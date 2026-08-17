@@ -492,122 +492,115 @@ class SwitchPointFooter extends StatelessWidget {
         ),
         padding: EdgeInsets.symmetric(
           horizontal: isMobile ? 12 : 24,
-          vertical: isMobile ? 10 : 14,
+          vertical: isMobile ? 6 : 14,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Clean & simple contact and links row in English (LTR)
-            Wrap(
-              spacing: 12,
-              runSpacing: 8,
-              alignment: WrapAlignment.center,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                // Website Link
-                _buildFooterPill(
-                  context: context,
-                  icon: Icons.public_rounded,
-                  label: SwitchPointInfo.websiteDisplay,
-                  url: SwitchPointInfo.websiteUrl,
-                ),
-
-                // Email Support
-                _buildFooterPill(
-                  context: context,
-                  icon: Icons.mail_outline_rounded,
-                  label: SwitchPointInfo.supportEmail,
-                  url: 'mailto:${SwitchPointInfo.supportEmail}',
-                ),
-
-                // WhatsApp Egypt Icon Pill
-                _buildFooterPill(
-                  context: context,
-                  icon: Icons.chat_rounded,
-                  label: 'WhatsApp Egypt',
-                  tooltip: 'Contact via WhatsApp Egypt (${SwitchPointInfo.whatsappEgypt})',
-                  url: SwitchPointInfo.whatsappEgyptUrl,
-                ),
-
-                // WhatsApp UAE Icon Pill
-                _buildFooterPill(
-                  context: context,
-                  icon: Icons.chat_rounded,
-                  label: 'WhatsApp UAE',
-                  tooltip: 'Contact via WhatsApp UAE (${SwitchPointInfo.whatsappUae})',
-                  url: SwitchPointInfo.whatsappUaeUrl,
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 10),
-            Divider(
-              height: 1,
-              color: colorScheme.outlineVariant.withValues(alpha: 0.3),
-            ),
-            const SizedBox(height: 8),
-
-            // Copyright & Branding Row (LTR)
-            SizedBox(
-              width: double.infinity,
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 8,
+            if (isMobile) ...[
+              // Compact Mobile View: Icons-only single row to minimize footer space
+              Wrap(
                 alignment: WrapAlignment.center,
                 crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
                 children: [
-                  // Copyright Text
+                  // Website Icon Button
+                  _buildMobileIconPill(
+                    context: context,
+                    icon: Icons.public_rounded,
+                    tooltip: 'Website: ${SwitchPointInfo.websiteDisplay}',
+                    url: SwitchPointInfo.websiteUrl,
+                  ),
+
+                  // Email Support Icon Button
+                  _buildMobileIconPill(
+                    context: context,
+                    icon: Icons.mail_outline_rounded,
+                    tooltip: 'Email: ${SwitchPointInfo.supportEmail}',
+                    url: 'mailto:${SwitchPointInfo.supportEmail}',
+                  ),
+
+                  // WhatsApp Egypt Icon Button
+                  _buildMobileIconPill(
+                    context: context,
+                    icon: Icons.chat_rounded,
+                    badgeText: 'EG',
+                    tooltip: 'WhatsApp Egypt (${SwitchPointInfo.whatsappEgypt})',
+                    url: SwitchPointInfo.whatsappEgyptUrl,
+                    highlightColor: Colors.green.shade600,
+                  ),
+
+                  // WhatsApp UAE Icon Button
+                  _buildMobileIconPill(
+                    context: context,
+                    icon: Icons.chat_rounded,
+                    badgeText: 'UAE',
+                    tooltip: 'WhatsApp UAE (${SwitchPointInfo.whatsappUae})',
+                    url: SwitchPointInfo.whatsappUaeUrl,
+                    highlightColor: Colors.green.shade600,
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 5),
+
+              // Compact Mobile Copyright & Powered By
+              Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 6,
+                runSpacing: 2,
+                children: [
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         Icons.copyright_rounded,
-                        size: 13,
-                        color: colorScheme.onSurfaceVariant,
+                        size: 11,
+                        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
                       ),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: 3),
                       Text(
-                        isMobile ? '2026 Switch Point' : SwitchPointInfo.copyright,
+                        '2026 Switch Point',
                         style: GoogleFonts.cairo(
-                          fontSize: 11,
+                          fontSize: 10,
                           fontWeight: FontWeight.w500,
-                          color: colorScheme.onSurfaceVariant,
+                          color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
                         ),
                       ),
                     ],
                   ),
-
-                  // Powered by Switch Point Badge
+                  Text(
+                    '•',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: colorScheme.outlineVariant,
+                    ),
+                  ),
                   InkWell(
                     onTap: () => SwitchPointInfo.launchLink(SwitchPointInfo.websiteUrl),
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: colorScheme.primaryContainer.withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: colorScheme.primary.withValues(alpha: 0.25),
-                        ),
-                      ),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Container(
-                            width: 6,
-                            height: 6,
+                            width: 5,
+                            height: 5,
                             decoration: BoxDecoration(
                               color: colorScheme.primary,
                               shape: BoxShape.circle,
                             ),
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 4),
                           Text(
-                            isMobile ? 'Powered by Switch Point' : 'Powered by Switch Point Smart Systems',
+                            'Powered by Switch Point',
                             style: GoogleFonts.cairo(
-                              fontSize: 11,
+                              fontSize: 10,
                               fontWeight: FontWeight.bold,
-                              color: colorScheme.onPrimaryContainer,
+                              color: colorScheme.primary,
                             ),
                           ),
                         ],
@@ -616,8 +609,189 @@ class SwitchPointFooter extends StatelessWidget {
                   ),
                 ],
               ),
-            ),
+            ] else ...[
+              // Desktop View: Clean & simple contact and links row in English (LTR)
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  // Website Link
+                  _buildFooterPill(
+                    context: context,
+                    icon: Icons.public_rounded,
+                    label: SwitchPointInfo.websiteDisplay,
+                    url: SwitchPointInfo.websiteUrl,
+                  ),
+
+                  // Email Support
+                  _buildFooterPill(
+                    context: context,
+                    icon: Icons.mail_outline_rounded,
+                    label: SwitchPointInfo.supportEmail,
+                    url: 'mailto:${SwitchPointInfo.supportEmail}',
+                  ),
+
+                  // WhatsApp Egypt Icon Pill
+                  _buildFooterPill(
+                    context: context,
+                    icon: Icons.chat_rounded,
+                    label: 'WhatsApp Egypt',
+                    tooltip: 'Contact via WhatsApp Egypt (${SwitchPointInfo.whatsappEgypt})',
+                    url: SwitchPointInfo.whatsappEgyptUrl,
+                    highlightColor: Colors.green.shade700,
+                  ),
+
+                  // WhatsApp UAE Icon Pill
+                  _buildFooterPill(
+                    context: context,
+                    icon: Icons.chat_rounded,
+                    label: 'WhatsApp UAE',
+                    tooltip: 'Contact via WhatsApp UAE (${SwitchPointInfo.whatsappUae})',
+                    url: SwitchPointInfo.whatsappUaeUrl,
+                    highlightColor: Colors.green.shade700,
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 10),
+              Divider(
+                height: 1,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+              ),
+              const SizedBox(height: 8),
+
+              // Copyright & Branding Row (LTR)
+              SizedBox(
+                width: double.infinity,
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    // Copyright Text
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.copyright_rounded,
+                          size: 13,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          SwitchPointInfo.copyright,
+                          style: GoogleFonts.cairo(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // Powered by Switch Point Badge
+                    InkWell(
+                      onTap: () => SwitchPointInfo.launchLink(SwitchPointInfo.websiteUrl),
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primaryContainer.withValues(alpha: 0.4),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: colorScheme.primary.withValues(alpha: 0.25),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: colorScheme.primary,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Powered by Switch Point Smart Systems',
+                              style: GoogleFonts.cairo(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.onPrimaryContainer,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileIconPill({
+    required BuildContext context,
+    required IconData icon,
+    required String tooltip,
+    required String url,
+    String? badgeText,
+    Color? highlightColor,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final iconColor = highlightColor ?? colorScheme.primary;
+
+    return Tooltip(
+      message: tooltip,
+      preferBelow: false,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => SwitchPointInfo.launchLink(url),
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: badgeText != null ? 8 : 7,
+              vertical: 5,
+            ),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 15,
+                  color: iconColor,
+                ),
+                if (badgeText != null) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    badgeText,
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );

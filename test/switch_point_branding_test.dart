@@ -44,7 +44,11 @@ void main() {
       expect(find.byIcon(Icons.dark_mode_rounded), findsOneWidget); // Theme toggle icon
     });
 
-    testWidgets('SwitchPointFooter renders copyright, support email, website and clean WhatsApp pills', (WidgetTester tester) async {
+    testWidgets('SwitchPointFooter renders desktop layout with full pills on large screen', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1024, 768);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.lightTheme,
@@ -60,6 +64,35 @@ void main() {
       expect(find.text('WhatsApp Egypt'), findsOneWidget);
       expect(find.text('WhatsApp UAE'), findsOneWidget);
       expect(find.text('Powered by Switch Point Smart Systems'), findsOneWidget);
+    });
+
+    testWidgets('SwitchPointFooter renders ultra-compact icons-only layout on mobile screen (390x844)', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: const Scaffold(
+            body: SwitchPointFooter(),
+          ),
+        ),
+      );
+
+      // On mobile, text labels are not rendered in the main row to save vertical space
+      expect(find.text(SwitchPointInfo.supportEmail), findsNothing);
+      expect(find.text(SwitchPointInfo.websiteDisplay), findsNothing);
+      expect(find.text('WhatsApp Egypt'), findsNothing);
+      expect(find.text('WhatsApp UAE'), findsNothing);
+
+      // Instead, compact icons and badges are rendered
+      expect(find.byIcon(Icons.public_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.mail_outline_rounded), findsOneWidget);
+      expect(find.text('EG'), findsOneWidget);
+      expect(find.text('UAE'), findsOneWidget);
+      expect(find.text('2026 Switch Point'), findsOneWidget);
+      expect(find.text('Powered by Switch Point'), findsOneWidget);
     });
   });
 }
