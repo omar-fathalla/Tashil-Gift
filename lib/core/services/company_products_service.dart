@@ -1,0 +1,358 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'firebase_service.dart';
+
+class CompanyProductItem {
+  final String id;
+  final String companySlug;
+  final String productName;
+  final String barcode;
+  final String category;
+  final String unitSize;
+  final double? referencePrice;
+  final Map<String, dynamic>? metadata;
+
+  CompanyProductItem({
+    required this.id,
+    required this.companySlug,
+    required this.productName,
+    required this.barcode,
+    this.category = '',
+    this.unitSize = '',
+    this.referencePrice,
+    this.metadata,
+  });
+
+  factory CompanyProductItem.fromMap(Map<String, dynamic> data, String id) {
+    return CompanyProductItem(
+      id: id,
+      companySlug: data['companySlug']?.toString() ?? '',
+      productName: data['productName']?.toString() ?? '',
+      barcode: data['barcode']?.toString() ?? '',
+      category: data['category']?.toString() ?? '',
+      unitSize: data['unitSize']?.toString() ?? '',
+      referencePrice: (data['referencePrice'] as num?)?.toDouble(),
+      metadata: data['metadata'] is Map ? Map<String, dynamic>.from(data['metadata']) : null,
+    );
+  }
+
+  factory CompanyProductItem.fromFirestore(DocumentSnapshot doc) {
+    final data = (doc.data() as Map<String, dynamic>?) ?? {};
+    return CompanyProductItem.fromMap(data, doc.id);
+  }
+
+  Map<String, dynamic> toFirestore() {
+    return {
+      'companySlug': companySlug,
+      'productName': productName,
+      'barcode': barcode,
+      if (category.isNotEmpty) 'category': category,
+      if (unitSize.isNotEmpty) 'unitSize': unitSize,
+      if (referencePrice != null) 'referencePrice': referencePrice,
+      if (metadata != null && metadata!.isNotEmpty) 'metadata': metadata,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+  }
+}
+
+final companyProductsServiceProvider = Provider<CompanyProductsService>((ref) {
+  final firestore = ref.watch(firestoreProvider);
+  return CompanyProductsService(firestore);
+});
+
+class CompanyProductsService {
+  final FirebaseFirestore _firestore;
+
+  CompanyProductsService(this._firestore);
+
+  /// Checks if a product (by barcode or by name) already exists in Firestore for a given company
+  Future<CompanyProductItem?> findExistingProduct({
+    required String companySlug,
+    required String productName,
+    required String barcode,
+  }) async {
+    final slug = companySlug.trim().toLowerCase();
+    final normBarcode = barcode.trim();
+    final normName = productName.trim().toLowerCase();
+
+    if (slug.isEmpty) return null;
+
+    // 1. Check by barcode for this company (if barcode is provided)
+    if (normBarcode.isNotEmpty) {
+      try {
+        final barcodeQuery = await _firestore
+            .collection('company_products')
+            .where('companySlug', isEqualTo: slug)
+            .where('barcode', isEqualTo: normBarcode)
+            .limit(1)
+            .get()
+            .timeout(const Duration(seconds: 4), onTimeout: () => throw Exception('Timeout'));
+
+        if (barcodeQuery.docs.isNotEmpty) {
+          return CompanyProductItem.fromFirestore(barcodeQuery.docs.first);
+        }
+      } catch (_) {}
+    }
+
+    // 2. Check by exact product name for this company (if name is provided)
+    if (normName.isNotEmpty) {
+      try {
+        final nameQuery = await _firestore
+            .collection('company_products')
+            .where('companySlug', isEqualTo: slug)
+            .where('productName', isEqualTo: productName.trim())
+            .limit(1)
+            .get()
+            .timeout(const Duration(seconds: 4), onTimeout: () => throw Exception('Timeout'));
+
+        if (nameQuery.docs.isNotEmpty) {
+          return CompanyProductItem.fromFirestore(nameQuery.docs.first);
+        }
+      } catch (_) {}
+    }
+
+    return null;
+  }
+
+  /// Batch import products for a specific company with chunking and strict deduplication
+  Future<int> batchSaveProducts({
+    required String companySlug,
+    required String companyName,
+    required List<Map<String, dynamic>> products,
+    void Function(int saved, int total)? onProgress,
+  }) async {
+    final slug = companySlug.trim().toLowerCase();
+    if (slug.isEmpty || products.isEmpty) return 0;
+
+    // Fetch all existing products for this company to deduplicate against catalog
+    final existingList = await getProductsForCompany(slug);
+    final existingBarcodes = existingList.map((p) => p.barcode.trim()).where((b) => b.isNotEmpty).toSet();
+    final existingNames = existingList.map((p) => p.productName.trim().toLowerCase()).where((n) => n.isNotEmpty).toSet();
+
+    final uniqueProductsToSave = <Map<String, dynamic>>[];
+    final seenBarcodesInBatch = <String>{};
+    final seenNamesInBatch = <String>{};
+
+    for (var item in products) {
+      final pName = item['productName']?.toString().trim() ?? '';
+      final pBarcode = item['barcode']?.toString().trim() ?? '';
+
+      if (pName.isEmpty && pBarcode.isEmpty) continue;
+
+      final isDuplicateBarcode = pBarcode.isNotEmpty && (existingBarcodes.contains(pBarcode) || seenBarcodesInBatch.contains(pBarcode));
+      final isDuplicateName = pName.isNotEmpty && (existingNames.contains(pName.toLowerCase()) || seenNamesInBatch.contains(pName.toLowerCase()));
+
+      if (isDuplicateBarcode || isDuplicateName) {
+        // Skip duplicate item to prevent duplicate insertion
+        continue;
+      }
+
+      if (pBarcode.isNotEmpty) seenBarcodesInBatch.add(pBarcode);
+      if (pName.isNotEmpty) seenNamesInBatch.add(pName.toLowerCase());
+
+      uniqueProductsToSave.add(item);
+    }
+
+    if (uniqueProductsToSave.isEmpty) {
+      onProgress?.call(0, products.length);
+      return 0;
+    }
+
+    int totalSaved = 0;
+    const chunkSize = 400; // Safe limit under Firestore 500-op limit
+
+    // Initial progress notification (0 items processed)
+    onProgress?.call(0, uniqueProductsToSave.length);
+
+    for (var i = 0; i < uniqueProductsToSave.length; i += chunkSize) {
+      final chunk = uniqueProductsToSave.sublist(
+        i,
+        (i + chunkSize > uniqueProductsToSave.length) ? uniqueProductsToSave.length : i + chunkSize,
+      );
+
+      final batch = _firestore.batch();
+      final collection = _firestore.collection('company_products');
+
+      for (var item in chunk) {
+        final pName = item['productName']?.toString().trim() ?? '';
+        final pBarcode = item['barcode']?.toString().trim() ?? '';
+        final pCategory = item['category']?.toString().trim() ?? '';
+        final pUnitSize = item['unitSize']?.toString().trim() ?? '';
+        final pPrice = (item['referencePrice'] is num)
+            ? (item['referencePrice'] as num).toDouble()
+            : null;
+
+        if (pName.isNotEmpty || pBarcode.isNotEmpty) {
+          final docRef = collection.doc();
+          batch.set(docRef, {
+            'companySlug': slug,
+            'companyName': companyName,
+            'productName': pName,
+            'barcode': pBarcode,
+            if (pCategory.isNotEmpty) 'category': pCategory,
+            if (pUnitSize.isNotEmpty) 'unitSize': pUnitSize,
+            'referencePrice': ?pPrice,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+          totalSaved++;
+        }
+      }
+
+      await batch.commit().timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {},
+      );
+
+      // Notify progress after committing current chunk
+      onProgress?.call(totalSaved, uniqueProductsToSave.length);
+    }
+
+    // Update company product count
+    if (totalSaved > 0) {
+      final companyRef = _firestore.collection('companies').doc(slug);
+      await companyRef.set({
+        'name': companyName,
+        'slug': slug,
+        'productsCount': FieldValue.increment(totalSaved),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)).timeout(
+        const Duration(seconds: 4),
+        onTimeout: () {},
+      );
+    }
+
+    return totalSaved;
+  }
+
+  /// Adds a single product manually to Firestore with strict duplicate prevention
+  Future<void> addSingleProduct({
+    required String companySlug,
+    required String productName,
+    required String barcode,
+    String category = '',
+    String unitSize = '',
+    double? referencePrice,
+  }) async {
+    final slug = companySlug.trim().toLowerCase();
+    if (slug.isEmpty || productName.trim().isEmpty) return;
+
+    // Strict duplicate check
+    final existing = await findExistingProduct(
+      companySlug: slug,
+      productName: productName,
+      barcode: barcode,
+    );
+    if (existing != null) {
+      throw Exception('المنتج أو الباركود مسجل مسبقاً في كتالوج الشركة (${existing.productName})');
+    }
+
+    // Check/Ensure company document exists
+    final companyRef = _firestore.collection('companies').doc(slug);
+    final companyDoc = await companyRef.get().timeout(const Duration(seconds: 4), onTimeout: () => throw Exception('Timeout'));
+    if (!companyDoc.exists) {
+      await companyRef.set({
+        'name': companySlug,
+        'slug': slug,
+        'createdAt': FieldValue.serverTimestamp(),
+        'productsCount': 1,
+      });
+    } else {
+      await companyRef.update({
+        'productsCount': FieldValue.increment(1),
+      });
+    }
+
+    await _firestore.collection('company_products').add({
+      'companySlug': slug,
+      'productName': productName.trim(),
+      'barcode': barcode.trim(),
+      if (category.isNotEmpty) 'category': category.trim(),
+      if (unitSize.isNotEmpty) 'unitSize': unitSize.trim(),
+      'referencePrice': ?referencePrice,
+      'createdAt': FieldValue.serverTimestamp(),
+    }).timeout(const Duration(seconds: 4), onTimeout: () => throw Exception('Timeout'));
+  }
+
+  /// Seeds default company (e.g. Al Marai) and products if database is empty
+  Future<void> seedDefaultCompanyProducts() async {
+    const slug = 'almarai';
+    final companyRef = _firestore.collection('companies').doc(slug);
+    await companyRef.set({
+      'name': 'شركة المراعي',
+      'slug': slug,
+      'createdAt': FieldValue.serverTimestamp(),
+      'productsCount': 5,
+    }, SetOptions(merge: true));
+
+    final sampleProducts = [
+      {'productName': 'حليب المراعي كامل الدسم 1 لتر', 'barcode': '6281007001001', 'category': 'ألبان', 'unitSize': '1 لتر'},
+      {'productName': 'حليب المراعي قليل الدسم 1 لتر', 'barcode': '6281007001002', 'category': 'ألبان', 'unitSize': '1 لتر'},
+      {'productName': 'زبادي المراعي طبيعي 170 جم', 'barcode': '6281007002001', 'category': 'زبادي', 'unitSize': '170 جم'},
+      {'productName': 'عصير المراعي برتقال 1 لتر', 'barcode': '6281007003001', 'category': 'عصائر', 'unitSize': '1 لتر'},
+      {'productName': 'جبنة المراعي فيتا 500 جم', 'barcode': '6281007004001', 'category': 'أجبان', 'unitSize': '500 جم'},
+    ];
+
+    final batch = _firestore.batch();
+    for (var prod in sampleProducts) {
+      final docRef = _firestore.collection('company_products').doc();
+      batch.set(docRef, {
+        'companySlug': slug,
+        'productName': prod['productName'],
+        'barcode': prod['barcode'],
+        'category': prod['category'],
+        'unitSize': prod['unitSize'],
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit().timeout(const Duration(seconds: 4), onTimeout: () {});
+  }
+
+  /// Deletes ALL products registered for a specific company from Firestore in chunks
+  Future<int> deleteAllProductsForCompany({
+    required String companySlug,
+    void Function(int deleted, int total)? onProgress,
+  }) async {
+    final slug = companySlug.trim().toLowerCase();
+    if (slug.isEmpty) return 0;
+
+    int totalDeleted = 0;
+    while (true) {
+      final query = await _firestore
+          .collection('company_products')
+          .where('companySlug', isEqualTo: slug)
+          .limit(400)
+          .get()
+          .timeout(const Duration(seconds: 8), onTimeout: () => throw Exception('Timeout'));
+
+      if (query.docs.isEmpty) break;
+
+      final batch = _firestore.batch();
+      for (final doc in query.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit().timeout(const Duration(seconds: 8), onTimeout: () {});
+      totalDeleted += query.docs.length;
+      onProgress?.call(totalDeleted, totalDeleted);
+    }
+
+    // Reset company product count to 0 in companies collection
+    final companyRef = _firestore.collection('companies').doc(slug);
+    await companyRef.set({
+      'productsCount': 0,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true)).timeout(const Duration(seconds: 4), onTimeout: () {});
+
+    return totalDeleted;
+  }
+
+  /// Fetches registered products catalog for a company
+  Future<List<CompanyProductItem>> getProductsForCompany(String companySlug) async {
+    final query = await _firestore
+        .collection('company_products')
+        .where('companySlug', isEqualTo: companySlug.toLowerCase())
+        .limit(1000)
+        .get();
+
+    return query.docs.map((doc) => CompanyProductItem.fromFirestore(doc)).toList();
+  }
+}
