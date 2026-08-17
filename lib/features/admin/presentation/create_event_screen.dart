@@ -12,6 +12,8 @@ import '../../../core/services/company_gifts_service.dart';
 import '../../../core/services/retail_chains_service.dart';
 import '../../../core/utils/error_handler.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
+import '../../../core/utils/slug_utils.dart';
+import '../../../core/utils/url_builder.dart';
 import '../../../core/constants/country_currency_config.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
@@ -19,6 +21,7 @@ import '../domain/company_model.dart';
 import '../domain/event_model.dart';
 import '../domain/company_gift_model.dart';
 import '../domain/retail_chain_model.dart';
+
 
 class CreateEventScreen extends ConsumerStatefulWidget {
   final EventModel? eventToEdit;
@@ -1043,11 +1046,13 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         maxChancesPerReceipt: _maxChancesController.text.trim().toIntOrNull() ?? 0,
       );
 
+      String createdEventId = widget.eventToEdit?.id ?? '';
       if (widget.eventToEdit == null) {
-        await firestore.collection('events').add(event.toFirestore()).timeout(
+        final docRef = await firestore.collection('events').add(event.toFirestore()).timeout(
           const Duration(seconds: 5),
           onTimeout: () => firestore.collection('events').doc(),
         );
+        createdEventId = docRef.id;
       } else {
         await firestore.collection('events').doc(widget.eventToEdit!.id).update(event.toFirestore()).timeout(
           const Duration(seconds: 5),
@@ -1059,12 +1064,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       await ref.read(companyGiftsServiceProvider).syncCompanyGiftsAvailableQuantities(event.companySlug);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(widget.eventToEdit == null ? 'تم إنشاء الحملة بنجاح!' : 'تم تحديث الحملة بنجاح!'),
-            backgroundColor: Colors.green.shade800,
-          ),
-        );
+        await _showCampaignSuccessLinksDialog(context, event, createdEventId);
+        if (!mounted) return;
         if (widget.onSaved != null) {
           widget.onSaved!();
         } else if (Navigator.canPop(context)) {
@@ -1087,12 +1088,175 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     }
   }
 
+  Future<void> _showCampaignSuccessLinksDialog(
+    BuildContext context,
+    EventModel event,
+    String eventId,
+  ) async {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isAr = ref.isArabic;
+    final promoterUrl = AppUrlBuilder.buildPromoterUrl(event.companySlug, eventId: eventId);
+    final managerUrl = AppUrlBuilder.buildManagerPortalUrl(event.companySlug, eventId: eventId);
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.green.shade100,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.check_circle_rounded, color: Colors.green.shade800, size: 28),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                isAr ? 'تم نشر وتفعيل الحملة على الفايربيس!' : 'Campaign Live on Firebase!',
+                style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isAr
+                      ? 'تم توليد الروابط المباشرة للحملة بنجاح باسم إنجليزي فريد (${event.companySlug}). يمكنك نسخ الروابط أدناه وبدء الفحص والتشغيل من أي مكان:'
+                      : 'Live campaign URLs generated with unique English slug (${event.companySlug}). You can copy the links below:',
+                  style: GoogleFonts.cairo(fontSize: 13, color: colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 16),
+                // Promoter Link Card
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.teal.withValues(alpha: 0.3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.campaign_rounded, size: 18, color: Colors.teal.shade800),
+                          const SizedBox(width: 6),
+                          Text(
+                            isAr ? 'رابط البروموتر والعميل (Client Submission):' : 'Promoter & Client Link:',
+                            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.teal.shade900),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      SelectableText(
+                        promoterUrl,
+                        style: GoogleFonts.sourceCodePro(fontSize: 12, color: Colors.teal.shade900, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: FilledButton.tonalIcon(
+                          icon: const Icon(Icons.copy_rounded, size: 16),
+                          label: Text(isAr ? 'نسخ رابط البروموتر' : 'Copy Promoter Link', style: GoogleFonts.cairo(fontSize: 12)),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: promoterUrl));
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(
+                                content: Text(isAr ? 'تم نسخ رابط البروموتر بنجاح!' : 'Promoter Link Copied!'),
+                                backgroundColor: Colors.teal.shade700,
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Company Manager Portal Link Card
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.indigo.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.indigo.withValues(alpha: 0.3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.storefront_rounded, size: 18, color: Colors.indigo.shade800),
+                          const SizedBox(width: 6),
+                          Text(
+                            isAr ? 'رابط لوحة مدير وشريك الشركة (Partner Portal):' : 'Company Manager Portal Link:',
+                            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.indigo.shade900),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      SelectableText(
+                        managerUrl,
+                        style: GoogleFonts.sourceCodePro(fontSize: 12, color: Colors.indigo.shade900, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: FilledButton.tonalIcon(
+                          icon: const Icon(Icons.copy_rounded, size: 16),
+                          label: Text(isAr ? 'نسخ رابط لوحة المدير' : 'Copy Manager Link', style: GoogleFonts.cairo(fontSize: 12)),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: managerUrl));
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(
+                                content: Text(isAr ? 'تم نسخ رابط لوحة المدير بنجاح!' : 'Manager Portal Link Copied!'),
+                                backgroundColor: Colors.indigo.shade700,
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(isAr ? 'تم ومتابعة' : 'Done & Continue', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   InputDecoration _m3InputDecoration({
     required BuildContext context,
     required String labelText,
     String? hintText,
     String? helperText,
     IconData? prefixIcon,
+    Widget? suffixIcon,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
     return InputDecoration(
@@ -1103,6 +1267,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       helperText: helperText,
       helperStyle: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8), fontSize: 11),
       prefixIcon: prefixIcon != null ? Icon(prefixIcon, color: colorScheme.primary, size: 20) : null,
+      suffixIcon: suffixIcon,
       filled: true,
       fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
       border: OutlineInputBorder(
@@ -1120,6 +1285,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     );
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -1237,6 +1403,12 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         prefixIcon: Icons.edit_note_rounded,
                       ),
                       validator: (value) => value == null || value.isEmpty ? 'اسم الحملة مطلوب' : null,
+                      onChanged: (val) {
+                        if (_companySlugController.text.isEmpty && _targetCompanyController.text.isEmpty) {
+                          final auto = SlugUtils.generateEnglishSlug(val);
+                          setState(() => _companySlugController.text = auto);
+                        }
+                      },
                     ),
                     const SizedBox(height: 16),
 
@@ -1354,7 +1526,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                       validator: (value) => value == null || value.isEmpty ? 'مطلوب' : null,
                                       onChanged: (val) {
                                         if (_companySlugController.text.isEmpty) {
-                                          _companySlugController.text = val.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '-');
+                                          final auto = SlugUtils.generateEnglishSlug(val);
+                                          setState(() => _companySlugController.text = auto);
                                         }
                                       },
                                     ),
@@ -1367,15 +1540,129 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                       style: GoogleFonts.cairo(),
                                       decoration: _m3InputDecoration(
                                         context: context,
-                                        labelText: 'معرف الرابط (Slug URL)',
-                                        hintText: 'مثال: almarai',
-                                        helperText: 'يستخدم في رابط العميل: /c/almarai',
+                                        labelText: 'معرف الرابط الإنجليزي (English Slug)',
+                                        hintText: 'مثال: almarai أو summer-promo',
+                                        helperText: 'يحدد الرابط في الفايربيس: /c/${_companySlugController.text.isNotEmpty ? _companySlugController.text : 'slug'}',
                                         prefixIcon: Icons.link_rounded,
+                                        suffixIcon: IconButton(
+                                          icon: Icon(Icons.auto_awesome_rounded, color: colorScheme.primary, size: 20),
+                                          tooltip: 'توليد المعرف الإنجليزي تلقائياً من الاسم',
+                                          onPressed: () {
+                                            final text = _targetCompanyController.text.isNotEmpty
+                                                ? _targetCompanyController.text
+                                                : _eventNameController.text;
+                                            final auto = SlugUtils.generateEnglishSlug(text);
+                                            setState(() => _companySlugController.text = auto);
+                                            _loadCompanyProducts(auto);
+                                          },
+                                        ),
                                       ),
-                                      onChanged: (val) => _loadCompanyProducts(val.trim().toLowerCase()),
+                                      onChanged: (val) {
+                                        setState(() {});
+                                        _loadCompanyProducts(val.trim().toLowerCase());
+                                      },
                                     ),
                                   ),
                                 ],
+                              ),
+                              const SizedBox(height: 12),
+                              // Live Firebase URLs Preview
+                              Builder(
+                                builder: (context) {
+                                  final currentSlug = _companySlugController.text.trim().isNotEmpty
+                                      ? _companySlugController.text.trim().toLowerCase()
+                                      : 'campaign';
+                                  final promoterUrl = AppUrlBuilder.buildPromoterUrl(currentSlug);
+                                  final managerUrl = AppUrlBuilder.buildManagerPortalUrl(currentSlug);
+
+                                  return Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: colorScheme.surface,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: colorScheme.primary.withValues(alpha: 0.25)),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Icon(Icons.cloud_done_rounded, size: 16, color: colorScheme.primary),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              'معاينة روابط الفايربيس الحية (Firebase Web URLs):',
+                                              style: GoogleFonts.cairo(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12,
+                                                color: colorScheme.primary,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          children: [
+                                            Icon(Icons.campaign_rounded, size: 15, color: Colors.teal.shade700),
+                                            const SizedBox(width: 6),
+                                            Expanded(
+                                              child: Text(
+                                                'البروموتر: $promoterUrl',
+                                                style: GoogleFonts.sourceCodePro(fontSize: 11, color: Colors.teal.shade900),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            InkWell(
+                                              onTap: () {
+                                                Clipboard.setData(ClipboardData(text: promoterUrl));
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text('تم نسخ رابط البروموتر: $promoterUrl'),
+                                                    backgroundColor: Colors.teal.shade700,
+                                                    behavior: SnackBarBehavior.floating,
+                                                  ),
+                                                );
+                                              },
+                                              child: Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                                child: Icon(Icons.copy_rounded, size: 14, color: Colors.teal.shade700),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            Icon(Icons.storefront_rounded, size: 15, color: Colors.indigo.shade700),
+                                            const SizedBox(width: 6),
+                                            Expanded(
+                                              child: Text(
+                                                'لوحة المدير: $managerUrl',
+                                                style: GoogleFonts.sourceCodePro(fontSize: 11, color: Colors.indigo.shade900),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            InkWell(
+                                              onTap: () {
+                                                Clipboard.setData(ClipboardData(text: managerUrl));
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text('تم نسخ رابط لوحة المدير: $managerUrl'),
+                                                    backgroundColor: Colors.indigo.shade700,
+                                                    behavior: SnackBarBehavior.floating,
+                                                  ),
+                                                );
+                                              },
+                                              child: Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                                child: Icon(Icons.copy_rounded, size: 14, color: Colors.indigo.shade700),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
                               ),
                             ],
                           ),

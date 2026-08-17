@@ -22,6 +22,7 @@ import '../../games/presentation/game_types_screen.dart';
 import 'retail_chains_screen.dart';
 import 'ai_speed_benchmark_screen.dart';
 import '../../../core/services/company_gifts_service.dart';
+import '../../../core/utils/url_builder.dart';
 
 class AdminDashboardScreen extends ConsumerStatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -44,10 +45,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   }
 
   void _copyPromoterLink(BuildContext context, String slug, {String? eventId}) {
-    final baseUrl = Uri.base.origin;
-    final url = (eventId != null && eventId.isNotEmpty)
-        ? '$baseUrl/#/c/$slug?event=$eventId'
-        : '$baseUrl/#/c/$slug';
+    final url = AppUrlBuilder.buildPromoterUrl(slug, eventId: eventId);
     Clipboard.setData(ClipboardData(text: url));
     final strings = AppStrings.of(ref);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -60,10 +58,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   }
 
   void _copyCompanyManagerPortalLink(BuildContext context, String slug, {String? eventId}) {
-    final baseUrl = Uri.base.origin;
-    final url = (eventId != null && eventId.isNotEmpty)
-        ? '$baseUrl/#/portal/$slug?event=$eventId'
-        : '$baseUrl/#/portal/$slug';
+    final url = AppUrlBuilder.buildManagerPortalUrl(slug, eventId: eventId);
     Clipboard.setData(ClipboardData(text: url));
     final strings = AppStrings.of(ref);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -74,6 +69,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       ),
     );
   }
+
 
   @override
   Widget build(BuildContext context) {

@@ -12,6 +12,9 @@ import '../../../core/widgets/m3_button_groups.dart';
 import '../../admin/domain/event_model.dart';
 import '../../admin/presentation/campaign_reports_screen.dart';
 import '../../validation/presentation/invoices_log_screen.dart';
+import '../../../core/utils/url_builder.dart';
+import '../../../core/utils/slug_utils.dart';
+
 
 /// Dedicated Executive Company Manager & Partner Portal (بوابة مدير وشريك الشركة)
 /// Provides a secure, white-labeled, scoped analytics and invoice audit environment
@@ -31,19 +34,10 @@ class CompanyManagerPortalScreen extends ConsumerStatefulWidget {
 }
 
 class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPortalScreen> {
-  int _selectedTab = 0; // 0: Reports & Analytics, 1: Invoices Log & Audit
-
-  String _formatSlugToName(String slug) {
-    if (slug.isEmpty) return '';
-    return slug
-        .split(RegExp(r'[-_]'))
-        .map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '')
-        .join(' ');
-  }
+  int _selectedTab = 0; // 0 = Analytics & Insights, 1 = Invoice Audit Feed
 
   void _copyPortalLink(BuildContext context, AppStrings strings) {
-    final baseUrl = Uri.base.origin;
-    final url = '$baseUrl/#/portal/${widget.companySlug}';
+    final url = AppUrlBuilder.buildManagerPortalUrl(widget.companySlug);
     Clipboard.setData(ClipboardData(text: url));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -55,8 +49,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
   }
 
   void _copyPromoterLink(BuildContext context, AppStrings strings) {
-    final baseUrl = Uri.base.origin;
-    final url = '$baseUrl/#/c/${widget.companySlug}';
+    final url = AppUrlBuilder.buildPromoterUrl(widget.companySlug);
     Clipboard.setData(ClipboardData(text: url));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -97,7 +90,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
       companyDisplayName = companyEvents.first.targetCompany;
     }
     if (companyDisplayName.isEmpty) {
-      companyDisplayName = _formatSlugToName(widget.companySlug);
+      companyDisplayName = SlugUtils.formatSlugToName(widget.companySlug);
     }
 
     EventModel? initialEvent;
