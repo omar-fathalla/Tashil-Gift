@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:al_mraay/features/admin/domain/event_model.dart';
 
 /// Provide your actual Gemini API Key here or load from environment variables
 const String _geminiApiKey =
@@ -332,6 +333,7 @@ class AiReceiptService {
     String customPrompt = '',
     bool allowMultipleChances = false,
     int maxChancesPerReceipt = 0,
+    List<PromotionalRuleItem> promotionalRules = const [],
   }) async {
     final stopwatch = Stopwatch()..start();
     try {
@@ -348,6 +350,20 @@ class AiReceiptService {
         } else {
           catalogCondition = 'العرض يشمل كافة منتجات وباركودات شركة "$targetCompany" المعتمدة (إجمالي ${registeredBarcodes.length} صنف مسجل بالكتالوج). ابحث عن أي منتج تابع للعلامة التجارية.';
         }
+      }
+
+      String promotionalRulesCondition = '';
+      if (promotionalRules.isNotEmpty) {
+        final rulesListFormatted = promotionalRules.map((r) {
+          final multText = r.allowMultipliers ? ' (تتضاعف الهدايا مع زيادة الكمية)' : '';
+          return '• ${r.ruleTitle}: عند شراء ${r.minQuantity} من [${r.triggerProduct}] -> المكافأة المستحقة: [${r.rewardValue}]$multText';
+        }).join('\n');
+
+        promotionalRulesCondition = '''
+- قواعد وهدايا المهرجان الخاصة (Promotional Rules):
+$rulesListFormatted
+المطلوب: تحقق من مطابقة أصناف الفاتورة والكميات مع هذه القواعد المحددة، واذكر في تقرير الفحص (message) تفاصيل الجوائز أو القسائم المستحقة بدقة.
+''';
       }
 
       String branchCondition = '';
@@ -391,6 +407,7 @@ class AiReceiptService {
 $branchCondition
 $catalogCondition
 $productsCondition
+$promotionalRulesCondition
 $chancesCondition
 
 تأكد من إرجاع النتيجة بصيغة JSON المحتوي على الحقول المفروضة:
@@ -407,8 +424,9 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         3. "تاريخ الشراء" (Receipt Date). استخرج تاريخ اليوم والوقت المكتوب بالفاتورة في حقل receiptDate (مثال: 22/07/2026).
         4. $catalogCondition
         5. $productsCondition
-        6. احسب الإجمالي المؤهل للحملة في حقل (targetCompanyTotal).
-        7. $chancesCondition
+        6. $promotionalRulesCondition
+        7. احسب الإجمالي المؤهل للحملة في حقل (targetCompanyTotal).
+        8. $chancesCondition
         
         شروط الموافقة (isValid = true):
         - يجب أن تكون الصورة لفاتورة حقيقية ومقروءة وواضحة الرأس.

@@ -1,5 +1,54 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Represents a structured promotional rule/offer condition (e.g. "Buy 1 Axe/Rexona spray -> Get 50 EGP voucher")
+class PromotionalRuleItem {
+  final String id;
+  final String ruleTitle;
+  final String triggerProduct;
+  final int minQuantity;
+  final String rewardType; // 'voucher' | 'free_product' | 'game_spin'
+  final String rewardValue; // e.g. 'قسيمة مشتريات 50 ج.م' or 'كلير 90 مل هدية'
+  final double rewardAmount; // 50.0 if voucher
+  final bool allowMultipliers; // true if buying 2x items gives 2x rewards
+
+  PromotionalRuleItem({
+    required this.id,
+    required this.ruleTitle,
+    required this.triggerProduct,
+    this.minQuantity = 1,
+    this.rewardType = 'free_product',
+    required this.rewardValue,
+    this.rewardAmount = 0.0,
+    this.allowMultipliers = true,
+  });
+
+  factory PromotionalRuleItem.fromMap(Map<String, dynamic> data) {
+    return PromotionalRuleItem(
+      id: data['id']?.toString() ?? '',
+      ruleTitle: data['ruleTitle']?.toString() ?? '',
+      triggerProduct: data['triggerProduct']?.toString() ?? '',
+      minQuantity: (data['minQuantity'] as num?)?.toInt() ?? 1,
+      rewardType: data['rewardType']?.toString() ?? 'free_product',
+      rewardValue: data['rewardValue']?.toString() ?? '',
+      rewardAmount: (data['rewardAmount'] as num?)?.toDouble() ?? 0.0,
+      allowMultipliers: data['allowMultipliers'] != false,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'ruleTitle': ruleTitle,
+      'triggerProduct': triggerProduct,
+      'minQuantity': minQuantity,
+      'rewardType': rewardType,
+      'rewardValue': rewardValue,
+      'rewardAmount': rewardAmount,
+      'allowMultipliers': allowMultipliers,
+    };
+  }
+}
+
 /// Represents a single prize allocated to a campaign or specific branch from the company's master inventory.
 class AllocatedPrize {
   final String giftId;
@@ -58,6 +107,15 @@ class EventModel {
   final bool isActive;
   final DateTime? createdAt;
 
+  /// The raw natural language promotional idea typed by admin
+  final String promotionalIdea;
+
+  /// Human-readable structured Arabic/English summary produced by AI assistant
+  final String aiValidationSummary;
+
+  /// List of structured promotional rules parsed by AI
+  final List<PromotionalRuleItem> promotionalRules;
+
   /// The type of game to show after receipt validation.
   /// Values: 'wheel' (عجلة الحظ), 'scratch' (امسح واربح)
   final String gameType;
@@ -96,6 +154,9 @@ class EventModel {
     this.endDate,
     this.isActive = true,
     this.createdAt,
+    this.promotionalIdea = '',
+    this.aiValidationSummary = '',
+    this.promotionalRules = const [],
     this.gameType = 'wheel',
     this.allocatedPrizes = const [],
     this.retailChainId = '',
@@ -154,9 +215,15 @@ class EventModel {
   }
 
   factory EventModel.fromFirestore(DocumentSnapshot doc) {
-    final data = (doc.data() as Map<String, dynamic>?) ?? {};
+    return EventModel.fromFirestoreMap(
+      doc.id,
+      (doc.data() as Map<String, dynamic>?) ?? {},
+    );
+  }
+
+  factory EventModel.fromFirestoreMap(String id, Map<String, dynamic> data) {
     return EventModel(
-      id: doc.id,
+      id: id,
       eventName: data['eventName'] ?? '',
       targetCompany: data['targetCompany'] ?? '',
       companySlug: data['companySlug'] ?? '',
@@ -167,13 +234,31 @@ class EventModel {
       welcomeTitle: data['welcomeTitle'] ?? '',
       welcomeMessage: data['welcomeMessage'] ?? '',
       termsAndConditions: data['termsAndConditions'] ?? '',
-      startDate: (data['startDate'] as Timestamp?)?.toDate(),
-      endDate: (data['endDate'] as Timestamp?)?.toDate(),
+      startDate: data['startDate'] is Timestamp
+          ? (data['startDate'] as Timestamp).toDate()
+          : data['startDate'] is DateTime
+              ? data['startDate'] as DateTime
+              : null,
+      endDate: data['endDate'] is Timestamp
+          ? (data['endDate'] as Timestamp).toDate()
+          : data['endDate'] is DateTime
+              ? data['endDate'] as DateTime
+              : null,
       isActive: data['isActive'] ?? true,
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      createdAt: data['createdAt'] is Timestamp
+          ? (data['createdAt'] as Timestamp).toDate()
+          : data['createdAt'] is DateTime
+              ? data['createdAt'] as DateTime
+              : null,
+      promotionalIdea: data['promotionalIdea']?.toString() ?? '',
+      aiValidationSummary: data['aiValidationSummary']?.toString() ?? '',
+      promotionalRules: (data['promotionalRules'] as List<dynamic>?)
+              ?.map((e) => PromotionalRuleItem.fromMap(Map<String, dynamic>.from(e as Map)))
+              .toList() ??
+          [],
       gameType: data['gameType'] ?? 'wheel',
       allocatedPrizes: (data['allocatedPrizes'] as List<dynamic>?)
-              ?.map((e) => AllocatedPrize.fromMap(e as Map<String, dynamic>))
+              ?.map((e) => AllocatedPrize.fromMap(Map<String, dynamic>.from(e as Map)))
               .toList() ??
           [],
       retailChainId: data['retailChainId'] ?? '',
@@ -202,6 +287,9 @@ class EventModel {
       'endDate': endDate != null ? Timestamp.fromDate(endDate!) : null,
       'isActive': isActive,
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
+      'promotionalIdea': promotionalIdea,
+      'aiValidationSummary': aiValidationSummary,
+      'promotionalRules': promotionalRules.map((r) => r.toMap()).toList(),
       'gameType': gameType,
       'allocatedPrizes': allocatedPrizes.map((p) => p.toMap()).toList(),
       'retailChainId': retailChainId,
@@ -214,3 +302,4 @@ class EventModel {
     };
   }
 }
+

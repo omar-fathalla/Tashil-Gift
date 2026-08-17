@@ -143,6 +143,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         customPrompt: activeEvent.customPrompt,
         allowMultipleChances: activeEvent.allowMultipleChances,
         maxChancesPerReceipt: activeEvent.maxChancesPerReceipt,
+        promotionalRules: activeEvent.promotionalRules,
       );
 
       final previewImgUrl = 'data:$mimeType;base64,${base64Encode(bytes)}';

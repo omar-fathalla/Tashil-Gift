@@ -682,4 +682,83 @@ class AppStrings {
     en: 'Upload your purchase receipt photo for instant chances to win exciting prizes!',
     hi: 'रोमांचक पुरस्कार जीतने के त्वरित अवसरों के लिए अपनी खरीद रसीद फोटो अपलोड करें!',
   );
+
+  // ---------------------------------------------------------------------------
+  // 19. AI Campaign Prompt & Rules Assistant (مساعد الذكاء الاصطناعي للحملات)
+  // ---------------------------------------------------------------------------
+  String get aiCampaignAssistantTitle => _t(
+    ar: 'مساعد الذكاء الاصطناعي لصياغة شروط المهرجان',
+    en: 'AI Campaign Idea & Rules Assistant',
+    hi: 'एआई अभियान विचार और नियम सहायक',
+  );
+  String get aiCampaignAssistantSubtitle => _t(
+    ar: 'اكتب فكرة العرض بحرية وسيقوم الذكاء الاصطناعي بهيكلة قواعد التدقيق فورياً',
+    en: 'Type your promotional offer freely in natural language; AI will format audit rules instantly',
+    hi: 'अपनी प्रचार पेशकश को स्वाभाविक भाषा में लिखें; एआई तुरंत ऑडिट नियम तैयार करेगा',
+  );
+  String get aiCampaignIdeaHint => _t(
+    ar: 'اكتب فكرة المهرجان أو شروط العرض هنا بحرية... مثال: عند شراء أي عبوة اسبراي ريكسونا أو أكس يحصل العميل على قسيمة 50 ج.م، وعند شراء كلير 360 مل يحصل على كلير 90 مل هدية، وإذا اشترى قطعتين تريزمي يحصل على عبوة تريزمي 250 مل هدية...',
+    en: 'Write your promotional campaign idea or conditions here freely... e.g., Buy 1 Rexona/Axe spray get 50 EGP voucher, Buy Clear 360ml get Clear 90ml free gift, Buy 2 Tresemme get Tresemme 250ml free...',
+    hi: 'अपने प्रचार अभियान का विचार या शर्तें यहां स्वतंत्र रूप से लिखें... जैसे, 1 रेक्सोना/एक्स स्प्रे खरीदें और 50 ईजीपी वाउचर पाएं, क्लीयर 360 मिली खरीदें और क्लीयर 90 मिली मुफ़्त उपहार पाएं...',
+  );
+  String get aiGenerateRulesBtn => _t(
+    ar: '✨ توليد وتنسيق قواعد الفحص بالذكاء الاصطناعي',
+    en: '✨ Generate & Structure Rules with AI',
+    hi: '✨ एआई के साथ नियम बनाएं और व्यवस्थित करें',
+  );
+  String get aiGeneratingRulesLoading => _t(
+    ar: 'جاري صياغة وهيكلة شروط العرض بالذكاء الاصطناعي...',
+    en: 'Analyzing campaign idea and structuring rules with AI...',
+    hi: 'एआई के साथ अभियान विचार का विश्लेषण और नियमों की संरचना की जा रही है...',
+  );
+  String get aiValidationSummaryHeader => _t(
+    ar: '📋 ملخص منطق التدقيق الذي سيطبقه الذكاء الاصطناعي على الفواتير',
+    en: '📋 AI Receipt Audit Logic & Rules Summary',
+    hi: '📋 एआई रसीद ऑडिट तर्क और नियम सारांश',
+  );
+  String get aiPromotionalRulesListTitle => _t(
+    ar: 'قواعد العروض والجوائز المستخلصة',
+    en: 'Extracted Promotional Rules & Rewards',
+    hi: 'निकाले गए प्रचार नियम और पुरस्कार',
+  );
+  String get voucherRewardLabel => _t(
+    ar: 'قسيمة مشتريات',
+    en: 'Shopping Voucher',
+    hi: 'शॉपिंग वाउचर',
+  );
+  String get freeProductRewardLabel => _t(
+    ar: 'هدية عينية مجانية',
+    en: 'Free Gift Item',
+    hi: 'मुफ़्त उपहार वस्तु',
+  );
+  String get gameSpinRewardLabel => _t(
+    ar: 'دورة سحب / لعبة',
+    en: 'Game Spin Chance',
+    hi: 'गेम स्पिन का अवसर',
+  );
+  String get multipliersAllowedLabel => _t(
+    ar: 'مضاعفة الهدايا مع زيادة الكمية',
+    en: 'Multipliers active (more qty = more gifts)',
+    hi: 'गुणक सक्रिय (अधिक मात्रा = अधिक उपहार)',
+  );
+  String get clearAiSummaryBtn => _t(
+    ar: 'إعادة الصياغة / مسح',
+    en: 'Reset / Clear',
+    hi: 'रीसेट / साफ़ करें',
+  );
+  String get presetIdea1 => _t(
+    ar: '🎁 اشتري عبوة كبيرة واحصل على عبوة صغيرة هدية',
+    en: '🎁 Buy large pack, get small pack free',
+    hi: '🎁 बड़ा पैक खरीदें, छोटा पैक मुफ़्त पाएं',
+  );
+  String get presetIdea2 => _t(
+    ar: '🎟️ اشتري أي اسبراي واحصل على قسيمة 50 ج.م',
+    en: '🎟️ Buy any spray, get 50 EGP voucher',
+    hi: '🎟️ कोई भी स्प्रे खरीदें, 50 ईजीपी वाउचर पाएं',
+  );
+  String get presetIdea3 => _t(
+    ar: '✨ اشتري قطعتين واحصل على قطعة ثالثة مجاناً',
+    en: '✨ Buy 2 items, get 3rd item free',
+    hi: '✨ 2 वस्तुएं खरीदें, तीसरी वस्तु मुफ़्त पाएं',
+  );
 }

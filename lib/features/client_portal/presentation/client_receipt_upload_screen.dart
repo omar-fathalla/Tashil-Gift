@@ -215,6 +215,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         customPrompt: _activeEvent!.customPrompt,
         allowMultipleChances: _activeEvent!.allowMultipleChances,
         maxChancesPerReceipt: _activeEvent!.maxChancesPerReceipt,
+        promotionalRules: _activeEvent!.promotionalRules,
       );
 
       final previewImgUrl = 'data:$mimeType;base64,${base64Encode(bytes)}';

@@ -17,6 +17,7 @@ import '../../../core/utils/url_builder.dart';
 import '../../../core/constants/country_currency_config.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
+import '../../../core/services/campaign_ai_assistant_service.dart';
 import '../domain/company_model.dart';
 import '../domain/event_model.dart';
 import '../domain/company_gift_model.dart';
@@ -49,6 +50,10 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   late final TextEditingController _minimumSpendController;
   late final TextEditingController _requiredProductsController;
   late final TextEditingController _customPromptController;
+  late final TextEditingController _promotionalIdeaController;
+  String _aiValidationSummary = '';
+  List<PromotionalRuleItem> _promotionalRules = [];
+  bool _isAiStructuringRules = false;
   late final TextEditingController _welcomeTitleController;
   late final TextEditingController _welcomeMessageController;
   late final TextEditingController _termsController;
@@ -130,6 +135,10 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     _welcomeTitleController = TextEditingController(text: e?.welcomeTitle ?? 'عروض وحملات الشركات');
     _welcomeMessageController = TextEditingController(text: e?.welcomeMessage ?? 'قم برفع صورة فاتورة الشراء للحصول على فرص فوز فورية بأحد جوائزنا!');
     _termsController = TextEditingController(text: e?.termsAndConditions ?? 'الشروط والأحكام: الاحتفاظ بالفاتورة الأصلية عند الاستلام.');
+    
+    _promotionalIdeaController = TextEditingController(text: e?.promotionalIdea ?? '');
+    _aiValidationSummary = e?.aiValidationSummary ?? '';
+    _promotionalRules = List<PromotionalRuleItem>.from(e?.promotionalRules ?? []);
 
     if (e?.companySlug != null && e!.companySlug.isNotEmpty) {
       _loadCompanyProducts(e.companySlug);
@@ -908,6 +917,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     _minimumSpendController.dispose();
     _requiredProductsController.dispose();
     _customPromptController.dispose();
+    _promotionalIdeaController.dispose();
     _welcomeTitleController.dispose();
     _welcomeMessageController.dispose();
     _termsController.dispose();
@@ -931,6 +941,73 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       _customPromptController.text = currentPrompt
           .replaceAll(RegExp(r'\n?- مضاعفة فرص السحب واللعب:[^\n]+'), '')
           .trim();
+    }
+  }
+
+  Future<void> _structureCampaignWithAi() async {
+    final ideaText = _promotionalIdeaController.text.trim();
+    if (ideaText.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppStrings.of(ref).aiCampaignIdeaHint),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isAiStructuringRules = true);
+
+    try {
+      final targetCompany = _targetCompanyController.text.trim().isNotEmpty
+          ? _targetCompanyController.text.trim()
+          : 'الشركة المستهدفة';
+      final minSpend = _minimumSpendController.text.trim().toDoubleOrNull() ?? 0.0;
+
+      final result = await ref.read(campaignAiAssistantServiceProvider).structureCampaignIdea(
+        targetCompany: targetCompany,
+        rawIdeaText: ideaText,
+        existingPrompt: _customPromptController.text.trim(),
+        minimumSpend: minSpend,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _aiValidationSummary = result.aiValidationSummary;
+        _promotionalRules = result.rules;
+        if (result.formattedSystemPrompt.isNotEmpty) {
+          _customPromptController.text = result.formattedSystemPrompt;
+        }
+
+        if (result.suggestedRequiredProducts.isNotEmpty) {
+          final currentProducts = _requiredProductsController.text.trim();
+          if (currentProducts.isEmpty) {
+            _requiredProductsController.text = result.suggestedRequiredProducts.join(', ');
+          }
+        }
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('✨ تم تحليل وهيكلة قواعد العرض وتحديث البرومبت بنجاح!'),
+          backgroundColor: Colors.teal.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppErrorHandler.getFriendlyMessage(e, defaultMessage: 'فشل تحليل شروط العرض بالذكاء الاصطناعي')),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isAiStructuringRules = false);
+      }
     }
   }
 
@@ -1044,6 +1121,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         isAllBranches: _isAllBranches,
         allowMultipleChances: _allowMultipleChances,
         maxChancesPerReceipt: _maxChancesController.text.trim().toIntOrNull() ?? 0,
+        promotionalIdea: _promotionalIdeaController.text.trim(),
+        aiValidationSummary: _aiValidationSummary.trim(),
+        promotionalRules: _promotionalRules,
       );
 
       String createdEventId = widget.eventToEdit?.id ?? '';
@@ -1376,6 +1456,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     final activeCountry = ref.watch(activeCountryProvider);
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 650;
+    final strings = AppStrings.of(ref);
 
     return Center(
       child: SingleChildScrollView(
@@ -1873,7 +1954,12 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
                 const SizedBox(height: 20),
 
-                // Section 6: AI Prompt Editor
+                // Section 6: AI Campaign Idea & Rules Assistant (Smart Prompt Generator)
+                _buildAiCampaignAssistantSection(context, colorScheme, isMobile, strings),
+
+                const SizedBox(height: 20),
+
+                // Section 7: AI Prompt Editor
                 _buildSectionCard(
                   context: context,
                   icon: Icons.psychology_rounded,
@@ -2741,6 +2827,439 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               fontSize: 11,
               color: colorScheme.onSurfaceVariant,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAiCampaignAssistantSection(
+    BuildContext context,
+    ColorScheme colorScheme,
+    bool isMobile,
+    AppStrings strings,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            colorScheme.primary.withValues(alpha: 0.07),
+            colorScheme.secondary.withValues(alpha: 0.04),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: colorScheme.primary.withValues(alpha: 0.3),
+          width: 1.5,
+        ),
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section Title & AI Badge
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.auto_awesome_rounded,
+                  color: colorScheme.primary,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            strings.aiCampaignAssistantTitle,
+                            style: GoogleFonts.cairo(
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [colorScheme.primary, colorScheme.secondary],
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Text(
+                            'AI ⚡ Assistant',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      strings.aiCampaignAssistantSubtitle,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Preset Suggestion Chips
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildPresetChip(
+                label: strings.presetIdea1,
+                textToAdd: 'عند شراء عبوة كبيرة من المنتج يتم الحصول على عبوة صغيرة هدية فورية.',
+                colorScheme: colorScheme,
+              ),
+              _buildPresetChip(
+                label: strings.presetIdea2,
+                textToAdd: 'عند شراء أي عبوة اسبراي ريكسونا أو أكس يتم الحصول على قسيمة مشتريات (Voucher) بقيمة 50 جنيه، وتتضاعف القسيمة مع كل قطعة إضافية.',
+                colorScheme: colorScheme,
+              ),
+              _buildPresetChip(
+                label: strings.presetIdea3,
+                textToAdd: 'عند شراء قطعتين من منتجات تريزمي يحصل العميل على عبوة تريزمي 250 مل هدية مجانية.',
+                colorScheme: colorScheme,
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          // Text Field for natural language prompt
+          Container(
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: colorScheme.outlineVariant.withValues(alpha: 0.8),
+              ),
+            ),
+            padding: const EdgeInsets.all(12),
+            child: TextFormField(
+              controller: _promotionalIdeaController,
+              maxLines: 4,
+              minLines: 2,
+              style: const TextStyle(fontSize: 13.5, height: 1.5),
+              decoration: InputDecoration(
+                hintText: strings.aiCampaignIdeaHint,
+                hintStyle: TextStyle(
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                  fontSize: 12.5,
+                ),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: const EdgeInsets.all(4),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          // Magic Generate Action Button
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: FilledButton.icon(
+              onPressed: _isAiStructuringRules ? null : _structureCampaignWithAi,
+              icon: _isAiStructuringRules
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Icon(Icons.auto_awesome_rounded, size: 20),
+              label: Text(
+                _isAiStructuringRules
+                    ? strings.aiGeneratingRulesLoading
+                    : strings.aiGenerateRulesBtn,
+                style: GoogleFonts.cairo(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+          ),
+
+          // AI Logic & Rules Summary Preview Card
+          if (_aiValidationSummary.isNotEmpty || _promotionalRules.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            _buildAiRulesPreviewContainer(context, colorScheme, strings),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPresetChip({
+    required String label,
+    required String textToAdd,
+    required ColorScheme colorScheme,
+  }) {
+    return ActionChip(
+      avatar: const Icon(Icons.lightbulb_outline_rounded, size: 16),
+      label: Text(
+        label,
+        style: GoogleFonts.cairo(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+      side: BorderSide(
+        color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      onPressed: () {
+        final current = _promotionalIdeaController.text.trim();
+        if (current.isEmpty) {
+          _promotionalIdeaController.text = textToAdd;
+        } else {
+          _promotionalIdeaController.text = '$current\n$textToAdd';
+        }
+      },
+    );
+  }
+
+  Widget _buildAiRulesPreviewContainer(
+    BuildContext context,
+    ColorScheme colorScheme,
+    AppStrings strings,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: colorScheme.primary.withValues(alpha: 0.3),
+        ),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Icon(Icons.fact_check_rounded, color: colorScheme.primary, size: 22),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  strings.aiValidationSummaryHeader,
+                  style: GoogleFonts.cairo(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.primary,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.clear_rounded, size: 18),
+                tooltip: strings.clearAiSummaryBtn,
+                onPressed: () {
+                  setState(() {
+                    _aiValidationSummary = '';
+                    _promotionalRules.clear();
+                  });
+                },
+              ),
+            ],
+          ),
+          const Divider(height: 18),
+
+          // Summary Text
+          if (_aiValidationSummary.isNotEmpty)
+            SelectableText(
+              _aiValidationSummary,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.55,
+                color: colorScheme.onSurface,
+              ),
+            ),
+
+          if (_promotionalRules.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Text(
+              strings.aiPromotionalRulesListTitle,
+              style: GoogleFonts.cairo(
+                fontSize: 13.5,
+                fontWeight: FontWeight.bold,
+                color: colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _promotionalRules.length,
+              separatorBuilder: (_, index) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                final rule = _promotionalRules[index];
+                return _buildRuleItemTile(rule, index, colorScheme, strings);
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRuleItemTile(
+    PromotionalRuleItem rule,
+    int index,
+    ColorScheme colorScheme,
+    AppStrings strings,
+  ) {
+    IconData icon;
+    Color badgeColor;
+    String typeLabel;
+
+    switch (rule.rewardType) {
+      case 'voucher':
+        icon = Icons.confirmation_number_rounded;
+        badgeColor = Colors.amber.shade800;
+        typeLabel = strings.voucherRewardLabel;
+        break;
+      case 'game_spin':
+        icon = Icons.casino_rounded;
+        badgeColor = Colors.purple.shade700;
+        typeLabel = strings.gameSpinRewardLabel;
+        break;
+      case 'free_product':
+      default:
+        icon = Icons.card_giftcard_rounded;
+        badgeColor = Colors.teal.shade700;
+        typeLabel = strings.freeProductRewardLabel;
+        break;
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: badgeColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: badgeColor, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        rule.ruleTitle,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13.5,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: badgeColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        typeLabel,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: badgeColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '• الشرط: شراء ${rule.minQuantity} من [${rule.triggerProduct}] ➔ المكافأة: [${rule.rewardValue}]',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                if (rule.allowMultipliers) ...[
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Icon(Icons.all_inclusive_rounded, size: 14, color: Colors.blue.shade700),
+                      const SizedBox(width: 4),
+                      Text(
+                        strings.multipliersAllowedLabel,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.blue.shade700,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
+            onPressed: () {
+              setState(() {
+                _promotionalRules.removeAt(index);
+              });
+            },
           ),
         ],
       ),
