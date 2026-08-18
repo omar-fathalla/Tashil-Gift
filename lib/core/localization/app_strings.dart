@@ -831,4 +831,47 @@ class AppStrings {
     en: 'Confidence',
     hi: 'सटीकता',
   );
+
+  // Admin Auth & Security
+  String get rememberMe => _t(
+    ar: 'تذكر بيانات الدخول',
+    en: 'Remember Me',
+    hi: 'मुझे याद रखें',
+  );
+  String get signOutBtn => _t(
+    ar: 'تسجيل الخروج',
+    en: 'Sign Out',
+    hi: 'साइन आउट',
+  );
+  String get confirmSignOutTitle => _t(
+    ar: 'تأكيد تسجيل الخروج',
+    en: 'Confirm Sign Out',
+    hi: 'साइन आउट की पुष्टि करें',
+  );
+  String get confirmSignOutMsg => _t(
+    ar: 'هل أنت متأكد من رغبتك في تسجيل الخروج وقفل الجلسة الإدارية؟',
+    en: 'Are you sure you want to sign out and lock the administrative session?',
+    hi: 'क्या आप वाकई साइन आउट करना चाहते हैं और व्यवस्थापकीय सत्र लॉक करना चाहते हैं?',
+  );
+  String get unauthorizedAccessTitle => _t(
+    ar: 'وصول غير مصرح به',
+    en: 'Unauthorized Access',
+    hi: 'अनधिकृत पहुंच',
+  );
+  String get unauthorizedAccessMsg => _t(
+    ar: 'يرجى تسجيل الدخول بحساب الإدارة المعتمد للوصول إلى لوحة التحكم.',
+    en: 'Please sign in with the authorized admin account to access the dashboard.',
+    hi: 'डैशबोर्ड तक पहुंचने के लिए कृपया अधिकृत व्यवस्थापक खाते से साइन इन करें।',
+  );
+  String get secureAdminPortalBadge => _t(
+    ar: 'بوابة الإدارة الآمنة (Protected)',
+    en: 'Secure Admin Portal (Protected)',
+    hi: 'सुरक्षित व्यवस्थापक पोर्टल (संरक्षित)',
+  );
+  String get invalidAdminCredentialsMsg => _t(
+    ar: 'بيانات الدخول غير صحيحة أو الحساب غير مصرح له كمسؤول نظام.',
+    en: 'Invalid credentials or account is not authorized as system admin.',
+    hi: 'अमान्य क्रेडेंशियल या खाता सिस्टम व्यवस्थापक के रूप में अधिकृत नहीं है।',
+  );
 }
+

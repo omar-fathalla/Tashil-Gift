@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/firebase_service.dart';
 import '../../../core/utils/error_handler.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../core/widgets/switch_point_branding.dart';
-import '../../validation/presentation/validation_screen.dart';
+import '../../admin/presentation/admin_dashboard_screen.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
@@ -19,6 +20,30 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
+  bool _rememberMe = true;
+  bool _obscurePassword = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedCredentials();
+  }
+
+  Future<void> _loadSavedCredentials() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedEmail = prefs.getString('saved_admin_email');
+      final rememberMePref = prefs.getBool('remember_admin_me') ?? true;
+      if (mounted) {
+        setState(() {
+          _rememberMe = rememberMePref;
+          if (savedEmail != null && savedEmail.isNotEmpty) {
+            _emailController.text = savedEmail;
+          }
+        });
+      }
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -34,23 +59,35 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
     try {
       final authService = ref.read(firebaseServiceProvider);
-      await authService.signIn(
-        _emailController.text.trim(),
-        _passwordController.text.trim(),
-      );
+      final email = _emailController.text.trim();
+      final password = _passwordController.text.trim();
+
+      await authService.signIn(email, password);
+
+      // Save or clear Remember Me preference
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('remember_admin_me', _rememberMe);
+        if (_rememberMe) {
+          await prefs.setString('saved_admin_email', email);
+        } else {
+          await prefs.remove('saved_admin_email');
+        }
+      } catch (_) {}
       
-      // On success, navigate to the Validation Screen (Dashboard)
+      // On success, navigate to the Admin Dashboard
       if (mounted) {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const ValidationScreen()),
+          MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppErrorHandler.getFriendlyMessage(e, defaultMessage: strings.authFailedMsg)),
+            content: Text(AppErrorHandler.getFriendlyMessage(e, defaultMessage: strings.invalidAdminCredentialsMsg)),
             backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -97,19 +134,21 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: colorScheme.primaryContainer.withValues(alpha: 0.4),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.lock_open_rounded,
-                                size: 48,
-                                color: colorScheme.primary,
+                            Center(
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.primaryContainer.withValues(alpha: 0.4),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.admin_panel_settings_rounded,
+                                  size: 44,
+                                  color: colorScheme.primary,
+                                ),
                               ),
                             ),
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 18),
                             Text(
                               strings.authSignInTitle,
                               style: GoogleFonts.cairo(
@@ -128,7 +167,37 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                               ),
                               textAlign: TextAlign.center,
                             ),
-                            const SizedBox(height: 28),
+                            const SizedBox(height: 12),
+                            // Security badge
+                            Center(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.teal.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.teal.withValues(alpha: 0.3)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.shield_rounded, size: 14, color: Colors.teal),
+                                    const SizedBox(width: 6),
+                                    Flexible(
+                                      child: Text(
+                                        strings.secureAdminPortalBadge,
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.teal.shade800,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 24),
                             TextFormField(
                               controller: _emailController,
                               style: GoogleFonts.cairo(),
@@ -151,13 +220,21 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                             const SizedBox(height: 16),
                             TextFormField(
                               controller: _passwordController,
-                              obscureText: true,
+                              obscureText: _obscurePassword,
                               style: GoogleFonts.cairo(),
                               decoration: InputDecoration(
                                 labelText: strings.authPasswordLabel,
                                 labelStyle: GoogleFonts.cairo(),
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                                 prefixIcon: Icon(Icons.lock_outline_rounded, color: colorScheme.primary),
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                                    color: colorScheme.onSurfaceVariant,
+                                    size: 20,
+                                  ),
+                                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                                ),
                                 filled: true,
                                 fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
                               ),
@@ -168,7 +245,38 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                 return null;
                               },
                             ),
-                            const SizedBox(height: 24),
+                            const SizedBox(height: 12),
+                            // Remember Me Checkbox
+                            InkWell(
+                              onTap: () => setState(() => _rememberMe = !_rememberMe),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 4),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      height: 24,
+                                      width: 24,
+                                      child: Checkbox(
+                                        value: _rememberMe,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                        onChanged: (val) => setState(() => _rememberMe = val ?? true),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      strings.rememberMe,
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 13,
+                                        color: colorScheme.onSurface,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
                             FilledButton(
                               onPressed: _isLoading ? null : () => _login(strings),
                               style: FilledButton.styleFrom(
@@ -186,22 +294,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                       style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold),
                                     ),
                             ),
-                            const SizedBox(height: 12),
-                            FilledButton.tonal(
-                              onPressed: () {
-                                Navigator.of(context).pushReplacement(
-                                  MaterialPageRoute(builder: (_) => const ValidationScreen()),
-                                );
-                              },
-                              style: FilledButton.styleFrom(
-                                padding: const EdgeInsets.all(14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
-                              child: Text(
-                                strings.authQuickDemoBtn,
-                                style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.w600),
-                              ),
-                            ),
                           ],
                         ),
                       ),
@@ -217,3 +309,4 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     );
   }
 }
+

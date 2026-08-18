@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'core/localization/locale_provider.dart';
+import 'core/services/firebase_service.dart';
 import 'features/auth/presentation/auth_screen.dart';
 import 'features/admin/presentation/admin_dashboard_screen.dart';
 import 'features/client_portal/presentation/client_receipt_upload_screen.dart';
@@ -87,7 +88,7 @@ class MyApp extends ConsumerWidget {
         switch (uri.path) {
           case '/admin':
             return MaterialPageRoute(
-              builder: (context) => const AdminDashboardScreen(),
+              builder: (context) => const AdminAuthGuard(),
               settings: settings,
             );
           case '/portal':
@@ -117,4 +118,36 @@ class MyApp extends ConsumerWidget {
     );
   }
 }
+
+class AdminAuthGuard extends ConsumerWidget {
+  const AdminAuthGuard({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authStateStreamProvider);
+    final firebaseService = ref.read(firebaseServiceProvider);
+
+    return authState.when(
+      data: (user) {
+        if (user != null) {
+          return const AdminDashboardScreen();
+        }
+        return const AuthScreen();
+      },
+      loading: () {
+        if (firebaseService.currentUser != null) {
+          return const AdminDashboardScreen();
+        }
+        return Scaffold(
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          body: const Center(
+            child: CircularProgressIndicator(),
+          ),
+        );
+      },
+      error: (_, _) => const AuthScreen(),
+    );
+  }
+}
+
 

@@ -70,6 +70,52 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     );
   }
 
+  Future<void> _handleSignOut(BuildContext context, AppStrings strings) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(Icons.logout_rounded, color: cs.error),
+              const SizedBox(width: 8),
+              Text(
+                strings.confirmSignOutTitle,
+                style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: Text(
+            strings.confirmSignOutMsg,
+            style: GoogleFonts.cairo(fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(strings.cancel, style: GoogleFonts.cairo()),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: cs.error,
+                foregroundColor: cs.onError,
+              ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(strings.signOutBtn, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      await ref.read(firebaseServiceProvider).signOut();
+      if (context.mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -109,18 +155,36 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
             ),
             const SizedBox(width: 8),
           ],
-          if (isMobile)
+          if (isMobile) ...[
             IconButton(
               icon: Icon(Icons.open_in_browser_rounded, color: colorScheme.primary),
               tooltip: strings.previewClientApp,
               onPressed: () => Navigator.of(context).pushNamed('/'),
-            )
-          else
+            ),
+            IconButton(
+              icon: Icon(Icons.logout_rounded, color: colorScheme.error),
+              tooltip: strings.signOutBtn,
+              onPressed: () => _handleSignOut(context, strings),
+            ),
+          ] else ...[
             FilledButton.tonalIcon(
               onPressed: () => Navigator.of(context).pushNamed('/'),
               icon: const Icon(Icons.open_in_browser_rounded, size: 18),
               label: Text(strings.previewClientApp, style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold)),
             ),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              onPressed: () => _handleSignOut(context, strings),
+              icon: Icon(Icons.logout_rounded, size: 18, color: colorScheme.error),
+              label: Text(
+                strings.signOutBtn,
+                style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold, color: colorScheme.error),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: colorScheme.error.withValues(alpha: 0.4)),
+              ),
+            ),
+          ],
         ],
       ),
       body: Row(

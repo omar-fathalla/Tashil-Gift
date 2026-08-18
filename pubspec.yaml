@@ -53,6 +53,7 @@ dependencies:
   excel: ^4.0.6
   url_launcher: ^6.3.1
   audioplayers: ^6.7.1
+  shared_preferences: ^2.5.4
 
 
 dev_dependencies:
