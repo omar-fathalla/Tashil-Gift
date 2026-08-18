@@ -744,6 +744,105 @@ class M3Feedback {
     );
   }
 
+  /// Displays an animated Duplicate Rejection / Warning Modal
+  static Future<void> showDuplicateWarning(
+    BuildContext context, {
+    required String title,
+    required String message,
+    String buttonText = 'حسناً، فهمت',
+    IconData icon = Icons.warning_amber_rounded,
+    VoidCallback? onDismiss,
+  }) async {
+    HapticFeedback.heavyImpact();
+
+    await showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Duplicate Warning Modal',
+      barrierColor: Colors.black54,
+      transitionDuration: M3Durations.medium3,
+      transitionBuilder: (context, anim1, anim2, child) {
+        final curveValue = M3Curves.emphasizedDecelerate.transform(anim1.value);
+        return Transform.scale(
+          scale: 0.85 + (0.15 * curveValue),
+          child: Opacity(
+            opacity: anim1.value,
+            child: child,
+          ),
+        );
+      },
+      pageBuilder: (context, anim1, anim2) {
+        final colorScheme = Theme.of(context).colorScheme;
+
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          backgroundColor: colorScheme.surfaceContainerHigh,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 76,
+                height: 76,
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade100,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icon,
+                  size: 44,
+                  color: Colors.amber.shade900,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.cairo(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              if (message.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.cairo(
+                    fontSize: 14,
+                    color: colorScheme.onSurfaceVariant,
+                    height: 1.5,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    if (onDismiss != null) onDismiss();
+                  },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.amber.shade900,
+                    foregroundColor: Colors.white,
+                    shape: const StadiumBorder(),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: Text(
+                    buttonText,
+                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   /// Displays an animated Success / Approval Modal
   static Future<void> showSuccess(
     BuildContext context, {

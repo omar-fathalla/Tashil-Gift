@@ -107,7 +107,10 @@ class RetailChainsService {
     return list;
   }
 
-  Future<void> addRetailChain(RetailChainModel chain) async {
+  /// Adds a new retail chain.
+  /// Returns `true` if duplicate was detected and addition was rejected.
+  /// Returns `false` on successful addition of new unique chain.
+  Future<bool> addRetailChain(RetailChainModel chain) async {
     final cleanSlug = chain.slug.toLowerCase().trim().toEnglishDigits().replaceAll(RegExp(r'\s+'), '-');
     final deterministicId = cleanSlug.isNotEmpty ? cleanSlug : chain.name.toLowerCase().trim().toEnglishDigits().replaceAll(RegExp(r'\s+'), '-');
     
@@ -119,19 +122,26 @@ class RetailChainsService {
         c.name.trim().toLowerCase() == chain.name.trim().toLowerCase()
     ).firstOrNull;
 
-    final docId = existing?.id ?? (deterministicId.isNotEmpty ? deterministicId : _chainsCollection.doc().id);
+    if (existing != null) {
+      // Reject duplicate creation
+      return true;
+    }
+
+    final docId = deterministicId.isNotEmpty ? deterministicId : _chainsCollection.doc().id;
     final docRef = _chainsCollection.doc(docId);
     
     final toSave = chain.copyWith(
       id: docId,
       slug: cleanSlug.isNotEmpty ? cleanSlug : docId,
-      createdAt: existing?.createdAt ?? chain.createdAt ?? DateTime.now(),
+      createdAt: chain.createdAt ?? DateTime.now(),
     );
 
     await docRef.set(toSave.toFirestore(), SetOptions(merge: true)).timeout(
       const Duration(seconds: 4),
       onTimeout: () {},
     );
+
+    return false;
   }
 
   Future<void> updateRetailChain(RetailChainModel chain) async {
@@ -210,7 +220,7 @@ class RetailChainsService {
 
   /// Adds a branch with strict deduplication validation.
   /// If a branch with the same code, name, or storeId already exists in this chain,
-  /// it merges and updates the existing document instead of creating a duplicate.
+  /// the addition is rejected (returns `true` for isDuplicate) and no duplicate doc is created.
   Future<bool> addBranch(BranchModel branch) async {
     final chainId = branch.retailChainId.trim().toLowerCase();
     final cleanCode = branch.branchCode.trim().toUpperCase().toEnglishDigits();
@@ -221,8 +231,6 @@ class RetailChainsService {
     final existingBranchesSnap = await _branchesCollection
         .where('retailChainId', isEqualTo: branch.retailChainId)
         .get();
-
-    DocumentSnapshot<Map<String, dynamic>>? duplicateDoc;
 
     for (final doc in existingBranchesSnap.docs) {
       final data = doc.data();
@@ -236,24 +244,22 @@ class RetailChainsService {
       final matchesName = cleanName.isNotEmpty && existingName == cleanName;
 
       if (matchesCode || matchesStoreId || matchesName) {
-        duplicateDoc = doc;
-        break;
+        // Reject duplicate addition
+        return true;
       }
     }
 
-    // Deterministic ID if creating new doc
+    // Deterministic ID for new branch
     final deterministicDocId = branch.id.isNotEmpty
         ? branch.id
-        : (duplicateDoc?.id ??
-            '${chainId}_${cleanCode.isNotEmpty ? cleanCode.toLowerCase() : cleanName.replaceAll(RegExp(r'\s+'), '_')}');
+        : '${chainId}_${cleanCode.isNotEmpty ? cleanCode.toLowerCase() : cleanName.replaceAll(RegExp(r'\s+'), '_')}';
 
     final docRef = _branchesCollection.doc(deterministicDocId);
-    final isDuplicate = duplicateDoc != null;
 
     final toSave = branch.copyWith(
       id: docRef.id,
       branchCode: cleanCode,
-      createdAt: isDuplicate ? (BranchModel.fromFirestore(duplicateDoc).createdAt ?? DateTime.now()) : (branch.createdAt ?? DateTime.now()),
+      createdAt: branch.createdAt ?? DateTime.now(),
     );
 
     await docRef.set(toSave.toFirestore(), SetOptions(merge: true)).timeout(
@@ -264,7 +270,7 @@ class RetailChainsService {
     // Update branches count in parent chain
     await _recalculateChainBranchesCount(branch.retailChainId);
 
-    return isDuplicate;
+    return false;
   }
 
   Future<void> updateBranch(BranchModel branch) async {

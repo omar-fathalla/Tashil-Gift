@@ -112,17 +112,18 @@ Provide dedicated background and manual cleanup routines (`deduplicateAllBranche
 
 ---
 
-### Pillar 5: User-Facing Arabic Feedback
+### Pillar 5: User-Facing Arabic Rejection Feedback (Never Show Success / Added)
 Whenever a duplicate entry is intercepted during a form submission or AI receipt scan:
-- **Do not fail silently.**
-- Notify the user with clear, reassuring feedback:
+- **STRICT RULE:** You **MUST NEVER** display a success checkmark (✔️) or say "تمت" / "تم الحفظ" when a duplicate is submitted.
+- The action **MUST BE REJECTED** and accompanied by an explicit Amber/Warning modal via `M3Feedback.showDuplicateWarning` so the user knows clearly that the item was already registered and was rejected:
   ```dart
   if (isDuplicate) {
-    await M3Feedback.showSuccess(
+    await M3Feedback.showDuplicateWarning(
       context,
-      title: 'تم تحديث الفرع القائم 🛡️',
-      message: 'الفرع مسجل مسبقاً في السلسلة، تم تحديث بياناته وبصمته تلقائياً ومنع إنشاء سجل مكرر.',
+      title: 'تم رفض الإضافة: مسجل مسبقاً ⚠️',
+      message: 'هذا السجل / الفرع مسجل مسبقاً بالفعل في النظام (كود: $code). تم رفض العملية لمنع تكرار البيانات.',
     );
+    return;
   }
   ```
 
@@ -132,6 +133,8 @@ Whenever a duplicate entry is intercepted during a form submission or AI receipt
 
 - [ ] Does the entity have a deterministic Firestore Document ID based on natural keys?
 - [ ] Is there a pre-write check verifying uniqueness by code, slug, barcode, or name?
+- [ ] Are duplicate additions strictly REJECTED without creating or overwriting documents?
+- [ ] Does the UI show an explicit Warning Modal (`M3Feedback.showDuplicateWarning`) with an amber warning icon rather than a success checkmark?
 - [ ] Does the stream query pass raw snapshot documents through `_deduplicateList()`?
 - [ ] Does the screen trigger background deduplication on mount (`initState`)?
 - [ ] Is there a manual "تنظيف التكرارات" (Auto-Deduplicate) button for administrators?

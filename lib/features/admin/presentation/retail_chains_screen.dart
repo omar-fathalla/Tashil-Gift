@@ -144,14 +144,23 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
       );
 
       if (_editingChainId == null) {
-        await service.addRetailChain(chain);
+        final isDuplicate = await service.addRetailChain(chain);
         if (mounted) {
-          await M3Feedback.showAdded(
-            context,
-            itemName: name,
-            message: 'تمت إضافة السلسلة التجارية إلى النظام بنجاح.',
-            icon: Icons.storefront_rounded,
-          );
+          if (isDuplicate) {
+            await M3Feedback.showDuplicateWarning(
+              context,
+              title: 'تم رفض الإضافة: السلسلة مسجلة مسبقاً ⚠️',
+              message: 'السلسلة التجارية "$name" مسجلة مسبقاً بالفعل في النظام. تم رفض العملية لمنع تكرار البيانات.',
+            );
+            return;
+          } else {
+            await M3Feedback.showAdded(
+              context,
+              itemName: name,
+              message: 'تمت إضافة السلسلة التجارية إلى النظام بنجاح.',
+              icon: Icons.storefront_rounded,
+            );
+          }
         }
       } else {
         await service.updateRetailChain(chain);
@@ -281,11 +290,12 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
         final isDuplicate = await service.addBranch(branch);
         if (mounted) {
           if (isDuplicate) {
-            await M3Feedback.showSuccess(
+            await M3Feedback.showDuplicateWarning(
               context,
-              title: 'تم تحديث الفرع القائم 🛡️',
-              message: 'الفرع مسجل مسبقاً في السلسلة، تم تحديث بياناته تلقائياً ومنع إنشاء سجل مكرر.',
+              title: 'تم رفض الإضافة: الفرع مسجل مسبقاً ⚠️',
+              message: 'فرع "$branchName" مسجل مسبقاً بالفعل في السلسلة "${selectedChain.name}". تم رفض تسجيله لمنع التكرار.',
             );
+            return;
           } else {
             await M3Feedback.showAdded(
               context,
@@ -1054,12 +1064,12 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                               if (context.mounted) {
                                 Navigator.of(dialogCtx).pop();
                                 if (isDuplicate) {
-                                  await M3Feedback.showSuccess(
+                                  await M3Feedback.showDuplicateWarning(
                                     context,
-                                    title: isAr ? 'تم تحديث الفرع وبصمة الكاشير 🛡️' : 'Branch Updated',
+                                    title: isAr ? 'تم رفض الإضافة: الفرع مسجل مسبقاً ⚠️' : 'Duplicate Branch Rejected ⚠️',
                                     message: isAr
-                                        ? 'هذا الفرع مسجل مسبقاً في "$targetChainName". تم تحديث بصمة الكاشير والبيانات ومنع إنشاء سجل مكرر.'
-                                        : 'Branch already exists in "$targetChainName". Updated signature and avoided duplicate.',
+                                        ? 'فرع "$branchName" مسجل مسبقاً بالفعل في سلسلة "$targetChainName" بنفس الكود أو البصمة. تم رفض العملية لمنع تكرار البيانات.'
+                                        : 'Branch "$branchName" is already registered in "$targetChainName". Action was rejected to prevent duplicate data.',
                                   );
                                 } else {
                                   await M3Feedback.showSuccess(
