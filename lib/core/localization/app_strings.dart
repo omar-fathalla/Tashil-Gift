@@ -308,6 +308,36 @@ class AppStrings {
     en: 'Gift handover simulated successfully!',
     hi: 'उपहार सौंपने का सिमुलेशन सफल रहा!',
   );
+  String get directGiftCustomerCongrats => _t(
+    ar: 'مبروك! استحققت الهدية الفورية',
+    en: 'Congratulations! You earned the instant gift',
+    hi: 'बधाई हो! आप तत्काल उपहार के हकदार हैं',
+  );
+  String get directGiftCustomerVerified => _t(
+    ar: 'تم التحقق من الفاتورة بنجاح واستيفاء شروط العرض الترويجي.',
+    en: 'Receipt verified successfully and all promotion terms met.',
+    hi: 'रसीद का सफलतापूर्वक सत्यापन किया गया और प्रचार की शर्तें पूरी हुईं।',
+  );
+  String get directGiftCustomerHandoverNote => _t(
+    ar: 'يرجى استلام هديتك المعتمدة من ممثل الشركة في الفرع.',
+    en: 'Please receive your approved gift from the company representative in the branch.',
+    hi: 'कृपया शाखा में कंपनी प्रतिनिधि से अपना स्वीकृत उपहार प्राप्त करें।',
+  );
+  String get promoterLowStockWarningSingle => _t(
+    ar: '⚠️ تنبيه للبروموتر: متبقي قطعة واحدة فقط من هذا الصنف في المخزون!',
+    en: '⚠️ Promoter Alert: Only 1 unit remaining in stock!',
+    hi: '⚠️ प्रमोटर चेतावनी: स्टॉक में केवल 1 इकाई शेष है!',
+  );
+  String get promoterLowStockWarningDouble => _t(
+    ar: '⚠️ تنبيه للبروموتر: متبقي قطعتان فقط من هذا الصنف في المخزون!',
+    en: '⚠️ Promoter Alert: Only 2 units remaining in stock!',
+    hi: '⚠️ प्रमोटر चेतावनी: स्टॉक में केवल 2 इकाइयां शेष हैं!',
+  );
+  String get directGiftOutOfStock => _t(
+    ar: 'تم نفاد مخزون هذه الهدية بالفرع، يرجى مراجعة المشرف.',
+    en: 'This gift is currently out of stock at the branch. Please check with supervisor.',
+    hi: 'यह उपहार वर्तमान में शाखा में समाप्त हो गया है। कृपया पर्यवेक्षक से संपर्क करें।',
+  );
 
   // ---------------------------------------------------------------------------
   // 12. Client Portal / Promoter Flow

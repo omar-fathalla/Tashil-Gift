@@ -335,13 +335,15 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         final designatedPrize = prizeNames.isNotEmpty
             ? prizeNames.first
             : (activeEvent.allocatedPrizes.isNotEmpty ? activeEvent.allocatedPrizes.first.name : 'هدية فورية مميزة');
+        final promoQuantity = activeEvent.allowMultipleChances ? totalChances : 1;
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => DirectGiftClaimScreen(
               transactionId: transactionRef.id,
               eventId: activeEvent.id,
               prizeName: designatedPrize,
-              quantity: totalChances,
+              quantity: promoQuantity,
+              branchId: activeEvent.branchIds.isNotEmpty ? activeEvent.branchIds.first : null,
             ),
           ),
         );

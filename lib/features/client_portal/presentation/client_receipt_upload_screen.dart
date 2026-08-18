@@ -438,13 +438,15 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
             : ((currentEvent?.allocatedPrizes.isNotEmpty ?? false)
                 ? currentEvent!.allocatedPrizes.first.name
                 : 'هدية فورية مميزة');
+        final promoQuantity = (currentEvent?.allowMultipleChances ?? false) ? totalChances : 1;
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => DirectGiftClaimScreen(
               transactionId: transactionRef.id,
               eventId: currentEventId,
               prizeName: designatedPrize,
-              quantity: totalChances,
+              quantity: promoQuantity,
+              branchId: (currentEvent?.branchIds.isNotEmpty ?? false) ? currentEvent!.branchIds.first : null,
             ),
           ),
         );

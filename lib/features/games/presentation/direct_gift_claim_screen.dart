@@ -16,7 +16,8 @@ import 'winner_celebration_dialog.dart';
 import 'game_demo_banner.dart';
 
 /// Screen displayed when an event uses the "Direct Instant Gift" (الهدية الفورية المباشرة) game type.
-/// The customer is awarded the designated promotional gift immediately upon verified purchase.
+/// The customer is presented with an elegant, celebratory gift screen showing only customer-relevant
+/// information, while the promoter receives smart real-time stock alerts for low inventory.
 class DirectGiftClaimScreen extends ConsumerStatefulWidget {
   final String transactionId;
   final String eventId;
@@ -47,6 +48,8 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
 
   bool _isClaiming = false;
   bool _isClaimed = false;
+  int? _remainingStock;
+  bool _isLoadingStock = true;
 
   @override
   void initState() {
@@ -68,6 +71,9 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
 
     _animController.forward();
 
+    // Fetch remaining stock for promoter awareness
+    _fetchRemainingStock();
+
     // Play subtle joyful unlock sound effect upon viewing instant gift
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(gameAudioServiceProvider).playGiftUnlock();
@@ -78,6 +84,50 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
   void dispose() {
     _animController.dispose();
     super.dispose();
+  }
+
+  Future<void> _fetchRemainingStock() async {
+    if (widget.isDemo || widget.eventId.isEmpty) {
+      if (mounted) setState(() => _isLoadingStock = false);
+      return;
+    }
+
+    try {
+      final doc = await ref
+          .read(firestoreProvider)
+          .collection('events')
+          .doc(widget.eventId)
+          .get();
+
+      if (doc.exists && doc.data() != null) {
+        final prizes = List<Map<String, dynamic>>.from(doc.data()!['allocatedPrizes'] ?? []);
+        int foundRemaining = -1;
+
+        for (final p in prizes) {
+          final matches = p['giftId'] == widget.prizeName || p['name'] == widget.prizeName;
+          if (matches) {
+            if (widget.branchId != null && widget.branchId!.isNotEmpty && p['branchId'] == widget.branchId) {
+              foundRemaining = (p['remainingQuantity'] as num?)?.toInt() ?? 0;
+              break;
+            } else if (foundRemaining == -1) {
+              foundRemaining = (p['remainingQuantity'] as num?)?.toInt() ?? 0;
+            }
+          }
+        }
+
+        if (mounted) {
+          setState(() {
+            _remainingStock = foundRemaining >= 0 ? foundRemaining : null;
+            _isLoadingStock = false;
+          });
+        }
+      } else {
+        if (mounted) setState(() => _isLoadingStock = false);
+      }
+    } catch (e) {
+      debugPrint('Error fetching remaining prize stock: $e');
+      if (mounted) setState(() => _isLoadingStock = false);
+    }
   }
 
   void _resetDemo() {
@@ -92,6 +142,17 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
 
   Future<void> _claimAndHandoverGift() async {
     if (_isClaiming || _isClaimed) return;
+
+    if (_remainingStock != null && _remainingStock! <= 0 && !widget.isDemo) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppStrings.of(ref).directGiftOutOfStock),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
     setState(() => _isClaiming = true);
 
@@ -134,6 +195,9 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
       setState(() {
         _isClaiming = false;
         _isClaimed = true;
+        if (_remainingStock != null) {
+          _remainingStock = (_remainingStock! - effectiveQuantity).clamp(0, double.infinity).toInt();
+        }
       });
 
       // 3. Trigger celebration modal
@@ -153,6 +217,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
         SnackBar(
           content: Text(AppErrorHandler.getFriendlyMessage(e, defaultMessage: 'حدث خطأ أثناء تسجيل تسليم الهدية')),
           backgroundColor: Theme.of(context).colorScheme.error,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     }
@@ -165,6 +230,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
     final isAr = ref.isArabic;
     final strings = AppStrings.of(ref);
     final effectiveQuantity = widget.quantity > 0 ? widget.quantity : 1;
+    final isOutOfStock = _remainingStock != null && _remainingStock! <= 0 && !widget.isDemo;
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
@@ -196,230 +262,289 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                      // Top Banner / Tag
-                      Center(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: colorScheme.primaryContainer,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.verified_rounded, color: colorScheme.primary, size: 20),
-                              const SizedBox(width: 8),
-                              Text(
-                                isAr ? 'هدية فورية معتمدة ومضمونة' : 'Guaranteed Instant Gift',
-                                style: GoogleFonts.cairo(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: colorScheme.onPrimaryContainer,
+                            // Top Banner / Tag (Customer-facing certified badge)
+                            Center(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.primaryContainer,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.verified_rounded, color: colorScheme.primary, size: 20),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      isAr ? 'هدية فورية معتمدة ومضمونة' : 'Guaranteed Instant Gift',
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: colorScheme.onPrimaryContainer,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Main Gift Presentation Card
-                      ScaleTransition(
-                        scale: _scaleAnimation,
-                        child: Card(
-                          elevation: 0,
-                          color: colorScheme.surfaceContainerLow,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
-                            side: BorderSide(
-                              color: colorScheme.outlineVariant.withValues(alpha: 0.6),
-                              width: 1.5,
                             ),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(28.0),
-                            child: Column(
-                              children: [
-                                // Glowing Gift Icon Container
-                                Container(
-                                  width: 100,
-                                  height: 100,
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        colorScheme.primary,
-                                        colorScheme.tertiary,
-                                      ],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ),
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: colorScheme.primary.withValues(alpha: 0.35),
-                                        blurRadius: 20,
-                                        offset: const Offset(0, 8),
-                                      ),
-                                    ],
-                                  ),
-                                  child: const Icon(
-                                    Icons.redeem_rounded,
-                                    size: 54,
-                                    color: Colors.white,
+                            const SizedBox(height: 24),
+
+                            // Main Gift Presentation Card (Celebratory Customer View)
+                            ScaleTransition(
+                              scale: _scaleAnimation,
+                              child: Card(
+                                elevation: 0,
+                                color: colorScheme.surfaceContainerLow,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(24),
+                                  side: BorderSide(
+                                    color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+                                    width: 1.5,
                                   ),
                                 ),
-                                const SizedBox(height: 24),
-
-                                // Congratulations Header
-                                Text(
-                                  isAr ? 'مبروك! استحققت الهدية الفورية' : 'Congratulations! Instant Gift Claim',
-                                  textAlign: TextAlign.center,
-                                  style: GoogleFonts.cairo(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: colorScheme.primary,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-
-                                // Designated Prize Name
-                                Text(
-                                  widget.prizeName.isNotEmpty
-                                      ? widget.prizeName
-                                      : (isAr ? 'هدية ترويجية متميزة' : 'Promotional Gift'),
-                                  textAlign: TextAlign.center,
-                                  style: GoogleFonts.cairo(
-                                    fontSize: 26,
-                                    fontWeight: FontWeight.bold,
-                                    color: colorScheme.onSurface,
-                                    height: 1.3,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-
-                                // Quantity & Multiplier Chip
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                                  decoration: BoxDecoration(
-                                    color: effectiveQuantity > 1
-                                        ? colorScheme.secondaryContainer
-                                        : colorScheme.surfaceContainerHighest,
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(
-                                      color: effectiveQuantity > 1
-                                          ? colorScheme.secondary
-                                          : colorScheme.outlineVariant,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(28.0),
+                                  child: Column(
                                     children: [
-                                      Icon(
-                                        effectiveQuantity > 1 ? Icons.stars_rounded : Icons.inventory_2_rounded,
-                                        color: effectiveQuantity > 1
-                                            ? colorScheme.secondary
-                                            : colorScheme.onSurfaceVariant,
-                                        size: 22,
+                                      // Glowing Gift Icon Container
+                                      Container(
+                                        width: 100,
+                                        height: 100,
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              colorScheme.primary,
+                                              colorScheme.tertiary,
+                                            ],
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
+                                          ),
+                                          shape: BoxShape.circle,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: colorScheme.primary.withValues(alpha: 0.35),
+                                              blurRadius: 20,
+                                              offset: const Offset(0, 8),
+                                            ),
+                                          ],
+                                        ),
+                                        child: const Icon(
+                                          Icons.redeem_rounded,
+                                          size: 54,
+                                          color: Colors.white,
+                                        ),
                                       ),
-                                      const SizedBox(width: 8),
+                                      const SizedBox(height: 24),
+
+                                      // Congratulations Header
                                       Text(
-                                        '${strings.directGiftQuantity}: $effectiveQuantity ${isAr ? (effectiveQuantity > 1 ? 'قطع' : 'قطعة') : (effectiveQuantity > 1 ? 'Units' : 'Unit')}',
+                                        strings.directGiftCustomerCongrats,
+                                        textAlign: TextAlign.center,
                                         style: GoogleFonts.cairo(
                                           fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                          color: colorScheme.primary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+
+                                      // Designated Prize Name
+                                      Text(
+                                        widget.prizeName.isNotEmpty
+                                            ? widget.prizeName
+                                            : (isAr ? 'هدية ترويجية متميزة' : 'Promotional Gift'),
+                                        textAlign: TextAlign.center,
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 26,
                                           fontWeight: FontWeight.bold,
-                                          color: effectiveQuantity > 1
-                                              ? colorScheme.onSecondaryContainer
-                                              : colorScheme.onSurface,
+                                          color: colorScheme.onSurface,
+                                          height: 1.3,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 16),
+
+                                      // Multiplier Badge (Only shown if customer earned >1 gifts)
+                                      if (effectiveQuantity > 1)
+                                        Padding(
+                                          padding: const EdgeInsets.only(bottom: 16),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                            decoration: BoxDecoration(
+                                              color: colorScheme.secondaryContainer,
+                                              borderRadius: BorderRadius.circular(16),
+                                              border: Border.all(color: colorScheme.secondary),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.stars_rounded, color: colorScheme.secondary, size: 20),
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  '${isAr ? 'عدد الهدايا المستحقة' : 'Gifts Earned'}: $effectiveQuantity ${isAr ? 'قطع' : 'Units'}',
+                                                  style: GoogleFonts.cairo(
+                                                    fontSize: 15,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: colorScheme.onSecondaryContainer,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+
+                                      // Information details (Refined, strictly customer-facing)
+                                      Container(
+                                        padding: const EdgeInsets.all(16),
+                                        decoration: BoxDecoration(
+                                          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                                          borderRadius: BorderRadius.circular(16),
+                                        ),
+                                        child: Column(
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Icon(Icons.check_circle_outline_rounded, color: Colors.green.shade600, size: 20),
+                                                const SizedBox(width: 10),
+                                                Expanded(
+                                                  child: Text(
+                                                    strings.directGiftCustomerVerified,
+                                                    style: GoogleFonts.cairo(
+                                                      fontSize: 13,
+                                                      fontWeight: FontWeight.w500,
+                                                      color: colorScheme.onSurface,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 10),
+                                            Row(
+                                              children: [
+                                                Icon(Icons.card_giftcard_rounded, color: colorScheme.primary, size: 20),
+                                                const SizedBox(width: 10),
+                                                Expanded(
+                                                  child: Text(
+                                                    strings.directGiftCustomerHandoverNote,
+                                                    style: GoogleFonts.cairo(
+                                                      fontSize: 13,
+                                                      color: colorScheme.onSurfaceVariant,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
-                                const SizedBox(height: 20),
+                              ),
+                            ),
 
-                                // Information details
-                                Container(
-                                  padding: const EdgeInsets.all(16),
+                            // Promoter Smart Low Stock Alert (Only visible when stock is 1 or 2 units)
+                            if (_remainingStock != null && _remainingStock! > 0 && _remainingStock! <= 2 && !widget.isDemo)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 16),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                   decoration: BoxDecoration(
-                                    color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                                    color: Colors.amber.shade50,
                                     borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: Colors.amber.shade400, width: 1.5),
                                   ),
-                                  child: Column(
+                                  child: Row(
                                     children: [
-                                      Row(
-                                        children: [
-                                          Icon(Icons.check_circle_outline_rounded, color: Colors.green.shade600, size: 20),
-                                          const SizedBox(width: 10),
-                                          Expanded(
-                                            child: Text(
-                                              isAr
-                                                  ? 'تم التحقق من الفاتورة بنجاح واستيفاء كافة الشروط.'
-                                                  : 'Receipt validated and all campaign conditions met.',
-                                              style: GoogleFonts.cairo(fontSize: 13, color: colorScheme.onSurfaceVariant),
-                                            ),
+                                      Icon(Icons.warning_amber_rounded, color: Colors.amber.shade900, size: 22),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          _remainingStock == 1
+                                              ? strings.promoterLowStockWarningSingle
+                                              : strings.promoterLowStockWarningDouble,
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.amber.shade900,
+                                            height: 1.35,
                                           ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Row(
-                                        children: [
-                                          Icon(Icons.auto_awesome_rounded, color: colorScheme.primary, size: 20),
-                                          const SizedBox(width: 10),
-                                          Expanded(
-                                            child: Text(
-                                              isAr
-                                                  ? 'سيتم خصم الهدية وتحديث السجل فور الضغط على زر التسليم.'
-                                                  : 'Stock will be deducted and transaction logged upon handover.',
-                                              style: GoogleFonts.cairo(fontSize: 13, color: colorScheme.onSurfaceVariant),
-                                            ),
-                                          ),
-                                        ],
+                                        ),
                                       ),
                                     ],
                                   ),
                                 ),
-                              ],
+                              ),
+
+                            // Out of stock warning (if 0 units left)
+                            if (isOutOfStock)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 16),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.errorContainer,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: colorScheme.error, width: 1.5),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.block_rounded, color: colorScheme.error, size: 22),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          strings.directGiftOutOfStock,
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: colorScheme.onErrorContainer,
+                                            height: 1.35,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
+                            const SizedBox(height: 28),
+
+                            // Action Button (Handover & Claim)
+                            M3ActionButton(
+                              onPressed: (_isClaiming || _isClaimed || isOutOfStock) ? null : _claimAndHandoverGift,
+                              label: _isClaimed
+                                  ? (isAr ? 'تم تسليم الهدية بنجاح' : 'Gift Handed Over')
+                                  : (isOutOfStock ? (isAr ? 'المخزون نافد' : 'Out of Stock') : strings.claimDirectGift),
+                              icon: _isClaimed
+                                  ? Icons.done_all_rounded
+                                  : (isOutOfStock ? Icons.block_rounded : Icons.check_circle_rounded),
+                              isLoading: _isClaiming,
                             ),
-                          ),
+                            const SizedBox(height: 12),
+
+                            // Back / Cancel text button
+                            TextButton.icon(
+                              onPressed: _isClaiming ? null : () => Navigator.of(context).pop(),
+                              icon: Icon(Icons.arrow_back_rounded, size: 18, color: colorScheme.onSurfaceVariant),
+                              label: Text(
+                                isAr ? 'العودة لشاشة الفحص' : 'Back to Validation',
+                                style: GoogleFonts.cairo(
+                                  fontSize: 14,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 32),
-
-                      // Action Button (Handover & Claim)
-                      M3ActionButton(
-                        onPressed: _isClaiming || _isClaimed ? null : _claimAndHandoverGift,
-                        label: _isClaimed
-                            ? (isAr ? 'تم تسليم الهدية بنجاح' : 'Gift Handed Over')
-                            : strings.claimDirectGift,
-                        icon: _isClaimed ? Icons.done_all_rounded : Icons.check_circle_rounded,
-                        isLoading: _isClaiming,
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Back / Cancel text button
-                      TextButton.icon(
-                        onPressed: _isClaiming ? null : () => Navigator.of(context).pop(),
-                        icon: Icon(Icons.arrow_back_rounded, size: 18, color: colorScheme.onSurfaceVariant),
-                        label: Text(
-                          isAr ? 'العودة لشاشة الفحص' : 'Back to Validation',
-                          style: GoogleFonts.cairo(
-                            fontSize: 14,
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
           ),
         ),
-      ],
-    ),
-  ),
-),
-);
+      ),
+    );
   }
 }
