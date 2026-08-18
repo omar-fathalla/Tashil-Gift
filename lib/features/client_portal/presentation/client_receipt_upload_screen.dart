@@ -559,17 +559,6 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       backgroundColor: colorScheme.surface,
       appBar: SwitchPointHeader(
         subtitle: '${strings.clientPortalSubtitle} — ${event.targetCompany}',
-        customActions: [
-          Tooltip(
-            message: strings.authSuperAdminTooltip,
-            waitDuration: const Duration(milliseconds: 400),
-            child: IconButton(
-              icon: const Icon(Icons.admin_panel_settings_rounded),
-              color: colorScheme.primary,
-              onPressed: () => Navigator.of(context).pushNamed('/admin'),
-            ),
-          ),
-        ],
       ),
       body: Column(
         children: [

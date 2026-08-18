@@ -71,14 +71,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       backgroundColor: colorScheme.surface,
       appBar: SwitchPointHeader(
         subtitle: strings.authPortalSubtitle,
-        customActions: [
-          IconButton(
-            icon: const Icon(Icons.admin_panel_settings_rounded),
-            tooltip: strings.authSuperAdminTooltip,
-            color: colorScheme.primary,
-            onPressed: () => Navigator.of(context).pushNamed('/admin'),
-          ),
-        ],
       ),
       body: Column(
         children: [
@@ -208,21 +200,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                               child: Text(
                                 strings.authQuickDemoBtn,
                                 style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.w600),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            OutlinedButton.icon(
-                              onPressed: () {
-                                Navigator.of(context).pushNamed('/admin');
-                              },
-                              icon: const Icon(Icons.dashboard_customize_rounded, size: 18),
-                              label: Text(
-                                strings.authSuperAdminBtn,
-                                style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.w600),
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.all(14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               ),
                             ),
                           ],

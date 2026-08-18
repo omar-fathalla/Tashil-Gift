@@ -761,4 +761,9 @@ class AppStrings {
     en: '✨ Buy 2 items, get 3rd item free',
     hi: '✨ 2 वस्तुएं खरीदें, तीसरी वस्तु मुफ़्त पाएं',
   );
+  String get presetIdea4 => _t(
+    ar: '🎟️ عرض الفاوتشر المتدرج (اسبراي ورول أون)',
+    en: '🎟️ Tiered Voucher Offer (Sprays & Roll-ons)',
+    hi: '🎟️ स्तरीय वाउचर ऑफ़र (स्प्रे और रोल-ऑन)',
+  );
 }

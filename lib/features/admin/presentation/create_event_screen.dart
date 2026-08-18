@@ -2947,6 +2947,11 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                 textToAdd: 'عند شراء قطعتين من منتجات تريزمي يحصل العميل على عبوة تريزمي 250 مل هدية مجانية.',
                 colorScheme: colorScheme,
               ),
+              _buildPresetChip(
+                label: strings.presetIdea4,
+                textToAdd: 'عند شراء أي قطعة اسبراي (ريكسونا أو أكس) يتم الحصول على فواتشر بقيمة 50 جنيه.\nعند شراء أي 2 قطعة اسبراي (ريكسونا أو أكس) يتم الحصول على فواتشر بقيمة 125 جنيه.\nعند شراء أي 2 قطعة ريكسونا رول اون (ريكسونا أو أكس) يتم الحصول على فواتشر بقيمة 50 جنيه.',
+                colorScheme: colorScheme,
+              ),
             ],
           ),
 

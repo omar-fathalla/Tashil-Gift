@@ -131,5 +131,54 @@ void main() {
       expect(result.rules.first.rewardAmount, 50.0);
       expect(result.rules.first.allowMultipliers, isTrue);
     });
+
+    test('CampaignAiAnalysisResult parses multi-tiered spray and roll-on promotion accurately', () {
+      final json = {
+        'formattedSystemPrompt': 'برومبت فحص فواتير يونيليفر (اسبراي ورول أون)',
+        'aiValidationSummary': '• شراء قطعة اسبراي ريكسونا أو أكس -> قسيمة 50 جنيه\n• شراء قطعتين اسبراي ريكسونا أو أكس -> قسيمة 125 جنيه\n• شراء قطعتين رول أون -> قسيمة 50 جنيه',
+        'suggestedRequiredProducts': ['اسبراي ريكسونا', 'اسبراي أكس', 'ريكسونا رول اون', 'أكس رول اون'],
+        'rules': [
+          {
+            'id': 'rule_spray_1',
+            'ruleTitle': 'شراء 1 اسبراي ريكسونا/أكس',
+            'triggerProduct': 'اسبراي ريكسونا، اسبراي أكس',
+            'minQuantity': 1,
+            'rewardType': 'voucher',
+            'rewardValue': 'قسيمة مشتريات 50 جنيه',
+            'rewardAmount': 50.0,
+            'allowMultipliers': false,
+          },
+          {
+            'id': 'rule_spray_2',
+            'ruleTitle': 'شراء 2 اسبراي ريكسونا/أكس',
+            'triggerProduct': 'اسبراي ريكسونا، اسبراي أكس',
+            'minQuantity': 2,
+            'rewardType': 'voucher',
+            'rewardValue': 'قسيمة مشتريات 125 جنيه',
+            'rewardAmount': 125.0,
+            'allowMultipliers': true,
+          },
+          {
+            'id': 'rule_rollon_2',
+            'ruleTitle': 'شراء 2 ريكسونا/أكس رول اون',
+            'triggerProduct': 'ريكسونا رول اون، أكس رول اون',
+            'minQuantity': 2,
+            'rewardType': 'voucher',
+            'rewardValue': 'قسيمة مشتريات 50 جنيه',
+            'rewardAmount': 50.0,
+            'allowMultipliers': true,
+          },
+        ]
+      };
+
+      final result = CampaignAiAnalysisResult.fromJson(json);
+      expect(result.rules.length, 3);
+      expect(result.rules[0].rewardAmount, 50.0);
+      expect(result.rules[1].minQuantity, 2);
+      expect(result.rules[1].rewardAmount, 125.0);
+      expect(result.rules[2].triggerProduct, contains('رول اون'));
+      expect(result.rules[2].rewardAmount, 50.0);
+      expect(result.suggestedRequiredProducts.length, 4);
+    });
   });
 }
