@@ -766,4 +766,69 @@ class AppStrings {
     en: '🎟️ Tiered Voucher Offer (Sprays & Roll-ons)',
     hi: '🎟️ स्तरीय वाउचर ऑफ़र (स्प्रे और रोल-ऑन)',
   );
+  String get aiScanReceiptTemplate => _t(
+    ar: 'استخراج بصمة البونة والفرع بالذكاء الاصطناعي',
+    en: 'AI Scan Receipt & Extract Branch Signature',
+    hi: 'एआई रसीद स्कैन और शाखा हस्ताक्षर निकालें',
+  );
+  String get aiScanReceiptTemplateSub => _t(
+    ar: 'قم برفع أو تصوير بونة الفاتورة لاستخراج السلسلة والفرع وكود المتجر ونمط الباركود آلياً',
+    en: 'Upload or snap a sample receipt to auto-extract chain, branch, store code, and barcode pattern',
+    hi: 'श्रृंखला, शाखा, स्टोर कोड और बारकोड पैटर्न को स्वतः निकालने के लिए रसीद अपलोड करें',
+  );
+  String get uploadReceiptSampleBtn => _t(
+    ar: '📸 رفع صورة بونة الفاتورة',
+    en: '📸 Upload Sample Receipt',
+    hi: '📸 नमूना रसीद अपलोड करें',
+  );
+  String get analyzingReceiptSignature => _t(
+    ar: 'جاري تحليل بصمة البونة ونظام الكاشير POS بالذكاء الاصطناعي...',
+    en: 'Analyzing receipt signature & POS cashier system via AI...',
+    hi: 'एआई के माध्यम से रसीद हस्ताक्षर और पीओएस कैशियर सिस्टम का विश्लेषण...',
+  );
+  String get signatureExtractedSuccess => _t(
+    ar: 'تم استخراج بصمة البونة والفرع بنجاح',
+    en: 'Receipt & Branch Signature Extracted Successfully',
+    hi: 'रसीद और शाखा हस्ताक्षर सफलतापूर्वक निकाला गया',
+  );
+  String get saveChainAndBranchWithSignature => _t(
+    ar: '💾 حفظ واعتماد السلسلة والفرع بالبصمة الذكية',
+    en: '💾 Save & Verify Chain & Branch with Smart Signature',
+    hi: '💾 स्मार्ट हस्ताक्षर के साथ श्रृंखला और शाखा सहेजें और सत्यापित करें',
+  );
+  String get posStoreId => _t(
+    ar: 'كود المتجر في الـ POS',
+    en: 'POS Store ID',
+    hi: 'पीओएस स्टोर आईडी',
+  );
+  String get receiptBarcodePattern => _t(
+    ar: 'نمط وهيكل رقم الفاتورة والباركود',
+    en: 'Receipt & Barcode Pattern',
+    hi: 'रसीद और बारकोड पैटर्न',
+  );
+  String get headerKeywordsLabel => _t(
+    ar: 'الكلمات الدلالية لرأس البونة',
+    en: 'Header Keywords',
+    hi: 'शीर्षक कीवर्ड',
+  );
+  String get hasSmartSignatureBadge => _t(
+    ar: 'بصمة ذكية معتمدة',
+    en: 'Verified Smart Signature',
+    hi: 'सत्यापित स्मार्ट हस्ताक्षर',
+  );
+  String get linkWithExistingChain => _t(
+    ar: 'ربط بسلسلة تجارية مسجلة',
+    en: 'Link to Existing Retail Chain',
+    hi: 'मौजूदा खुदरा श्रृंखला से लिंक करें',
+  );
+  String get createNewChain => _t(
+    ar: 'إنشاء سلسلة تجارية جديدة',
+    en: 'Create New Retail Chain',
+    hi: 'नई खुदरा श्रृंखला बनाएं',
+  );
+  String get confidenceScoreLabel => _t(
+    ar: 'نسبة الدقة',
+    en: 'Confidence',
+    hi: 'सटीकता',
+  );
 }

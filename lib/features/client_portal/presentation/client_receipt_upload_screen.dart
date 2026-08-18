@@ -11,6 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/services/firebase_service.dart';
 import '../../../core/services/ai_receipt_service.dart';
 import '../../../core/services/company_products_service.dart';
+import '../../../core/services/retail_chains_service.dart';
 import '../../../core/utils/error_handler.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
 import '../../../core/widgets/switch_point_branding.dart';
@@ -19,6 +20,7 @@ import '../../../core/localization/app_strings.dart';
 import '../../../core/widgets/m3_progress_indicators.dart';
 import '../../../core/animations/m3_motion.dart';
 import '../../admin/domain/event_model.dart';
+import '../../admin/domain/retail_chain_model.dart';
 import '../../games/presentation/spin_the_wheel_screen.dart';
 import '../../games/presentation/scratch_card_screen.dart';
 import '../../games/presentation/direct_gift_claim_screen.dart';
@@ -198,6 +200,16 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
             item.productName: item.barcode,
       };
 
+      // Fetch retail chain branch signatures if available for deterministic anti-fraud matching
+      List<BranchModel> chainBranches = [];
+      try {
+        if (_activeEvent!.retailChainId.isNotEmpty) {
+          chainBranches = await ref
+              .read(retailChainsServiceProvider)
+              .getBranchesForChain(_activeEvent!.retailChainId);
+        }
+      } catch (_) {}
+
       // Run Gemini AI analysis
       final result = await aiService.analyzeReceiptImage(
         bytes,
@@ -210,6 +222,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         retailChainName: _activeEvent!.retailChainName,
         allowedBranches: _activeEvent!.branchNames,
         isAllBranches: _activeEvent!.isAllBranches,
+        registeredBranches: chainBranches,
         startDate: _activeEvent!.startDate,
         endDate: _activeEvent!.endDate,
         customPrompt: _activeEvent!.customPrompt,

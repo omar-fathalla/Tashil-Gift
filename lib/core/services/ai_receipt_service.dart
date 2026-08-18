@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:al_mraay/features/admin/domain/event_model.dart';
+import 'package:al_mraay/features/admin/domain/retail_chain_model.dart';
 
 /// Provide your actual Gemini API Key here or load from environment variables
 const String _geminiApiKey =
@@ -328,6 +329,7 @@ class AiReceiptService {
     String retailChainName = '',
     List<String> allowedBranches = const [],
     bool isAllBranches = true,
+    List<BranchModel> registeredBranches = const [],
     DateTime? startDate,
     DateTime? endDate,
     String customPrompt = '',
@@ -366,6 +368,22 @@ $rulesListFormatted
 ''';
       }
 
+      String branchSignaturesText = '';
+      final branchesWithSignatures = registeredBranches
+          .where((b) => b.receiptSignature != null && b.receiptSignature!.hasSignature)
+          .toList();
+      if (branchesWithSignatures.isNotEmpty) {
+        final sigsList = branchesWithSignatures.map((b) {
+          final s = b.receiptSignature!;
+          return '  * فرع "${b.branchName}" (${b.retailChainName}): [Store ID: "${s.storeId}", كود: "${b.branchCode}", نسق الفاتورة/الباركود: "${s.receiptPattern}", نسق الـ POS: "${s.posNumberPattern}", الرقم الضريبي: "${s.taxNumber}", الهاتف/الخط الساخن: "${s.hotline}", كلمات الرأس: ${s.headerKeywords.join("/")}]';
+        }).join('\n');
+        branchSignaturesText = '''
+- البصمات الهيكلية المعتمدة لنقاط البيع (Store POS Receipt Signatures):
+$sigsList
+استخدم هذه البصمات والأكواد لمطابقة الفرع والسلسلة بدقة قاطعة 100% حتى لو كان الشعار باهتاً أو الاسم مختصراً.
+''';
+      }
+
       String branchCondition = '';
       if (retailChainName.trim().isNotEmpty) {
         if (!isAllBranches && allowedBranches.isNotEmpty) {
@@ -373,13 +391,17 @@ $rulesListFormatted
 - السلسلة المعتمدة للحملة: "$retailChainName".
 - الفروع المعتمدة حصراً لهذا العرض: [${allowedBranches.join("، ")}].
 - المطلوب للفرع: افحص رأس الفاتورة بدقة واستخرج اسم السلسلة في (storeChainDetected) واسم الفرع أو عنوانه أو رقمه في (branchDetected). إذا كانت الفاتورة صادرة من أحد الفروع المعتمدة المذكورة أعلاه، حدد (isBranchMatched = true). إذا كانت من فرع آخر أو سلسلة أخرى، حدد (isBranchMatched = false) و (isValid = false) واكتب في (message) أن الفاتورة صادرة من فرع غير مشمول بالعرض.
+$branchSignaturesText
 ''';
         } else {
           branchCondition = '''
 - السلسلة المعتمدة للحملة: "$retailChainName" (كافة الفروع مشمولة).
 - المطلوب للفرع: استخرج اسم السلسلة في (storeChainDetected) والفرع في (branchDetected)، وحدد (isBranchMatched = true) إذا كانت تابعة لـ "$retailChainName".
+$branchSignaturesText
 ''';
         }
+      } else if (branchSignaturesText.isNotEmpty) {
+        branchCondition = branchSignaturesText;
       }
 
       String chancesCondition = '';
