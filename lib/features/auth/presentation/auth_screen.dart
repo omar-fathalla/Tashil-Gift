@@ -39,6 +39,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           _rememberMe = rememberMePref;
           if (savedEmail != null && savedEmail.isNotEmpty) {
             _emailController.text = savedEmail;
+          } else {
+            _emailController.text = kPrimaryAdminEmail;
           }
         });
       }
@@ -70,8 +72,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         await prefs.setBool('remember_admin_me', _rememberMe);
         if (_rememberMe) {
           await prefs.setString('saved_admin_email', email);
+          await prefs.setString('active_admin_session', email.toLowerCase());
         } else {
           await prefs.remove('saved_admin_email');
+          await prefs.remove('active_admin_session');
         }
       } catch (_) {}
       
@@ -83,11 +87,24 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       }
     } catch (e) {
       if (mounted) {
+        final errorMsg = AppErrorHandler.getFriendlyMessage(e, defaultMessage: strings.invalidAdminCredentialsMsg);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppErrorHandler.getFriendlyMessage(e, defaultMessage: strings.invalidAdminCredentialsMsg)),
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    errorMsg,
+                    style: GoogleFonts.cairo(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
             backgroundColor: Theme.of(context).colorScheme.error,
             behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
         );
       }

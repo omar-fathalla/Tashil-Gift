@@ -4,8 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 /// tailored for an Online-Only (أونلاين فقط) system architecture.
 class AppErrorHandler {
   /// Converts any error/exception into a clear, actionable Arabic message.
-  static String getFriendlyMessage(dynamic error, {String defaultMessage = 'حدث خطأ أثناء معالجة البيانات، يرجى المحاولة ثانية'}) {
-    if (error == null) return defaultMessage;
+  static String getFriendlyMessage(dynamic error, {String? defaultMessage}) {
+    if (error == null) return defaultMessage ?? 'حدث خطأ أثناء معالجة البيانات، يرجى المحاولة ثانية';
 
     final str = error.toString().toLowerCase();
 
@@ -105,6 +105,13 @@ class AppErrorHandler {
       }
     }
 
+    if (defaultMessage != null && defaultMessage.isNotEmpty) {
+      return defaultMessage;
+    }
+
     return 'حدث خطأ أثناء معالجة بيانات الفاتورة. يرجى التأكد من وضوح الصورة وإعادة المحاولة.';
   }
 }
+
+
+

@@ -5,13 +5,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:al_mraay/core/localization/app_strings.dart';
 import 'package:al_mraay/core/services/firebase_service.dart';
 import 'package:al_mraay/features/auth/presentation/auth_screen.dart';
+import 'package:al_mraay/main.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Admin Auth & Security Tests', () {
-    test('Primary admin email constant is support@sw-point.com', () {
+    test('Primary admin credentials constants are defined', () {
       expect(kPrimaryAdminEmail, 'support@sw-point.com');
+      expect(kPrimaryAdminPassword, 'Youniis@!1987');
     });
 
     test('Trilingual strings for Admin Security & Auth are defined', () {
@@ -43,15 +45,38 @@ void main() {
       expect(prefs.getBool('remember_admin_me'), true);
     });
 
-    testWidgets('AuthScreen renders Remember Me and has no demo bypass button', (tester) async {
+    test('isAdminProvider evaluates correctly with session email', () {
+      final container = ProviderContainer(
+        overrides: [
+          adminSessionEmailProvider.overrideWith((ref) => 'support@sw-point.com'),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      expect(container.read(isAdminProvider), isTrue);
+
+      final unauthorizedContainer = ProviderContainer(
+        overrides: [
+          adminSessionEmailProvider.overrideWith((ref) => 'other@gmail.com'),
+        ],
+      );
+      addTearDown(unauthorizedContainer.dispose);
+
+      expect(unauthorizedContainer.read(isAdminProvider), isFalse);
+    });
+
+    testWidgets('AuthScreen renders Remember Me, prefilled admin email, and has no demo bypass button', (tester) async {
       SharedPreferences.setMockInitialValues({
         'saved_admin_email': 'support@sw-point.com',
         'remember_admin_me': true,
       });
 
       await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
+        ProviderScope(
+          overrides: [
+            authStateStreamProvider.overrideWith((ref) => Stream.value(null)),
+          ],
+          child: const MaterialApp(
             home: AuthScreen(),
           ),
         ),
@@ -67,6 +92,25 @@ void main() {
       // Verify demo bypass button is NOT present
       expect(find.text('دخول تجريبي سريع'), findsNothing);
       expect(find.text('Quick Demo Login'), findsNothing);
+    });
+
+    testWidgets('AdminAuthGuard routes unauthenticated users to AuthScreen', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            adminSessionEmailProvider.overrideWith((ref) => null),
+            authStateStreamProvider.overrideWith((ref) => Stream.value(null)),
+          ],
+          child: const MaterialApp(
+            home: AdminAuthGuard(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AuthScreen), findsOneWidget);
     });
   });
 }

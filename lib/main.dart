@@ -124,30 +124,13 @@ class AdminAuthGuard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authStateStreamProvider);
-    final firebaseService = ref.read(firebaseServiceProvider);
-
-    return authState.when(
-      data: (user) {
-        if (user != null) {
-          return const AdminDashboardScreen();
-        }
-        return const AuthScreen();
-      },
-      loading: () {
-        if (firebaseService.currentUser != null) {
-          return const AdminDashboardScreen();
-        }
-        return Scaffold(
-          backgroundColor: Theme.of(context).colorScheme.surface,
-          body: const Center(
-            child: CircularProgressIndicator(),
-          ),
-        );
-      },
-      error: (_, _) => const AuthScreen(),
-    );
+    final isAdmin = ref.watch(isAdminProvider);
+    if (isAdmin) {
+      return const AdminDashboardScreen();
+    }
+    return const AuthScreen();
   }
 }
+
 
 
