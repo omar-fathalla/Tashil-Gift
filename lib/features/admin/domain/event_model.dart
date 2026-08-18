@@ -205,8 +205,8 @@ class EventModel {
 
   /// Calculates the number of lottery/game chances earned based on the receipt spend.
   int calculateChancesEarned(double targetCompanySpend) {
-    if (minimumSpend <= 0 || targetCompanySpend < minimumSpend) return 0;
-    if (!allowMultipleChances) return 1;
+    if (minimumSpend > 0 && targetCompanySpend < minimumSpend) return 0;
+    if (!allowMultipleChances || minimumSpend <= 0) return 1;
     final int computed = (targetCompanySpend / minimumSpend).floor();
     if (maxChancesPerReceipt > 0 && computed > maxChancesPerReceipt) {
       return maxChancesPerReceipt;

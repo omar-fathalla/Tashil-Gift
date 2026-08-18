@@ -42,7 +42,7 @@ List<ValidationConditionItem> buildValidationConditionItems({
   final List<ValidationConditionItem> items = [];
 
   // 1. Minimum Spend Condition
-  if (targetCompanyTotal < minimumSpend) {
+  if (minimumSpend > 0 && targetCompanyTotal < minimumSpend) {
     items.add(
       ValidationConditionItem(
         title: 'الحد الأدنى لقيمة المشتريات',

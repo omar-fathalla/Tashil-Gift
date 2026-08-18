@@ -1024,7 +1024,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 ),
                 _buildMetadataPill(
                   icon: Icons.payments_rounded,
-                  label: '${isAr ? "الحد الأدنى: " : "Min Spend: "}${event.minimumSpend} ${activeCountry.currencySymbol}',
+                  label: event.minimumSpend > 0
+                      ? '${isAr ? "الحد الأدنى: " : "Min Spend: "}${event.minimumSpend == event.minimumSpend.roundToDouble() ? event.minimumSpend.toInt() : event.minimumSpend} ${activeCountry.currencySymbol}'
+                      : (isAr ? 'بدون حد أدنى' : 'No Min Spend'),
                   colorScheme: colorScheme,
                   customBg: Colors.teal.shade50,
                   customBorder: Colors.teal.shade200,

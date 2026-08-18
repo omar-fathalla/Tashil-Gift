@@ -413,12 +413,21 @@ $branchSignaturesText
 
       String finalPromptText;
       if (customPrompt.trim().isNotEmpty) {
-        finalPromptText = customPrompt
+        String processedPrompt = customPrompt
             .replaceAll('{TARGET_COMPANY}', targetCompany)
-            .replaceAll('{MIN_SPEND}', minimumSpend.toString())
             .replaceAll('{REQUIRED_PRODUCTS}', requiredProducts.join(", "))
             .replaceAll('{RETAIL_CHAIN}', retailChainName)
             .replaceAll('{BRANCHES}', allowedBranches.join(", "));
+        
+        if (minimumSpend > 0) {
+          processedPrompt = processedPrompt.replaceAll('{MIN_SPEND}', minimumSpend.toString());
+        } else {
+          // If no minimum spend is configured, clean up any {MIN_SPEND} clauses gracefully
+          processedPrompt = processedPrompt
+              .replaceAll(RegExp(r'\n?-?\s*إجمالي المنتجات يجب أن يلبي الحد الأدنى\s*\{MIN_SPEND\}[^\n]*'), '')
+              .replaceAll('{MIN_SPEND}', '0');
+        }
+        finalPromptText = processedPrompt;
         
         finalPromptText += '''
 
@@ -490,17 +499,21 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
 
         // Calculate / enforce chances earned based on spend multipliers
         int calculatedChances = result.chancesEarned;
-        if (result.isValid && minimumSpend > 0 && result.targetCompanyTotal >= minimumSpend) {
-          if (allowMultipleChances) {
-            final computed = (result.targetCompanyTotal / minimumSpend).floor();
-            calculatedChances = computed > 0 ? computed : 1;
-            if (maxChancesPerReceipt > 0 && calculatedChances > maxChancesPerReceipt) {
-              calculatedChances = maxChancesPerReceipt;
+        if (result.isValid) {
+          if (minimumSpend > 0 && result.targetCompanyTotal >= minimumSpend) {
+            if (allowMultipleChances) {
+              final computed = (result.targetCompanyTotal / minimumSpend).floor();
+              calculatedChances = computed > 0 ? computed : 1;
+              if (maxChancesPerReceipt > 0 && calculatedChances > maxChancesPerReceipt) {
+                calculatedChances = maxChancesPerReceipt;
+              }
+            } else {
+              calculatedChances = 1;
             }
-          } else {
-            calculatedChances = 1;
+          } else if (minimumSpend <= 0) {
+            calculatedChances = result.chancesEarned > 0 ? result.chancesEarned : 1;
           }
-        } else if (!result.isValid) {
+        } else {
           calculatedChances = 0;
         }
         result = result.copyWith(chancesEarned: calculatedChances);

@@ -236,9 +236,36 @@ void main() {
         productName: 'حليب جهينة 1 لتر',
         barcode: '6221001002003',
       );
-
       expect(product.companySlug, '2450');
       expect(product.companyName, 'شركة جهينة');
+    });
+
+    test('Should calculate chances earned correctly with optional minimum spend and multiple chances', () {
+      // 1. Optional minimum spend (0.0): any valid receipt gets 1 chance
+      final optionalSpendEvent = EventModel(
+        id: 'event_opt_1',
+        eventName: 'حملة بدون حد أدنى',
+        targetCompany: 'المراعي',
+        companySlug: 'almarai',
+        minimumSpend: 0.0,
+      );
+      expect(optionalSpendEvent.calculateChancesEarned(25.0), 1);
+      expect(optionalSpendEvent.calculateChancesEarned(0.0), 1);
+
+      // 2. Minimum spend enforced: spend < minSpend returns 0
+      final enforcedSpendEvent = EventModel(
+        id: 'event_enf_1',
+        eventName: 'حملة بحد أدنى 100',
+        targetCompany: 'المراعي',
+        companySlug: 'almarai',
+        minimumSpend: 100.0,
+        allowMultipleChances: true,
+        maxChancesPerReceipt: 3,
+      );
+      expect(enforcedSpendEvent.calculateChancesEarned(50.0), 0);
+      expect(enforcedSpendEvent.calculateChancesEarned(100.0), 1);
+      expect(enforcedSpendEvent.calculateChancesEarned(250.0), 2);
+      expect(enforcedSpendEvent.calculateChancesEarned(500.0), 3); // Capped at maxChancesPerReceipt = 3
     });
   });
 }

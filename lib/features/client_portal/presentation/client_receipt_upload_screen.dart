@@ -283,7 +283,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       }
 
       final double totalValue = result.targetCompanyTotal;
-      if (totalValue < _activeEvent!.minimumSpend) {
+      if (_activeEvent!.minimumSpend > 0 && totalValue < _activeEvent!.minimumSpend) {
         if (!mounted) return;
         final activeCountry = ref.read(activeCountryProvider);
         final conditions = [

@@ -141,9 +141,13 @@ class CampaignAiAssistantService {
     String existingPrompt = '',
     double minimumSpend = 0.0,
   }) async {
+    final minSpendText = minimumSpend > 0
+        ? '$minimumSpend ج.م'
+        : 'بدون حد أدنى للإنفاق (العرض يعتمد بالكامل على شروط الأصناف والكميات وقواعد البرومبت)';
+
     final prompt = '''
 الشركة الراعية / المستهدفة: "$targetCompany"
-الحد الأدنى للإنفاق الحالي: $minimumSpend ج.م
+الحد الأدنى للإنفاق: $minSpendText
 
 نص فكرة المهرجان وشروط العرض كما كتبها المسؤول:
 """
@@ -216,7 +220,7 @@ $rawIdeaText
 أنت مدقق مالي ذكي لفحص فواتير السوبرماركت لمهرجان "$targetCompany".
 شروط العرض:
 $rawIdeaText
-الحد الأدنى للإنفاق: $minimumSpend ج.م.
+${minimumSpend > 0 ? 'الحد الأدنى للإنفاق: $minimumSpend ج.م.' : 'العرض ساري بدون اشتراط حد أدنى لمبلغ الفاتورة (الاعتماد على شروط الأصناف والكميات المحددة).'}
 تحقق من وجود أصناف $targetCompany والكميات المطلوبة، وقم باحتساب الهدايا المستحقة بدقة.
 ''';
 

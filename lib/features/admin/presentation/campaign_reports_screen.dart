@@ -678,7 +678,9 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
               // Minimum Spend Chip
               _buildMetaPill(
                 icon: Icons.monetization_on_outlined,
-                label: '${isAr ? "الحد الأدنى: " : "Min: "}${event.minimumSpend.toStringAsFixed(0)} ${activeCountry.currencySymbol}',
+                label: event.minimumSpend > 0
+                    ? '${isAr ? "الحد الأدنى: " : "Min: "}${event.minimumSpend.toStringAsFixed(0)} ${activeCountry.currencySymbol}'
+                    : (isAr ? 'بدون حد أدنى' : 'No Min Spend'),
                 colorScheme: colorScheme,
               ),
             ],

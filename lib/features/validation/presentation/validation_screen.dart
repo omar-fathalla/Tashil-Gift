@@ -187,7 +187,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       }
 
       final double totalValue = result.targetCompanyTotal;
-      if (totalValue < activeEvent.minimumSpend) {
+      if (activeEvent.minimumSpend > 0 && totalValue < activeEvent.minimumSpend) {
         if (!mounted) return;
         final activeCountry = ref.read(activeCountryProvider);
         final conditions = [
@@ -514,7 +514,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
                                     ),
                                     Text(
                                       _activeEvent != null && _activeEvent!.targetCompany.isNotEmpty
-                                          ? '${strings.targetCompanyHeader}: ${_activeEvent!.targetCompany} • ${strings.minSpendPrefix} ${_activeEvent!.minimumSpend} ${activeCountry.currencySymbolFor(strings.languageCode)}'
+                                          ? '${strings.targetCompanyHeader}: ${_activeEvent!.targetCompany}${_activeEvent!.minimumSpend > 0 ? " • ${strings.minSpendPrefix} ${_activeEvent!.minimumSpend} ${activeCountry.currencySymbolFor(strings.languageCode)}" : ""}'
                                           : strings.receiptAuditSubtitle,
                                       style: GoogleFonts.cairo(
                                         fontSize: 13,

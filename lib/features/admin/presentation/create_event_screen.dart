@@ -95,7 +95,13 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     _targetCompanyController = TextEditingController(text: e?.targetCompany ?? '');
     _companySlugController = TextEditingController(text: e?.companySlug ?? '');
     _companyLogoUrl = e?.companyLogoUrl ?? '';
-    _minimumSpendController = TextEditingController(text: e?.minimumSpend.toString() ?? '');
+    _minimumSpendController = TextEditingController(
+      text: (e?.minimumSpend != null && e!.minimumSpend > 0)
+          ? (e.minimumSpend == e.minimumSpend.roundToDouble()
+              ? e.minimumSpend.toInt().toString()
+              : e.minimumSpend.toString())
+          : '',
+    );
     _requiredProductsController = TextEditingController(text: e?.requiredProducts.join(', ') ?? '');
     _allowMultipleChances = e?.allowMultipleChances ?? false;
     _maxChancesController = TextEditingController(
@@ -128,8 +134,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 - يجب أن تكون الصورة لفاتورة حقيقية ومقروءة.
 - يجب أن يكون "رقم الفاتورة" واضحاً وموجوداً.
 - يجب أن تكون الفاتورة ضمن تاريخ سريان الفاعلية للحدث.
-- يجب أن تحتوي الفاتورة على منتج واحد على الأقل من "{TARGET_COMPANY}".
-- إجمالي المنتجات يجب أن يلبي الحد الأدنى {MIN_SPEND} جنيه.''',
+- يجب أن تحتوي الفاتورة على منتج واحد على الأقل من "{TARGET_COMPANY}".''',
     );
     
     _welcomeTitleController = TextEditingController(text: e?.welcomeTitle ?? 'عروض وحملات الشركات');
@@ -1763,12 +1768,15 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             style: GoogleFonts.cairo(),
                             decoration: _m3InputDecoration(
                               context: context,
-                              labelText: 'الحد الأدنى للشراء (${activeCountry.currencySymbol})',
+                              labelText: 'الحد الأدنى للشراء (${activeCountry.currencySymbol}) (اختياري)',
+                              hintText: 'اتركه فارغاً إذا كان العرض بدون حد أدنى للمشتريات',
+                              helperText: 'اختياري - في حال تركه فارغاً يعتمد الـ AI على شروط البرومبت والأصناف فقط',
                               prefixIcon: Icons.payments_outlined,
                             ),
                             validator: (value) {
-                              if (value == null || value.isEmpty) return 'مطلوب';
-                              if (value.toDoubleOrNull() == null) return 'رقم غير صحيح';
+                              if (value != null && value.trim().isNotEmpty) {
+                                if (value.trim().toDoubleOrNull() == null) return 'رقم غير صحيح';
+                              }
                               return null;
                             },
                           ),
@@ -2602,7 +2610,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     bool isMobile,
     dynamic activeCountry,
   ) {
-    final minSpend = _minimumSpendController.text.toDoubleOrNull() ?? 300.0;
+    final minSpend = _minimumSpendController.text.toDoubleOrNull() ?? 0.0;
     final currency = activeCountry.currencySymbol;
 
     return Container(
@@ -2692,11 +2700,17 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.calculate_outlined, size: 20, color: colorScheme.primary),
+                  Icon(
+                    minSpend > 0 ? Icons.calculate_outlined : Icons.info_outline_rounded,
+                    size: 20,
+                    color: colorScheme.primary,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'المعادلة الحية: كل ${minSpend.toStringAsFixed(0)} $currency = فرصة سحب واحدة (مثال: ${(minSpend * 2).toStringAsFixed(0)} $currency = فرصتان، ${(minSpend * 3).toStringAsFixed(0)} $currency = 3 فرص).',
+                      minSpend > 0
+                          ? 'المعادلة الحية: كل ${minSpend.toStringAsFixed(0)} $currency = فرصة سحب واحدة (مثال: ${(minSpend * 2).toStringAsFixed(0)} $currency = فرصتان، ${(minSpend * 3).toStringAsFixed(0)} $currency = 3 فرص).'
+                          : 'تنبيه: لمضاعفة الفرص بناءً على المبلغ، يرجى إدخال الحد الأدنى للشراء أعلاه (أو تركها لمنح فرصة واحدة لكل فاتورة صالحة).',
                       style: GoogleFonts.cairo(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w600,

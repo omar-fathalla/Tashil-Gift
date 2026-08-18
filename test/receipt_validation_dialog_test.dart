@@ -21,6 +21,19 @@ void main() {
       expect(items.first.isMet, isFalse);
     });
 
+    test('buildValidationConditionItems does NOT build minimum spend condition when minimumSpend <= 0', () {
+      final items = buildValidationConditionItems(
+        isValid: true,
+        message: 'الفاتورة صحيحة',
+        targetCompanyTotal: 25.0,
+        minimumSpend: 0.0, // Optional minimum spend not configured
+        targetCompany: 'المراعي',
+        currencySymbol: 'ج.م',
+      );
+
+      expect(items.any((i) => i.title.contains('الحد الأدنى')), isFalse);
+    });
+
     test('buildValidationConditionItems builds branch mismatch condition', () {
       final items = buildValidationConditionItems(
         isValid: false,
