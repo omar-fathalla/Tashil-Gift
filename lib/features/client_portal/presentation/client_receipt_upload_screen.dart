@@ -16,6 +16,7 @@ import '../../../core/utils/error_handler.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
 import '../../../core/widgets/switch_point_branding.dart';
 import '../../../core/constants/country_currency_config.dart';
+import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../core/widgets/m3_progress_indicators.dart';
 import '../../../core/animations/m3_motion.dart';
@@ -64,6 +65,16 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
     _customerPhoneController.dispose();
     _customerNameController.dispose();
     super.dispose();
+  }
+
+  void _resetFormForNextCustomer() {
+    _customerNameController.clear();
+    _customerPhoneController.clear();
+    _receiptImage = null;
+    _aiPhaseText = '';
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _loadEvent() async {
@@ -416,7 +427,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
 
       if (!mounted) return;
 
-      // Reset image
+      // Reset image preview immediately
       setState(() {
         _receiptImage = null;
       });
@@ -439,7 +450,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                 ? currentEvent!.allocatedPrizes.first.name
                 : 'هدية فورية مميزة');
         final promoQuantity = (currentEvent?.allowMultipleChances ?? false) ? totalChances : 1;
-        Navigator.of(context).push(
+        await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => DirectGiftClaimScreen(
               transactionId: transactionRef.id,
@@ -450,8 +461,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
             ),
           ),
         );
+        _resetFormForNextCustomer();
       } else if (gameType == 'scratchCard' || totalValue >= 500) {
-        Navigator.of(context).push(
+        await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => ScratchCardScreen(
               transactionId: transactionRef.id,
@@ -461,8 +473,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
             ),
           ),
         );
+        _resetFormForNextCustomer();
       } else {
-        Navigator.of(context).push(
+        await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => SpinTheWheelScreen(
               transactionId: transactionRef.id,
@@ -472,6 +485,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
             ),
           ),
         );
+        _resetFormForNextCustomer();
       }
     } catch (e) {
       if (mounted) {
@@ -513,6 +527,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
     final colorScheme = theme.colorScheme;
     final activeCountry = ref.watch(activeCountryProvider);
     final strings = AppStrings.of(ref);
+    final isAr = ref.isArabic;
     final mediaQuery = MediaQuery.of(context);
     final screenWidth = mediaQuery.size.width;
     final isMobile = screenWidth < 600;
@@ -728,6 +743,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                           TextField(
                             controller: _customerNameController,
                             textInputAction: TextInputAction.next,
+                            onChanged: (_) => setState(() {}),
                             style: GoogleFonts.cairo(fontSize: isMobile ? 14 : 15),
                             decoration: InputDecoration(
                               labelText: strings.customerNameOptional,
@@ -737,6 +753,16 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                 color: colorScheme.primary,
                                 size: isMobile ? 22 : 24,
                               ),
+                              suffixIcon: _customerNameController.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear_rounded, size: 20),
+                                      tooltip: isAr ? 'مسح اسم العميل' : 'Clear name',
+                                      onPressed: () {
+                                        _customerNameController.clear();
+                                        setState(() {});
+                                      },
+                                    )
+                                  : null,
                               filled: true,
                               fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
                               contentPadding: EdgeInsets.symmetric(
@@ -766,6 +792,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                             controller: _customerPhoneController,
                             keyboardType: TextInputType.phone,
                             textInputAction: TextInputAction.done,
+                            onChanged: (_) => setState(() {}),
                             inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
                             style: GoogleFonts.cairo(fontSize: isMobile ? 14 : 15),
                             decoration: InputDecoration(
@@ -776,6 +803,16 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                 color: colorScheme.primary,
                                 size: isMobile ? 22 : 24,
                               ),
+                              suffixIcon: _customerPhoneController.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear_rounded, size: 20),
+                                      tooltip: isAr ? 'مسح رقم الهاتف' : 'Clear phone',
+                                      onPressed: () {
+                                        _customerPhoneController.clear();
+                                        setState(() {});
+                                      },
+                                    )
+                                  : null,
                               filled: true,
                               fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
                               contentPadding: EdgeInsets.symmetric(

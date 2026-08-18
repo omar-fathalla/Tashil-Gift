@@ -115,5 +115,39 @@ void main() {
       expect(find.byIcon(Icons.camera_alt_rounded), findsOneWidget);
       expect(find.byIcon(Icons.photo_library_rounded), findsOneWidget);
     });
+
+    testWidgets('Displays clear suffix icon when text is entered and clears text on tap', (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createTestWidget(screenSize: const Size(390, 844)));
+      await tester.pumpAndSettle();
+
+      final textFields = find.byType(TextField);
+      expect(textFields, findsNWidgets(2));
+
+      // Enter name
+      await tester.enterText(textFields.first, 'Omar Fathalla');
+      await tester.pumpAndSettle();
+      expect(find.text('Omar Fathalla'), findsOneWidget);
+      expect(find.byIcon(Icons.clear_rounded), findsOneWidget);
+
+      // Enter phone
+      await tester.enterText(textFields.last, '01211857725');
+      await tester.pumpAndSettle();
+      expect(find.text('01211857725'), findsOneWidget);
+      expect(find.byIcon(Icons.clear_rounded), findsNWidgets(2));
+
+      // Tap clear on phone
+      await tester.tap(find.byIcon(Icons.clear_rounded).last);
+      await tester.pumpAndSettle();
+      expect(find.text('01211857725'), findsNothing);
+
+      // Tap clear on name
+      await tester.tap(find.byIcon(Icons.clear_rounded).first);
+      await tester.pumpAndSettle();
+      expect(find.text('Omar Fathalla'), findsNothing);
+    });
   });
 }

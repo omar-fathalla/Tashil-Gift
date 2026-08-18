@@ -336,7 +336,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
             ? prizeNames.first
             : (activeEvent.allocatedPrizes.isNotEmpty ? activeEvent.allocatedPrizes.first.name : 'هدية فورية مميزة');
         final promoQuantity = activeEvent.allowMultipleChances ? totalChances : 1;
-        Navigator.of(context).push(
+        await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => DirectGiftClaimScreen(
               transactionId: transactionRef.id,
@@ -347,8 +347,9 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
             ),
           ),
         );
+        if (mounted) setState(() => _receiptImage = null);
       } else if (gameType == 'scratch') {
-        Navigator.of(context).push(
+        await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => ScratchCardScreen(
               transactionId: transactionRef.id,
@@ -358,9 +359,10 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
             ),
           ),
         );
+        if (mounted) setState(() => _receiptImage = null);
       } else {
         // Default: wheel
-        Navigator.of(context).push(
+        await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => SpinTheWheelScreen(
               transactionId: transactionRef.id,
@@ -370,6 +372,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
             ),
           ),
         );
+        if (mounted) setState(() => _receiptImage = null);
       }
 
     } catch (e) {
