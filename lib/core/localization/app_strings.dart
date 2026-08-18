@@ -653,9 +653,9 @@ class AppStrings {
     hi: 'गैलरी से अपलोड करें (फ़ाइलें)',
   );
   String get auditReceiptActionBtn => _t(
-    ar: 'فحص وتدقيق الفاتورة بالذكاء الاصطناعي 🚀',
-    en: 'Verify Receipt with AI 🚀',
-    hi: 'एआई के साथ रसीद सत्यापित करें 🚀',
+    ar: 'فحص وتدقيق الفاتورة بالذكاء الاصطناعي',
+    en: 'Verify Receipt with AI',
+    hi: 'एआई के साथ रसीद सत्यापित करें',
   );
   String get participationTermsTitle => _t(
     ar: 'شروط المشاركة في العرض',
@@ -702,9 +702,9 @@ class AppStrings {
     hi: 'अपने प्रचार अभियान का विचार या शर्तें यहां स्वतंत्र रूप से लिखें... जैसे, 1 रेक्सोना/एक्स स्प्रे खरीदें और 50 ईजीपी वाउचर पाएं, क्लीयर 360 मिली खरीदें और क्लीयर 90 मिली मुफ़्त उपहार पाएं...',
   );
   String get aiGenerateRulesBtn => _t(
-    ar: '✨ توليد وتنسيق قواعد الفحص بالذكاء الاصطناعي',
-    en: '✨ Generate & Structure Rules with AI',
-    hi: '✨ एआई के साथ नियम बनाएं और व्यवस्थित करें',
+    ar: 'توليد وتنسيق قواعد الفحص بالذكاء الاصطناعي',
+    en: 'Generate & Structure Rules with AI',
+    hi: 'एआई के साथ नियम बनाएं और व्यवस्थित करें',
   );
   String get aiGeneratingRulesLoading => _t(
     ar: 'جاري صياغة وهيكلة شروط العرض بالذكاء الاصطناعي...',
@@ -777,9 +777,9 @@ class AppStrings {
     hi: 'श्रृंखला, शाखा, स्टोर कोड और बारकोड पैटर्न को स्वतः निकालने के लिए रसीद अपलोड करें',
   );
   String get uploadReceiptSampleBtn => _t(
-    ar: '📸 رفع صورة بونة الفاتورة',
-    en: '📸 Upload Sample Receipt',
-    hi: '📸 नमूना रसीद अपलोड करें',
+    ar: 'رفع صورة بونة الفاتورة',
+    en: 'Upload Sample Receipt',
+    hi: 'नमूना रसीद अपलोड करें',
   );
   String get analyzingReceiptSignature => _t(
     ar: 'جاري تحليل بصمة البونة ونظام الكاشير POS بالذكاء الاصطناعي...',

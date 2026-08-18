@@ -132,6 +132,9 @@ DataColumn(label: Text(strings.receiptStatusCol)),
 ### Rule 7: Coexistence with Arabic Numerals Normalization Standard
 Even when the UI language is switched to English or Hindi, the app's input formatters and parsing logic MUST continue to accept both Western (`0-9`) and Eastern/Persian Arabic numerals (`٠-٩` / `۰-۹`) seamlessly as per the [`arabic-numerals-normalization`](file:///Users/fathalla/Development/al-mraay/.agents/skills/arabic-numerals-normalization/SKILL.md) skill.
 
+### Rule 8: Clean Button Text (Strictly No Emojis in Button Text Strings)
+Never embed Unicode emojis (like 📸, 🪄, ✨, 🚀, 🎯, 🔍) in button text strings in `AppStrings`. The icon must be provided exclusively once as a Flutter `Icon` widget in the button (e.g. `FilledButton.icon(icon: Icon(Icons.camera_alt_rounded), label: Text(strings.uploadReceiptSampleBtn))`) to prevent double-icon rendering.
+
 ---
 
 ## 3. Localization Architecture Reference

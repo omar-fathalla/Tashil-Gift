@@ -82,6 +82,12 @@ Button groups organize buttons and add interactions between them.
 - **Tertiary Actions**: Use `TextButton`.
 - **Button Groups**: Use `M3ConnectedButtonGroup` / `SegmentedButton` or `M3MorphingButtonGroup`.
 - **Floating Action Buttons**: Use `FloatingActionButton` or `FloatingActionButton.extended` with `shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))`.
+- **STRICT SINGLE-ICON RULE (قاعدة الأيقونة الواحدة للزر - يمنع دمج أيقونتين):**
+  * Every button MUST contain at most **ONE single icon**.
+  * **NEVER combine two icons** or mix a Flutter `Icon` widget with an emoji (e.g. 📸, 🪄, ✨, 🚀, 🎯, 🔍) in the button's label text.
+  * If a button uses an `icon:` parameter or leading widget, its `label` text in `AppStrings` MUST be pure clean text without any embedded emoji icons.
+  * ❌ **WRONG**: `FilledButton.icon(icon: Icon(Icons.camera_alt_rounded), label: Text('📸 رفع صورة بونة الفاتورة'))` (Double icon: Flutter icon + emoji).
+  * ✅ **CORRECT**: `FilledButton.icon(icon: Icon(Icons.camera_alt_rounded), label: Text('رفع صورة بونة الفاتورة'))` (Single clean M3 icon).
 
 ### B. Cards & Containers
 - Standard Card shape: `RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))`.
@@ -92,6 +98,7 @@ Button groups organize buttons and add interactions between them.
 
 ### D. Unified Iconography & Color Tokens (M3 & Google Fonts Icons)
 - **Mandatory Icon Family**: Strictly use **Material Design 3 Rounded Icons** (`Icons.*_rounded` from the Flutter Material library / Google Symbols). Never mix conflicting icon sets or styles.
+- **Single Icon per Interactive Element**: Never display multiple icons or an icon + emoji in the same button or action chip.
 - **Strict Color Harmonization (No Arbitrary Colors)**:
   - All icons MUST derive their colors dynamically from the active M3 `ColorScheme` generated from the brand purple seed.
   - Primary / Interactive / Brand Icons: `colorScheme.primary` or `colorScheme.onPrimaryContainer`.
@@ -101,8 +108,8 @@ Button groups organize buttons and add interactions between them.
     * Error: `colorScheme.error` or `colorScheme.onErrorContainer`.
     * Warning / Alert: `colorScheme.tertiary` or `colorScheme.onTertiaryContainer`.
     * Success: `colorScheme.primary` or structured M3 Success container.
-- **No Raw Emojis in Form Labels or Dropdowns**:
-  - NEVER embed raw Unicode emoji arrows or icons (such as `🔽`, `➡️`, `⚡`, `⚠️`, `✅`) inside `labelText`, `hintText`, or dropdown labels. Always use native `prefixIcon`, `suffixIcon`, or standard Flutter dropdown controls.
+- **No Raw Emojis in Buttons, Form Labels, or Dropdowns**:
+  - NEVER embed raw Unicode emojis or icons (such as `📸`, `🪄`, `✨`, `🚀`, `🔽`, `➡️`, `⚡`, `⚠️`, `✅`) inside button text, `labelText`, `hintText`, or dropdown labels. Always use a single native Flutter `Icon(Icons.*_rounded)`.
 - **LTR / RTL Directional Icon Placement**:
   - In English / LTR pills, buttons, and badges (e.g. footer links, contact pills): The **Icon MUST be on the left** (leading), followed by the text on the right (`[Icon] [Text]`).
   - In Arabic / RTL components: The **Icon MUST be on the right** (leading for RTL), followed by the Arabic text on the left (`[Icon] [النص العربي]`).
