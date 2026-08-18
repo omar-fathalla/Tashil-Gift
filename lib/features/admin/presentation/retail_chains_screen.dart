@@ -55,6 +55,16 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
   // AI Receipt Scanner
   final ImagePicker _picker = ImagePicker();
   bool _isScanningReceipt = false;
+  bool _isDeduplicating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-run background deduplication on mount to clean any pre-existing duplicate docs
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(retailChainsServiceProvider).deduplicateAllBranchesInFirestore();
+    });
+  }
 
   @override
   void dispose() {
@@ -75,6 +85,44 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
     _searchController.dispose();
     _chainSearchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _deduplicateRecords() async {
+    setState(() => _isDeduplicating = true);
+    final isAr = ref.isArabic;
+    try {
+      final deletedCount = await ref.read(retailChainsServiceProvider).deduplicateAllBranchesInFirestore();
+      if (mounted) {
+        if (deletedCount > 0) {
+          await M3Feedback.showSuccess(
+            context,
+            title: isAr ? 'تم تنظيف وحذف السجلات المكررة 🛡️' : 'Duplicate Records Cleaned',
+            message: isAr
+                ? 'تم فحص قاعدة البيانات وحذف $deletedCount سجل مكرر بنجاح، وتوحيد السجلات الأساسية.'
+                : 'Scanned database and safely removed $deletedCount duplicate records.',
+          );
+        } else {
+          await M3Feedback.showSuccess(
+            context,
+            title: isAr ? 'قاعدة البيانات نقية ومطابقة 100% ✨' : 'Database Fully Clean',
+            message: isAr
+                ? 'لا توجد أي سجلات مكررة، جميع السلاسل والفروع فريدة ومطابقة للمعايير.'
+                : 'No duplicate records found. All chains and branches are unique.',
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppErrorHandler.getFriendlyMessage(e, defaultMessage: isAr ? 'حدث خطأ أثناء تنظيف التكرارات' : 'Error cleaning duplicates')),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isDeduplicating = false);
+    }
   }
 
   // --- ACTIONS: SAVE / EDIT / DELETE CHAIN ---
@@ -230,14 +278,22 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
       );
 
       if (_editingBranchId == null) {
-        await service.addBranch(branch);
+        final isDuplicate = await service.addBranch(branch);
         if (mounted) {
-          await M3Feedback.showAdded(
-            context,
-            itemName: '$branchName (${selectedChain.name})',
-            message: 'تمت إضافة الفرع بنجاح.',
-            icon: Icons.store_rounded,
-          );
+          if (isDuplicate) {
+            await M3Feedback.showSuccess(
+              context,
+              title: 'تم تحديث الفرع القائم 🛡️',
+              message: 'الفرع مسجل مسبقاً في السلسلة، تم تحديث بياناته تلقائياً ومنع إنشاء سجل مكرر.',
+            );
+          } else {
+            await M3Feedback.showAdded(
+              context,
+              itemName: '$branchName (${selectedChain.name})',
+              message: 'تمت إضافة الفرع بنجاح.',
+              icon: Icons.store_rounded,
+            );
+          }
         }
       } else {
         await service.updateBranch(branch);
@@ -993,17 +1049,27 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                                 receiptSignature: sig,
                               );
 
-                              await service.addBranch(newBranch);
+                              final isDuplicate = await service.addBranch(newBranch);
 
                               if (context.mounted) {
                                 Navigator.of(dialogCtx).pop();
-                                await M3Feedback.showSuccess(
-                                  context,
-                                  title: isAr ? 'تم اعتماد الفرع والبصمة بنجاح! 🛡️' : 'Branch & Signature Saved!',
-                                  message: isAr
-                                      ? 'تم ربط فرع "$branchName" بالسلسلة "$targetChainName" مع بصمة الكاشير (Store ID: ${sig.storeId}).'
-                                      : 'Branch "$branchName" saved with smart POS signature.',
-                                );
+                                if (isDuplicate) {
+                                  await M3Feedback.showSuccess(
+                                    context,
+                                    title: isAr ? 'تم تحديث الفرع وبصمة الكاشير 🛡️' : 'Branch Updated',
+                                    message: isAr
+                                        ? 'هذا الفرع مسجل مسبقاً في "$targetChainName". تم تحديث بصمة الكاشير والبيانات ومنع إنشاء سجل مكرر.'
+                                        : 'Branch already exists in "$targetChainName". Updated signature and avoided duplicate.',
+                                  );
+                                } else {
+                                  await M3Feedback.showSuccess(
+                                    context,
+                                    title: isAr ? 'تم اعتماد الفرع والبصمة بنجاح! 🛡️' : 'Branch & Signature Saved!',
+                                    message: isAr
+                                        ? 'تم ربط فرع "$branchName" بالسلسلة "$targetChainName" مع بصمة الكاشير (Store ID: ${sig.storeId}).'
+                                        : 'Branch "$branchName" saved with smart POS signature.',
+                                  );
+                                }
                               }
                             },
                             icon: const Icon(Icons.verified_rounded, size: 18),
@@ -1411,6 +1477,25 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                                     : const Icon(Icons.auto_fix_high_rounded, size: 18),
                                 label: Text(
                                   _isSeeding ? strings.loading : (isAr ? 'تهيئة السلاسل الشهيرة تلقائياً' : 'Auto-Seed Popular Chains'),
+                                  style: GoogleFonts.cairo(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              // Auto-deduplicate button
+                              FilledButton.tonalIcon(
+                                onPressed: _isDeduplicating ? null : _deduplicateRecords,
+                                icon: _isDeduplicating
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      )
+                                    : const Icon(Icons.cleaning_services_rounded, size: 18),
+                                label: Text(
+                                  _isDeduplicating ? strings.loading : (isAr ? 'تنظيف التكرارات' : 'Auto-Deduplicate'),
                                   style: GoogleFonts.cairo(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 13,

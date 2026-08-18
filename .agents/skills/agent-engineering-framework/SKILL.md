@@ -24,6 +24,10 @@ You should document your thought process and decisions for each stage either in 
   - Use read tools (`view_file`, `list_dir`, `grep_search`) to understand the current codebase.
   - Do NOT guess the architecture; verify it.
   - Document the key constraints, existing patterns, and dependencies that will affect the task.
+  - **Mandatory Standards Check:** Always verify compliance with:
+    1. `data-deduplication-and-integrity-standard` (Zero-tolerance duplicate data policy, deterministic doc IDs, pre-write checks, in-stream deduplication).
+    2. `arabic-numerals-normalization` (Automatic Eastern/Persian numeral conversion across all inputs/parsers).
+    3. `material-design-3` (Single M3 icon rule for buttons, no emojis mixed with icons).
 
 ## Stage 3: Harness Engineering (Tools & Environment Setup)
 - **Objective:** Prepare your tools, sandbox, and execution environment.
@@ -36,6 +40,7 @@ You should document your thought process and decisions for each stage either in 
 - **Objective:** Establish a self-correction and evaluation cycle.
 - **Action:** 
   - Define exactly how you will verify your work (e.g., running specific tests, compiling the code, checking a URL).
+  - Verify data deduplication and zero-duplicate guarantees across backend and UI.
   - Determine your fallback strategy: if the verification fails, what will you check next?
   - Set a limit: decide when you will stop looping and ask the user for clarification to prevent endless loops.
 
