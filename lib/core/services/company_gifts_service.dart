@@ -215,39 +215,199 @@ class CompanyGiftsService {
     });
   }
 
+  static String _normalizePrizeText(String text) {
+    return text
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\u064B-\u065F\u0670]'), '') // Remove Arabic tashkeel/diacritics
+        .replaceAll('أ', 'ا')
+        .replaceAll('إ', 'ا')
+        .replaceAll('آ', 'ا')
+        .replaceAll('ة', 'ه')
+        .replaceAll('ى', 'ي')
+        .replaceAll('٠', '0')
+        .replaceAll('١', '1')
+        .replaceAll('٢', '2')
+        .replaceAll('٣', '3')
+        .replaceAll('٤', '4')
+        .replaceAll('٥', '5')
+        .replaceAll('٦', '6')
+        .replaceAll('٧', '7')
+        .replaceAll('٨', '8')
+        .replaceAll('٩', '9')
+        .replaceAll(RegExp(r'[^\w\s\d]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  static List<int> _extractNumbers(String text) {
+    final matches = RegExp(r'\d+').allMatches(text);
+    return matches.map((m) => int.tryParse(m.group(0)!) ?? 0).where((n) => n > 0).toList();
+  }
+
+  static double _extractNumericValue(String text) {
+    final match = RegExp(r'(\d+(\.\d+)?)').firstMatch(text);
+    return match != null ? double.tryParse(match.group(1)!) ?? 0.0 : 0.0;
+  }
+
+  static int findBestPrizeMatchIndex(
+    List<Map<String, dynamic>> prizes,
+    String prizeIdentifier, {
+    String? branchId,
+    double? unitValue,
+    bool? isVoucher,
+    bool preferWithRemaining = true,
+  }) {
+    if (prizes.isEmpty || prizeIdentifier.trim().isEmpty) return -1;
+
+    final cleanTarget = _normalizePrizeText(prizeIdentifier);
+    final targetVal = unitValue ?? _extractNumericValue(prizeIdentifier);
+    final targetNums = _extractNumbers(prizeIdentifier);
+
+    int bestIndex = -1;
+    int highestScore = -1;
+
+    for (int i = 0; i < prizes.length; i++) {
+      final p = prizes[i];
+      final pGiftId = (p['giftId'] ?? '').toString().trim();
+      final pName = (p['name'] ?? '').toString().trim();
+      final pBranchId = (p['branchId'] ?? '').toString().trim();
+      final pUnitVal = (p['unitValue'] as num?)?.toDouble() ?? 0.0;
+      final pType = (p['giftType'] ?? '').toString();
+      final pIsVoucher = pType == 'voucher' || pUnitVal > 0;
+      final pRemaining = (p['remainingQuantity'] as num?)?.toInt() ?? 0;
+
+      int score = 0;
+
+      // 1. Branch match weighting
+      final isExactBranch = branchId != null && branchId.isNotEmpty && pBranchId == branchId;
+      final isGeneralBranch = pBranchId.isEmpty;
+      if (isExactBranch) {
+        score += 120;
+      } else if (isGeneralBranch) {
+        score += 60;
+      } else if (branchId != null && branchId.isNotEmpty && pBranchId.isNotEmpty && pBranchId != branchId) {
+        // Different specific branch penalty
+        score -= 80;
+      }
+
+      // 2. Direct exact matches
+      if (pGiftId.isNotEmpty && (pGiftId == prizeIdentifier || pGiftId == cleanTarget)) {
+        score += 200;
+      } else if (pName == prizeIdentifier) {
+        score += 160;
+      }
+
+      // 3. Normalized string matching
+      final cleanPName = _normalizePrizeText(pName);
+      if (cleanPName == cleanTarget && cleanTarget.isNotEmpty) {
+        score += 140;
+      } else if (cleanTarget.isNotEmpty && (cleanPName.contains(cleanTarget) || cleanTarget.contains(cleanPName))) {
+        score += 95;
+      }
+
+      // 4. Voucher Denomination matching
+      if ((isVoucher == true || pIsVoucher) && targetVal > 0 && pUnitVal > 0) {
+        if ((targetVal - pUnitVal).abs() < 0.01) {
+          score += 110;
+        }
+      }
+
+      // 5. Product size / numeric token match (e.g. 90, 250, 360, 50, 25)
+      final pNums = _extractNumbers(pName);
+      if (targetNums.isNotEmpty && pNums.isNotEmpty && targetNums.any((n) => pNums.contains(n))) {
+        score += 50;
+      }
+
+      // 6. Remaining quantity preference during decrement
+      if (preferWithRemaining && pRemaining > 0) {
+        score += 15;
+      }
+
+      if (score > highestScore && score > 30) {
+        highestScore = score;
+        bestIndex = i;
+      }
+    }
+
+    return bestIndex;
+  }
+
   /// Decrements the remaining quantity of a prize in a specific campaign after a win.
   /// [prizeIdentifier] can be a giftId or a prize name.
   /// If [branchId] is provided, prioritizes matching the specific branch prize.
   /// [count] is the quantity to decrement (defaults to 1).
-  Future<void> decrementCampaignPrize(String eventId, String prizeIdentifier, {String? branchId, int count = 1}) async {
+  Future<void> decrementCampaignPrize(
+    String eventId,
+    String prizeIdentifier, {
+    String? branchId,
+    int count = 1,
+    double? unitValue,
+    bool? isVoucher,
+  }) async {
+    if (eventId.isEmpty || prizeIdentifier.isEmpty || count <= 0) return;
+
     final doc = await _firestore.collection('events').doc(eventId).get();
     if (!doc.exists) return;
 
     final data = doc.data()!;
     final prizes = List<Map<String, dynamic>>.from(data['allocatedPrizes'] ?? []);
-    
-    int matchIndex = -1;
-    for (int i = 0; i < prizes.length; i++) {
-      final matchesPrize = prizes[i]['giftId'] == prizeIdentifier || prizes[i]['name'] == prizeIdentifier;
-      if (matchesPrize) {
-        if (branchId != null && branchId.isNotEmpty && prizes[i]['branchId'] == branchId) {
-          matchIndex = i;
-          break;
-        } else if (matchIndex == -1) {
-          matchIndex = i;
-        }
-      }
-    }
+    if (prizes.isEmpty) return;
+
+    final matchIndex = findBestPrizeMatchIndex(
+      prizes,
+      prizeIdentifier,
+      branchId: branchId,
+      unitValue: unitValue,
+      isVoucher: isVoucher,
+      preferWithRemaining: true,
+    );
 
     if (matchIndex != -1) {
-      final remaining = (prizes[matchIndex]['remainingQuantity'] ?? 0) as int;
-      if (remaining > 0) {
-        final newRemaining = (remaining - count).clamp(0, double.infinity).toInt();
-        prizes[matchIndex]['remainingQuantity'] = newRemaining;
-        await _firestore.collection('events').doc(eventId).update({
-          'allocatedPrizes': prizes,
-        });
-      }
+      final remaining = (prizes[matchIndex]['remainingQuantity'] as num?)?.toInt() ?? 0;
+      final newRemaining = (remaining - count).clamp(0, double.infinity).toInt();
+      prizes[matchIndex]['remainingQuantity'] = newRemaining;
+      await _firestore.collection('events').doc(eventId).update({
+        'allocatedPrizes': prizes,
+      });
+    }
+  }
+
+  /// Restores / Replenishes the remaining quantity of a prize in a campaign (e.g. when an invoice is deleted).
+  Future<void> replenishCampaignPrize(
+    String eventId,
+    String prizeIdentifier, {
+    String? branchId,
+    int count = 1,
+    double? unitValue,
+    bool? isVoucher,
+  }) async {
+    if (eventId.isEmpty || prizeIdentifier.isEmpty || count <= 0) return;
+
+    final doc = await _firestore.collection('events').doc(eventId).get();
+    if (!doc.exists) return;
+
+    final data = doc.data()!;
+    final prizes = List<Map<String, dynamic>>.from(data['allocatedPrizes'] ?? []);
+    if (prizes.isEmpty) return;
+
+    final matchIndex = findBestPrizeMatchIndex(
+      prizes,
+      prizeIdentifier,
+      branchId: branchId,
+      unitValue: unitValue,
+      isVoucher: isVoucher,
+      preferWithRemaining: false,
+    );
+
+    if (matchIndex != -1) {
+      final allocated = (prizes[matchIndex]['allocatedQuantity'] as num?)?.toInt() ?? 0;
+      final remaining = (prizes[matchIndex]['remainingQuantity'] as num?)?.toInt() ?? 0;
+      final maxCapacity = allocated > 0 ? allocated : (remaining + count);
+      final newRemaining = (remaining + count).clamp(0, maxCapacity).toInt();
+      prizes[matchIndex]['remainingQuantity'] = newRemaining;
+      await _firestore.collection('events').doc(eventId).update({
+        'allocatedPrizes': prizes,
+      });
     }
   }
 }

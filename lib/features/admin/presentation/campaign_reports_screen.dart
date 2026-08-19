@@ -513,60 +513,77 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
         border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.8)),
       ),
       child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _selectedEvent?.id ?? 'ALL',
-          isExpanded: true,
-          dropdownColor: colorScheme.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(16),
-          icon: Icon(Icons.keyboard_arrow_down_rounded, color: colorScheme.primary),
-          style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
-          items: [
-            DropdownMenuItem<String>(
-              value: 'ALL',
-              child: Row(
-                children: [
-                  Icon(Icons.public_rounded, size: 18, color: colorScheme.primary),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      (widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty)
-                          ? '🌐 ${strings.companyAllCampaigns}'
-                          : (isAr ? '🌐 كافة الحملات والفعاليات (All)' : '🌐 All Campaigns & Events'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            ...allEvents.map((evt) => DropdownMenuItem<String>(
-                  value: evt.id,
+        child: Builder(
+          builder: (context) {
+            // Deduplicate events by ID
+            final uniqueEvents = <String, EventModel>{};
+            for (final evt in allEvents) {
+              if (evt.id.isNotEmpty && !uniqueEvents.containsKey(evt.id)) {
+                uniqueEvents[evt.id] = evt;
+              }
+            }
+            final cleanEvents = uniqueEvents.values.toList();
+            final hasValidSelection = _selectedEvent == null ||
+                _selectedEvent!.id == 'ALL' ||
+                cleanEvents.any((e) => e.id == _selectedEvent!.id);
+            final effectiveSelectedId = hasValidSelection ? (_selectedEvent?.id ?? 'ALL') : 'ALL';
+
+            return DropdownButton<String>(
+              key: ValueKey('reports_event_${effectiveSelectedId}_${cleanEvents.length}'),
+              value: effectiveSelectedId,
+              isExpanded: true,
+              dropdownColor: colorScheme.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(16),
+              icon: Icon(Icons.keyboard_arrow_down_rounded, color: colorScheme.primary),
+              style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+              items: [
+                DropdownMenuItem<String>(
+                  value: 'ALL',
                   child: Row(
                     children: [
-                      Icon(Icons.campaign_rounded, size: 18, color: colorScheme.secondary),
+                      Icon(Icons.public_rounded, size: 18, color: colorScheme.primary),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          evt.retailChainName.isNotEmpty
-                              ? '${evt.eventName} (${evt.targetCompany} - ${evt.retailChainName})'
-                              : '${evt.eventName} (${evt.targetCompany})',
+                          (widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty)
+                              ? '🌐 ${strings.companyAllCampaigns}'
+                              : (isAr ? '🌐 كافة الحملات والفعاليات (All)' : '🌐 All Campaigns & Events'),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
                   ),
-                )),
-          ],
-          onChanged: (val) {
-            setState(() {
-              if (val == null || val == 'ALL') {
-                _selectedEvent = null;
-              } else {
-                final match = allEvents.where((e) => e.id == val);
-                _selectedEvent = match.isNotEmpty ? match.first : null;
-              }
-            });
+                ),
+                ...cleanEvents.map((evt) => DropdownMenuItem<String>(
+                      value: evt.id,
+                      child: Row(
+                        children: [
+                          Icon(Icons.campaign_rounded, size: 18, color: colorScheme.secondary),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              evt.retailChainName.isNotEmpty
+                                  ? '${evt.eventName} (${evt.targetCompany} - ${evt.retailChainName})'
+                                  : '${evt.eventName} (${evt.targetCompany})',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )),
+              ],
+              onChanged: (val) {
+                setState(() {
+                  if (val == null || val == 'ALL') {
+                    _selectedEvent = null;
+                  } else {
+                    _selectedEvent = cleanEvents.where((e) => e.id == val).firstOrNull;
+                  }
+                });
+              },
+            );
           },
         ),
       ),

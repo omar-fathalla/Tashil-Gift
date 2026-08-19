@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:al_mraay/features/admin/domain/event_model.dart';
+import 'package:al_mraay/features/admin/domain/company_gift_model.dart';
 
 const String _geminiApiKey =
     'REMOVED_SECRET';
@@ -64,10 +65,13 @@ class CampaignAiAssistantService {
       systemInstruction: Content.system(
         'أنت كبير مستشاري التسويق وتدقيق العروض الترويجية لسلاسل السوبرماركت والتجزئة (FMCG Trade Marketing & Audit Specialist). '
         'مهمتك قراءة الأفكار والشروط الترويجية التي يكتبها مسؤول الحملة باللغة العربية (سواء كانت فصحى أو عامية أو شروط شراء محددة Buy X Get Y)، '
-        'وتحليلها بدقة متناهية وترجمتها إلى: '
+        'وربطها بشكل صارم ومباشر بقائمة هدايا وجوائز المخزون المتاحة للشركة (Company Gifts Master Inventory). '
+        'يجب عليك مطابقة كل مكافأة مع هدية حقيقية موجودة في قائمة مخزون الشركة المرفقة (عن طريق مطابقة الفئة النقدية للفاوتشر، أو اسم الهدية العينية أو نوعها)، '
+        'وتعيين linkedGiftId و linkedGiftName المطابق بدقة. لا تقم باختراع أي هدية خارج قائمة المخزون إذا توفرت هدايا متطابقة. '
+        'وترجمة كل ذلك إلى: '
         '1. برومبت نظام تدقيق احترافي صارم ومكتمل يفهمه الذكاء الاصطناعي لفحص الفواتير ومنع أي تلاعب. '
-        '2. ملخص توضيحي مرئي ومنسق باللغة العربية يشرح بوضوح للمسؤول قواعد الفحص والمكافآت (Summary). '
-        '3. قائمة قواعد وهياكل بيانات دقيقة (Rules List) تحتوي على: اسم القاعدة، المنتجات المشروطة، الكمية الدنيا، نوع المكافأة (قسيمة شراء voucher، منتج مجاني free_product، دورة سحب game_spin)، وقيمة الهدية وقابلية المضاعفة. '
+        '2. ملخص توضيحي مرئي ومنسق باللغة العربية يشرح بوضوح للمسؤول قواعد الفحص والمكافآت والربط بالمخزون (Summary). '
+        '3. قائمة قواعد وهياكل بيانات دقيقة (Rules List) تحتوي على: اسم القاعدة، المنتجات المشروطة، الكمية الدنيا، نوع المكافأة، قيمة الهدية، معرف الهدية المربوطة بالمخزون (linkedGiftId و linkedGiftName)، وقابلية المضاعفة. '
         '4. قائمة بأسماء الأصناف الرئيسية المشروطة لاقتراحها في قائمة المنتجات المعتمدة.',
       ),
       generationConfig: GenerationConfig(
@@ -106,6 +110,12 @@ class CampaignAiAssistantService {
                   'allowMultipliers': Schema.boolean(
                     description: 'True if purchasing multiples of the required quantity grants multiple rewards.',
                   ),
+                  'linkedGiftId': Schema.string(
+                    description: 'The exact ID of the matched gift from the company master inventory list, or empty string if not matched.',
+                  ),
+                  'linkedGiftName': Schema.string(
+                    description: 'The exact name of the matched gift from the company master inventory list.',
+                  ),
                 },
                 requiredProperties: [
                   'id',
@@ -140,14 +150,28 @@ class CampaignAiAssistantService {
     required String rawIdeaText,
     String existingPrompt = '',
     double minimumSpend = 0.0,
+    List<CompanyGiftModel> availableCompanyGifts = const [],
   }) async {
     final minSpendText = minimumSpend > 0
         ? '$minimumSpend ج.م'
         : 'بدون حد أدنى للإنفاق (العرض يعتمد بالكامل على شروط الأصناف والكميات وقواعد البرومبت)';
 
+    String inventoryGiftsText = '';
+    if (availableCompanyGifts.isNotEmpty) {
+      final giftsListFormatted = availableCompanyGifts.map((g) {
+        final typeDesc = g.isVoucher ? 'فاوتشر/قسيمة فئة (${g.formattedUnitValue})' : 'هدية عينية';
+        return '- [معرف: "${g.id}"] الهدية: "${g.giftName}" (النوع: ${g.giftType}, $typeDesc, القيمة: ${g.unitValue} ج.م, الكمية المتاحة: ${g.availableQuantity})';
+      }).join('\n');
+      inventoryGiftsText = 'قائمة الهدايا المتاحة في مخزون شركة "$targetCompany":\n$giftsListFormatted';
+    } else {
+      inventoryGiftsText = 'لا توجد قائمة مخزون هدايا محددة مسبقاً (استخرج الهدايا بحسب نص الشروط).';
+    }
+
     final prompt = '''
 الشركة الراعية / المستهدفة: "$targetCompany"
 الحد الأدنى للإنفاق: $minSpendText
+
+$inventoryGiftsText
 
 نص فكرة المهرجان وشروط العرض كما كتبها المسؤول:
 """
@@ -156,10 +180,11 @@ $rawIdeaText
 
 المطلوب:
 1. قم بتحليل كافة قواعد الشراء والجوائز المذكورة (مثل: عند شراء منتج كذا احصل على كذا، القسائم، الهدايا العينية، السحوبات، مضاعفات الكميات).
-2. استخرج قائمة القواعد المهيكلة بدقة مع تحديد نوع كل مكافأة (voucher, free_product, game_spin) وقيمتها وقابليتها للتضاعف.
-3. اكتب برومبت تدقيق فائق الاحترافية والدقة (formattedSystemPrompt) ليوجه الذكاء الاصطناعي أثناء قراءة الفاتورة، مع التأكيد على التحقق من الأصناف والأحجام والكميات بدقة ومنع التلاعب.
-4. أنشئ ملخصاً واضحاً باللغة العربية (aiValidationSummary) في نقاط محددة ومنسقة، يشرح بأسلوب جميل للمسؤول: "إليك كيف سأقوم بفحص وتدقيق فواتير هذا المهرجان".
-5. اقترح قائمة الأصناف والكلمات المفتاحية المشروطة في العرض (suggestedRequiredProducts).
+2. اربط كل قاعدة (Rule) بهدية حقيقية مطابقة من قائمة مخزون الشركة المذكورة أعلاه بدقة (واستخرج معرفها linkedGiftId واسمها linkedGiftName المطابق لقائمة المخزون)، وطابق الفئات النقدية للفاوتشرات والمنتجات العينية دون اختراع هدايا من خارج المخزون إذا توفرت هدايا مطابقة.
+3. استخرج قائمة القواعد المهيكلة بدقة مع تحديد نوع كل مكافأة (voucher, free_product, game_spin) وقيمتها وقابليتها للتضاعف والهدية المربوطة.
+4. اكتب برومبت تدقيق فائق الاحترافية والدقة (formattedSystemPrompt) ليوجه الذكاء الاصطناعي أثناء قراءة الفاتورة، مع التأكيد على التحقق من الأصناف والأحجام والكميات بدقة ومنع التلاعب وربط الجوائز بهدايا المخزون.
+5. أنشئ ملخصاً واضحاً باللغة العربية (aiValidationSummary) في نقاط محددة ومنسقة، يشرح بأسلوب جميل للمسؤول: "إليك كيف سأقوم بفحص وتدقيق فواتير هذا المهرجان وربطها بمخزون الجوائز".
+6. اقترح قائمة الأصناف والكلمات المفتاحية المشروطة في العرض (suggestedRequiredProducts).
 ''';
 
     try {
@@ -169,7 +194,17 @@ $rawIdeaText
         throw Exception('استجابة الذكاء الاصطناعي فارغة.');
       }
       final jsonMap = jsonDecode(text) as Map<String, dynamic>;
-      return CampaignAiAnalysisResult.fromJson(jsonMap);
+      final result = CampaignAiAnalysisResult.fromJson(jsonMap);
+
+      // Post-process rules to guarantee exact inventory gift matching if ID is slightly mismatched
+      final enrichedRules = _enrichRulesWithInventory(result.rules, availableCompanyGifts);
+
+      return CampaignAiAnalysisResult(
+        formattedSystemPrompt: result.formattedSystemPrompt,
+        aiValidationSummary: result.aiValidationSummary,
+        rules: enrichedRules,
+        suggestedRequiredProducts: result.suggestedRequiredProducts,
+      );
     } catch (e) {
       // Try fallback model
       try {
@@ -177,7 +212,14 @@ $rawIdeaText
         final fallbackText = fallbackResponse.text;
         if (fallbackText != null && fallbackText.trim().isNotEmpty) {
           final jsonMap = jsonDecode(fallbackText) as Map<String, dynamic>;
-          return CampaignAiAnalysisResult.fromJson(jsonMap);
+          final result = CampaignAiAnalysisResult.fromJson(jsonMap);
+          final enrichedRules = _enrichRulesWithInventory(result.rules, availableCompanyGifts);
+          return CampaignAiAnalysisResult(
+            formattedSystemPrompt: result.formattedSystemPrompt,
+            aiValidationSummary: result.aiValidationSummary,
+            rules: enrichedRules,
+            suggestedRequiredProducts: result.suggestedRequiredProducts,
+          );
         }
       } catch (_) {}
       
@@ -186,25 +228,297 @@ $rawIdeaText
         targetCompany: targetCompany,
         rawIdeaText: rawIdeaText,
         minimumSpend: minimumSpend,
+        availableCompanyGifts: availableCompanyGifts,
       );
     }
+  }
+
+  /// Generates a bulletproof, formatted AI system prompt from existing promotional rules, spend, and conditions.
+  static String generateFormattedSystemPrompt({
+    required String targetCompany,
+    required double minimumSpend,
+    List<String> requiredProducts = const [],
+    List<PromotionalRuleItem> promotionalRules = const [],
+    String retailChainName = '',
+    List<String> allowedBranches = const [],
+  }) {
+    final buffer = StringBuffer();
+    buffer.writeln('أنت مدقق فواتير فائق الدقة ومسؤول عن فحص وتدقيق فواتير عروض ومهرجانات شركة "$targetCompany".');
+    buffer.writeln();
+    buffer.writeln('المطلوب فحص صورة الفاتورة فورياً واستخراج البيانات الأساسية:');
+    buffer.writeln('1. اسم سلسلة المتجر والفرع ومطابقتهما.');
+    buffer.writeln('2. رقم الفاتورة (Receipt Number أو Transaction ID) وتاريخ الشراء.');
+    buffer.writeln('3. أصناف وكميات منتجات "$targetCompany" بدقة.');
+    buffer.writeln();
+
+    if (retailChainName.trim().isNotEmpty) {
+      buffer.writeln('🏢 شروط السلسلة والفروع:');
+      buffer.writeln('- السلسلة المعتمدة: "$retailChainName".');
+      if (allowedBranches.isNotEmpty) {
+        buffer.writeln('- الفروع المعتمدة حصراً: [${allowedBranches.join("، ")}].');
+      }
+      buffer.writeln();
+    }
+
+    if (minimumSpend > 0) {
+      buffer.writeln('💰 شرط الحد الأدنى للإنفاق:');
+      buffer.writeln('- إجمالي منتجات "$targetCompany" في الفاتورة يجب ألا يقل عن $minimumSpend ج.م.');
+      buffer.writeln();
+    }
+
+    if (requiredProducts.isNotEmpty) {
+      buffer.writeln('📦 قائمة المنتجات المشروطة:');
+      buffer.writeln('- يشترط احتواء الفاتورة على صنف أو أكثر من: [${requiredProducts.join("، ")}].');
+      buffer.writeln();
+    }
+
+    if (promotionalRules.isNotEmpty) {
+      buffer.writeln('🎯 محرك القواعد والعروض الترويجية والجوائز المعتمدة (Promotional Rules Engine):');
+      for (int i = 0; i < promotionalRules.length; i++) {
+        final r = promotionalRules[i];
+        final id = r.id.isNotEmpty ? r.id : 'rule_${i + 1}';
+        final multText = r.allowMultipliers ? ' (تتضاعف الجوائز بمضاعفة الكمية)' : '';
+        final voucherVal = r.totalVoucherValue > 0
+            ? ' [قيمة نقدية: ${r.totalVoucherValue.toInt()} ج.م]'
+            : (r.rewardAmount > 0 ? ' [قيمة نقدية: ${r.rewardAmount.toInt()} ج.م]' : '');
+        final giftBinding = r.linkedGiftsSummary.isNotEmpty ? ' ➔ تسليم كروت: (${r.linkedGiftsSummary})' : '';
+        buffer.writeln('${i + 1}. [معرف ID: "$id"] عنوان: "${r.ruleTitle}"');
+        buffer.writeln('   - الشرط: شراء كمية (${r.minQuantity}) أو أكثر من أصناف [${r.triggerProduct}]');
+        buffer.writeln('   - المكافأة المستحقة: [${r.rewardValue}$voucherVal] (نوع: ${r.rewardType})$giftBinding$multText');
+      }
+      buffer.writeln();
+      buffer.writeln('⚠️ تعليمات هامة للذكاء الاصطناعي أثناء التدقيق:');
+      buffer.writeln('- في حال وجود مستويات متعددة من الكميات لنفس الصنف، امنح العميل القاعدة ذات المستوى الأعلى المحقق (مثل: 2 قطعة تفوز بقاعدة 125 ج.م وليس قاعدة قطعة واحدة).');
+      buffer.writeln('- ضع في حقل (matchedRuleId) معرف القاعدة الفائزة بدقة.');
+      buffer.writeln('- ضع في حقل (matchedRewardValue) اسم الجائزة المستحقة بدقة.');
+      buffer.writeln('- إذا لم تتحقق أي قاعدة خاصة، اترك (matchedRuleId) فارغاً.');
+    }
+
+    return buffer.toString().trim();
+  }
+
+  /// Decomposes a target monetary amount into the best combination of available voucher denominations from inventory.
+  /// Example: 125 EGP with [50 EGP, 25 EGP] -> 2x 50 EGP + 1x 25 EGP.
+  static List<LinkedGiftAllocation> decomposeVoucherAmount(
+    double targetAmount,
+    List<CompanyGiftModel> availableGifts,
+  ) {
+    if (targetAmount <= 0) return [];
+    final vouchers = availableGifts
+        .where((g) => g.isVoucher && g.unitValue > 0)
+        .toList()
+      ..sort((a, b) => b.unitValue.compareTo(a.unitValue));
+
+    if (vouchers.isEmpty) return [];
+
+    // 1. Direct exact match
+    final exact = vouchers.where((v) => (v.unitValue - targetAmount).abs() < 0.01).firstOrNull;
+    if (exact != null) {
+      return [
+        LinkedGiftAllocation(
+          giftId: exact.id,
+          giftName: exact.giftName,
+          quantity: 1,
+          unitValue: exact.unitValue,
+          giftType: 'voucher',
+        ),
+      ];
+    }
+
+    // 2. Greedy search
+    int remaining = targetAmount.round();
+    final List<LinkedGiftAllocation> allocations = [];
+
+    for (final v in vouchers) {
+      final val = v.unitValue.round();
+      if (val <= 0) continue;
+      final count = remaining ~/ val;
+      if (count > 0) {
+        allocations.add(
+          LinkedGiftAllocation(
+            giftId: v.id,
+            giftName: v.giftName,
+            quantity: count,
+            unitValue: v.unitValue,
+            giftType: 'voucher',
+          ),
+        );
+        remaining -= count * val;
+      }
+    }
+
+    if (remaining == 0 && allocations.isNotEmpty) {
+      return allocations;
+    }
+
+    // 3. Fallback: if greedy had remainder, try recursive exact change
+    final exactChange = _findExactVoucherChange(targetAmount.round(), vouchers, 0);
+    if (exactChange != null && exactChange.isNotEmpty) {
+      return exactChange;
+    }
+
+    return allocations;
+  }
+
+  static List<LinkedGiftAllocation>? _findExactVoucherChange(
+    int target,
+    List<CompanyGiftModel> vouchers,
+    int index,
+  ) {
+    if (target == 0) return [];
+    if (index >= vouchers.length || target < 0) return null;
+
+    final v = vouchers[index];
+    final val = v.unitValue.round();
+    if (val <= 0) return _findExactVoucherChange(target, vouchers, index + 1);
+
+    final maxCount = target ~/ val;
+    for (int count = maxCount; count >= 0; count--) {
+      final subResult = _findExactVoucherChange(target - (count * val), vouchers, index + 1);
+      if (subResult != null) {
+        if (count > 0) {
+          return [
+            LinkedGiftAllocation(
+              giftId: v.id,
+              giftName: v.giftName,
+              quantity: count,
+              unitValue: v.unitValue,
+              giftType: 'voucher',
+            ),
+            ...subResult,
+          ];
+        }
+        return subResult;
+      }
+    }
+    return null;
+  }
+
+  List<PromotionalRuleItem> _enrichRulesWithInventory(
+    List<PromotionalRuleItem> rules,
+    List<CompanyGiftModel> availableGifts,
+  ) {
+    if (availableGifts.isEmpty) return rules;
+
+    return rules.map((rule) {
+      // If already has linkedGifts, verify and keep
+      if (rule.linkedGifts.isNotEmpty) {
+        final verified = rule.linkedGifts.map((alloc) {
+          final matched = availableGifts.where((g) => g.id == alloc.giftId || g.giftName == alloc.giftName).firstOrNull;
+          if (matched != null) {
+            return alloc.copyWith(
+              giftId: matched.id,
+              giftName: matched.giftName,
+              unitValue: matched.unitValue,
+              giftType: matched.giftType,
+            );
+          }
+          return alloc;
+        }).toList();
+        return rule.copyWith(linkedGifts: verified);
+      }
+
+      // If already linked to a single gift ID
+      if (rule.linkedGiftId != null && rule.linkedGiftId!.isNotEmpty) {
+        final exact = availableGifts.where((g) => g.id == rule.linkedGiftId).firstOrNull;
+        if (exact != null) {
+          final alloc = LinkedGiftAllocation(
+            giftId: exact.id,
+            giftName: exact.giftName,
+            quantity: 1,
+            unitValue: exact.unitValue,
+            giftType: exact.giftType,
+          );
+          return rule.copyWith(
+            linkedGiftId: exact.id,
+            linkedGiftName: exact.giftName,
+            rewardType: exact.isVoucher ? 'voucher' : 'free_product',
+            rewardAmount: exact.isVoucher ? exact.unitValue : rule.rewardAmount,
+            linkedGifts: [alloc],
+          );
+        }
+      }
+
+      final isExplicitVoucher = rule.rewardType == 'voucher' ||
+          rule.rewardValue.contains('فواتشر') ||
+          rule.rewardValue.toLowerCase().contains('voucher') ||
+          rule.rewardValue.contains('قسيمة');
+      final isExplicitProduct = rule.rewardType == 'free_product' ||
+          rule.rewardType == 'game_spin' ||
+          rule.rewardValue.contains('هدية') ||
+          rule.rewardValue.contains('منتج');
+
+      final isVoucherRule = isExplicitVoucher && !isExplicitProduct;
+
+      // Extract numeric amount from rule title or rewardValue only for voucher rules
+      double effectiveAmount = rule.rewardAmount;
+      if (isVoucherRule && effectiveAmount <= 0) {
+        final match = RegExp(r'(\d+)').firstMatch(rule.rewardValue);
+        if (match != null) {
+          effectiveAmount = double.tryParse(match.group(1)!) ?? 0.0;
+        }
+      }
+
+      if (isVoucherRule && effectiveAmount > 0) {
+        final decomposed = decomposeVoucherAmount(effectiveAmount, availableGifts);
+        if (decomposed.isNotEmpty) {
+          return rule.copyWith(
+            rewardType: 'voucher',
+            rewardAmount: effectiveAmount,
+            linkedGifts: decomposed,
+            linkedGiftId: decomposed.first.giftId,
+            linkedGiftName: decomposed.map((d) => d.quantity > 1 ? '${d.quantity}x ${d.giftName}' : d.giftName).join(' + '),
+          );
+        }
+      }
+
+      // Match single gift by name in inventory
+      final matchedGift = availableGifts.where((g) =>
+          g.giftName.toLowerCase().contains(rule.rewardValue.toLowerCase()) ||
+          rule.rewardValue.toLowerCase().contains(g.giftName.toLowerCase())
+      ).firstOrNull;
+
+      if (matchedGift != null) {
+        final alloc = LinkedGiftAllocation(
+          giftId: matchedGift.id,
+          giftName: matchedGift.giftName,
+          quantity: 1,
+          unitValue: matchedGift.unitValue,
+          giftType: matchedGift.giftType,
+        );
+        return rule.copyWith(
+          linkedGiftId: matchedGift.id,
+          linkedGiftName: matchedGift.giftName,
+          rewardType: matchedGift.isVoucher ? 'voucher' : 'free_product',
+          rewardAmount: matchedGift.isVoucher ? matchedGift.unitValue : rule.rewardAmount,
+          linkedGifts: [alloc],
+        );
+      }
+
+      return rule;
+    }).toList();
   }
 
   CampaignAiAnalysisResult _generateLocalFallbackResult({
     required String targetCompany,
     required String rawIdeaText,
     required double minimumSpend,
+    List<CompanyGiftModel> availableCompanyGifts = const [],
   }) {
+    CompanyGiftModel? firstGift = availableCompanyGifts.firstOrNull;
+
     final rules = [
       PromotionalRuleItem(
         id: 'rule_1',
         ruleTitle: 'عرض منتجات $targetCompany',
         triggerProduct: targetCompany,
         minQuantity: 1,
-        rewardType: 'free_product',
-        rewardValue: 'هدية فورية من العرض',
-        rewardAmount: 0.0,
+        rewardType: firstGift?.isVoucher == true ? 'voucher' : 'free_product',
+        rewardValue: firstGift != null ? firstGift.giftName : 'هدية فورية من العرض',
+        rewardAmount: firstGift?.unitValue ?? 0.0,
         allowMultipliers: true,
+        linkedGiftId: firstGift?.id,
+        linkedGiftName: firstGift?.giftName,
       ),
     ];
 
@@ -212,7 +526,7 @@ $rawIdeaText
 📋 **ملخص منطق التدقيق المستخلص من فكرة المهرجان:**
 • **الشركة المستهدفة:** $targetCompany
 • **الشرط الأساسي:** $rawIdeaText
-• **المكافأة:** استحقاق الجوائز والقسائم المحددة بناءً على مطابقة الأصناف والكميات في الفاتورة.
+• **المكافأة:** استحقاق الجوائز والقسائم المحددة بناءً على مطابقة الأصناف والكميات في الفاتورة وربطها بمخزون الشركة.
 • **مضاعفات الكمية:** مفعّلة تلقائياً عند زيادة الكمية المشتراة.
 ''';
 
@@ -221,7 +535,7 @@ $rawIdeaText
 شروط العرض:
 $rawIdeaText
 ${minimumSpend > 0 ? 'الحد الأدنى للإنفاق: $minimumSpend ج.م.' : 'العرض ساري بدون اشتراط حد أدنى لمبلغ الفاتورة (الاعتماد على شروط الأصناف والكميات المحددة).'}
-تحقق من وجود أصناف $targetCompany والكميات المطلوبة، وقم باحتساب الهدايا المستحقة بدقة.
+تحقق من وجود أصناف $targetCompany والكميات المطلوبة، وقم باحتساب الهدايا المستحقة بدقة وفقاً لقائمة الجوائز المعتمدة.
 ''';
 
     return CampaignAiAnalysisResult(

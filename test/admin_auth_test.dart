@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:al_mraay/core/localization/app_strings.dart';
 import 'package:al_mraay/core/services/firebase_service.dart';
 import 'package:al_mraay/features/auth/presentation/auth_screen.dart';
+import 'package:al_mraay/features/admin/presentation/admin_dashboard_screen.dart';
 import 'package:al_mraay/main.dart';
 
 void main() {
@@ -12,7 +13,7 @@ void main() {
 
   group('Admin Auth & Security Tests', () {
     test('Primary admin credentials constants are defined', () {
-      expect(kPrimaryAdminEmail, 'support@sw-point.com');
+      expect(kPrimaryAdminEmail, 'support@switchpoint.com');
       expect(kPrimaryAdminPassword, 'Youniis@!1987');
     });
 
@@ -101,6 +102,7 @@ void main() {
         ProviderScope(
           overrides: [
             adminSessionEmailProvider.overrideWith((ref) => null),
+            isAdminProvider.overrideWithValue(false),
             authStateStreamProvider.overrideWith((ref) => Stream.value(null)),
           ],
           child: const MaterialApp(
@@ -111,6 +113,51 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(AuthScreen), findsOneWidget);
+    });
+
+    testWidgets('AdminDashboardScreen header removes AI speed test and Preview buttons and renders Profile Menu with Logout', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            adminSessionEmailProvider.overrideWith((ref) => 'support@switchpoint.com'),
+            isAdminProvider.overrideWithValue(true),
+          ],
+          child: const MaterialApp(
+            home: AdminDashboardScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 1. Verify AI speed benchmark button is removed from header
+      expect(find.text('اختبار سرعة AI ⚡'), findsNothing);
+      expect(find.text('AI Speed KPI ⚡'), findsNothing);
+
+      // 2. Verify top header Preview Client App button is removed
+      expect(find.widgetWithText(FilledButton, 'معاينة تطبيق العميل / البروموتر'), findsNothing);
+
+      // 3. Verify standalone Outlined Logout button is replaced
+      expect(find.byType(OutlinedButton), findsNothing);
+
+      // 4. Verify Profile Menu is rendered in header
+      final profileIconFinder = find.byIcon(Icons.person_rounded);
+      expect(profileIconFinder, findsOneWidget);
+
+      // 5. Tap Profile menu to open popup
+      await tester.tap(profileIconFinder);
+      await tester.pumpAndSettle();
+
+      // 6. Verify Profile dropdown contents including Logout
+      expect(find.text('مسؤول النظام'), findsWidgets);
+      expect(find.text('support@switchpoint.com'), findsOneWidget);
+      expect(find.text('جلسة إدارية نشطة'), findsOneWidget);
+      expect(find.text('تسجيل الخروج'), findsOneWidget);
+      expect(find.byIcon(Icons.logout_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.logout_rounded), findsOneWidget);
     });
   });
 }

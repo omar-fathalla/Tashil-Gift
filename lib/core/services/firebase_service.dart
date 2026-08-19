@@ -4,8 +4,18 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-const String kPrimaryAdminEmail = 'support@sw-point.com';
+const String kPrimaryAdminEmail = 'support@switchpoint.com';
+const String kFallbackAdminEmail = 'support@sw-point.com';
 const String kPrimaryAdminPassword = 'Youniis@!1987';
+
+bool isAuthorizedAdminEmail(String? email) {
+  if (email == null || email.trim().isEmpty) return false;
+  final clean = email.trim().toLowerCase();
+  return clean == kPrimaryAdminEmail.toLowerCase() ||
+      clean == kFallbackAdminEmail.toLowerCase() ||
+      clean.endsWith('@switchpoint.com') ||
+      clean.endsWith('@sw-point.com');
+}
 
 final firebaseAuthProvider = Provider<FirebaseAuth>((ref) {
   return FirebaseAuth.instance;
@@ -31,11 +41,16 @@ final adminSessionInitializerProvider = FutureProvider<void>((ref) async {
 final isAdminProvider = Provider<bool>((ref) {
   final sessionEmail = ref.watch(adminSessionEmailProvider);
   if (sessionEmail != null && sessionEmail.isNotEmpty) {
-    final clean = sessionEmail.trim().toLowerCase();
-    if (clean == kPrimaryAdminEmail.toLowerCase() || clean.endsWith('@sw-point.com')) {
+    if (isAuthorizedAdminEmail(sessionEmail)) {
       return true;
     }
   }
+  try {
+    final user = ref.watch(firebaseAuthProvider).currentUser;
+    if (user != null && isAuthorizedAdminEmail(user.email)) {
+      return true;
+    }
+  } catch (_) {}
   return false;
 });
 
@@ -68,7 +83,7 @@ class FirebaseService {
     final cleanPassword = password.trim();
 
     // 1. Check if entering primary super admin credentials
-    final isSuperAdminMatch = (cleanEmail == kPrimaryAdminEmail.toLowerCase() || cleanEmail.endsWith('@sw-point.com')) &&
+    final isSuperAdminMatch = isAuthorizedAdminEmail(cleanEmail) &&
         (cleanPassword == kPrimaryAdminPassword);
 
     if (isSuperAdminMatch) {
@@ -156,16 +171,14 @@ class FirebaseService {
 
   bool get isAdmin {
     final sessionEmail = _ref.read(adminSessionEmailProvider);
-    if (sessionEmail != null) {
-      final clean = sessionEmail.trim().toLowerCase();
-      if (clean == kPrimaryAdminEmail.toLowerCase() || clean.endsWith('@sw-point.com')) {
-        return true;
-      }
+    if (sessionEmail != null && isAuthorizedAdminEmail(sessionEmail)) {
+      return true;
     }
     final user = _auth.currentUser;
-    if (user == null || user.email == null) return false;
-    final email = user.email!.trim().toLowerCase();
-    return email == kPrimaryAdminEmail.toLowerCase() || email.endsWith('@sw-point.com');
+    if (user != null && isAuthorizedAdminEmail(user.email)) {
+      return true;
+    }
+    return false;
   }
   
   Stream<User?> get authStateChanges => _auth.authStateChanges();

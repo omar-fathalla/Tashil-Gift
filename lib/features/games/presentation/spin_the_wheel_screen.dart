@@ -113,9 +113,18 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
         final firestore = ref.read(firestoreProvider);
         await firestore.collection('receipts_transactions').doc(widget.transactionId).update({
           'game_played': true,
+          'game_type': 'wheel',
           'prize_won': _wonPrizes.join(' + '),
           'prizes_won': _wonPrizes,
           'remaining_chances': _remainingChances,
+          'event_id': widget.eventId,
+          'claimed_gifts': [{
+            'giftId': '',
+            'giftName': prize,
+            'quantity': 1,
+            'unitValue': 0.0,
+            'isVoucher': false,
+          }],
         });
 
         // Decrement the prize from the campaign's allocated inventory
@@ -334,8 +343,9 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
                                 ],
                               ),
                               child: ClipOval(
-                                child: FortuneWheel(
-                                  selected: selected.stream,
+                                child: SelectionContainer.disabled(
+                                  child: FortuneWheel(
+                                    selected: selected.stream,
                                   duration: const Duration(seconds: 14), // 14 seconds of thrilling, realistic spin
                                   rotationCount: 16, // 16 full revolutions starting fast and decelerating smoothly
                                   curve: FortuneCurve.spin,
@@ -378,6 +388,7 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
                                 ),
                               ),
                             ),
+                          ),
 
                             // Center Golden Hub
                             Container(

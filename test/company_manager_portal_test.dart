@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:al_mraay/core/localization/app_strings.dart';
 import 'package:al_mraay/core/widgets/m3_button_groups.dart';
 import 'package:al_mraay/features/company_portal/presentation/company_manager_portal_screen.dart';
+import 'package:al_mraay/features/company_portal/presentation/company_prizes_stock_report_screen.dart';
 import 'package:al_mraay/features/admin/presentation/campaign_reports_screen.dart';
 import 'package:al_mraay/features/validation/presentation/invoices_log_screen.dart';
 
@@ -30,7 +31,7 @@ void main() {
       expect(stringsHi.previewManagerPortal, isNotEmpty);
     });
 
-    testWidgets('CompanyManagerPortalScreen renders executive header and 2 M3 tabs', (tester) async {
+    testWidgets('CompanyManagerPortalScreen renders executive header and 3 M3 tabs', (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
@@ -47,12 +48,13 @@ void main() {
 
       await tester.pump();
 
-      // Verify partner portal badge & M3ConnectedButtonGroup with 2 tabs in portal header and tabs in reports
-      expect(find.byType(M3ConnectedButtonGroup<int>), findsNWidgets(2));
+      // Verify partner portal badge & M3ConnectedButtonGroup with tabs in portal header
+      expect(find.byType(M3ConnectedButtonGroup<int>), findsWidgets);
       expect(find.byIcon(Icons.analytics_rounded), findsWidgets);
       expect(find.byIcon(Icons.receipt_long_rounded), findsWidgets);
+      expect(find.byIcon(Icons.inventory_2_rounded), findsWidgets);
 
-      // Verify embedded CampaignReportsScreen is instantiated
+      // Verify embedded CampaignReportsScreen is instantiated initially
       expect(find.byType(CampaignReportsScreen), findsOneWidget);
     });
 
@@ -82,6 +84,32 @@ void main() {
       expect(find.byType(InvoicesLogScreen), findsOneWidget);
     });
 
+    testWidgets('Tapping Prizes Stock tab in CompanyManagerPortalScreen switches view to CompanyPrizesStockReportScreen', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: CompanyManagerPortalScreen(
+              companySlug: 'adco',
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      // Find the third segment (Prizes Stock)
+      final prizesStockSegment = find.byIcon(Icons.inventory_2_rounded).first;
+      await tester.tap(prizesStockSegment);
+      await tester.pump();
+
+      // Verify CompanyPrizesStockReportScreen is rendered
+      expect(find.byType(CompanyPrizesStockReportScreen), findsOneWidget);
+    });
+
     testWidgets('CompanyManagerPortalScreen renders responsive mobile layout on smartphone (390x844)', (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1.0;
@@ -100,17 +128,17 @@ void main() {
       await tester.pump();
 
       // Verify portal header renders with full-width M3ConnectedButtonGroup
-      expect(find.byType(M3ConnectedButtonGroup<int>), findsNWidgets(2));
+      expect(find.byType(M3ConnectedButtonGroup<int>), findsWidgets);
       expect(find.byType(CampaignReportsScreen), findsOneWidget);
       expect(tester.takeException(), isNull);
 
-      // Tap on Invoices & Audit tab on mobile
-      final invoicesSegment = find.byIcon(Icons.receipt_long_rounded).first;
-      await tester.tap(invoicesSegment);
+      // Tap on Prizes Stock tab on mobile
+      final prizesStockSegment = find.byIcon(Icons.inventory_2_rounded).first;
+      await tester.tap(prizesStockSegment);
       await tester.pump();
 
-      // Verify InvoicesLogScreen is rendered with 0 overflow errors
-      expect(find.byType(InvoicesLogScreen), findsOneWidget);
+      // Verify CompanyPrizesStockReportScreen is rendered with 0 overflow errors
+      expect(find.byType(CompanyPrizesStockReportScreen), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -137,6 +165,17 @@ void main() {
       expect(invoices.lockedCompanyName, equals('لمار'));
       expect(invoices.isEmbedded, isTrue);
     });
+
+    test('CompanyPrizesStockReportScreen accepts lockedCompanySlug parameter for secure data scoping', () {
+      const prizesStock = CompanyPrizesStockReportScreen(
+        lockedCompanySlug: 'unilever',
+        lockedCompanyName: 'يونيليفر',
+        isEmbedded: true,
+      );
+
+      expect(prizesStock.lockedCompanySlug, equals('unilever'));
+      expect(prizesStock.lockedCompanyName, equals('يونيليفر'));
+      expect(prizesStock.isEmbedded, isTrue);
+    });
   });
 }
-

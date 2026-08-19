@@ -13,8 +13,8 @@ class SwitchPointInfo {
   static const String platformName = 'Tashil Gift';
   static const String platformSubtitle = 'حلول الترويج والتحقق الذكي متعدد الشركات';
   static const String websiteUrl = 'https://www.sw-point.com/';
-  static const String websiteDisplay = 'www.switchpoint.com';
-  static const String supportEmail = 'support@switchpoint.com';
+  static const String websiteDisplay = 'www.sw-point.com';
+  static const String supportEmail = 'support@sw-point.com';
   static const String whatsappEgypt = '+20 121 185 7725';
   static const String whatsappEgyptUrl = 'https://wa.me/201211857725';
   static const String whatsappUae = '+971 55 871 5615';

@@ -1,5 +1,61 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Represents a specific quantity of an inventory gift allocated to a promotional rule
+class LinkedGiftAllocation {
+  final String giftId;
+  final String giftName;
+  final int quantity; // e.g. 2 of 50 EGP card, 1 of 25 EGP card
+  final double unitValue; // 50.0
+  final String giftType; // 'voucher' | 'product'
+
+  LinkedGiftAllocation({
+    required this.giftId,
+    required this.giftName,
+    this.quantity = 1,
+    this.unitValue = 0.0,
+    this.giftType = 'product',
+  });
+
+  bool get isVoucher => giftType == 'voucher' || unitValue > 0;
+  double get totalMonetaryValue => isVoucher ? (unitValue * quantity) : 0.0;
+
+  LinkedGiftAllocation copyWith({
+    String? giftId,
+    String? giftName,
+    int? quantity,
+    double? unitValue,
+    String? giftType,
+  }) {
+    return LinkedGiftAllocation(
+      giftId: giftId ?? this.giftId,
+      giftName: giftName ?? this.giftName,
+      quantity: quantity ?? this.quantity,
+      unitValue: unitValue ?? this.unitValue,
+      giftType: giftType ?? this.giftType,
+    );
+  }
+
+  factory LinkedGiftAllocation.fromMap(Map<String, dynamic> data) {
+    return LinkedGiftAllocation(
+      giftId: data['giftId']?.toString() ?? '',
+      giftName: data['giftName']?.toString() ?? '',
+      quantity: (data['quantity'] as num?)?.toInt() ?? 1,
+      unitValue: (data['unitValue'] as num?)?.toDouble() ?? 0.0,
+      giftType: data['giftType']?.toString() ?? 'product',
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'giftId': giftId,
+      'giftName': giftName,
+      'quantity': quantity,
+      'unitValue': unitValue,
+      'giftType': giftType,
+    };
+  }
+}
+
 /// Represents a structured promotional rule/offer condition (e.g. "Buy 1 Axe/Rexona spray -> Get 50 EGP voucher")
 class PromotionalRuleItem {
   final String id;
@@ -10,6 +66,9 @@ class PromotionalRuleItem {
   final String rewardValue; // e.g. 'قسيمة مشتريات 50 ج.م' or 'كلير 90 مل هدية'
   final double rewardAmount; // 50.0 if voucher
   final bool allowMultipliers; // true if buying 2x items gives 2x rewards
+  final String? linkedGiftId; // ID of the linked CompanyGiftModel from inventory (legacy/fallback)
+  final String? linkedGiftName; // Friendly display name of the linked gift (legacy/fallback)
+  final List<LinkedGiftAllocation> linkedGifts; // Multiple allocated gifts/vouchers for this rule
 
   PromotionalRuleItem({
     required this.id,
@@ -20,9 +79,52 @@ class PromotionalRuleItem {
     required this.rewardValue,
     this.rewardAmount = 0.0,
     this.allowMultipliers = true,
+    this.linkedGiftId,
+    this.linkedGiftName,
+    this.linkedGifts = const [],
   });
 
+  bool get hasLinkedGifts => linkedGifts.isNotEmpty || (linkedGiftId != null && linkedGiftId!.isNotEmpty);
+
+  /// Returns total monetary value of linked vouchers
+  double get totalVoucherValue {
+    if (linkedGifts.isNotEmpty) {
+      return linkedGifts.where((g) => g.isVoucher).fold(0.0, (total, g) => total + g.totalMonetaryValue);
+    }
+    return rewardAmount;
+  }
+
+  /// Formatted summary of linked gifts (e.g. "2 × فواتشر 50 جنيه + 1 × فواتشر 25 جنيه")
+  String get linkedGiftsSummary {
+    if (linkedGifts.isEmpty) {
+      return linkedGiftName ?? '';
+    }
+    return linkedGifts.map((g) => g.quantity > 1 ? '${g.quantity} × ${g.giftName}' : g.giftName).join(' + ');
+  }
+
   factory PromotionalRuleItem.fromMap(Map<String, dynamic> data) {
+    List<LinkedGiftAllocation> parsedLinkedGifts = [];
+    if (data['linkedGifts'] is List) {
+      parsedLinkedGifts = (data['linkedGifts'] as List)
+          .map((e) => LinkedGiftAllocation.fromMap(Map<String, dynamic>.from(e as Map)))
+          .where((g) => g.giftId.isNotEmpty)
+          .toList();
+    }
+
+    final rawGiftId = data['linkedGiftId']?.toString();
+    final rawGiftName = data['linkedGiftName']?.toString();
+
+    // Backward compatibility: if linkedGifts is empty but linkedGiftId is present
+    if (parsedLinkedGifts.isEmpty && rawGiftId != null && rawGiftId.isNotEmpty) {
+      parsedLinkedGifts.add(LinkedGiftAllocation(
+        giftId: rawGiftId,
+        giftName: rawGiftName ?? '',
+        quantity: 1,
+        unitValue: (data['rewardAmount'] as num?)?.toDouble() ?? 0.0,
+        giftType: data['rewardType']?.toString() ?? 'product',
+      ));
+    }
+
     return PromotionalRuleItem(
       id: data['id']?.toString() ?? '',
       ruleTitle: data['ruleTitle']?.toString() ?? '',
@@ -32,10 +134,16 @@ class PromotionalRuleItem {
       rewardValue: data['rewardValue']?.toString() ?? '',
       rewardAmount: (data['rewardAmount'] as num?)?.toDouble() ?? 0.0,
       allowMultipliers: data['allowMultipliers'] != false,
+      linkedGiftId: rawGiftId,
+      linkedGiftName: rawGiftName,
+      linkedGifts: parsedLinkedGifts,
     );
   }
 
   Map<String, dynamic> toMap() {
+    final effectiveGiftId = linkedGifts.isNotEmpty ? linkedGifts.first.giftId : (linkedGiftId ?? '');
+    final effectiveGiftName = linkedGifts.isNotEmpty ? linkedGiftsSummary : (linkedGiftName ?? '');
+
     return {
       'id': id,
       'ruleTitle': ruleTitle,
@@ -45,7 +153,38 @@ class PromotionalRuleItem {
       'rewardValue': rewardValue,
       'rewardAmount': rewardAmount,
       'allowMultipliers': allowMultipliers,
+      if (effectiveGiftId.isNotEmpty) 'linkedGiftId': effectiveGiftId,
+      if (effectiveGiftName.isNotEmpty) 'linkedGiftName': effectiveGiftName,
+      if (linkedGifts.isNotEmpty) 'linkedGifts': linkedGifts.map((g) => g.toMap()).toList(),
     };
+  }
+
+  PromotionalRuleItem copyWith({
+    String? id,
+    String? ruleTitle,
+    String? triggerProduct,
+    int? minQuantity,
+    String? rewardType,
+    String? rewardValue,
+    double? rewardAmount,
+    bool? allowMultipliers,
+    String? linkedGiftId,
+    String? linkedGiftName,
+    List<LinkedGiftAllocation>? linkedGifts,
+  }) {
+    return PromotionalRuleItem(
+      id: id ?? this.id,
+      ruleTitle: ruleTitle ?? this.ruleTitle,
+      triggerProduct: triggerProduct ?? this.triggerProduct,
+      minQuantity: minQuantity ?? this.minQuantity,
+      rewardType: rewardType ?? this.rewardType,
+      rewardValue: rewardValue ?? this.rewardValue,
+      rewardAmount: rewardAmount ?? this.rewardAmount,
+      allowMultipliers: allowMultipliers ?? this.allowMultipliers,
+      linkedGiftId: linkedGiftId ?? this.linkedGiftId,
+      linkedGiftName: linkedGiftName ?? this.linkedGiftName,
+      linkedGifts: linkedGifts ?? this.linkedGifts,
+    );
   }
 }
 
@@ -57,6 +196,8 @@ class AllocatedPrize {
   final int remainingQuantity;
   final String branchId;
   final String branchName;
+  final String giftType; // 'product' | 'voucher'
+  final double unitValue; // Denomination per card for vouchers (e.g. 25.0, 50.0, 100.0)
 
   AllocatedPrize({
     required this.giftId,
@@ -65,16 +206,73 @@ class AllocatedPrize {
     required this.remainingQuantity,
     this.branchId = '',
     this.branchName = '',
+    this.giftType = 'product',
+    this.unitValue = 0.0,
   });
 
-  factory AllocatedPrize.fromMap(Map<String, dynamic> data) {
+  bool get isVoucher => giftType == 'voucher' || unitValue > 0;
+
+  /// Calculates how many physical voucher cards should be deducted/handed over for a given winning cash amount.
+  /// Example: Winning 100 EGP with 50 EGP vouchers -> 2 cards.
+  /// Example: Winning 100 EGP with 25 EGP vouchers -> 4 cards.
+  int calculateVoucherUnitsForAmount(double targetAmount) {
+    if (!isVoucher || unitValue <= 0) return 1;
+    if (targetAmount <= 0) return 1;
+    final units = (targetAmount / unitValue).ceil();
+    return units > 0 ? units : 1;
+  }
+
+  AllocatedPrize copyWith({
+    String? giftId,
+    String? name,
+    int? allocatedQuantity,
+    int? remainingQuantity,
+    String? branchId,
+    String? branchName,
+    String? giftType,
+    double? unitValue,
+  }) {
     return AllocatedPrize(
-      giftId: data['giftId'] ?? '',
-      name: data['name'] ?? '',
+      giftId: giftId ?? this.giftId,
+      name: name ?? this.name,
+      allocatedQuantity: allocatedQuantity ?? this.allocatedQuantity,
+      remainingQuantity: remainingQuantity ?? this.remainingQuantity,
+      branchId: branchId ?? this.branchId,
+      branchName: branchName ?? this.branchName,
+      giftType: giftType ?? this.giftType,
+      unitValue: unitValue ?? this.unitValue,
+    );
+  }
+
+  factory AllocatedPrize.fromMap(Map<String, dynamic> data) {
+    final rawUnitVal = (data['unitValue'] as num?)?.toDouble() ?? 0.0;
+    final rawType = data['giftType'] as String? ?? (rawUnitVal > 0 ? 'voucher' : 'product');
+    String rawName = (data['name'] as String? ?? '').trim();
+    final giftId = (data['giftId'] as String? ?? '').trim();
+
+    // Self-healing: if name is empty, or is a raw Firestore ID (e.g. 20-character alphanumeric ID)
+    final isRawId = rawName.isEmpty ||
+        (rawName == giftId && RegExp(r'^[a-zA-Z0-9_-]{15,35}$').hasMatch(rawName)) ||
+        RegExp(r'^[a-zA-Z0-9]{18,30}$').hasMatch(rawName);
+
+    if (isRawId) {
+      if (rawType == 'voucher' || rawUnitVal > 0) {
+        final formattedVal = rawUnitVal == rawUnitVal.roundToDouble() ? rawUnitVal.toInt() : rawUnitVal;
+        rawName = rawUnitVal > 0 ? 'فواتشر $formattedVal جنيه' : 'كارت فواتشر مشتريات';
+      } else {
+        rawName = 'هدية ترويجية مميزة';
+      }
+    }
+
+    return AllocatedPrize(
+      giftId: giftId,
+      name: rawName,
       allocatedQuantity: (data['allocatedQuantity'] as num?)?.toInt() ?? 0,
       remainingQuantity: (data['remainingQuantity'] as num?)?.toInt() ?? 0,
       branchId: data['branchId'] ?? '',
       branchName: data['branchName'] ?? '',
+      giftType: rawType,
+      unitValue: rawUnitVal,
     );
   }
 
@@ -84,6 +282,8 @@ class AllocatedPrize {
       'name': name,
       'allocatedQuantity': allocatedQuantity,
       'remainingQuantity': remainingQuantity,
+      'giftType': giftType,
+      'unitValue': unitValue,
       if (branchId.isNotEmpty) 'branchId': branchId,
       if (branchName.isNotEmpty) 'branchName': branchName,
     };
@@ -106,6 +306,10 @@ class EventModel {
   final DateTime? endDate;
   final bool isActive;
   final DateTime? createdAt;
+
+  /// Independent control toggles for Promoter and Company Manager Portals
+  final bool isPromoterActive;
+  final bool isManagerActive;
 
   /// The raw natural language promotional idea typed by admin
   final String promotionalIdea;
@@ -154,6 +358,8 @@ class EventModel {
     this.endDate,
     this.isActive = true,
     this.createdAt,
+    this.isPromoterActive = true,
+    this.isManagerActive = true,
     this.promotionalIdea = '',
     this.aiValidationSummary = '',
     this.promotionalRules = const [],
@@ -185,6 +391,10 @@ class EventModel {
     return true;
   }
 
+  /// Granular portal access status helpers
+  bool get canPromoterAccess => isActive && isPromoterActive && !isExpired && !isNotStartedYet;
+  bool get canManagerAccess => isActive && isManagerActive;
+
   /// Formatted branches display for UI chips & summaries
   String get branchesDisplaySummary {
     if (retailChainName.isEmpty) return 'غير محدد';
@@ -200,7 +410,27 @@ class EventModel {
 
   /// Returns prize names for display in games (only available ones).
   List<String> get availablePrizeNames {
-    return availablePrizes.map((p) => p.name).toList();
+    if (availablePrizes.isNotEmpty) {
+      return availablePrizes.map((p) {
+        if (p.isVoucher && p.unitValue > 0) {
+          final val = p.unitValue == p.unitValue.roundToDouble() ? p.unitValue.toInt() : p.unitValue;
+          if (!p.name.contains('$val')) {
+            return '${p.name} ($val ج.م)';
+          }
+        }
+        return p.name;
+      }).toList();
+    }
+    if (allocatedPrizes.isNotEmpty) {
+      return allocatedPrizes.map((p) => p.name).toList();
+    }
+    if (promotionalRules.isNotEmpty) {
+      return promotionalRules
+          .map((r) => r.rewardValue.isNotEmpty ? r.rewardValue : r.linkedGiftsSummary)
+          .where((n) => n.isNotEmpty)
+          .toList();
+    }
+    return [];
   }
 
   /// Calculates the number of lottery/game chances earned based on the receipt spend.
@@ -250,6 +480,8 @@ class EventModel {
           : data['createdAt'] is DateTime
               ? data['createdAt'] as DateTime
               : null,
+      isPromoterActive: data['isPromoterActive'] ?? (data['isActive'] ?? true),
+      isManagerActive: data['isManagerActive'] ?? (data['isActive'] ?? true),
       promotionalIdea: data['promotionalIdea']?.toString() ?? '',
       aiValidationSummary: data['aiValidationSummary']?.toString() ?? '',
       promotionalRules: (data['promotionalRules'] as List<dynamic>?)
@@ -287,6 +519,8 @@ class EventModel {
       'endDate': endDate != null ? Timestamp.fromDate(endDate!) : null,
       'isActive': isActive,
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
+      'isPromoterActive': isPromoterActive,
+      'isManagerActive': isManagerActive,
       'promotionalIdea': promotionalIdea,
       'aiValidationSummary': aiValidationSummary,
       'promotionalRules': promotionalRules.map((r) => r.toMap()).toList(),
@@ -300,6 +534,70 @@ class EventModel {
       'allowMultipleChances': allowMultipleChances,
       'maxChancesPerReceipt': maxChancesPerReceipt,
     };
+  }
+
+  EventModel copyWith({
+    String? id,
+    String? eventName,
+    String? targetCompany,
+    String? companySlug,
+    String? companyLogoUrl,
+    double? minimumSpend,
+    List<String>? requiredProducts,
+    String? customPrompt,
+    String? welcomeTitle,
+    String? welcomeMessage,
+    String? termsAndConditions,
+    DateTime? startDate,
+    DateTime? endDate,
+    bool? isActive,
+    DateTime? createdAt,
+    bool? isPromoterActive,
+    bool? isManagerActive,
+    String? promotionalIdea,
+    String? aiValidationSummary,
+    List<PromotionalRuleItem>? promotionalRules,
+    String? gameType,
+    List<AllocatedPrize>? allocatedPrizes,
+    String? retailChainId,
+    String? retailChainName,
+    List<String>? branchIds,
+    List<String>? branchNames,
+    bool? isAllBranches,
+    bool? allowMultipleChances,
+    int? maxChancesPerReceipt,
+  }) {
+    return EventModel(
+      id: id ?? this.id,
+      eventName: eventName ?? this.eventName,
+      targetCompany: targetCompany ?? this.targetCompany,
+      companySlug: companySlug ?? this.companySlug,
+      companyLogoUrl: companyLogoUrl ?? this.companyLogoUrl,
+      minimumSpend: minimumSpend ?? this.minimumSpend,
+      requiredProducts: requiredProducts ?? this.requiredProducts,
+      customPrompt: customPrompt ?? this.customPrompt,
+      welcomeTitle: welcomeTitle ?? this.welcomeTitle,
+      welcomeMessage: welcomeMessage ?? this.welcomeMessage,
+      termsAndConditions: termsAndConditions ?? this.termsAndConditions,
+      startDate: startDate ?? this.startDate,
+      endDate: endDate ?? this.endDate,
+      isActive: isActive ?? this.isActive,
+      createdAt: createdAt ?? this.createdAt,
+      isPromoterActive: isPromoterActive ?? this.isPromoterActive,
+      isManagerActive: isManagerActive ?? this.isManagerActive,
+      promotionalIdea: promotionalIdea ?? this.promotionalIdea,
+      aiValidationSummary: aiValidationSummary ?? this.aiValidationSummary,
+      promotionalRules: promotionalRules ?? this.promotionalRules,
+      gameType: gameType ?? this.gameType,
+      allocatedPrizes: allocatedPrizes ?? this.allocatedPrizes,
+      retailChainId: retailChainId ?? this.retailChainId,
+      retailChainName: retailChainName ?? this.retailChainName,
+      branchIds: branchIds ?? this.branchIds,
+      branchNames: branchNames ?? this.branchNames,
+      isAllBranches: isAllBranches ?? this.isAllBranches,
+      allowMultipleChances: allowMultipleChances ?? this.allowMultipleChances,
+      maxChancesPerReceipt: maxChancesPerReceipt ?? this.maxChancesPerReceipt,
+    );
   }
 }
 

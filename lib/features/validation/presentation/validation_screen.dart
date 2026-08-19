@@ -14,6 +14,8 @@ import '../../games/presentation/spin_the_wheel_screen.dart';
 import '../../games/presentation/scratch_card_screen.dart';
 import '../../games/presentation/direct_gift_claim_screen.dart';
 import '../../admin/domain/event_model.dart';
+import '../../client_portal/presentation/widgets/campaign_gift_balance_dialog.dart';
+import '../../client_portal/presentation/widgets/campaign_brief_dialog.dart';
 import 'invoices_log_screen.dart';
 import 'widgets/receipt_validation_dialog.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -218,7 +220,8 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
 
       final receiptNumber = result.receiptNumber.trim();
 
-      // Duplicate receipt check
+      // Check for existing receipt to update/upsert
+      DocumentSnapshot<Map<String, dynamic>>? existingDoc;
       if (receiptNumber.isNotEmpty) {
         final existingReceipt = await firestore
             .collection('receipts_transactions')
@@ -227,33 +230,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
             .get();
 
         if (existingReceipt.docs.isNotEmpty) {
-          if (!mounted) return;
-          final activeCountry = ref.read(activeCountryProvider);
-          final conditions = [
-            ValidationConditionItem(
-              title: 'حالة الفاتورة (مستخدمة مسبقاً)',
-              description: 'رقم الفاتورة ($receiptNumber) تم استخدامه مسبقاً والمطالبة بجائزته في النظام، ولا يمكن إعادة استخدامه لمنع التكرار.',
-              icon: Icons.history_toggle_off_rounded,
-              isMet: false,
-            ),
-          ];
-
-          showReceiptValidationReportDialog(
-            context: context,
-            title: 'عفواً، الفاتورة مسجلة مسبقاً',
-            subtitle: 'تم التحقق من قاعدة البيانات وتبيّن وجود تسجيل سابق لهذه الفاتورة:',
-            conditions: conditions,
-            receiptNumber: receiptNumber,
-            storeChain: result.storeChainDetected,
-            branch: result.branchDetected,
-            receiptDate: result.receiptDate,
-            totalValue: totalValue,
-            requiredMinimum: activeEvent.minimumSpend,
-            currencySymbol: activeCountry.currencySymbol,
-            imageUrl: previewImgUrl,
-            isDuplicate: true,
-          );
-          return;
+          existingDoc = existingReceipt.docs.first;
         }
       }
 
@@ -291,10 +268,15 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         imageUrl = 'data:$mimeType;base64,${base64Encode(bytes)}';
       }
 
-      // Save to Firestore
+      // Save or Update in Firestore (Upsert)
       final int totalChances = result.chancesEarned > 0 ? result.chancesEarned : 1;
-      final transactionRef = firestore.collection('receipts_transactions').doc();
-      await transactionRef.set({
+      final DocumentReference<Map<String, dynamic>> transactionRef =
+          existingDoc != null ? existingDoc.reference : firestore.collection('receipts_transactions').doc();
+      final bool isExistingRecord = existingDoc != null;
+      final existingData = existingDoc?.data() ?? {};
+      final bool wasGamePlayed = existingData['game_played'] == true;
+
+      final Map<String, dynamic> transactionData = {
         'receipt_number': receiptNumber,
         'total_value': totalValue,
         'target_company_total': totalValue,
@@ -304,9 +286,8 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         'branch_detected': result.branchDetected,
         'is_branch_matched': result.isBranchMatched,
         'retail_chain_name': activeEvent.retailChainName,
-        'image_url': imageUrl,
-        'storage_path': storagePath,
-        'timestamp': FieldValue.serverTimestamp(),
+        if (imageUrl.isNotEmpty) 'image_url': imageUrl,
+        if (imageUrl.isNotEmpty) 'storage_path': storagePath,
         'promoter_id': ref.read(firebaseAuthProvider).currentUser?.uid,
         'campaignId': activeEvent.id,
         'companySlug': activeEvent.companySlug,
@@ -316,13 +297,75 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         'ai_kpi_rating': result.kpiRating,
         'chances_earned': totalChances,
         'allow_multiple_chances': activeEvent.allowMultipleChances,
-        'game_played': false,
-        'prize_won': null,
-      });
+      };
+
+      if (isExistingRecord) {
+        transactionData['updated_at'] = FieldValue.serverTimestamp();
+        transactionData['is_updated_via_ai'] = true;
+        await transactionRef.set(transactionData, SetOptions(merge: true));
+      } else {
+        transactionData['timestamp'] = FieldValue.serverTimestamp();
+        transactionData['game_played'] = false;
+        transactionData['prize_won'] = null;
+        await transactionRef.set(transactionData);
+      }
 
       if (!mounted) return;
 
       // Reset form
+      setState(() {
+        _receiptImage = null;
+      });
+
+      if (isExistingRecord) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'تم تحديث بيانات الفاتورة رقم ($receiptNumber) بنجاح بالمعلومات الجديدة من البون 🔄',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+
+        if (wasGamePlayed) {
+          final activeCountry = ref.read(activeCountryProvider);
+          final strings = AppStrings.of(ref);
+          showReceiptValidationReportDialog(
+            context: context,
+            title: strings.duplicateReceiptAlreadyDrawnTitle,
+            subtitle: strings.duplicateReceiptAlreadyDrawnSubtitle,
+            conditions: [
+              ValidationConditionItem(
+                title: strings.duplicateReceiptConditionTitle,
+                description: strings.duplicateReceiptConditionDesc,
+                icon: Icons.history_toggle_off_rounded,
+                isMet: false,
+              ),
+            ],
+            receiptNumber: receiptNumber,
+            storeChain: result.storeChainDetected,
+            branch: result.branchDetected,
+            receiptDate: result.receiptDate,
+            totalValue: totalValue,
+            requiredMinimum: activeEvent.minimumSpend,
+            currencySymbol: activeCountry.currencySymbol,
+            imageUrl: imageUrl.isNotEmpty ? imageUrl : previewImgUrl,
+            isDuplicate: true,
+          );
+          return;
+        }
+      }
       setState(() {
         _receiptImage = null;
       });
@@ -332,9 +375,83 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       final gameType = activeEvent.gameType;
 
       if (gameType == 'directGift' || gameType == 'direct_gift') {
-        final designatedPrize = prizeNames.isNotEmpty
-            ? prizeNames.first
-            : (activeEvent.allocatedPrizes.isNotEmpty ? activeEvent.allocatedPrizes.first.name : 'هدية فورية مميزة');
+        // Check promotional rules using our robust multi-tiered AI & NLP PromotionalRuleMatcher
+        final matchedRule = PromotionalRuleMatcher.match(
+          result: result,
+          promotionalRules: activeEvent.promotionalRules,
+        );
+
+        final designatedPrizeObj = activeEvent.availablePrizes.isNotEmpty
+            ? activeEvent.availablePrizes.first
+            : (activeEvent.allocatedPrizes.isNotEmpty ? activeEvent.allocatedPrizes.first : null);
+
+        String designatedPrize;
+        List<LinkedGiftAllocation> resolvedLinkedGifts = [];
+        double? resolvedUnitValue;
+        bool resolvedIsVoucher = false;
+
+        if (matchedRule != null) {
+          resolvedLinkedGifts = matchedRule.linkedGifts;
+          if (matchedRule.rewardValue.isNotEmpty) {
+            designatedPrize = matchedRule.rewardValue;
+          } else if (matchedRule.linkedGiftsSummary.isNotEmpty) {
+            designatedPrize = matchedRule.linkedGiftsSummary;
+          } else {
+            designatedPrize = designatedPrizeObj?.name ?? (prizeNames.isNotEmpty ? prizeNames.first : '');
+          }
+
+          resolvedIsVoucher = matchedRule.rewardType == 'voucher' ||
+              matchedRule.totalVoucherValue > 0 ||
+              designatedPrize.contains('فواتشر') ||
+              designatedPrize.toLowerCase().contains('voucher') ||
+              designatedPrize.contains('قسيمة');
+
+          resolvedUnitValue = resolvedIsVoucher
+              ? (matchedRule.totalVoucherValue > 0
+                  ? matchedRule.totalVoucherValue
+                  : (matchedRule.rewardAmount > 0 ? matchedRule.rewardAmount : designatedPrizeObj?.unitValue))
+              : 0.0;
+        } else if (result.matchedRewardValue.trim().isNotEmpty) {
+          designatedPrize = result.matchedRewardValue.trim();
+          resolvedIsVoucher = result.matchedRewardType == 'voucher' ||
+              result.matchedRewardAmount > 0 ||
+              designatedPrize.contains('فواتشر') ||
+              designatedPrize.contains('قسيمة');
+          resolvedUnitValue = resolvedIsVoucher
+              ? (result.matchedRewardAmount > 0 ? result.matchedRewardAmount : designatedPrizeObj?.unitValue)
+              : 0.0;
+        } else {
+          designatedPrize = designatedPrizeObj?.name ??
+              (prizeNames.isNotEmpty ? prizeNames.first : '');
+          resolvedUnitValue = designatedPrizeObj?.unitValue;
+          resolvedIsVoucher = designatedPrizeObj?.isVoucher ?? false;
+        }
+
+        // Self-heal ONLY if empty or raw doc id or generic placeholder
+        if (designatedPrize.isEmpty ||
+            designatedPrize == 'هدية فورية مميزة' ||
+            designatedPrize == 'هدية ترويجية مميزة' ||
+            RegExp(r'^[a-zA-Z0-9_-]{15,35}$').hasMatch(designatedPrize)) {
+          if (resolvedLinkedGifts.isNotEmpty) {
+            designatedPrize = resolvedLinkedGifts.map((g) => g.quantity > 1 ? '${g.quantity} × ${g.giftName}' : g.giftName).join(' + ');
+            resolvedIsVoucher = resolvedLinkedGifts.any((g) => g.isVoucher);
+            resolvedUnitValue = resolvedIsVoucher
+                ? resolvedLinkedGifts.fold<double>(0.0, (acc, g) => acc + g.totalMonetaryValue)
+                : 0.0;
+          } else if (resolvedIsVoucher || (resolvedUnitValue != null && resolvedUnitValue > 0)) {
+            final val = (resolvedUnitValue != null && resolvedUnitValue > 0)
+                ? (resolvedUnitValue == resolvedUnitValue.roundToDouble() ? resolvedUnitValue.toInt() : resolvedUnitValue)
+                : 50;
+            designatedPrize = 'فواتشر بقيمة $val جنيه';
+            resolvedIsVoucher = true;
+            resolvedUnitValue ??= 50.0;
+          } else {
+            designatedPrize = 'هدية فورية معتمدة';
+            resolvedIsVoucher = false;
+            resolvedUnitValue = 0.0;
+          }
+        }
+
         final promoQuantity = activeEvent.allowMultipleChances ? totalChances : 1;
         await Navigator.of(context).push(
           MaterialPageRoute(
@@ -344,6 +461,9 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
               prizeName: designatedPrize,
               quantity: promoQuantity,
               branchId: activeEvent.branchIds.isNotEmpty ? activeEvent.branchIds.first : null,
+              unitValue: resolvedUnitValue,
+              isVoucher: resolvedIsVoucher,
+              linkedGifts: resolvedLinkedGifts,
             ),
           ),
         );
@@ -414,6 +534,35 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       appBar: SwitchPointHeader(
         subtitle: strings.validationScreenSubtitle,
         customActions: [
+          if (_activeEvent != null) ...[
+            // 1. Campaign Concept & Offer Rules Action Button (Brief & Conditions)
+            IconButton.filledTonal(
+              icon: Icon(
+                Icons.campaign_rounded,
+                color: colorScheme.primary,
+                size: 20,
+              ),
+              tooltip: strings.promoterCampaignBriefTooltip,
+              onPressed: () {
+                CampaignBriefDialog.show(context, _activeEvent!);
+              },
+            ),
+            const SizedBox(width: 4),
+
+            // 2. Remaining Gift Inventory & Branch Balance Action Button
+            IconButton.filledTonal(
+              icon: Icon(
+                Icons.card_giftcard_rounded,
+                color: colorScheme.primary,
+                size: 20,
+              ),
+              tooltip: strings.promoterGiftsBalanceTooltip,
+              onPressed: () {
+                CampaignGiftBalanceDialog.show(context, _activeEvent!);
+              },
+            ),
+            const SizedBox(width: 4),
+          ],
           IconButton(
             icon: const Icon(Icons.list_alt_rounded),
             tooltip: strings.invoicesLogTooltip,

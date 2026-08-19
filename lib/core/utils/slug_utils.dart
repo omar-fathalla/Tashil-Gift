@@ -198,6 +198,9 @@ class SlugUtils {
     'پ': 'p', 'چ': 'ch', 'ڤ': 'v', 'گ': 'g',
   };
 
+  /// Alias for generateEnglishSlug
+  static String generateSlug(String input) => generateEnglishSlug(input);
+
   /// Generates a clean English slug from an input string (Arabic or English).
   static String generateEnglishSlug(String input) {
     String trimmed = input.trim();

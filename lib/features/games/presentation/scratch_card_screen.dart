@@ -83,9 +83,18 @@ class _ScratchCardScreenState extends ConsumerState<ScratchCardScreen> {
         final firestore = ref.read(firestoreProvider);
         await firestore.collection('receipts_transactions').doc(widget.transactionId).update({
           'game_played': true,
+          'game_type': 'scratch',
           'prize_won': _wonPrizes.join(' + '),
           'prizes_won': _wonPrizes,
           'remaining_chances': _remainingChances,
+          'event_id': widget.eventId,
+          'claimed_gifts': [{
+            'giftId': '',
+            'giftName': _prize,
+            'quantity': 1,
+            'unitValue': 0.0,
+            'isVoucher': false,
+          }],
         });
 
         // Decrement the prize from the campaign's allocated inventory
@@ -248,18 +257,19 @@ class _ScratchCardScreenState extends ConsumerState<ScratchCardScreen> {
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(21),
-                            child: Scratcher(
-                              key: _scratcherKey,
-                              brushSize: 48,
-                              threshold: 45,
-                              color: const Color(0xFFC0C0C0),
-                              onThreshold: () => _onThresholdReached(),
-                              onChange: (value) {
-                                setState(() {
-                                  _progress = value;
-                                });
-                              },
-                              child: Container(
+                            child: SelectionContainer.disabled(
+                              child: Scratcher(
+                                key: _scratcherKey,
+                                brushSize: 48,
+                                threshold: 45,
+                                color: const Color(0xFFC0C0C0),
+                                onThreshold: () => _onThresholdReached(),
+                                onChange: (value) {
+                                  setState(() {
+                                    _progress = value;
+                                  });
+                                },
+                                child: Container(
                                 height: 280,
                                 width: 280,
                                 decoration: BoxDecoration(
@@ -299,12 +309,13 @@ class _ScratchCardScreenState extends ConsumerState<ScratchCardScreen> {
                             ),
                           ),
                         ),
+                      ),
 
                         const SizedBox(height: 24),
 
                         if (_progress > 0 && !_gamePlayed)
                           Text(
-                            'تم كشط ${( _progress).toInt()}% من البطاقة...',
+                            'تم كشط ${_progress.toInt()}% من البطاقة...',
                             style: GoogleFonts.cairo(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,

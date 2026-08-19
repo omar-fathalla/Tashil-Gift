@@ -78,14 +78,37 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   final Map<String, Map<String, int>> _branchAllocationQuantities = {};
   String? _selectedAllocationBranchId;
 
-  // Retail Chain & Branches State
-  String? _selectedRetailChainId;
-  String? _selectedRetailChainName;
-  bool _isAllBranches = true;
-  List<String> _selectedBranchIds = [];
-  List<String> _selectedBranchNames = [];
+  // Multi-Chain & Branches State
+  List<String> _selectedRetailChainIds = [];
+  List<String> _selectedRetailChainNames = [];
+  final Map<String, List<BranchModel>> _chainBranchesMap = {};
+  final Map<String, bool> _chainIsAllBranchesMap = {};
+  final Map<String, Set<String>> _chainSelectedBranchIdsMap = {};
+  final Map<String, Set<String>> _chainSelectedBranchNamesMap = {};
   List<BranchModel> _availableBranches = [];
   bool _isLoadingBranches = false;
+
+  String? get _selectedRetailChainId => _selectedRetailChainIds.isNotEmpty ? _selectedRetailChainIds.join(',') : null;
+  String? get _selectedRetailChainName => _selectedRetailChainNames.isNotEmpty ? _selectedRetailChainNames.join(' • ') : null;
+  bool get _isAllBranches => _selectedRetailChainIds.isEmpty || _selectedRetailChainIds.every((id) => _chainIsAllBranchesMap[id] ?? true);
+  List<String> get _selectedBranchIds {
+    final list = <String>[];
+    for (final id in _selectedRetailChainIds) {
+      if (!(_chainIsAllBranchesMap[id] ?? true)) {
+        list.addAll(_chainSelectedBranchIdsMap[id] ?? {});
+      }
+    }
+    return list;
+  }
+  List<String> get _selectedBranchNames {
+    final list = <String>[];
+    for (final id in _selectedRetailChainIds) {
+      if (!(_chainIsAllBranchesMap[id] ?? true)) {
+        list.addAll(_chainSelectedBranchNamesMap[id] ?? {});
+      }
+    }
+    return list;
+  }
 
   @override
   void initState() {
@@ -113,13 +136,17 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     _startDate = e?.startDate;
     _endDate = e?.endDate;
 
-    _selectedRetailChainId = e?.retailChainId.isNotEmpty == true ? e!.retailChainId : null;
-    _selectedRetailChainName = e?.retailChainName;
-    _isAllBranches = e?.isAllBranches ?? true;
-    _selectedBranchIds = List<String>.from(e?.branchIds ?? []);
-    _selectedBranchNames = List<String>.from(e?.branchNames ?? []);
-    if (_selectedBranchIds.isNotEmpty) {
-      _selectedAllocationBranchId = _selectedBranchIds.first;
+    if (e != null && e.retailChainId.isNotEmpty) {
+      final rawChainIds = e.retailChainId.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      final rawChainNames = e.retailChainName.split('•').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      _selectedRetailChainIds = List<String>.from(rawChainIds);
+      _selectedRetailChainNames = List<String>.from(rawChainNames);
+      for (final cId in rawChainIds) {
+        _chainIsAllBranchesMap[cId] = e.isAllBranches;
+        _chainSelectedBranchIdsMap[cId] = Set<String>.from(e.branchIds);
+        _chainSelectedBranchNamesMap[cId] = Set<String>.from(e.branchNames);
+        _loadBranchesForChain(cId);
+      }
     }
     
     _customPromptController = TextEditingController(
@@ -151,37 +178,29 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       _loadCompanyLogo(e.companySlug);
     }
 
-    if (_selectedRetailChainId != null && _selectedRetailChainId!.isNotEmpty) {
-      _loadBranchesForChain(_selectedRetailChainId!);
-    }
-
     _selectedGameType = e?.gameType ?? 'wheel';
 
     // Restore existing allocations when editing
     if (e != null) {
       for (final p in e.allocatedPrizes) {
         final bKey = p.branchId.isNotEmpty ? p.branchId : 'all';
-        _branchAllocationQuantities.putIfAbsent(bKey, () => {})[p.giftId] = p.allocatedQuantity;
+        final key = (p.name.isNotEmpty && !RegExp(r'^[a-zA-Z0-9_-]{15,35}$').hasMatch(p.name))
+            ? p.name
+            : p.giftId;
+        _branchAllocationQuantities.putIfAbsent(bKey, () => {})[key] = p.allocatedQuantity;
       }
     }
   }
 
   Future<void> _loadBranchesForChain(String chainId) async {
-    if (chainId.trim().isEmpty) {
-      if (mounted) {
-        setState(() {
-          _availableBranches = [];
-          _isLoadingBranches = false;
-        });
-      }
-      return;
-    }
+    if (chainId.trim().isEmpty) return;
     setState(() => _isLoadingBranches = true);
     try {
       final branches = await ref.read(retailChainsServiceProvider).getBranchesForChain(chainId);
       if (mounted) {
         setState(() {
-          _availableBranches = branches;
+          _chainBranchesMap[chainId] = branches;
+          _updateAvailableBranches();
         });
       }
     } catch (_) {
@@ -192,9 +211,16 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     }
   }
 
+  void _updateAvailableBranches() {
+    final all = <BranchModel>[];
+    for (final chainId in _selectedRetailChainIds) {
+      all.addAll(_chainBranchesMap[chainId] ?? []);
+    }
+    _availableBranches = all;
+  }
+
   Future<void> _showQuickAddChainDialog() async {
     final nameCtrl = TextEditingController();
-    final slugCtrl = TextEditingController();
     bool isSaving = false;
 
     await showDialog(
@@ -210,40 +236,25 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               children: [
                 Icon(Icons.add_business_rounded, color: colorScheme.primary),
                 const SizedBox(width: 10),
-                Text('إضافة سلسلة تجارية سريعة', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text('إضافة سلسلة تجارية جديدة', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 16)),
               ],
             ),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'أدخل اسم السلسلة والكود المعرف لإضافتها فوراً واختيارها في هذه الحملة.',
+                    'أدخل اسم السلسلة الجديدة لإضافتها فوراً إلى قائمة سلاسل النظام واختيارها لهذه الحملة.',
                     style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
                   ),
                   const SizedBox(height: 14),
                   TextField(
                     controller: nameCtrl,
+                    autofocus: true,
                     decoration: InputDecoration(
-                      labelText: 'اسم السلسلة *',
-                      hintText: 'مثال: أسواق فتح الله أو كارفور',
-                      filled: true,
-                      fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onChanged: (val) {
-                      if (slugCtrl.text.isEmpty) {
-                        slugCtrl.text = val.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '-');
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: slugCtrl,
-                    inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
-                    decoration: InputDecoration(
-                      labelText: 'الكود المعرف (Slug) *',
-                      hintText: 'مثال: fathalla أو carrefour',
+                      labelText: 'اسم السلسلة التجارية *',
+                      hintText: 'مثال: كارفور أو سبينس أو خير زمان',
                       filled: true,
                       fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -260,8 +271,10 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               FilledButton.icon(
                 onPressed: isSaving ? null : () async {
                   final name = nameCtrl.text.trim();
-                  final slug = slugCtrl.text.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '-');
-                  if (name.isEmpty || slug.isEmpty) return;
+                  if (name.isEmpty) return;
+
+                  final slug = SlugUtils.generateSlug(name);
+                  if (slug.isEmpty) return;
 
                   setDialogState(() => isSaving = true);
                   try {
@@ -269,10 +282,13 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     await ref.read(retailChainsServiceProvider).addRetailChain(chain);
                     if (mounted) {
                       setState(() {
-                        _selectedRetailChainId = slug;
-                        _selectedRetailChainName = name;
-                        _selectedBranchIds = [];
-                        _selectedBranchNames = [];
+                        if (!_selectedRetailChainIds.contains(slug)) {
+                          _selectedRetailChainIds.add(slug);
+                          _selectedRetailChainNames.add(name);
+                          _chainIsAllBranchesMap[slug] = true;
+                          _chainSelectedBranchIdsMap[slug] = {};
+                          _chainSelectedBranchNamesMap[slug] = {};
+                        }
                       });
                       _loadBranchesForChain(slug);
                     }
@@ -287,7 +303,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     if (ctx.mounted) setDialogState(() => isSaving = false);
                   }
                 },
-                icon: isSaving ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.check, size: 16),
+                icon: isSaving
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.check_rounded, size: 18),
                 label: const Text('إضافة واختيار'),
               ),
             ],
@@ -297,8 +315,11 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     );
   }
 
-  Future<void> _showQuickAddBranchDialog() async {
-    if (_selectedRetailChainId == null || _selectedRetailChainId!.isEmpty) {
+  Future<void> _showQuickAddBranchDialog([String? targetChainId, String? targetChainName]) async {
+    final effectiveChainId = targetChainId ?? (_selectedRetailChainIds.isNotEmpty ? _selectedRetailChainIds.first : null);
+    final effectiveChainName = targetChainName ?? (_selectedRetailChainNames.isNotEmpty ? _selectedRetailChainNames.first : '');
+
+    if (effectiveChainId == null || effectiveChainId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('يرجى اختيار السلسلة التجارية أولاً')),
       );
@@ -323,7 +344,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               children: [
                 Icon(Icons.add_location_alt_rounded, color: colorScheme.secondary),
                 const SizedBox(width: 10),
-                Text('إضافة فرع جديد لـ ($_selectedRetailChainName)', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 15)),
+                Text('إضافة فرع جديد لـ ($effectiveChainName)', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 15)),
               ],
             ),
             content: SingleChildScrollView(
@@ -380,19 +401,17 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   try {
                     final branch = BranchModel(
                       id: '',
-                      retailChainId: _selectedRetailChainId!,
-                      retailChainName: _selectedRetailChainName ?? '',
+                      retailChainId: effectiveChainId,
+                      retailChainName: effectiveChainName,
                       branchName: branchName,
                       city: cityCtrl.text.trim(),
                       branchCode: codeCtrl.text.trim(),
                     );
                     await ref.read(retailChainsServiceProvider).addBranch(branch);
                     if (mounted) {
-                      await _loadBranchesForChain(_selectedRetailChainId!);
+                      await _loadBranchesForChain(effectiveChainId);
                       setState(() {
-                        if (!_isAllBranches) {
-                          _selectedBranchNames.add(branchName);
-                        }
+                        _chainSelectedBranchNamesMap.putIfAbsent(effectiveChainId, () => {}).add(branchName);
                       });
                     }
                     if (ctx.mounted) Navigator.pop(ctx);
@@ -837,6 +856,46 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     );
   }
 
+  String _resolveGiftDisplayName(String giftKey) {
+    if (giftKey.trim().isEmpty) return 'هدية';
+
+    // 1. Check in loaded _companyGifts by ID or Name
+    final matchedGift = _companyGifts.where((g) => g.id == giftKey || g.giftName == giftKey).firstOrNull;
+    if (matchedGift != null && matchedGift.giftName.isNotEmpty) {
+      return matchedGift.giftName;
+    }
+
+    // 2. Check in widget.eventToEdit?.allocatedPrizes
+    if (widget.eventToEdit != null) {
+      final matchedPrize = widget.eventToEdit!.allocatedPrizes
+          .where((p) => (p.giftId == giftKey || p.name == giftKey) && p.name.isNotEmpty)
+          .firstOrNull;
+      if (matchedPrize != null && matchedPrize.name.isNotEmpty && !RegExp(r'^[a-zA-Z0-9_-]{15,35}$').hasMatch(matchedPrize.name)) {
+        return matchedPrize.name;
+      }
+    }
+
+    // 3. Check in _promotionalRules linked gifts
+    for (final rule in _promotionalRules) {
+      for (final linked in rule.linkedGifts) {
+        if ((linked.giftId == giftKey || linked.giftName == giftKey) && linked.giftName.isNotEmpty) {
+          return linked.giftName;
+        }
+      }
+      if ((rule.linkedGiftId == giftKey || rule.linkedGiftName == giftKey) && rule.linkedGiftName?.isNotEmpty == true) {
+        return rule.linkedGiftName!;
+      }
+    }
+
+    // 4. If giftKey looks like a raw alphanumeric Firestore doc ID (e.g. 5ryhCunijL8NTUi2T49v), fallback cleanly
+    final isRawId = RegExp(r'^[a-zA-Z0-9_-]{15,35}$').hasMatch(giftKey);
+    if (isRawId) {
+      return 'هدية ترويجية';
+    }
+
+    return giftKey;
+  }
+
   Future<void> _loadCompanyGifts(String slug) async {
     if (slug.trim().isEmpty) return;
     final giftsService = ref.read(companyGiftsServiceProvider);
@@ -845,15 +904,65 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       excludeEventId: widget.eventToEdit?.id,
     );
     if (mounted) {
-      setState(() => _companyGifts = gifts);
+      setState(() {
+        _companyGifts = gifts;
+        // Normalize keys in _branchAllocationQuantities so that every allocation uses canonical gift.id
+        for (final branchEntry in _branchAllocationQuantities.entries) {
+          final bMap = branchEntry.value;
+          final updatedMap = <String, int>{};
+          for (final giftEntry in bMap.entries) {
+            final key = giftEntry.key;
+            final qty = giftEntry.value;
+            if (qty <= 0) continue;
+            final matched = gifts.where((g) => g.id == key || g.giftName == key || _resolveGiftDisplayName(key) == g.giftName).firstOrNull;
+            final canonicalKey = matched?.id ?? key;
+            updatedMap[canonicalKey] = (updatedMap[canonicalKey] ?? 0) + qty;
+          }
+          bMap
+            ..clear()
+            ..addAll(updatedMap);
+        }
+      });
     }
+  }
+
+  int _getBranchAllocationForGift(String branchId, CompanyGiftModel gift) {
+    final bMap = _branchAllocationQuantities[branchId] ?? {};
+    int sum = 0;
+    bMap.forEach((k, v) {
+      if (k == gift.id || k == gift.giftName || _resolveGiftDisplayName(k) == gift.giftName) {
+        sum += v;
+      }
+    });
+    return sum;
+  }
+
+  void _setBranchAllocationForGift(String branchId, CompanyGiftModel gift, int newQty) {
+    final bMap = _branchAllocationQuantities.putIfAbsent(branchId, () => {});
+    final keysToRemove = <String>[];
+    bMap.forEach((k, v) {
+      if (k != gift.id && (k == gift.giftName || _resolveGiftDisplayName(k) == gift.giftName)) {
+        keysToRemove.add(k);
+      }
+    });
+    for (final k in keysToRemove) {
+      bMap.remove(k);
+    }
+    bMap[gift.id] = newQty;
   }
 
   int _getAllocatedInOtherBranches(String giftId, String currentBranchId) {
     int sum = 0;
+    final matchedGift = _companyGifts.where((g) => g.id == giftId).firstOrNull;
+    final giftName = matchedGift?.giftName ?? giftId;
+
     _branchAllocationQuantities.forEach((bId, gifts) {
       if (bId != currentBranchId && (_isAllBranches || _selectedBranchIds.contains(bId))) {
-        sum += gifts[giftId] ?? 0;
+        gifts.forEach((k, v) {
+          if (k == giftId || k == giftName || _resolveGiftDisplayName(k) == giftName) {
+            sum += v;
+          }
+        });
       }
     });
     return sum;
@@ -861,11 +970,24 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
   int _getTotalAllocatedForGift(String giftId) {
     int sum = 0;
+    final matchedGift = _companyGifts.where((g) => g.id == giftId).firstOrNull;
+    final giftName = matchedGift?.giftName ?? giftId;
+
     if (_isAllBranches || _selectedBranchIds.isEmpty) {
-      sum = _branchAllocationQuantities['all']?[giftId] ?? 0;
+      final allMap = _branchAllocationQuantities['all'] ?? {};
+      allMap.forEach((k, v) {
+        if (k == giftId || k == giftName || _resolveGiftDisplayName(k) == giftName) {
+          sum += v;
+        }
+      });
     } else {
       for (final bId in _selectedBranchIds) {
-        sum += _branchAllocationQuantities[bId]?[giftId] ?? 0;
+        final bMap = _branchAllocationQuantities[bId] ?? {};
+        bMap.forEach((k, v) {
+          if (k == giftId || k == giftName || _resolveGiftDisplayName(k) == giftName) {
+            sum += v;
+          }
+        });
       }
     }
     return sum;
@@ -895,7 +1017,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       for (final gift in _companyGifts) {
         final share = gift.availableQuantity ~/ _selectedBranchIds.length;
         for (final bId in _selectedBranchIds) {
-          _branchAllocationQuantities.putIfAbsent(bId, () => {})[gift.id] = share;
+          _setBranchAllocationForGift(bId, gift, share);
         }
       }
     });
@@ -974,6 +1096,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rawIdeaText: ideaText,
         existingPrompt: _customPromptController.text.trim(),
         minimumSpend: minSpend,
+        availableCompanyGifts: _companyGifts,
       );
 
       if (!mounted) return;
@@ -1014,6 +1137,377 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         setState(() => _isAiStructuringRules = false);
       }
     }
+  }
+
+  void _syncPromptFromRules() {
+    final targetCompany = _targetCompanyController.text.trim().isNotEmpty
+        ? _targetCompanyController.text.trim()
+        : 'الشركة المستهدفة';
+    final minSpend = double.tryParse(_minimumSpendController.text.trim()) ?? 0.0;
+    final reqProducts = _requiredProductsController.text
+        .split(RegExp(r'[,،]'))
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+
+    final formatted = CampaignAiAssistantService.generateFormattedSystemPrompt(
+      targetCompany: targetCompany,
+      minimumSpend: minSpend,
+      requiredProducts: reqProducts,
+      promotionalRules: _promotionalRules,
+      retailChainName: _selectedRetailChainName ?? '',
+      allowedBranches: _selectedBranchNames,
+    );
+
+    setState(() {
+      _customPromptController.text = formatted;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          AppStrings.of(ref).syncPromptSuccessMsg,
+          style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.teal.shade700,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _applyRulePreset(String presetKey) {
+    if (presetKey == 'clear_360') {
+      final matchedGift = _companyGifts.where((g) => g.giftName.contains('كلير') || g.giftName.contains('Clear')).firstOrNull;
+      final newRule = PromotionalRuleItem(
+        id: 'rule_${_promotionalRules.length + 1}',
+        ruleTitle: 'عرض كلير 360 مل -> هدية كلير 90 مل',
+        triggerProduct: 'كلير 360 مل',
+        minQuantity: 1,
+        rewardType: 'free_product',
+        rewardValue: matchedGift?.giftName ?? 'كلير 90 مل هدية',
+        rewardAmount: 0.0,
+        allowMultipliers: true,
+        linkedGiftId: matchedGift?.id,
+        linkedGiftName: matchedGift?.giftName,
+        linkedGifts: matchedGift != null
+            ? [LinkedGiftAllocation(giftId: matchedGift.id, giftName: matchedGift.giftName, quantity: 1, giftType: 'product')]
+            : [],
+      );
+      setState(() => _promotionalRules.add(newRule));
+    } else if (presetKey == 'tresemme_shrink') {
+      final matchedGift = _companyGifts.where((g) => g.giftName.contains('تريزيمي') || g.giftName.contains('Tresemme')).firstOrNull;
+      final newRule = PromotionalRuleItem(
+        id: 'rule_${_promotionalRules.length + 1}',
+        ruleTitle: 'عرض شرنك 2ق تريزيمي -> هدية تريزيمي 250 مل',
+        triggerProduct: 'عرض شرنك 2ق تريزيمي، تريزيمي شرنك',
+        minQuantity: 1,
+        rewardType: 'free_product',
+        rewardValue: matchedGift?.giftName ?? 'تريزيمي 250 مل هدية',
+        rewardAmount: 0.0,
+        allowMultipliers: true,
+        linkedGiftId: matchedGift?.id,
+        linkedGiftName: matchedGift?.giftName,
+        linkedGifts: matchedGift != null
+            ? [LinkedGiftAllocation(giftId: matchedGift.id, giftName: matchedGift.giftName, quantity: 1, giftType: 'product')]
+            : [],
+      );
+      setState(() => _promotionalRules.add(newRule));
+    } else if (presetKey == 'spray_1pc_50') {
+      final decomposed = CampaignAiAssistantService.decomposeVoucherAmount(50.0, _companyGifts);
+      final newRule = PromotionalRuleItem(
+        id: 'rule_${_promotionalRules.length + 1}',
+        ruleTitle: 'عرض اسبراي ريكسونا أو أكس (قطعة واحدة) -> فواتشر 50 ج.م',
+        triggerProduct: 'اسبراي ريكسونا، اسبراي أكس، مزيل عرق ريكسونا اسبراي، مزيل عرق أكس اسبراي',
+        minQuantity: 1,
+        rewardType: 'voucher',
+        rewardValue: 'قسيمة مشتريات بقيمة 50 ج.م',
+        rewardAmount: 50.0,
+        allowMultipliers: true,
+        linkedGifts: decomposed,
+        linkedGiftId: decomposed.firstOrNull?.giftId,
+        linkedGiftName: decomposed.firstOrNull?.giftName,
+      );
+      setState(() => _promotionalRules.add(newRule));
+    } else if (presetKey == 'spray_2pc_125') {
+      final decomposed = CampaignAiAssistantService.decomposeVoucherAmount(125.0, _companyGifts);
+      final newRule = PromotionalRuleItem(
+        id: 'rule_${_promotionalRules.length + 1}',
+        ruleTitle: 'عرض اسبراي ريكسونا أو أكس (قطعتين) -> فواتشر 125 ج.م',
+        triggerProduct: 'اسبراي ريكسونا، اسبراي أكس، مزيل عرق ريكسونا اسبراي، مزيل عرق أكس اسبراي',
+        minQuantity: 2,
+        rewardType: 'voucher',
+        rewardValue: 'قسيمة مشتريات بقيمة 125 ج.م',
+        rewardAmount: 125.0,
+        allowMultipliers: true,
+        linkedGifts: decomposed,
+        linkedGiftId: decomposed.firstOrNull?.giftId,
+        linkedGiftName: decomposed.firstOrNull?.giftName,
+      );
+      setState(() => _promotionalRules.add(newRule));
+    } else if (presetKey == 'rollon_2pc_50') {
+      final decomposed = CampaignAiAssistantService.decomposeVoucherAmount(50.0, _companyGifts);
+      final newRule = PromotionalRuleItem(
+        id: 'rule_${_promotionalRules.length + 1}',
+        ruleTitle: 'عرض رول أون ريكسونا أو أكس (قطعتين) -> فواتشر 50 ج.م',
+        triggerProduct: 'رول أون ريكسونا، رول أون أكس، ريكسونا رول اون، اكس رول اون',
+        minQuantity: 2,
+        rewardType: 'voucher',
+        rewardValue: 'قسيمة مشتريات بقيمة 50 ج.م',
+        rewardAmount: 50.0,
+        allowMultipliers: true,
+        linkedGifts: decomposed,
+        linkedGiftId: decomposed.firstOrNull?.giftId,
+        linkedGiftName: decomposed.firstOrNull?.giftName,
+      );
+      setState(() => _promotionalRules.add(newRule));
+    }
+  }
+
+  void _showAddOrEditPromotionalRuleDialog(BuildContext context, {int? ruleIndex}) {
+    final strings = AppStrings.of(ref);
+    final isEditing = ruleIndex != null && ruleIndex >= 0 && ruleIndex < _promotionalRules.length;
+    final existingRule = isEditing ? _promotionalRules[ruleIndex] : null;
+
+    final titleController = TextEditingController(text: existingRule?.ruleTitle ?? '');
+    final triggerController = TextEditingController(text: existingRule?.triggerProduct ?? '');
+    final minQtyController = TextEditingController(text: (existingRule?.minQuantity ?? 1).toString());
+    final rewardValController = TextEditingController(text: existingRule?.rewardValue ?? '');
+    final rewardAmtController = TextEditingController(text: (existingRule?.rewardAmount ?? 0.0).toString());
+    String rewardType = existingRule?.rewardType ?? 'free_product';
+    bool allowMultipliers = existingRule?.allowMultipliers ?? true;
+    CompanyGiftModel? selectedGift = existingRule?.linkedGiftId != null
+        ? _companyGifts.where((g) => g.id == existingRule!.linkedGiftId).firstOrNull
+        : null;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Icon(
+                    isEditing ? Icons.edit_note_rounded : Icons.add_circle_outline_rounded,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    isEditing ? strings.editRuleTitle : strings.addCustomRuleBtn,
+                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: SizedBox(
+                  width: 480,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextFormField(
+                        controller: titleController,
+                        decoration: InputDecoration(
+                          labelText: strings.ruleTitleLabel,
+                          hintText: 'مثال: عرض اسبراي ريكسونا أو أكس (قطعتين)',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: triggerController,
+                        decoration: InputDecoration(
+                          labelText: strings.triggerProductLabel,
+                          hintText: 'مثال: اسبراي ريكسونا، اسبراي أكس',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: minQtyController,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                labelText: strings.minQuantityLabel,
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              initialValue: rewardType,
+                              decoration: InputDecoration(
+                                labelText: strings.rewardTypeLabel,
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                isDense: true,
+                              ),
+                              items: [
+                                DropdownMenuItem(value: 'free_product', child: Text(strings.freeProductRewardLabel)),
+                                DropdownMenuItem(value: 'voucher', child: Text(strings.voucherRewardLabel)),
+                                DropdownMenuItem(value: 'game_spin', child: Text(strings.gameSpinRewardLabel)),
+                              ],
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setDialogState(() => rewardType = val);
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      if (_companyGifts.isNotEmpty) ...[
+                        DropdownButtonFormField<CompanyGiftModel>(
+                          initialValue: selectedGift,
+                          isExpanded: true,
+                          decoration: InputDecoration(
+                            labelText: strings.chooseInventoryGiftLabel,
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                            isDense: true,
+                          ),
+                          items: _companyGifts.map((g) {
+                            final typeDesc = g.isVoucher ? 'فواتشر (${g.formattedUnitValue})' : 'هدية عينية';
+                            return DropdownMenuItem(
+                              value: g,
+                              child: Text(
+                                '${g.giftName} - $typeDesc',
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (gift) {
+                            if (gift != null) {
+                              setDialogState(() {
+                                selectedGift = gift;
+                                if (gift.isVoucher) {
+                                  rewardType = 'voucher';
+                                  rewardAmtController.text = gift.unitValue.toString();
+                                  if (rewardValController.text.isEmpty || rewardValController.text.contains('هدية')) {
+                                    rewardValController.text = 'قسيمة مشتريات بقيمة ${gift.formattedUnitValue}';
+                                  }
+                                } else {
+                                  rewardType = 'free_product';
+                                  rewardAmtController.text = '0.0';
+                                  if (rewardValController.text.isEmpty || rewardValController.text.contains('قسيمة')) {
+                                    rewardValController.text = '${gift.giftName} هدية';
+                                  }
+                                }
+                              });
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      TextFormField(
+                        controller: rewardValController,
+                        decoration: InputDecoration(
+                          labelText: 'نص الجائزة / المكافأة',
+                          hintText: 'مثال: فواتشر بقيمة 125 جنيه أو كلير 90 مل هدية',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          isDense: true,
+                        ),
+                      ),
+                      if (rewardType == 'voucher') ...[
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: rewardAmtController,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: 'المبلغ الإجمالي للفاوتشر (ج.م)',
+                            hintText: '125',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                            isDense: true,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      SwitchListTile(
+                        title: Text(
+                          strings.multipliersAllowedLabel,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                        value: allowMultipliers,
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        onChanged: (v) => setDialogState(() => allowMultipliers = v),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: Text(strings.cancel),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final title = titleController.text.trim();
+                    final trigger = triggerController.text.trim();
+                    final minQty = int.tryParse(minQtyController.text.trim()) ?? 1;
+                    final rewardVal = rewardValController.text.trim();
+                    final rewardAmt = double.tryParse(rewardAmtController.text.trim()) ?? 0.0;
+
+                    if (title.isEmpty || trigger.isEmpty) return;
+
+                    List<LinkedGiftAllocation> linkedGifts = [];
+                    if (rewardType == 'voucher' && rewardAmt > 0) {
+                      linkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(rewardAmt, _companyGifts);
+                    } else if (selectedGift != null) {
+                      linkedGifts = [
+                        LinkedGiftAllocation(
+                          giftId: selectedGift!.id,
+                          giftName: selectedGift!.giftName,
+                          quantity: 1,
+                          unitValue: selectedGift!.unitValue,
+                          giftType: selectedGift!.giftType,
+                        ),
+                      ];
+                    }
+
+                    final ruleId = existingRule?.id.isNotEmpty == true
+                        ? existingRule!.id
+                        : 'rule_${isEditing ? ruleIndex + 1 : _promotionalRules.length + 1}';
+
+                    final updatedRule = PromotionalRuleItem(
+                      id: ruleId,
+                      ruleTitle: title,
+                      triggerProduct: trigger,
+                      minQuantity: minQty,
+                      rewardType: rewardType,
+                      rewardValue: rewardVal.isNotEmpty ? rewardVal : title,
+                      rewardAmount: rewardAmt,
+                      allowMultipliers: allowMultipliers,
+                      linkedGiftId: linkedGifts.isNotEmpty ? linkedGifts.first.giftId : selectedGift?.id,
+                      linkedGiftName: linkedGifts.isNotEmpty ? linkedGifts.first.giftName : selectedGift?.giftName,
+                      linkedGifts: linkedGifts,
+                    );
+
+                    setState(() {
+                      if (isEditing) {
+                        _promotionalRules[ruleIndex] = updatedRule;
+                      } else {
+                        _promotionalRules.add(updatedRule);
+                      }
+                    });
+                    Navigator.pop(dialogCtx);
+                  },
+                  child: Text(strings.save),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _pickDate(bool isStart) async {
@@ -1073,22 +1567,68 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         startDate: _startDate,
         endDate: _endDate,
         isActive: widget.eventToEdit?.isActive ?? true,
+        isPromoterActive: widget.eventToEdit?.isPromoterActive ?? true,
+        isManagerActive: widget.eventToEdit?.isManagerActive ?? true,
         gameType: _selectedGameType,
         allocatedPrizes: () {
           final List<AllocatedPrize> prizes = [];
+
+          AllocatedPrize resolveAllocatedPrize({
+            required String giftKey,
+            required int quantity,
+            required String branchId,
+            required String branchName,
+          }) {
+            CompanyGiftModel? matchedGift;
+            try {
+              matchedGift = _companyGifts.firstWhere((g) => g.id == giftKey || g.giftName == giftKey);
+            } catch (_) {}
+
+            AllocatedPrize? originalPrize;
+            if (widget.eventToEdit != null) {
+              try {
+                originalPrize = widget.eventToEdit!.allocatedPrizes.firstWhere(
+                  (p) => p.giftId == giftKey || p.name == giftKey,
+                );
+              } catch (_) {}
+            }
+
+            String finalName = matchedGift?.giftName ?? originalPrize?.name ?? giftKey;
+            String finalType = matchedGift?.giftType ?? originalPrize?.giftType ?? 'product';
+            double finalUnitValue = matchedGift?.unitValue ?? originalPrize?.unitValue ?? 0.0;
+
+            final isRawId = finalName.isEmpty ||
+                (finalName == giftKey && RegExp(r'^[a-zA-Z0-9_-]{15,35}$').hasMatch(finalName)) ||
+                RegExp(r'^[a-zA-Z0-9]{18,30}$').hasMatch(finalName);
+
+            if (isRawId) {
+              if (finalType == 'voucher' || finalUnitValue > 0) {
+                final val = finalUnitValue == finalUnitValue.roundToDouble() ? finalUnitValue.toInt() : finalUnitValue;
+                finalName = finalUnitValue > 0 ? 'فواتشر $val جنيه' : 'كارت فواتشر مشتريات';
+              } else {
+                finalName = 'هدية ترويجية مميزة';
+              }
+            }
+
+            return AllocatedPrize(
+              giftId: giftKey,
+              name: finalName,
+              allocatedQuantity: quantity,
+              remainingQuantity: quantity,
+              giftType: finalType,
+              unitValue: finalUnitValue,
+              branchId: branchId,
+              branchName: branchName,
+            );
+          }
+
           if (_isAllBranches || _selectedBranchIds.isEmpty) {
             final allAllocations = _branchAllocationQuantities['all'] ?? {};
             for (final entry in allAllocations.entries) {
               if (entry.value > 0) {
-                final gift = _companyGifts.firstWhere(
-                  (g) => g.id == entry.key,
-                  orElse: () => CompanyGiftModel(id: entry.key, companySlug: '', giftName: entry.key, totalQuantity: 0, availableQuantity: 0),
-                );
-                prizes.add(AllocatedPrize(
-                  giftId: entry.key,
-                  name: gift.giftName,
-                  allocatedQuantity: entry.value,
-                  remainingQuantity: entry.value,
+                prizes.add(resolveAllocatedPrize(
+                  giftKey: entry.key,
+                  quantity: entry.value,
                   branchId: '',
                   branchName: '',
                 ));
@@ -1101,15 +1641,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               final bAllocations = _branchAllocationQuantities[bId] ?? {};
               for (final entry in bAllocations.entries) {
                 if (entry.value > 0) {
-                  final gift = _companyGifts.firstWhere(
-                    (g) => g.id == entry.key,
-                    orElse: () => CompanyGiftModel(id: entry.key, companySlug: '', giftName: entry.key, totalQuantity: 0, availableQuantity: 0),
-                  );
-                  prizes.add(AllocatedPrize(
-                    giftId: entry.key,
-                    name: gift.giftName,
-                    allocatedQuantity: entry.value,
-                    remainingQuantity: entry.value,
+                  prizes.add(resolveAllocatedPrize(
+                    giftKey: entry.key,
+                    quantity: entry.value,
                     branchId: bId,
                     branchName: bName,
                   ));
@@ -1117,6 +1651,33 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               }
             }
           }
+
+          // Auto-include any gifts linked in promotional rules if not already present in prizes
+          for (final rule in _promotionalRules) {
+            for (final linked in rule.linkedGifts) {
+              final alreadyInPrizes = prizes.any((p) => p.giftId == linked.giftId || p.name == linked.giftName);
+              if (!alreadyInPrizes) {
+                prizes.add(resolveAllocatedPrize(
+                  giftKey: linked.giftId,
+                  quantity: 100,
+                  branchId: '',
+                  branchName: '',
+                ));
+              }
+            }
+            if (rule.linkedGiftId != null && rule.linkedGiftId!.isNotEmpty) {
+              final alreadyInPrizes = prizes.any((p) => p.giftId == rule.linkedGiftId || p.name == rule.linkedGiftName);
+              if (!alreadyInPrizes) {
+                prizes.add(resolveAllocatedPrize(
+                  giftKey: rule.linkedGiftId!,
+                  quantity: 100,
+                  branchId: '',
+                  branchName: '',
+                ));
+              }
+            }
+          }
+
           return prizes;
         }(),
         retailChainId: _selectedRetailChainId ?? '',
@@ -1977,10 +2538,26 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         _buildVariableChip(context, '{TARGET_COMPANY}', 'اسم الشركة المستهدفة'),
                         _buildVariableChip(context, '{MIN_SPEND}', 'الحد الأدنى للإنفاق'),
                         _buildVariableChip(context, '{REQUIRED_PRODUCTS}', 'المنتجات المشترطة'),
+                        const SizedBox(width: 6),
+                        FilledButton.tonalIcon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: Colors.teal.shade700.withValues(alpha: 0.12),
+                            foregroundColor: Colors.teal.shade800,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          icon: const Icon(Icons.auto_awesome_rounded, size: 16),
+                          label: Text(
+                            strings.syncPromptFromRulesBtn,
+                            style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                          onPressed: _syncPromptFromRules,
+                        ),
                       ],
                     ),
                     const SizedBox(height: 14),
@@ -2941,7 +3518,16 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
           const SizedBox(height: 16),
 
-          // Preset Suggestion Chips
+          // Preset Suggestion Chips Header & Wrap
+          Text(
+            strings.presetIdeasHeader,
+            style: GoogleFonts.cairo(
+              fontSize: 12.5,
+              fontWeight: FontWeight.bold,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 6),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -2968,6 +3554,65 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               ),
             ],
           ),
+
+          if (_companyGifts.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              strings.dynamicInventoryChipsHeader,
+              style: GoogleFonts.cairo(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.teal.shade800,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _companyGifts.take(6).map((gift) {
+                final isVoucher = gift.isVoucher;
+                return ActionChip(
+                  avatar: Icon(
+                    isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
+                    size: 15,
+                    color: isVoucher ? Colors.amber.shade900 : Colors.teal.shade700,
+                  ),
+                  label: Text(
+                    isVoucher
+                        ? '${gift.giftName} (${gift.formattedUnitValue})'
+                        : gift.giftName,
+                    style: GoogleFonts.cairo(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                  backgroundColor: isVoucher
+                      ? Colors.amber.shade50.withValues(alpha: 0.8)
+                      : Colors.teal.shade50.withValues(alpha: 0.8),
+                  side: BorderSide(
+                    color: isVoucher
+                        ? Colors.amber.shade300
+                        : Colors.teal.shade300,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  onPressed: () {
+                    final textToAdd = isVoucher
+                        ? 'عند شراء [حدد المنتج والكمية] يتم الحصول على ${gift.giftName} بقيمة ${gift.unitValue} جنيه.'
+                        : 'عند شراء [حدد المنتج والكمية] يحصل العميل على عبوة ${gift.giftName} مجاناً.';
+                    final current = _promotionalIdeaController.text.trim();
+                    if (current.isEmpty) {
+                      _promotionalIdeaController.text = textToAdd;
+                    } else {
+                      _promotionalIdeaController.text = '$current\n$textToAdd';
+                    }
+                  },
+                );
+              }).toList(),
+            ),
+          ],
 
           const SizedBox(height: 14),
 
@@ -3135,22 +3780,109 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               ),
             ),
 
-          if (_promotionalRules.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            Text(
-              strings.aiPromotionalRulesListTitle,
-              style: GoogleFonts.cairo(
-                fontSize: 13.5,
-                fontWeight: FontWeight.bold,
-                color: colorScheme.onSurface,
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Text(
+                strings.aiPromotionalRulesListTitle,
+                style: GoogleFonts.cairo(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${_promotionalRules.length}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onPrimaryContainer,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  side: BorderSide(color: Colors.teal.shade700.withValues(alpha: 0.5)),
+                ),
+                icon: const Icon(Icons.add_rounded, size: 16, color: Colors.teal),
+                label: Text(
+                  strings.addCustomRuleBtn,
+                  style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.teal.shade800),
+                ),
+                onPressed: () => _showAddOrEditPromotionalRuleDialog(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Presets Dropdown
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                isExpanded: true,
+                hint: Row(
+                  children: [
+                    const Icon(Icons.flash_on_rounded, size: 16, color: Colors.amber),
+                    const SizedBox(width: 6),
+                    Text(
+                      strings.presetRulesDropdownHint,
+                      style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'clear_360',
+                    child: Text('🎁 شراء 1 كلير 360 مل -> كلير 90 مل هدية', style: TextStyle(fontSize: 12.5)),
+                  ),
+                  DropdownMenuItem(
+                    value: 'tresemme_shrink',
+                    child: Text('🎁 شراء عرض تريزيمي شرنك 2ق -> تريزيمي 250 مل هدية', style: TextStyle(fontSize: 12.5)),
+                  ),
+                  DropdownMenuItem(
+                    value: 'spray_1pc_50',
+                    child: Text('💳 شراء 1 اسبراي ريكسونا أو أكس -> فواتشر 50 ج.م', style: TextStyle(fontSize: 12.5)),
+                  ),
+                  DropdownMenuItem(
+                    value: 'spray_2pc_125',
+                    child: Text('💳 شراء 2 اسبراي ريكسونا أو أكس -> فواتشر 125 ج.م (2×50 + 1×25)', style: TextStyle(fontSize: 12.5)),
+                  ),
+                  DropdownMenuItem(
+                    value: 'rollon_2pc_50',
+                    child: Text('💳 شراء 2 رول أون ريكسونا أو أكس -> فواتشر 50 ج.م', style: TextStyle(fontSize: 12.5)),
+                  ),
+                ],
+                onChanged: (val) {
+                  if (val != null) {
+                    _applyRulePreset(val);
+                  }
+                },
               ),
             ),
-            const SizedBox(height: 8),
+          ),
+          const SizedBox(height: 10),
+
+          if (_promotionalRules.isNotEmpty) ...[
             ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _promotionalRules.length,
-              separatorBuilder: (_, index) => const SizedBox(height: 8),
+              separatorBuilder: (_, index) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
                 final rule = _promotionalRules[index];
                 return _buildRuleItemTile(rule, index, colorScheme, strings);
@@ -3191,94 +3923,550 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         break;
     }
 
+    final isLinkedToInventory = (rule.linkedGifts.isNotEmpty &&
+            rule.linkedGifts.any((g) => _companyGifts.any((cg) => cg.id == g.giftId))) ||
+        (rule.linkedGiftId != null &&
+            rule.linkedGiftId!.isNotEmpty &&
+            _companyGifts.any((g) => g.id == rule.linkedGiftId));
+
+    final isExplicitVoucher = rule.rewardType == 'voucher' ||
+        rule.rewardValue.contains('فواتشر') ||
+        rule.rewardValue.toLowerCase().contains('voucher') ||
+        rule.rewardValue.contains('قسيمة');
+    final isExplicitFreeProduct = rule.rewardType == 'free_product' ||
+        rule.rewardValue.contains('هدية') ||
+        rule.rewardValue.contains('منتج') ||
+        (rule.linkedGifts.isNotEmpty && rule.linkedGifts.every((g) => !g.isVoucher));
+
+    final isVoucherRule = isExplicitVoucher && !isExplicitFreeProduct;
+
+    double effectiveVoucherAmount = rule.rewardAmount;
+    if (isVoucherRule && effectiveVoucherAmount <= 0) {
+      final match = RegExp(r'(\d+)').firstMatch(rule.rewardValue);
+      if (match != null) {
+        effectiveVoucherAmount = double.tryParse(match.group(1)!) ?? 0.0;
+      }
+    }
+
     return Container(
       decoration: BoxDecoration(
         color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+          color: isLinkedToInventory
+              ? Colors.teal.shade300
+              : colorScheme.outlineVariant.withValues(alpha: 0.6),
+          width: isLinkedToInventory ? 1.5 : 1.0,
         ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Row(
+      padding: const EdgeInsets.all(12),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: badgeColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: badgeColor, size: 20),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: badgeColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: badgeColor, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      rule.ruleTitle,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13.5,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: badgeColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            typeLabel,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.bold,
+                              color: badgeColor,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: isLinkedToInventory
+                                ? Colors.teal.shade100
+                                : Colors.amber.shade100,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                isLinkedToInventory
+                                    ? Icons.check_circle_rounded
+                                    : Icons.help_outline_rounded,
+                                size: 12,
+                                color: isLinkedToInventory
+                                    ? Colors.teal.shade800
+                                    : Colors.amber.shade900,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                isLinkedToInventory
+                                    ? strings.ruleLinkedBadge
+                                    : strings.ruleUnlinkedBadge,
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: isLinkedToInventory
+                                      ? Colors.teal.shade900
+                                      : Colors.amber.shade900,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.edit_note_rounded, size: 22, color: Colors.teal),
+                tooltip: strings.editRuleTitle,
+                onPressed: () => _showAddOrEditPromotionalRuleDialog(context, ruleIndex: index),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline_rounded, size: 20, color: Colors.redAccent),
+                tooltip: strings.deleteRuleTooltip,
+                onPressed: () {
+                  setState(() {
+                    _promotionalRules.removeAt(index);
+                  });
+                },
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
+          const SizedBox(height: 8),
+          Text(
+            '• الشرط: شراء ${rule.minQuantity} من [${rule.triggerProduct}] ➔ المكافأة: [${rule.rewardValue}]',
+            style: TextStyle(
+              fontSize: 12,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          if (rule.allowMultipliers) ...[
+            const SizedBox(height: 3),
+            Row(
+              children: [
+                Icon(Icons.all_inclusive_rounded, size: 14, color: Colors.blue.shade700),
+                const SizedBox(width: 4),
+                Text(
+                  strings.multipliersAllowedLabel,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.blue.shade700,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 10),
+
+          // Multi-Gift & Voucher Linker Card
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isLinkedToInventory
+                  ? Colors.teal.shade50.withValues(alpha: 0.5)
+                  : Colors.amber.shade50.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isLinkedToInventory
+                    ? Colors.teal.shade300
+                    : Colors.amber.shade300,
+              ),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
+                    Icon(
+                      Icons.inventory_2_rounded,
+                      size: 16,
+                      color: isLinkedToInventory ? Colors.teal.shade800 : Colors.amber.shade900,
+                    ),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        rule.ruleTitle,
-                        style: const TextStyle(
+                        strings.linkedCompanyGiftLabel,
+                        style: GoogleFonts.cairo(
+                          fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          fontSize: 13.5,
+                          color: isLinkedToInventory ? Colors.teal.shade900 : Colors.amber.shade900,
                         ),
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: badgeColor.withValues(alpha: 0.12),
+                    if (isVoucherRule && effectiveVoucherAmount > 0) ...[
+                      InkWell(
+                        onTap: () {
+                          final decomposed = CampaignAiAssistantService.decomposeVoucherAmount(
+                            effectiveVoucherAmount,
+                            _companyGifts,
+                          );
+                          if (decomposed.isNotEmpty) {
+                            setState(() {
+                              _promotionalRules[index] = rule.copyWith(
+                                linkedGifts: decomposed,
+                                linkedGiftId: decomposed.first.giftId,
+                                linkedGiftName: decomposed
+                                    .map((d) => d.quantity > 1 ? '${d.quantity}x ${d.giftName}' : d.giftName)
+                                    .join(' + '),
+                                rewardType: 'voucher',
+                                rewardAmount: effectiveVoucherAmount,
+                              );
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'تم تفكيك الفواتشر تلقائياً: ${decomposed.map((d) => '${d.quantity} × ${d.giftName}').join(' + ')}',
+                                ),
+                                backgroundColor: Colors.teal.shade700,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'لم نتمكن من مطابقة فئات الفواتشر في المخزون بدقة مع $effectiveVoucherAmount ج.م',
+                                ),
+                                backgroundColor: Colors.orange.shade800,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        },
                         borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        typeLabel,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: badgeColor,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '• الشرط: شراء ${rule.minQuantity} من [${rule.triggerProduct}] ➔ المكافأة: [${rule.rewardValue}]',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                if (rule.allowMultipliers) ...[
-                  const SizedBox(height: 3),
-                  Row(
-                    children: [
-                      Icon(Icons.all_inclusive_rounded, size: 14, color: Colors.blue.shade700),
-                      const SizedBox(width: 4),
-                      Text(
-                        strings.multipliersAllowedLabel,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.blue.shade700,
-                          fontWeight: FontWeight.w600,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade100,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.amber.shade400),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.auto_awesome_rounded, size: 13, color: Colors.amber.shade900),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${strings.autoDecomposeLabel} (${effectiveVoucherAmount.toInt()} ج.م)',
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.amber.shade900,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],
-                  ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                // Linked Gifts List
+                if (rule.linkedGifts.isNotEmpty) ...[
+                  ...rule.linkedGifts.asMap().entries.map((entry) {
+                    final giftIdx = entry.key;
+                    final alloc = entry.value;
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.teal.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            alloc.isVoucher
+                                ? Icons.confirmation_number_rounded
+                                : Icons.card_giftcard_rounded,
+                            size: 16,
+                            color: alloc.isVoucher ? Colors.amber.shade800 : Colors.teal.shade700,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  alloc.giftName,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (alloc.isVoucher && alloc.unitValue > 0)
+                                  Text(
+                                    'فئة: ${alloc.unitValue.toInt()} ج.م × ${alloc.quantity} = ${alloc.totalMonetaryValue.toInt()} ج.م',
+                                    style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          // Stepper: [-] [qty] [+]
+                          InkWell(
+                            onTap: () {
+                              final updatedList = List<LinkedGiftAllocation>.from(rule.linkedGifts);
+                              if (alloc.quantity > 1) {
+                                updatedList[giftIdx] = alloc.copyWith(quantity: alloc.quantity - 1);
+                              } else {
+                                updatedList.removeAt(giftIdx);
+                              }
+                              setState(() {
+                                _promotionalRules[index] = rule.copyWith(
+                                  linkedGifts: updatedList,
+                                  linkedGiftId: updatedList.isNotEmpty ? updatedList.first.giftId : '',
+                                  linkedGiftName: updatedList.isNotEmpty
+                                      ? updatedList.map((d) => d.quantity > 1 ? '${d.quantity}x ${d.giftName}' : d.giftName).join(' + ')
+                                      : '',
+                                );
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Icon(Icons.remove, size: 14),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            child: Text(
+                              '${alloc.quantity}',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () {
+                              final updatedList = List<LinkedGiftAllocation>.from(rule.linkedGifts);
+                              updatedList[giftIdx] = alloc.copyWith(quantity: alloc.quantity + 1);
+                              setState(() {
+                                _promotionalRules[index] = rule.copyWith(
+                                  linkedGifts: updatedList,
+                                  linkedGiftId: updatedList.first.giftId,
+                                  linkedGiftName: updatedList.map((d) => d.quantity > 1 ? '${d.quantity}x ${d.giftName}' : d.giftName).join(' + '),
+                                );
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Icon(Icons.add, size: 14),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, size: 16, color: Colors.redAccent),
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            onPressed: () {
+                              final updatedList = List<LinkedGiftAllocation>.from(rule.linkedGifts)..removeAt(giftIdx);
+                              setState(() {
+                                _promotionalRules[index] = rule.copyWith(
+                                  linkedGifts: updatedList,
+                                  linkedGiftId: updatedList.isNotEmpty ? updatedList.first.giftId : '',
+                                  linkedGiftName: updatedList.isNotEmpty
+                                      ? updatedList.map((d) => d.quantity > 1 ? '${d.quantity}x ${d.giftName}' : d.giftName).join(' + ')
+                                      : '',
+                                );
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+
+                  if (isVoucherRule && rule.totalVoucherValue > 0) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, bottom: 6),
+                      child: Row(
+                        children: [
+                          Icon(
+                            (rule.totalVoucherValue - effectiveVoucherAmount).abs() < 0.01
+                                ? Icons.check_circle_rounded
+                                : Icons.info_outline_rounded,
+                            size: 14,
+                            color: (rule.totalVoucherValue - effectiveVoucherAmount).abs() < 0.01
+                                ? Colors.teal.shade800
+                                : Colors.amber.shade900,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${strings.totalCardsValueLabel} ${rule.totalVoucherValue.toInt()} ج.م '
+                            '${(rule.totalVoucherValue - effectiveVoucherAmount).abs() < 0.01 ? '(مطابقة تامة ومكتملة ✓)' : '(المطلوب: ${effectiveVoucherAmount.toInt()} ج.م)'}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: (rule.totalVoucherValue - effectiveVoucherAmount).abs() < 0.01
+                                  ? Colors.teal.shade900
+                                  : Colors.amber.shade900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
+
+                // Add Gift to Rule Dropdown
+                DropdownButtonFormField<String?>(
+                  initialValue: null,
+                  isDense: true,
+                  isExpanded: true,
+                  hint: Text(
+                    rule.linkedGifts.isEmpty
+                        ? strings.unlinkedGiftOption
+                        : strings.addGiftToRule,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: rule.linkedGifts.isEmpty
+                          ? colorScheme.onSurfaceVariant
+                          : Colors.teal.shade900,
+                      fontWeight: rule.linkedGifts.isEmpty ? FontWeight.normal : FontWeight.bold,
+                    ),
+                  ),
+                  decoration: InputDecoration(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                  ),
+                  items: [
+                    DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text(
+                        rule.linkedGifts.isEmpty ? strings.unlinkedGiftOption : strings.addGiftToRule,
+                        style: TextStyle(fontSize: 11.5, color: colorScheme.onSurfaceVariant),
+                      ),
+                    ),
+                    ..._companyGifts.map((gift) {
+                      final isVoucher = gift.isVoucher;
+                      return DropdownMenuItem<String?>(
+                        value: gift.id,
+                        child: Row(
+                          children: [
+                            Icon(
+                              isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
+                              size: 15,
+                              color: isVoucher ? Colors.amber.shade800 : Colors.teal.shade700,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                gift.giftName,
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11.5),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (isVoucher) ...[
+                              const SizedBox(width: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.shade100,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  gift.formattedUnitValue,
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.amber.shade900,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            const SizedBox(width: 4),
+                            Text(
+                              '(${gift.availableQuantity})',
+                              style: TextStyle(fontSize: 10, color: colorScheme.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                  onChanged: (selectedGiftId) {
+                    if (selectedGiftId != null && selectedGiftId.isNotEmpty) {
+                      final selectedGift = _companyGifts.where((g) => g.id == selectedGiftId).firstOrNull;
+                      if (selectedGift != null) {
+                        final updatedList = List<LinkedGiftAllocation>.from(rule.linkedGifts);
+                        final existingIdx = updatedList.indexWhere((g) => g.giftId == selectedGift.id);
+                        if (existingIdx >= 0) {
+                          updatedList[existingIdx] = updatedList[existingIdx].copyWith(
+                            quantity: updatedList[existingIdx].quantity + 1,
+                          );
+                        } else {
+                          updatedList.add(
+                            LinkedGiftAllocation(
+                              giftId: selectedGift.id,
+                              giftName: selectedGift.giftName,
+                              quantity: 1,
+                              unitValue: selectedGift.unitValue,
+                              giftType: selectedGift.giftType,
+                            ),
+                          );
+                        }
+                        setState(() {
+                          _promotionalRules[index] = rule.copyWith(
+                            linkedGifts: updatedList,
+                            linkedGiftId: updatedList.first.giftId,
+                            linkedGiftName: updatedList.map((d) => d.quantity > 1 ? '${d.quantity}x ${d.giftName}' : d.giftName).join(' + '),
+                            rewardType: selectedGift.isVoucher ? 'voucher' : rule.rewardType,
+                            rewardAmount: isVoucherRule ? effectiveVoucherAmount : rule.rewardAmount,
+                          );
+                        });
+                      }
+                    }
+                  },
+                ),
               ],
             ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
-            onPressed: () {
-              setState(() {
-                _promotionalRules.removeAt(index);
-              });
-            },
           ),
         ],
       ),
@@ -3293,73 +4481,110 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       builder: (context, snapshot) {
         final chains = snapshot.data ?? [];
 
+        // 1. Deduplicate chains by ID
+        final uniqueChains = <String, RetailChainModel>{};
+        for (final chain in chains) {
+          if (chain.id.isNotEmpty && !uniqueChains.containsKey(chain.id)) {
+            uniqueChains[chain.id] = chain;
+          }
+        }
+        final cleanChains = uniqueChains.values.toList();
+
+        // Build list of chains available to add (or show all with (مضافة ✔️))
+        final dropdownItems = <DropdownMenuItem<String?>>[
+          const DropdownMenuItem<String?>(
+            value: null,
+            child: Text('اختر سلسلة تجارية لإضافتها للحملة...'),
+          ),
+          ...cleanChains.map((chain) {
+            final isAlreadyAdded = _selectedRetailChainIds.contains(chain.id);
+            return DropdownMenuItem<String?>(
+              value: chain.id,
+              child: Row(
+                children: [
+                  Icon(
+                    isAlreadyAdded ? Icons.check_circle_rounded : Icons.storefront_rounded,
+                    size: 18,
+                    color: isAlreadyAdded ? Colors.green : colorScheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    chain.name,
+                    style: GoogleFonts.cairo(
+                      fontWeight: FontWeight.bold,
+                      color: isAlreadyAdded ? Colors.green.shade700 : colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: isAlreadyAdded ? Colors.green.withValues(alpha: 0.15) : colorScheme.secondaryContainer,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      isAlreadyAdded ? 'مضافة بالحملة ✔️' : '${chain.branchesCount} فرع',
+                      style: GoogleFonts.cairo(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: isAlreadyAdded ? Colors.green.shade800 : colorScheme.onSecondaryContainer,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ];
+
         return _buildSectionCard(
           context: context,
           icon: Icons.storefront_rounded,
-          title: 'سلسلة الماركت والفروع المستهدفة (Retail Chain & Outlets)',
-          subtitle: 'حدد سلسلة الهايبر ماركت (فتح الله، كارفور، سبينس...) والفروع المشمولة في الحملة',
+          title: 'سلاسل الماركت والفروع المستهدفة (Retail Chains & Outlets)',
+          subtitle: 'اختر السلاسل التجارية المسجلة في النظام والفروع المشمولة في الحملة الترويجية',
           children: [
-            // Row 1: Chain Dropdown + Quick Add Button
+            // Row 1: Dropdown Selector for registered chains + Register new chain system button
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String?>(
+                    key: ValueKey('retail_chain_add_dropdown_${_selectedRetailChainIds.length}_${cleanChains.length}'),
                     isExpanded: true,
-                    initialValue: _selectedRetailChainId,
+                    initialValue: null,
                     style: GoogleFonts.cairo(color: colorScheme.onSurface),
                     decoration: _m3InputDecoration(
                       context: context,
-                      labelText: 'سلسلة الهايبر / المنظمة',
-                      hintText: chains.isEmpty ? 'لا توجد سلاسل مسجلة بعد' : 'اختر السلسلة (مثال: أسواق فتح الله)',
-                      prefixIcon: Icons.apartment_rounded,
+                      labelText: 'إضافة سلسلة تجارية من النظام (Dropdown)',
+                      hintText: cleanChains.isEmpty
+                          ? 'لا توجد سلاسل مسجلة بالنظام بعد'
+                          : 'اختر سلسلة لإضافتها (مثل: أسواق فتح الله، كارفور...)',
+                      prefixIcon: Icons.add_business_rounded,
                     ),
-                    items: [
-                      const DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text('بدون تحديد سلسلة (عام لجميع المتاجر)'),
-                      ),
-                      ...chains.map((chain) {
-                        return DropdownMenuItem<String?>(
-                          value: chain.id,
-                          child: Row(
-                            children: [
-                              Text(
-                                chain.name,
-                                style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                decoration: BoxDecoration(
-                                  color: colorScheme.secondaryContainer,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  '${chain.branchesCount} فرع',
-                                  style: GoogleFonts.cairo(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: colorScheme.onSecondaryContainer,
-                                  ),
-                                ),
-                              ),
-                            ],
+                    items: dropdownItems,
+                    onChanged: (selectedChainId) {
+                      if (selectedChainId == null || selectedChainId.isEmpty) return;
+                      final matched = cleanChains.where((c) => c.id == selectedChainId).firstOrNull;
+                      final chainName = matched?.name ?? selectedChainId;
+
+                      if (_selectedRetailChainIds.contains(selectedChainId)) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('السلسلة "$chainName" مضافة بالفعل في الحملة'),
+                            duration: const Duration(seconds: 2),
                           ),
                         );
-                      }),
-                    ],
-                    onChanged: (val) {
-                      setState(() {
-                        _selectedRetailChainId = val;
-                        final matched = chains.where((c) => c.id == val).firstOrNull;
-                        _selectedRetailChainName = matched?.name;
-                        _selectedBranchIds = [];
-                        _selectedBranchNames = [];
-                      });
-                      if (val != null && val.isNotEmpty) {
-                        _loadBranchesForChain(val);
+                        return;
                       }
+
+                      setState(() {
+                        _selectedRetailChainIds.add(selectedChainId);
+                        _selectedRetailChainNames.add(chainName);
+                        _chainIsAllBranchesMap[selectedChainId] = true;
+                        _chainSelectedBranchIdsMap[selectedChainId] = {};
+                        _chainSelectedBranchNamesMap[selectedChainId] = {};
+                      });
+                      _loadBranchesForChain(selectedChainId);
                     },
                   ),
                 ),
@@ -3367,11 +4592,11 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Tooltip(
-                    message: 'إضافة سلسلة تجارية جديدة سريعة',
+                    message: 'تسجيل علامة تجارية جديدة كلياً في النظام لم تكن موجودة من قبل',
                     child: OutlinedButton.icon(
                       onPressed: _showQuickAddChainDialog,
-                      icon: const Icon(Icons.add, size: 18),
-                      label: Text('سلسلة جديدة', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12)),
+                      icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
+                      label: Text('+ تسجيل بالسيستم', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12)),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -3382,172 +4607,287 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               ],
             ),
 
-            if (_selectedRetailChainId != null && _selectedRetailChainId!.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              const Divider(),
-              const SizedBox(height: 12),
+            const SizedBox(height: 16),
 
-              // Mode Selection: All branches vs Specific branches
-              Row(
-                children: [
-                  Icon(Icons.hub_rounded, size: 20, color: colorScheme.secondary),
-                  const SizedBox(width: 8),
-                  Text(
-                    'نطاق الفروع المشمولة:',
-                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Wrap(
-                      spacing: 8,
-                      children: [
-                        ChoiceChip(
-                          label: Text('جميع فروع $_selectedRetailChainName', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
-                          selected: _isAllBranches,
-                          onSelected: (selected) {
-                            if (selected) {
-                              setState(() {
-                                _isAllBranches = true;
-                                _selectedBranchIds.clear();
-                                _selectedBranchNames.clear();
-                              });
-                            }
-                          },
-                        ),
-                        ChoiceChip(
-                          label: Text('تحديد فروع معينة (${_selectedBranchNames.length})', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
-                          selected: !_isAllBranches,
-                          onSelected: (selected) {
-                            if (selected) {
-                              setState(() {
-                                _isAllBranches = false;
-                              });
-                            }
-                          },
-                        ),
-                      ],
+            // Active Chains in Campaign
+            if (_selectedRetailChainIds.isEmpty) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded, color: colorScheme.primary, size: 22),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'لم يتم تحديد سلسلة تجارية معينة بعد. يمكنك اختيار سلسلة أو أكثر من القائمة المنسدلة أعلاه، أو تركها فارغة لتكون الحملة عامة لجميع المتاجر.',
+                        style: GoogleFonts.cairo(fontSize: 13, color: colorScheme.onSurfaceVariant),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+            ] else ...[
+              Text(
+                'السلاسل والفروع المشمولة في هذه الحملة (${_selectedRetailChainIds.length} سلاسل):',
+                style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 14, color: colorScheme.primary),
+              ),
+              const SizedBox(height: 10),
 
-              if (!_isAllBranches) ...[
-                const SizedBox(height: 14),
-                Container(
+              // Build a card for each selected chain
+              ..._selectedRetailChainIds.map((chainId) {
+                final chainIndex = _selectedRetailChainIds.indexOf(chainId);
+                final chainName = chainIndex < _selectedRetailChainNames.length
+                    ? _selectedRetailChainNames[chainIndex]
+                    : chainId;
+                final chainBranches = _chainBranchesMap[chainId] ?? [];
+                final isChainAllBranches = _chainIsAllBranchesMap[chainId] ?? true;
+                final selectedBranchIds = _chainSelectedBranchIdsMap[chainId] ?? {};
+                final selectedBranchNames = _chainSelectedBranchNamesMap[chainId] ?? {};
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 14),
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+                    color: colorScheme.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Header: Chain name + branch count badge + delete button
                       Row(
                         children: [
-                          Text(
-                            'اختر الفروع التابعة لـ ($_selectedRetailChainName):',
-                            style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(Icons.store_mall_directory_rounded, size: 20, color: colorScheme.onPrimaryContainer),
                           ),
-                          const Spacer(),
-                          if (_availableBranches.isNotEmpty) ...[
-                            TextButton.icon(
-                              onPressed: () {
-                                setState(() {
-                                  _selectedBranchIds = _availableBranches.map((b) => b.id).toList();
-                                  _selectedBranchNames = _availableBranches.map((b) => b.branchName).toList();
-                                });
-                              },
-                              icon: const Icon(Icons.select_all_rounded, size: 16),
-                              label: const Text('تحديد الكل'),
-                            ),
-                            TextButton.icon(
-                              onPressed: () {
-                                setState(() {
-                                  _selectedBranchIds.clear();
-                                  _selectedBranchNames.clear();
-                                });
-                              },
-                              icon: const Icon(Icons.deselect_rounded, size: 16),
-                              label: const Text('إلغاء التحديد'),
-                            ),
-                          ],
-                          OutlinedButton.icon(
-                            onPressed: _showQuickAddBranchDialog,
-                            icon: const Icon(Icons.add_location_alt_rounded, size: 16),
-                            label: Text('+ فرع جديد', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold)),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-
-                      if (_isLoadingBranches)
-                        const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()))
-                      else if (_availableBranches.isEmpty)
-                        Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
+                          const SizedBox(width: 10),
+                          Expanded(
                             child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Icon(Icons.store_mall_directory_outlined, size: 36, color: colorScheme.outline),
-                                const SizedBox(height: 8),
                                 Text(
-                                  'لا توجد فروع مسجلة لهذه السلسلة حتى الآن',
-                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
+                                  chainName,
+                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 15),
                                 ),
-                                const SizedBox(height: 4),
                                 Text(
-                                  'اضغط على زر "+ فرع جديد" أعلاه لإضافة أول فرع بسهولة.',
+                                  '${chainBranches.length} فرع مسجل بالنظام',
                                   style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
                                 ),
                               ],
                             ),
                           ),
-                        )
-                      else
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: _availableBranches.map((branch) {
-                            final isSelected = _selectedBranchIds.contains(branch.id) ||
-                                _selectedBranchNames.contains(branch.branchName);
-
-                            return FilterChip(
-                              label: Text(
-                                branch.city.isNotEmpty
-                                    ? '${branch.branchName} (${branch.city})'
-                                    : branch.branchName,
-                                style: GoogleFonts.cairo(
-                                  fontSize: 12,
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                ),
-                              ),
-                              selected: isSelected,
-                              selectedColor: colorScheme.primaryContainer,
-                              checkmarkColor: colorScheme.onPrimaryContainer,
-                              onSelected: (selected) {
-                                setState(() {
-                                  if (selected) {
-                                    _selectedBranchIds.add(branch.id);
-                                    if (!_selectedBranchNames.contains(branch.branchName)) {
-                                      _selectedBranchNames.add(branch.branchName);
-                                    }
-                                  } else {
-                                    _selectedBranchIds.remove(branch.id);
-                                    _selectedBranchNames.remove(branch.branchName);
+                          IconButton(
+                            tooltip: 'إزالة هذه السلسلة من الحملة',
+                            icon: const Icon(Icons.close_rounded, color: Colors.redAccent),
+                            onPressed: () {
+                              setState(() {
+                                final idx = _selectedRetailChainIds.indexOf(chainId);
+                                if (idx >= 0) {
+                                  _selectedRetailChainIds.removeAt(idx);
+                                  if (idx < _selectedRetailChainNames.length) {
+                                    _selectedRetailChainNames.removeAt(idx);
                                   }
-                                });
-                              },
-                            );
-                          }).toList(),
+                                }
+                                _chainBranchesMap.remove(chainId);
+                                _chainIsAllBranchesMap.remove(chainId);
+                                _chainSelectedBranchIdsMap.remove(chainId);
+                                _chainSelectedBranchNamesMap.remove(chainId);
+                                _updateAvailableBranches();
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 12),
+                      const Divider(height: 1),
+                      const SizedBox(height: 12),
+
+                      // Scope Switcher for this chain
+                      Row(
+                        children: [
+                          Icon(Icons.hub_rounded, size: 18, color: colorScheme.secondary),
+                          const SizedBox(width: 8),
+                          Text(
+                            'نطاق فروع $chainName:',
+                            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Wrap(
+                              spacing: 8,
+                              children: [
+                                ChoiceChip(
+                                  label: Text('جميع فروع $chainName (${chainBranches.length})', style: GoogleFonts.cairo(fontWeight: FontWeight.w600, fontSize: 12)),
+                                  selected: isChainAllBranches,
+                                  onSelected: (selected) {
+                                    if (selected) {
+                                      setState(() {
+                                        _chainIsAllBranchesMap[chainId] = true;
+                                        _chainSelectedBranchIdsMap[chainId] = {};
+                                        _chainSelectedBranchNamesMap[chainId] = {};
+                                      });
+                                    }
+                                  },
+                                ),
+                                ChoiceChip(
+                                  label: Text('تحديد فروع معينة (${selectedBranchNames.length})', style: GoogleFonts.cairo(fontWeight: FontWeight.w600, fontSize: 12)),
+                                  selected: !isChainAllBranches,
+                                  onSelected: (selected) {
+                                    if (selected) {
+                                      setState(() {
+                                        _chainIsAllBranchesMap[chainId] = false;
+                                      });
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      // Branch Selection Chips if specific branches chosen
+                      if (!isChainAllBranches) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    'اختر الفروع المشمولة لـ ($chainName):',
+                                    style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                                  ),
+                                  const Spacer(),
+                                  if (chainBranches.isNotEmpty) ...[
+                                    TextButton.icon(
+                                      onPressed: () {
+                                        setState(() {
+                                          _chainSelectedBranchIdsMap[chainId] = chainBranches.map((b) => b.id).toSet();
+                                          _chainSelectedBranchNamesMap[chainId] = chainBranches.map((b) => b.branchName).toSet();
+                                        });
+                                      },
+                                      icon: const Icon(Icons.select_all_rounded, size: 16),
+                                      label: const Text('تحديد الكل'),
+                                    ),
+                                    TextButton.icon(
+                                      onPressed: () {
+                                        setState(() {
+                                          _chainSelectedBranchIdsMap[chainId] = {};
+                                          _chainSelectedBranchNamesMap[chainId] = {};
+                                        });
+                                      },
+                                      icon: const Icon(Icons.deselect_rounded, size: 16),
+                                      label: const Text('إلغاء التحديد'),
+                                    ),
+                                  ],
+                                  OutlinedButton.icon(
+                                    onPressed: () => _showQuickAddBranchDialog(chainId, chainName),
+                                    icon: const Icon(Icons.add_location_alt_rounded, size: 16),
+                                    label: Text('+ فرع جديد', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold)),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+
+                              if (_isLoadingBranches && chainBranches.isEmpty)
+                                const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()))
+                              else if (chainBranches.isEmpty)
+                                Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Column(
+                                      children: [
+                                        Icon(Icons.store_mall_directory_outlined, size: 36, color: colorScheme.outline),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          'لا توجد فروع مسجلة لهذه السلسلة حتى الآن',
+                                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'اضغط على زر "+ فرع جديد" أعلاه لإضافة أول فرع بسهولة.',
+                                          style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                              else
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: chainBranches.map((branch) {
+                                    final isSelected = selectedBranchIds.contains(branch.id) ||
+                                        selectedBranchNames.contains(branch.branchName);
+
+                                    return FilterChip(
+                                      label: Text(
+                                        branch.city.isNotEmpty
+                                            ? '${branch.branchName} (${branch.city})'
+                                            : branch.branchName,
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 12,
+                                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                        ),
+                                      ),
+                                      selected: isSelected,
+                                      selectedColor: colorScheme.primaryContainer,
+                                      checkmarkColor: colorScheme.onPrimaryContainer,
+                                      onSelected: (selected) {
+                                        setState(() {
+                                          final idsSet = _chainSelectedBranchIdsMap.putIfAbsent(chainId, () => {});
+                                          final namesSet = _chainSelectedBranchNamesMap.putIfAbsent(chainId, () => {});
+                                          if (selected) {
+                                            idsSet.add(branch.id);
+                                            namesSet.add(branch.branchName);
+                                          } else {
+                                            idsSet.remove(branch.id);
+                                            namesSet.remove(branch.branchName);
+                                          }
+                                        });
+                                      },
+                                    );
+                                  }).toList(),
+                                ),
+                            ],
+                          ),
                         ),
+                      ],
                     ],
                   ),
-                ),
-              ],
+                );
+              }),
             ],
           ],
         );
@@ -3760,7 +5100,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
           // Gift allocation cards
           ..._companyGifts.map((gift) {
-            final currentAllocation = _branchAllocationQuantities[activeBranchId]?[gift.id] ?? 0;
+            final currentAllocation = _getBranchAllocationForGift(activeBranchId, gift);
             final isAllocated = currentAllocation > 0;
             final allocatedInOthers = _getAllocatedInOtherBranches(gift.id, activeBranchId);
             final totalAllocatedInThisEvent = _getTotalAllocatedForGift(gift.id);
@@ -3793,7 +5133,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
-                      Icons.card_giftcard_rounded,
+                      gift.isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
                       color: isAllocated ? colorScheme.primary : colorScheme.onSurfaceVariant,
                       size: 20,
                     ),
@@ -3803,20 +5143,47 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          gift.giftName,
-                          style: GoogleFonts.cairo(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: colorScheme.onSurface,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                gift.giftName,
+                                style: GoogleFonts.cairo(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: colorScheme.onSurface,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (gift.isVoucher) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.primaryContainer,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '💳 ${gift.formattedUnitValue}',
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: colorScheme.onPrimaryContainer,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                         Wrap(
                           spacing: 8,
                           runSpacing: 2,
                           children: [
                             Text(
-                              'إجمالي رصيد الشركة: ${gift.totalQuantity}',
+                              gift.isVoucher 
+                                  ? 'رصيد الشركة: ${gift.totalQuantity} كارت (${gift.totalMonetaryValue.toInt()} ج.م)'
+                                  : 'إجمالي رصيد الشركة: ${gift.totalQuantity}',
                               style: GoogleFonts.cairo(
                                 fontSize: 11,
                                 color: colorScheme.onSurfaceVariant,
@@ -3841,7 +5208,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                 ),
                               ),
                             Text(
-                              '• المتبقي المتاح للتخصيص: ${remainingInCampaign > 0 ? remainingInCampaign : 0}',
+                              gift.isVoucher
+                                  ? '• المتبقي المتاح: ${remainingInCampaign > 0 ? remainingInCampaign : 0} كارت (${((remainingInCampaign > 0 ? remainingInCampaign : 0) * gift.unitValue).toInt()} ج.م)'
+                                  : '• المتبقي المتاح للتخصيص: ${remainingInCampaign > 0 ? remainingInCampaign : 0}',
                               style: GoogleFonts.cairo(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
@@ -3872,7 +5241,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             ? () {
                                 setState(() {
                                   final newQty = currentAllocation - 1;
-                                  _branchAllocationQuantities.putIfAbsent(activeBranchId, () => {})[gift.id] = newQty;
+                                  _setBranchAllocationForGift(activeBranchId, gift, newQty);
                                 });
                               }
                             : null,
@@ -3910,7 +5279,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             final parsed = int.tryParse(val) ?? 0;
                             final clamped = parsed.clamp(0, maxAllowable);
                             setState(() {
-                              _branchAllocationQuantities.putIfAbsent(activeBranchId, () => {})[gift.id] = clamped;
+                              _setBranchAllocationForGift(activeBranchId, gift, clamped);
                             });
                           },
                         ),
@@ -3924,7 +5293,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             ? () {
                                 setState(() {
                                   final newQty = currentAllocation + 1;
-                                  _branchAllocationQuantities.putIfAbsent(activeBranchId, () => {})[gift.id] = newQty;
+                                  _setBranchAllocationForGift(activeBranchId, gift, newQty);
                                 });
                               }
                             : null,
@@ -3968,12 +5337,15 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         ? _selectedBranchNames[bIndex] 
                         : bId;
                     final bAllocations = _branchAllocationQuantities[bId] ?? {};
-                    final allocatedGiftsText = bAllocations.entries
-                        .where((e) => e.value > 0)
-                        .map((e) {
-                          final gName = _companyGifts.where((g) => g.id == e.key).firstOrNull?.giftName ?? e.key;
-                          return '$gName (${e.value})';
-                        })
+                    final Map<String, int> resolvedGiftsMap = {};
+                    for (final entry in bAllocations.entries) {
+                      if (entry.value <= 0) continue;
+                      final displayName = _resolveGiftDisplayName(entry.key);
+                      resolvedGiftsMap[displayName] = (resolvedGiftsMap[displayName] ?? 0) + entry.value;
+                    }
+
+                    final allocatedGiftsText = resolvedGiftsMap.entries
+                        .map((e) => '${e.key} (${e.value})')
                         .join('، ');
 
                     final bUnits = _getBranchAllocatedUnits(bId);

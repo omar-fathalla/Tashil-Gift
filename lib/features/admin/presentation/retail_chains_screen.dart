@@ -770,22 +770,31 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                             ],
 
                             if (isLinkingExisting && existingChains.isNotEmpty) ...[
-                              DropdownButtonFormField<String>(
-                                initialValue: selectedChainId,
-                                decoration: InputDecoration(
-                                  labelText: isAr ? 'اختر السلسلة المسجلة' : 'Select Existing Chain',
-                                  prefixIcon: const Icon(Icons.storefront_rounded),
-                                  filled: true,
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                ),
-                                items: existingChains.map((c) {
-                                  return DropdownMenuItem<String>(
-                                    value: c.id,
-                                    child: Text('${c.name} (${c.branchesCount} فرع)', style: GoogleFonts.cairo(fontSize: 13)),
+                              Builder(
+                                builder: (context) {
+                                  final hasValidChain = existingChains.any((c) => c.id == selectedChainId);
+                                  final effectiveId = hasValidChain
+                                      ? selectedChainId
+                                      : (existingChains.isNotEmpty ? existingChains.first.id : null);
+                                  return DropdownButtonFormField<String>(
+                                    key: ValueKey('link_chain_${effectiveId}_${existingChains.length}'),
+                                    initialValue: effectiveId,
+                                    decoration: InputDecoration(
+                                      labelText: isAr ? 'اختر السلسلة المسجلة' : 'Select Existing Chain',
+                                      prefixIcon: const Icon(Icons.storefront_rounded),
+                                      filled: true,
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                    ),
+                                    items: existingChains.map((c) {
+                                      return DropdownMenuItem<String>(
+                                        value: c.id,
+                                        child: Text('${c.name} (${c.branchesCount} فرع)', style: GoogleFonts.cairo(fontSize: 13)),
+                                      );
+                                    }).toList(),
+                                    onChanged: (val) {
+                                      setDialogState(() => selectedChainId = val);
+                                    },
                                   );
-                                }).toList(),
-                                onChanged: (val) {
-                                  setDialogState(() => selectedChainId = val);
                                 },
                               ),
                             ] else ...[
@@ -1059,17 +1068,17 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                                 receiptSignature: sig,
                               );
 
-                              final isDuplicate = await service.addBranch(newBranch);
+                              final wasUpdated = await service.upsertBranch(newBranch);
 
                               if (context.mounted) {
                                 Navigator.of(dialogCtx).pop();
-                                if (isDuplicate) {
-                                  await M3Feedback.showDuplicateWarning(
+                                if (wasUpdated) {
+                                  await M3Feedback.showSuccess(
                                     context,
-                                    title: isAr ? 'تم رفض الإضافة: الفرع مسجل مسبقاً ⚠️' : 'Duplicate Branch Rejected ⚠️',
+                                    title: isAr ? 'تم تحديث بيانات وبصمة الفرع بنجاح! 🔄' : 'Branch & Signature Updated! 🔄',
                                     message: isAr
-                                        ? 'فرع "$branchName" مسجل مسبقاً بالفعل في سلسلة "$targetChainName" بنفس الكود أو البصمة. تم رفض العملية لمنع تكرار البيانات.'
-                                        : 'Branch "$branchName" is already registered in "$targetChainName". Action was rejected to prevent duplicate data.',
+                                        ? 'تم تحديث فرع "$branchName" في سلسلة "$targetChainName" بالبصمة الجديدة المستخرجة من الإيصال (Store ID: ${sig.storeId}).'
+                                        : 'Branch "$branchName" updated with new receipt POS signature.',
                                   );
                                 } else {
                                   await M3Feedback.showSuccess(
@@ -1764,27 +1773,37 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                   ),
                 )
               else
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedChainIdForBranch,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: 'السلسلة التجارية التابع لها الفرع *',
-                    prefixIcon: const Icon(Icons.apartment_rounded),
-                    filled: true,
-                    fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  items: chains.map((c) {
-                    return DropdownMenuItem<String>(
-                      value: c.id,
-                      child: Text(
-                        '${c.name} (${c.slug})',
-                        style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+                Builder(
+                  builder: (context) {
+                    final hasMatchingChain = chains.any((c) => c.id == _selectedChainIdForBranch);
+                    final effectiveChainId = hasMatchingChain
+                        ? _selectedChainIdForBranch
+                        : (chains.isNotEmpty ? chains.first.id : null);
+
+                    return DropdownButtonFormField<String>(
+                      key: ValueKey('branch_chain_${effectiveChainId}_${chains.length}'),
+                      initialValue: effectiveChainId,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: 'السلسلة التجارية التابع لها الفرع *',
+                        prefixIcon: const Icon(Icons.apartment_rounded),
+                        filled: true,
+                        fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
+                      items: chains.map((c) {
+                        return DropdownMenuItem<String>(
+                          value: c.id,
+                          child: Text(
+                            '${c.name} (${c.slug})',
+                            style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        setState(() => _selectedChainIdForBranch = val);
+                      },
                     );
-                  }).toList(),
-                  onChanged: (val) {
-                    setState(() => _selectedChainIdForBranch = val);
                   },
                 ),
               const SizedBox(height: 12),

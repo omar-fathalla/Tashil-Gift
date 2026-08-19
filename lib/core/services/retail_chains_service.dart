@@ -273,6 +273,76 @@ class RetailChainsService {
     return false;
   }
 
+  /// Adds or updates (upserts) a branch with smart receipt signature merging.
+  /// If a branch with matching code, storeId, or name exists in the chain, it is updated
+  /// with the new AI signature and details without duplicating records.
+  /// Returns `true` if an existing branch was updated, and `false` if newly created.
+  Future<bool> upsertBranch(BranchModel branch) async {
+    final chainId = branch.retailChainId.trim().toLowerCase();
+    final cleanCode = branch.branchCode.trim().toUpperCase().toEnglishDigits();
+    final cleanName = branch.branchName.trim().toLowerCase();
+    final storeId = branch.receiptSignature?.storeId.trim().toEnglishDigits() ?? '';
+
+    // Check for existing branch in the same chain
+    final existingBranchesSnap = await _branchesCollection
+        .where('retailChainId', isEqualTo: branch.retailChainId)
+        .get();
+
+    DocumentSnapshot<Map<String, dynamic>>? existingDoc;
+    for (final doc in existingBranchesSnap.docs) {
+      final data = doc.data();
+      final existingCode = (data['branchCode']?.toString() ?? '').trim().toUpperCase().toEnglishDigits();
+      final existingName = (data['branchName']?.toString() ?? '').trim().toLowerCase();
+      final sigMap = data['receiptSignature'] as Map<String, dynamic>?;
+      final existingStoreId = (sigMap?['storeId']?.toString() ?? '').trim().toEnglishDigits();
+
+      final matchesCode = cleanCode.isNotEmpty && cleanCode != 'DEF' && cleanCode != '0' && existingCode == cleanCode;
+      final matchesStoreId = storeId.isNotEmpty && existingStoreId.isNotEmpty && existingStoreId == storeId;
+      final matchesName = cleanName.isNotEmpty && existingName == cleanName;
+
+      if (matchesCode || matchesStoreId || matchesName) {
+        existingDoc = doc;
+        break;
+      }
+    }
+
+    if (existingDoc != null) {
+      final existingData = existingDoc.data() ?? {};
+      final mergedBranch = branch.copyWith(
+        id: existingDoc.id,
+        branchCode: cleanCode.isNotEmpty ? cleanCode : (existingData['branchCode']?.toString() ?? ''),
+        city: branch.city.isNotEmpty ? branch.city : (existingData['city']?.toString() ?? ''),
+        address: branch.address.isNotEmpty ? branch.address : (existingData['address']?.toString() ?? ''),
+      );
+      await _branchesCollection.doc(existingDoc.id).set(
+        mergedBranch.toFirestore(),
+        SetOptions(merge: true),
+      ).timeout(const Duration(seconds: 4), onTimeout: () {});
+      await _recalculateChainBranchesCount(branch.retailChainId);
+      return true; // updated
+    }
+
+    // Deterministic ID for new branch
+    final deterministicDocId = branch.id.isNotEmpty
+        ? branch.id
+        : '${chainId}_${cleanCode.isNotEmpty ? cleanCode.toLowerCase() : cleanName.replaceAll(RegExp(r'\s+'), '_')}';
+
+    final docRef = _branchesCollection.doc(deterministicDocId);
+    final toSave = branch.copyWith(
+      id: docRef.id,
+      branchCode: cleanCode,
+      createdAt: branch.createdAt ?? DateTime.now(),
+    );
+
+    await docRef.set(toSave.toFirestore(), SetOptions(merge: true)).timeout(
+      const Duration(seconds: 4),
+      onTimeout: () {},
+    );
+
+    await _recalculateChainBranchesCount(branch.retailChainId);
+    return false; // newly created
+  }
+
   Future<void> updateBranch(BranchModel branch) async {
     final cleanCode = branch.branchCode.trim().toUpperCase().toEnglishDigits();
     await _branchesCollection.doc(branch.id).set(

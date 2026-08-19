@@ -210,6 +210,29 @@ class AppStrings {
   String get filterAccepted => _t(ar: 'المقبولة', en: 'Accepted', hi: 'स्वीकृत');
   String get filterRejected => _t(ar: 'المرفوضة', en: 'Rejected', hi: 'अस्वीकृत');
   String get filterPending => _t(ar: 'قيد المراجعة', en: 'Pending Review', hi: 'समीक्षाधीन');
+  String get deleteInvoiceBtn => _t(ar: 'حذف الفاتورة', en: 'Delete Invoice', hi: 'रसीद हटाएं');
+  String get deleteInvoiceTooltip => _t(ar: 'حذف الفاتورة نهائياً وإلغاء قفل البون', en: 'Permanently delete invoice & unlock receipt', hi: 'रसीद हमेशा के लिए हटाएं और अनलॉक करें');
+  String get confirmDeleteInvoiceTitle => _t(ar: 'حذف الفاتورة نهائياً', en: 'Permanently Delete Invoice', hi: 'रसीद हमेशा के लिए हटाएं');
+  String get confirmDeleteInvoiceMsg => _t(
+    ar: 'هل أنت متأكد من حذف هذه الفاتورة نهائياً من النظام؟\nسيتم مسح سجل الفاتورة وبياناتها من السحابة بالكامل، مما يتيح إمكانية فحص وإعادة استخدام هذا البون مرة أخرى.',
+    en: 'Are you sure you want to permanently delete this invoice from the system?\nAll receipt transaction data and cloud images will be purged, allowing this receipt to be scanned and used again.',
+    hi: 'क्या आप वाकई इस रसीद को सिस्टम से हमेशा के लिए हटाना चाहते हैं?\nसभी रसीद डेटा और क्लाउड इमेज हटा दिए जाएंगे, जिससे इस रसीद का दोबारा उपयोग किया जा सकेगा।',
+  );
+  String get invoiceDeletedSuccess => _t(
+    ar: 'تم حذف الفاتورة بنجاح وإلغاء قفل البون من قاعدة البيانات.',
+    en: 'Invoice deleted successfully and receipt unlocked.',
+    hi: 'रसीद सफलतापूर्वक हटा दी गई और अनलॉक हो गई।',
+  );
+  String get invoiceDeletedError => _t(
+    ar: 'حدث خطأ أثناء حذف الفاتورة، يرجى المحاولة مرة أخرى.',
+    en: 'Failed to delete invoice. Please try again.',
+    hi: 'रसीद हटाने में त्रुटि हुई। कृपया पुनः प्रयास करें।',
+  );
+  String get deletingInvoiceProgress => _t(
+    ar: 'جاري حذف الفاتورة وتفريغ بيانات البون...',
+    en: 'Deleting invoice and unlocking receipt...',
+    hi: 'रसीद हटाई जा रही है...',
+  );
 
   // ---------------------------------------------------------------------------
   // 9. Agent 6: Create & Edit Campaign (إنشاء حملة جديدة)
@@ -451,6 +474,135 @@ class AppStrings {
     en: 'Company Manager Portal link copied successfully',
     hi: 'कंपनी प्रबंधक पोर्टल लिंक सफलतापूर्वक कॉपी किया गया',
   );
+
+  // ---------------------------------------------------------------------------
+  // 14.1 Prizes & Stock Balance System (منظومة رصيد وجرد الهدايا والمخزون)
+  // ---------------------------------------------------------------------------
+  String get prizesStockTitle => _t(
+    ar: 'رصيد وجرد الهدايا',
+    en: 'Prizes & Stock Balance',
+    hi: 'उपहार और स्टॉक शेष',
+  );
+  String get prizesStockSubtitle => _t(
+    ar: 'مراقبة لحظية شاملة لرصيد الهدايا المخصصة، المسحوبة، والمتبقية في الفروع',
+    en: 'Comprehensive real-time monitoring of allocated, claimed, and remaining branch prize stock',
+    hi: 'शाखाओं में आवंटित, वितरित और शेष उपहार स्टॉक की रीयल-टाइम निगरानी',
+  );
+  String get totalAllocatedGifts => _t(
+    ar: 'إجمالي الهدايا المخصصة',
+    en: 'Total Allocated Stock',
+    hi: 'कुल आवंटित उपहार',
+  );
+  String get awardedGiftsCount => _t(
+    ar: 'الهدايا المصروفة والمسحوبة',
+    en: 'Awarded & Claimed Prizes',
+    hi: 'वितरित एवं जीते गए उपहार',
+  );
+  String get remainingStockBalance => _t(
+    ar: 'الرصيد المتبقي الفعلي',
+    en: 'Live Remaining Stock',
+    hi: 'वास्तविक शेष स्टॉक',
+  );
+  String get coveredOutletsCount => _t(
+    ar: 'الفروع والمنافذ المغطاة',
+    en: 'Covered Outlets & Branches',
+    hi: 'शामिल शाखाएं और आउटलेट',
+  );
+  String get depletionRateLabel => _t(
+    ar: 'نسبة السحب والصرف',
+    en: 'Depletion Rate',
+    hi: 'निकासी दर',
+  );
+  String get itemizedGiftsTab => _t(
+    ar: 'جرد الأصناف والهدايا',
+    en: 'Itemized SKU Inventory',
+    hi: 'उपहार वार सूची',
+  );
+  String get branchBreakdownTab => _t(
+    ar: 'الأرصدة حسب الفروع',
+    en: 'Branch-by-Branch Stock',
+    hi: 'शाखा वार स्टॉक',
+  );
+  String get campaignBreakdownTab => _t(
+    ar: 'الأرصدة حسب الفعاليات',
+    en: 'Campaign Stock Breakdown',
+    hi: 'अभियान वार स्टॉक',
+  );
+  String get filterAllStock => _t(ar: 'كافة الحالات', en: 'All Statuses', hi: 'सभी स्थितियां');
+  String get filterAvailableStock => _t(ar: 'متوفر 🟢', en: 'In Stock 🟢', hi: 'उपलब्ध 🟢');
+  String get filterLowStock => _t(ar: 'رصيد منخفض 🟡', en: 'Low Stock 🟡', hi: 'कम स्टॉक 🟡');
+  String get filterOutOfStock => _t(ar: 'نفد الرصيد 🔴', en: 'Out of Stock 🔴', hi: 'स्टॉक खत्म 🔴');
+  String get searchGiftsPlaceholder => _t(
+    ar: 'ابحث باسم الهدية، كود الصنف، أو اسم الفرع...',
+    en: 'Search gift name, SKU code, or branch name...',
+    hi: 'उपहार का नाम, एसकेयू कोड, या शाखा खोजें...',
+  );
+  String get exportStockReportCsv => _t(
+    ar: 'تصدير تقرير الجرد (CSV)',
+    en: 'Export Stock Report (CSV)',
+    hi: 'स्टॉक रिपोर्ट निर्यात करें (CSV)',
+  );
+  String get allBranchesOption => _t(
+    ar: 'كافة الفروع والمنافذ',
+    en: 'All Branches & Outlets',
+    hi: 'सभी शाखाएं और आउटलेट',
+  );
+  String get allCampaignsOption => _t(
+    ar: 'كافة الفعاليات والحملات',
+    en: 'All Campaigns & Events',
+    hi: 'सभी अभियान और कार्यक्रम',
+  );
+  String get stockHealthyBadge => _t(ar: 'متوفر', en: 'Healthy Stock', hi: 'पर्याप्त स्टॉक');
+  String get stockLowBadge => _t(ar: 'منخفض', en: 'Low Stock', hi: 'कम स्टॉक');
+  String get stockDepletedBadge => _t(ar: 'نفد بالكامل', en: 'Depleted', hi: 'समाप्त');
+  String get noGiftsFoundMsg => _t(
+    ar: 'لا توجد هدايا أو أرصدة مطابقة لمعايير البحث الحالية.',
+    en: 'No gifts or stock records match your current filter criteria.',
+    hi: 'वर्तमान खोज मानदंडों से कोई उपहार या स्टॉक रिकॉर्ड मेल नहीं खाता।',
+  );
+  String get giftSkuLabel => _t(ar: 'كود الهدية', en: 'Gift SKU', hi: 'उपहार कोड');
+  String get branchDistributionLabel => _t(
+    ar: 'توزيع الأرصدة على الفروع المعتمدة',
+    en: 'Stock Distribution Across Authorized Branches',
+    hi: 'अधिकृत शाखाओं में स्टॉक वितरण',
+  );
+  String get remainingInBranch => _t(ar: 'متبقي بالفرع', en: 'Remaining in Branch', hi: 'शाखा में शेष');
+  String get dragToReorder => _t(
+    ar: 'اسحب لتغيير الترتيب',
+    en: 'Drag to reorder',
+    hi: 'पुनः व्यवस्थित करने के लिए खींचें',
+  );
+  String get dragToReorderHint => _t(
+    ar: 'اضغط مطولاً على أي كارت لسحبه وتغيير ترتيبه في المخزون',
+    en: 'Long press and drag any card to reorder in inventory',
+    hi: 'स्टॉक में पुनः व्यवस्थित करने के लिए किसी भी कार्ड को दबाकर खींचें',
+  );
+  String get orderUpdatedSuccess => _t(
+    ar: 'تم حفظ ترتيب الهدايا والكروت بنجاح ↕️',
+    en: 'Gift and voucher order saved successfully ↕️',
+    hi: 'उपहार और वाउचर का क्रम सफलतापूर्वक सहेजा गया ↕️',
+  );
+  String get reorderBadge => _t(
+    ar: 'ترتيب حر باللمس ↕️',
+    en: 'Touch Reorder ↕️',
+    hi: 'टच रीऑर्डर ↕️',
+  );
+  String voucherValueText(dynamic amount) => _t(
+    ar: 'بقيمة $amount ج.م',
+    en: 'Value: $amount EGP',
+    hi: 'मूल्य: $amount EGP',
+  );
+  String get certifiedVoucher => _t(
+    ar: 'قسيمة مشتريات معتمدة 🎫',
+    en: 'Certified Shopping Voucher 🎫',
+    hi: 'प्रमाणित शॉपिंग वाउचर 🎫',
+  );
+  String get validForImmediateUse => _t(
+    ar: 'صالحة للاستخدام الفوري لدى الكاشير',
+    en: 'Valid for immediate redemption at cashier',
+    hi: 'कैशियर पर तुरंत उपयोग के लिए मान्य',
+  );
+
 
   // ---------------------------------------------------------------------------
   // 15. Authentication & System Sign In (تسجيل الدخول والنظام)
@@ -796,6 +948,111 @@ class AppStrings {
     en: '🎟️ Tiered Voucher Offer (Sprays & Roll-ons)',
     hi: '🎟️ स्तरीय वाउचर ऑफ़र (स्प्रे और रोल-ऑन)',
   );
+  String get linkedCompanyGiftLabel => _t(
+    ar: '🎁 الهدية المربوطة من مخزون الشركة:',
+    en: '🎁 Linked Gift from Company Inventory:',
+    hi: '🎁 कंपनी इन्वेंट्री से जुड़ा उपहार:',
+  );
+  String get unlinkedGiftOption => _t(
+    ar: '➕ (غير مربوط بهدية محددة من المخزون)',
+    en: '➕ (Not linked to specific inventory gift)',
+    hi: '➕ (विशिष्ट इन्वेंट्री उपहार से जुड़ा नहीं है)',
+  );
+  String get ruleLinkedBadge => _t(
+    ar: 'مربوط بالمخزون',
+    en: 'Linked to Inventory',
+    hi: 'इन्वेंट्री से जुड़ा हुआ',
+  );
+  String get ruleUnlinkedBadge => _t(
+    ar: 'بحاجة لاختيار هدية',
+    en: 'Gift Unlinked',
+    hi: 'उपहार लिंक नहीं है',
+  );
+  String get deleteRuleTooltip => _t(
+    ar: 'حذف / إلغاء هذه القاعدة',
+    en: 'Delete / Remove this rule',
+    hi: 'इस नियम को हटाएं',
+  );
+  String get autoDecomposeLabel => _t(
+    ar: '⚡ تفكيك تلقائي للمبلغ',
+    en: '⚡ Auto-Decompose Amount',
+    hi: '⚡ स्वचालित राशि विभाजन',
+  );
+  String get addGiftToRule => _t(
+    ar: '+ إضافة هدية / كارت للمكافأة',
+    en: '+ Add Gift / Card to Reward',
+    hi: '+ इनाम में उपहार/कार्ड जोड़ें',
+  );
+  String get cardsBreakdownTitle => _t(
+    ar: 'بطاقات وكروت التسليم المعتمدة:',
+    en: 'Approved Voucher Breakdown:',
+    hi: 'स्वीकृत वाउचर कार्ड विवरण:',
+  );
+  String get totalCardsValueLabel => _t(
+    ar: 'إجمالي قيمة الكروت المربوطة:',
+    en: 'Total Linked Cards Value:',
+    hi: 'कुल जुड़े कार्डों का मूल्य:',
+  );
+  String get syncPromptFromRulesBtn => _t(
+    ar: '🔄 تنسيق وتحديث البرومبت تلقائياً من القواعد المعتمدة',
+    en: '🔄 Auto-Format & Sync Prompt from Rules',
+    hi: '🔄 नियमों से प्रॉम्प्ट को स्वतः प्रारूपित और समन्वयित करें',
+  );
+  String get syncPromptSuccessMsg => _t(
+    ar: 'تم تحديث وتنسيق برومبت الفحص بنجاح بناءً على القواعد والمخزون',
+    en: 'Audit prompt formatted and synced successfully from rules & inventory',
+    hi: 'प्रॉम्प्ट नियमों और इन्वेंट्री के आधार पर सफलतापूर्वक समन्वयित किया गया',
+  );
+  String get addCustomRuleBtn => _t(
+    ar: '+ إضافة شرط / قاعدة ترويجية جديدة',
+    en: '+ Add New Promotional Rule',
+    hi: '+ नया प्रचार नियम जोड़ें',
+  );
+  String get editRuleTitle => _t(
+    ar: 'تعديل القاعدة الترويجية',
+    en: 'Edit Promotional Rule',
+    hi: 'प्रचार नियम संपादित करें',
+  );
+  String get ruleTitleLabel => _t(
+    ar: 'عنوان القاعدة الترويجية',
+    en: 'Rule Title',
+    hi: 'نियम का शीर्षक',
+  );
+  String get triggerProductLabel => _t(
+    ar: 'المنتج / الأصناف المشروطة (الكلمات المفتاحية)',
+    en: 'Trigger Product / Required Keywords',
+    hi: 'शर्त वाले उत्पाद/कीवर्ड',
+  );
+  String get minQuantityLabel => _t(
+    ar: 'الكمية المشروطة الدنيا',
+    en: 'Minimum Required Quantity',
+    hi: 'न्यूनतम आवश्यक मात्रा',
+  );
+  String get rewardTypeLabel => _t(
+    ar: 'نوع المكافأة',
+    en: 'Reward Type',
+    hi: 'इनाम का प्रकार',
+  );
+  String get chooseInventoryGiftLabel => _t(
+    ar: 'اختر الهدية من مخزون هدايا الشركة',
+    en: 'Choose Gift from Company Inventory',
+    hi: 'कंपनी इन्वेंट्री से उपहार चुनें',
+  );
+  String get presetRulesDropdownHint => _t(
+    ar: '📋 نماذج عروض وقواعد شائعة جاهزة...',
+    en: '📋 Quick Preset Offer Templates...',
+    hi: '📋 त्वरित पूर्व निर्धारित ऑफ़र टेम्पलेट...',
+  );
+  String get presetIdeasHeader => _t(
+    ar: '💡 نماذج مقترحة لصياغة الأفكار (انقر للإضافة للبرومبت):',
+    en: '💡 Template Inspiration Chips (Tap to add to prompt):',
+    hi: '💡 टेम्पलेट प्रेरणा चिप्स (प्रॉम्प्ट में जोड़ने के लिए टैप करें):',
+  );
+  String get dynamicInventoryChipsHeader => _t(
+    ar: '📦 هدايا مخزون الشركة المتاحة للعرض:',
+    en: '📦 Available Company Inventory Gifts:',
+    hi: '📦 उपलब्ध कंपनी इन्वेंट्री उपहार:',
+  );
   String get aiScanReceiptTemplate => _t(
     ar: 'استخراج بصمة البونة والفرع بالذكاء الاصطناعي',
     en: 'AI Scan Receipt & Extract Branch Signature',
@@ -903,5 +1160,280 @@ class AppStrings {
     en: 'Invalid credentials or account is not authorized as system admin.',
     hi: 'अमान्य क्रेडेंशियल या खाता सिस्टम व्यवस्थापक के रूप में अधिकृत नहीं है।',
   );
+  String get unauthorizedError => _t(
+    ar: 'غير مصرح لك بتنفيذ هذه العملية. يتطلب صلاحيات مسؤول النظام.',
+    en: 'You are not authorized to perform this operation. Admin permissions required.',
+    hi: 'आप इस ऑपरेशन को करने के लिए अधिकृत नहीं हैं। व्यवस्थापक अनुमतियां आवश्यक हैं।',
+  );
+  String get adminProfileTooltip => _t(
+    ar: 'الملف الشخصي والحساب',
+    en: 'Admin Profile & Account',
+    hi: 'व्यवस्थापक प्रोफ़ाइल और खाता',
+  );
+  String get systemAdminRole => _t(
+    ar: 'مسؤول النظام',
+    en: 'System Admin',
+    hi: 'सिस्टम प्रशासक',
+  );
+  String get activeSessionLabel => _t(
+    ar: 'جلسة إدارية نشطة',
+    en: 'Active Admin Session',
+    hi: 'सक्रिय प्रशासनिक सत्र',
+  );
+
+  // Promoter Gift Inventory & Branch Balance
+  String get promoterGiftsBalanceTooltip => _t(
+    ar: 'استعراض رصيد ومخزون الهدايا المتبقي بالفروع',
+    en: 'View Remaining Gifts & Branch Inventory Balance',
+    hi: 'शेष उपहार और शाखा स्टॉक बैलेंस देखें',
+  );
+  String get promoterGiftsBalanceTitle => _t(
+    ar: 'رصيد ومخزون الهدايا المتبقي',
+    en: 'Remaining Gifts & Stock Balance',
+    hi: 'शेष उपहार और स्टॉक बैलेंस',
+  );
+  String get promoterGiftsBalanceSubtitle => _t(
+    ar: 'متابعة حية ولحظية للكميات المتبقية والمخصصة لكل فرع بالحملة',
+    en: 'Real-time monitoring of remaining & allocated quantities per branch',
+    hi: 'प्रत्येक शाखा के लिए शेष और आवंटित मात्रा की रीयल-टाइम निगरानी',
+  );
+  String get campaignBranchesTitle => _t(
+    ar: 'فروع الحملة الترويجية',
+    en: 'Campaign Branches',
+    hi: 'अभियान की शाखाएं',
+  );
+  String get allBranchesScope => _t(
+    ar: 'كافة فروع السلسلة (مخزون مركزي للحملة)',
+    en: 'All Chain Branches (Central Campaign Stock)',
+    hi: 'सभी शाखाएं (केंद्रीय अभियान स्टॉक)',
+  );
+  String get selectBranchToViewStock => _t(
+    ar: 'اختر الفرع لعرض تفاصيل الهدايا المتبقية فيه:',
+    en: 'Select a branch to view remaining gift inventory:',
+    hi: 'उपहार स्टॉक देखने के लिए शाखा चुनें:',
+  );
+  String get remainingOutOfTotal => _t(
+    ar: 'متبقي',
+    en: 'Remaining',
+    hi: 'शेष',
+  );
+  String get outOfLabel => _t(
+    ar: 'من إجمالي',
+    en: 'of total',
+    hi: 'कुल में से',
+  );
+  String get giftStatusAvailable => _t(
+    ar: 'متوفر',
+    en: 'In Stock',
+    hi: 'उपलब्ध',
+  );
+  String get giftStatusLow => _t(
+    ar: 'متبقي قليل',
+    en: 'Low Stock',
+    hi: 'कम स्टॉक',
+  );
+  String get giftStatusEmpty => _t(
+    ar: 'نفد المخزون',
+    en: 'Out of Stock',
+    hi: 'स्टॉक समाप्त',
+  );
+  String get noGiftsAllocatedForBranch => _t(
+    ar: 'لا توجد هدايا مخصصة لهذا الفرع حالياً',
+    en: 'No gifts allocated for this branch currently',
+    hi: 'वर्तमान में इस शाखा के लिए कोई उपहार आवंटित नहीं है',
+  );
+  String get totalBranchStock => _t(
+    ar: 'إجمالي رصيد الفرع',
+    en: 'Total Branch Stock',
+    hi: 'कुल शाखा स्टॉक',
+  );
+  String get closeInventoryDialog => _t(
+    ar: 'إغلاق نافذة الرصيد',
+    en: 'Close Inventory',
+    hi: 'विंडो बंद करें',
+  );
+  String get branchGiftsCountLabel => _t(
+    ar: 'أنواع هدايا',
+    en: 'Gift Types',
+    hi: 'उपहार प्रकार',
+  );
+
+  // ---------------------------------------------------------------------------
+  // 31. Promoter & Client Portal: Campaign Brief & Offer Rules Dialog
+  // ---------------------------------------------------------------------------
+  String get promoterCampaignBriefTooltip => _t(
+    ar: 'فكرة وشروط العرض الترويجي (Campaign Brief)',
+    en: 'Campaign Brief & Promotional Conditions',
+    hi: 'अभियान का संक्षिप्त विवरण और शर्तें',
+  );
+  String get campaignBriefTitle => _t(
+    ar: 'فكرة وشروط العرض الترويجي',
+    en: 'Campaign Brief & Offer Rules',
+    hi: 'प्रचार अभियान के नियम और विवरण',
+  );
+  String get campaignBriefSubtitle => _t(
+    ar: 'دليل بنود العرض الترويجي وشروط استحقاق الهدايا والقسائم المعتمدة',
+    en: 'Guide to promotional rules, eligibility conditions, and certified rewards',
+    hi: 'प्रचार नियमों, पात्रता शर्तों और प्रमाणित पुरस्कारों की गाइड',
+  );
+  String get promotionalConditionsListTitle => _t(
+    ar: 'بنود وشروط العروض الترويجية المعتمدة',
+    en: 'Approved Promotional Conditions & Rules',
+    hi: 'स्वीकृत प्रचार नियम और शर्तें',
+  );
+  String get campaignIdeaSummaryTitle => _t(
+    ar: 'ملخص فكرة المهرجان والعرض',
+    en: 'Campaign Overview & Concept',
+    hi: 'अभियान की मुख्य अवधारणा',
+  );
+  String get ruleConditionBuy => _t(
+    ar: 'الشرط: شراء',
+    en: 'Condition: Buy',
+    hi: 'शर्त: खरीदें',
+  );
+  String get ruleConditionGet => _t(
+    ar: 'المكافأة المستحقة',
+    en: 'Earned Reward',
+    hi: 'पात्र इनाम',
+  );
+  String get ruleMultiplierAllowed => _t(
+    ar: 'مضاعفة الهدايا مع زيادة الكمية',
+    en: 'Multipliers allowed with increased quantity',
+    hi: 'मात्रा बढ़ने पर इनाम कई गुना',
+  );
+  String get campaignValidityPeriod => _t(
+    ar: 'فترة سريان العرض',
+    en: 'Validity Period',
+    hi: 'वैधता अवधि',
+  );
+  String get noSpecificPromotionalRules => _t(
+    ar: 'لا توجد شروط خاصة للأصناف، يتم الفوز وفقاً للحد الأدنى للشراء.',
+    en: 'No specific item rules; eligibility based on minimum purchase amount.',
+    hi: 'कोई विशेष आइटम नियम नहीं, न्यूनतम खरीद राशि पर लागू।',
+  );
+  String get closeBriefDialog => _t(
+    ar: 'إغلاق الدليل',
+    en: 'Close Guide',
+    hi: 'गाइड बंद करें',
+  );
+  String get campaignGeneralConditions => _t(
+    ar: 'الشروط العامة للحملة',
+    en: 'General Campaign Conditions',
+    hi: 'अभियान की सामान्य शर्तें',
+  );
+
+  // ---------------------------------------------------------------------------
+  // 21. Granular Portal Status Controls & Suspended Campaign Screens
+  // ---------------------------------------------------------------------------
+  String get promoterPortalLabel => _t(
+    ar: 'بوابة البروموتر والعميل',
+    en: 'Promoter & Client Portal',
+    hi: 'प्रमोटर और ग्राहक पोर्टल',
+  );
+  String get managerPortalLabel => _t(
+    ar: 'بوابة مدير الشركة',
+    en: 'Company Manager Portal',
+    hi: 'कंपनी प्रबंधक पोर्टल',
+  );
+  String get portalStatusActive => _t(
+    ar: 'مفعلة',
+    en: 'Active',
+    hi: 'सक्रिय',
+  );
+  String get portalStatusPaused => _t(
+    ar: 'متوقفة',
+    en: 'Paused',
+    hi: 'रुकी हुई',
+  );
+  String get promoterPortalToggleTooltipActive => _t(
+    ar: 'بوابة البروموتر والعميل مفعلة حالياً - اضغط لإيقاف استقبال الفواتير',
+    en: 'Promoter portal is active - tap to pause receipt submission',
+    hi: 'प्रमोटर पोर्टल सक्रिय है - रसीद सबमिशन रोकने के लिए टैप करें',
+  );
+  String get promoterPortalToggleTooltipPaused => _t(
+    ar: 'بوابة البروموتر والعميل متوقفة - اضغط لإعادة تفعيلها فورياً',
+    en: 'Promoter portal is paused - tap to reactivate immediately',
+    hi: 'प्रमोटर पोर्टल रुका हुआ है - तुरंत पुनः सक्रिय करने के लिए टैप करें',
+  );
+  String get managerPortalToggleTooltipActive => _t(
+    ar: 'بوابة مدير الشركة مفعلة حالياً - اضغط لتعليق صلاحية الوصول',
+    en: 'Manager portal is active - tap to suspend dashboard access',
+    hi: 'प्रबंधक पोर्टल सक्रिय है - डैशबोर्ड पहुंच निलंबित करने के लिए टैप करें',
+  );
+  String get managerPortalToggleTooltipPaused => _t(
+    ar: 'بوابة مدير الشركة متوقفة - اضغط لإعادة فتح البوابة فورياً',
+    en: 'Manager portal is paused - tap to reopen portal immediately',
+    hi: 'प्रबंधक पोर्टल रुका हुआ है - पोर्टल तुरंत पुनः खोलने के लिए टैप करें',
+  );
+  String get promoterSuspendedTitle => _t(
+    ar: 'تم إيقاف هذه الحملة الترويجية مؤقتاً',
+    en: 'Promotion Temporarily Suspended',
+    hi: 'अभियान अस्थायी रूप से निलंबित है',
+  );
+  String get promoterSuspendedMessage => _t(
+    ar: 'نحيطكم علماً بأن استقبال الفواتير والمشاركة في هذه الحملة متوقف حالياً من قِبل إدارة النظام. إذا كنت أحد ممثلي الترويج المعتمدين، يرجى مراجعة مشرفك أو التواصل مع الإدارة.',
+    en: 'Receipt submission and promotion participation are currently paused by system administration. If you are an authorized promoter, please check with your supervisor or contact administration.',
+    hi: 'सिस्टम प्रशासन द्वारा रसीद सबमिशन और अभियान भागीदारी वर्तमान में रोक दी गई है। यदि आप एक अधिकृत प्रमोटर हैं, तो कृपया अपने पर्यवेक्षक से संपर्क करें या प्रशासन से संपर्क करें।',
+  );
+  String get managerSuspendedTitle => _t(
+    ar: 'تم تعليق صلاحية الوصول لبوابة الإدارة',
+    en: 'Manager Dashboard Access Suspended',
+    hi: 'प्रबंधक डैशबोर्ड का उपयोग निलंबित है',
+  );
+  String get managerSuspendedMessage => _t(
+    ar: 'تم إيقاف صلاحية استعراض التقارير وسجل الفواتير لهذه الحملة مؤقتاً. يرجى التواصل مع إدارة النظام المركزية لإعادة تفعيل الصلاحية.',
+    en: 'Access to analytics and invoice logs for this campaign is temporarily paused. Please contact central system administration for reactivation.',
+    hi: 'इस अभियान के लिए एनालिटिक्स और रसीद ऑडिट तक पहुंच अस्थायी रूप से रोक दी गई है। कृपया पुनः सक्रियण के लिए केंद्रीय प्रशासन से संपर्क करें।',
+  );
+  String get contactAdminBtn => _t(
+    ar: 'تواصل مع الإدارة',
+    en: 'Contact Administration',
+    hi: 'प्रशासन से संपर्क करें',
+  );
+  String get refreshStatusBtn => _t(
+    ar: 'تحديث وفحص الحالة',
+    en: 'Refresh & Check Status',
+    hi: 'रीफ्रेश करें और स्थिति जांचें',
+  );
+  String get contactAdminCopied => _t(
+    ar: 'تم نسخ بيانات التواصل مع الإدارة للحافظة',
+    en: 'Admin contact details copied to clipboard',
+    hi: 'व्यवस्थापक संपर्क विवरण क्लिपबोर्ड पर कॉपी किया गया',
+  );
+  String get supportTeamNotice => _t(
+    ar: 'فريق دعم وإدارة المنصة متاح للمساعدة.',
+    en: 'Platform support and administration team is available to assist.',
+    hi: 'प्लेटफ़ॉर्म सहायता और प्रशासन टीम सहायता के लिए उपलब्ध है।',
+  );
+
+  // ---------------------------------------------------------------------------
+  // 22. Enhanced Duplicate & Already Drawn Receipt Messages
+  // ---------------------------------------------------------------------------
+  String get duplicateReceiptAlreadyDrawnTitle => _t(
+    ar: 'تم السحب على هذه الفاتورة من قبل (مسجلة مسبقاً)',
+    en: 'Receipt Already Participated / Drawn',
+    hi: 'रसीद पहले ही ड्रा में भाग ले चुकी है',
+  );
+  String get duplicateReceiptAlreadyDrawnSubtitle => _t(
+    ar: 'عفواً، هذه الفاتورة تم استخدامها ودخول السحب واستلام الجائزة مسبقاً، ولا يمكن تكرار المشاركة بنفس الفاتورة.',
+    en: 'This receipt was previously submitted, entered the draw, and claimed a prize. Duplicate participation is not permitted.',
+    hi: 'यह रसीद पहले सबमिट की गई थी, ड्रा में प्रवेश किया था, और पुरस्कार प्राप्त किया था। पुनः भागीदारी की अनुमति नहीं है।',
+  );
+  String get duplicateReceiptConditionTitle => _t(
+    ar: 'حالة الفاتورة: مستخدمة مسبقاً',
+    en: 'Receipt Status: Previously Used',
+    hi: 'रसीद स्थिति: पहले से उपयोग की गई',
+  );
+  String get duplicateReceiptConditionDesc => _t(
+    ar: 'رقم الفاتورة مسجل بالنظام وتمت المشاركة بها من قبل. تم تحديث بيانات الإيصال في السجلات مع الحفاظ على الجائزة المسجلة.',
+    en: 'Receipt number is already recorded in the system with a claimed prize. Receipt data was updated in the audit logs.',
+    hi: 'रसीद संख्या पहले से ही सिस्टम में दर्ज है। ऑडिट लॉग में रसीद डेटा अपडेट कर दिया गया है।',
+  );
+  String get duplicateReceiptBadge => _t(
+    ar: 'تم السحب مسبقاً',
+    en: 'Already Drawn',
+    hi: 'पहले ही ड्रा हुआ',
+  );
 }
+
 

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/animations/m3_motion.dart';
 import '../../../core/services/game_audio_service.dart';
+import '../../admin/domain/event_model.dart';
 
 /// Shows a world-class, celebratory M3 Winner Dialog with Confetti and Spring Motion
 Future<void> showWinnerCelebrationDialog({
@@ -12,6 +13,9 @@ Future<void> showWinnerCelebrationDialog({
   required VoidCallback onNextCustomer,
   int remainingChances = 0,
   VoidCallback? onNextChance,
+  double? unitValue,
+  bool? isVoucher,
+  List<LinkedGiftAllocation> linkedGifts = const [],
 }) {
   return showGeneralDialog(
     context: context,
@@ -32,6 +36,9 @@ Future<void> showWinnerCelebrationDialog({
         onNextCustomer: onNextCustomer,
         remainingChances: remainingChances,
         onNextChance: onNextChance,
+        unitValue: unitValue,
+        isVoucher: isVoucher,
+        linkedGifts: linkedGifts,
       );
     },
   );
@@ -42,6 +49,9 @@ class WinnerCelebrationDialog extends ConsumerStatefulWidget {
   final VoidCallback onNextCustomer;
   final int remainingChances;
   final VoidCallback? onNextChance;
+  final double? unitValue;
+  final bool? isVoucher;
+  final List<LinkedGiftAllocation> linkedGifts;
 
   const WinnerCelebrationDialog({
     super.key,
@@ -49,6 +59,9 @@ class WinnerCelebrationDialog extends ConsumerStatefulWidget {
     required this.onNextCustomer,
     this.remainingChances = 0,
     this.onNextChance,
+    this.unitValue,
+    this.isVoucher,
+    this.linkedGifts = const [],
   });
 
   @override
@@ -240,45 +253,278 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
 
                         const SizedBox(height: 10),
 
-                        // Prize Card with Golden Rim
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                const Color(0xFFFFD700).withValues(alpha: 0.15),
-                                colorScheme.primaryContainer.withValues(alpha: 0.4),
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: colorScheme.primary.withValues(alpha: 0.3),
-                              width: 1.5,
-                            ),
-                          ),
-                          child: Column(
-                            children: [
-                              const Icon(
-                                Icons.card_giftcard_rounded,
-                                size: 36,
-                                color: Color(0xFFFF8F00),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                widget.prizeName,
-                                textAlign: TextAlign.center,
-                                style: GoogleFonts.cairo(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w900,
-                                  color: colorScheme.primary,
-                                  height: 1.3,
+                        // 1. Resolve Voucher & Gift Attributes
+                        Builder(
+                          builder: (context) {
+                            bool resolvedIsVoucher = widget.isVoucher ?? false;
+                            double? resolvedUnitValue = widget.unitValue;
+                            String cleanPrizeName = widget.prizeName.trim();
+
+                            final isRawDocId = RegExp(r'^[a-zA-Z0-9_-]{15,35}$').hasMatch(cleanPrizeName);
+
+                            // 1. Resolve from linked gifts bundle if available
+                            if (widget.linkedGifts.isNotEmpty &&
+                                (cleanPrizeName.isEmpty ||
+                                 cleanPrizeName == 'هدية ترويجية مميزة' ||
+                                 cleanPrizeName == 'هدية فورية مميزة' ||
+                                 isRawDocId)) {
+                              cleanPrizeName = widget.linkedGifts.map((g) => g.quantity > 1 ? '${g.quantity} × ${g.giftName}' : g.giftName).join(' + ');
+                              resolvedUnitValue ??= widget.linkedGifts.fold<double>(0.0, (sum, g) => sum + g.totalMonetaryValue);
+                              resolvedIsVoucher = widget.linkedGifts.any((g) => g.isVoucher);
+                            }
+
+                            final lowerName = cleanPrizeName.toLowerCase();
+                            final hasVoucherKeyword = lowerName.contains('فواتشر') ||
+                                lowerName.contains('voucher') ||
+                                lowerName.contains('قسيمة');
+
+                            if (hasVoucherKeyword) {
+                              resolvedIsVoucher = true;
+                              if (resolvedUnitValue == null || resolvedUnitValue == 0.0) {
+                                final match = RegExp(r'(\d+)').firstMatch(cleanPrizeName);
+                                if (match != null) {
+                                  resolvedUnitValue = double.tryParse(match.group(1)!);
+                                }
+                              }
+                            } else if (widget.isVoucher == false) {
+                              resolvedIsVoucher = false;
+                              resolvedUnitValue = null;
+                            } else if (widget.isVoucher == null) {
+                              // If isVoucher was not passed, detect physical product units to prevent false voucher
+                              if (lowerName.contains('مل') ||
+                                  lowerName.contains('ml') ||
+                                  lowerName.contains('جم') ||
+                                  lowerName.contains('gm') ||
+                                  lowerName.contains('شامبو') ||
+                                  lowerName.contains('بلسم') ||
+                                  lowerName.contains('قطعة')) {
+                                resolvedIsVoucher = false;
+                                resolvedUnitValue = null;
+                              }
+                            }
+
+                            // 3. Fallback naming
+                            if (isRawDocId || cleanPrizeName.isEmpty || cleanPrizeName == 'هدية ترويجية مميزة' || cleanPrizeName == 'هدية فورية مميزة') {
+                              if (resolvedIsVoucher && resolvedUnitValue != null && resolvedUnitValue > 0) {
+                                final val = (resolvedUnitValue == resolvedUnitValue.roundToDouble() ? resolvedUnitValue.toInt() : resolvedUnitValue);
+                                cleanPrizeName = 'فواتشر $val جنيه';
+                              } else if (resolvedIsVoucher) {
+                                cleanPrizeName = 'كارت فواتشر مشتريات';
+                              } else {
+                                cleanPrizeName = 'هدية فورية معتمدة';
+                              }
+                            }
+
+                            final formattedVal = (resolvedIsVoucher && resolvedUnitValue != null && resolvedUnitValue > 0)
+                                ? (resolvedUnitValue == resolvedUnitValue.roundToDouble()
+                                    ? resolvedUnitValue.toInt().toString()
+                                    : resolvedUnitValue.toString())
+                                : '';
+
+                            return Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: resolvedIsVoucher
+                                      ? [
+                                          const Color(0xFFFFD700).withValues(alpha: 0.22),
+                                          colorScheme.primaryContainer.withValues(alpha: 0.55),
+                                        ]
+                                      : [
+                                          const Color(0xFFE8F5E9).withValues(alpha: 0.6),
+                                          colorScheme.primaryContainer.withValues(alpha: 0.4),
+                                        ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
                                 ),
+                                borderRadius: BorderRadius.circular(24),
+                                border: Border.all(
+                                  color: resolvedIsVoucher
+                                      ? const Color(0xFFFFB300)
+                                      : colorScheme.primary.withValues(alpha: 0.3),
+                                  width: resolvedIsVoucher ? 2.0 : 1.5,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: resolvedIsVoucher
+                                        ? const Color(0xFFFFB300).withValues(alpha: 0.25)
+                                        : colorScheme.primary.withValues(alpha: 0.1),
+                                    blurRadius: 16,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
+                              child: Column(
+                                children: [
+                                  // Icon (Ticket for Voucher, Gift box for physical prize)
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: resolvedIsVoucher
+                                          ? const Color(0xFFFF8F00).withValues(alpha: 0.15)
+                                          : colorScheme.primary.withValues(alpha: 0.1),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      resolvedIsVoucher
+                                          ? Icons.confirmation_number_rounded
+                                          : Icons.card_giftcard_rounded,
+                                      size: 40,
+                                      color: resolvedIsVoucher ? const Color(0xFFFF8F00) : colorScheme.primary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+
+                                  // Voucher or Physical Gift Certified Badge
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.8),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          resolvedIsVoucher ? Icons.verified_rounded : Icons.check_circle_rounded,
+                                          size: 14,
+                                          color: resolvedIsVoucher ? const Color(0xFFFF8F00) : colorScheme.primary,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          resolvedIsVoucher ? 'كارت فواتشر مشتريات معتمد' : 'هدية عينية فورية معتمدة',
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: colorScheme.onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+
+                                  // Prize Name Title
+                                  Text(
+                                    cleanPrizeName,
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w900,
+                                      color: colorScheme.onSurface,
+                                      height: 1.3,
+                                    ),
+                                  ),
+
+                                  // PROMINENT VOUCHER MONETARY VALUE BADGE (ONLY for vouchers)
+                                  if (resolvedIsVoucher && formattedVal.isNotEmpty) ...[
+                                    const SizedBox(height: 12),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        gradient: const LinearGradient(
+                                          colors: [
+                                            Color(0xFFFFB300),
+                                            Color(0xFFFF6D00),
+                                          ],
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                        ),
+                                        borderRadius: BorderRadius.circular(16),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: const Color(0xFFFF8F00).withValues(alpha: 0.45),
+                                            blurRadius: 16,
+                                            spreadRadius: 1,
+                                            offset: const Offset(0, 4),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.payments_rounded, color: Colors.white, size: 22),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'بقيمة $formattedVal ج.م',
+                                            style: GoogleFonts.cairo(
+                                              fontSize: 20,
+                                              fontWeight: FontWeight.w900,
+                                              color: Colors.white,
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'صالحة للاستخدام الفوري لدى الكاشير',
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ] else if (!resolvedIsVoucher) ...[
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'يرجى استلام هديتك من ممثل الشركة في الفرع',
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+
+                                  // Multi-Card Breakdown Display
+                                  if (widget.linkedGifts.length > 1 ||
+                                      (widget.linkedGifts.length == 1 && widget.linkedGifts.first.quantity > 1)) ...[
+                                    const SizedBox(height: 10),
+                                    Wrap(
+                                      spacing: 6,
+                                      runSpacing: 4,
+                                      alignment: WrapAlignment.center,
+                                      children: widget.linkedGifts.map((g) {
+                                        return Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: Colors.amber.shade50,
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: Colors.amber.shade300),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                g.isVoucher
+                                                    ? Icons.confirmation_number_rounded
+                                                    : Icons.card_giftcard_rounded,
+                                                size: 13,
+                                                color: Colors.amber.shade900,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                '${g.quantity} × ${g.giftName}',
+                                                style: GoogleFonts.cairo(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.amber.shade900,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            );
+                          },
                         ),
 
                         if (widget.remainingChances > 0) ...[

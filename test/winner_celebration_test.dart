@@ -34,6 +34,7 @@ void main() {
       expect(find.text('تم (العميل التالي)'), findsOneWidget);
 
       // Tap action button
+      await tester.ensureVisible(find.text('تم (العميل التالي)'));
       await tester.tap(find.text('تم (العميل التالي)'));
       await tester.pump();
 
@@ -71,6 +72,7 @@ void main() {
       expect(find.text('إنهاء واستلام الجوائز'), findsOneWidget);
 
       // Tap next chance button
+      await tester.ensureVisible(find.text('سحب الفرصة التالية (متبقي 2)'));
       await tester.tap(find.text('سحب الفرصة التالية (متبقي 2)'));
       await tester.pump();
 

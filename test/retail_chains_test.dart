@@ -89,6 +89,27 @@ void main() {
 
       expect(event.branchesDisplaySummary, 'كارفور مصر (جميع الفروع)');
     });
+
+    test('EventModel supports multiple retail chains and comma-separated IDs', () {
+      final event = EventModel(
+        id: 'event-003',
+        eventName: 'مهرجان الصيف الكبرى',
+        targetCompany: 'المراعي',
+        retailChainId: 'fathalla,carrefour,spinneys',
+        retailChainName: 'أسواق فتح الله • كارفور • سبينس',
+        isAllBranches: true,
+        minimumSpend: 200,
+      );
+
+      expect(event.retailChainId, 'fathalla,carrefour,spinneys');
+      expect(event.retailChainName, 'أسواق فتح الله • كارفور • سبينس');
+      expect(event.isAllBranches, true);
+      expect(event.branchesDisplaySummary, 'أسواق فتح الله • كارفور • سبينس (جميع الفروع)');
+
+      final map = event.toFirestore();
+      expect(map['retailChainId'], 'fathalla,carrefour,spinneys');
+      expect(map['retailChainName'], 'أسواق فتح الله • كارفور • سبينس');
+    });
   });
 
   group('Arabic Numerals Normalization in Retail Chains', () {

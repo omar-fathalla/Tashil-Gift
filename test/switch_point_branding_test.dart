@@ -14,8 +14,8 @@ void main() {
       expect(SwitchPointInfo.companyName, 'Switch Point');
       expect(SwitchPointInfo.platformName, 'Tashil Gift');
       expect(SwitchPointInfo.websiteUrl, 'https://www.sw-point.com/');
-      expect(SwitchPointInfo.websiteDisplay, 'www.switchpoint.com');
-      expect(SwitchPointInfo.supportEmail, 'support@switchpoint.com');
+      expect(SwitchPointInfo.websiteDisplay, 'www.sw-point.com');
+      expect(SwitchPointInfo.supportEmail, 'support@sw-point.com');
       expect(SwitchPointInfo.whatsappEgypt, '+20 121 185 7725');
       expect(SwitchPointInfo.whatsappEgyptUrl, 'https://wa.me/201211857725');
       expect(SwitchPointInfo.whatsappUae, '+971 55 871 5615');

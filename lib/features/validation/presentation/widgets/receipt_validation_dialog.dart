@@ -404,17 +404,19 @@ class ReceiptValidationReportDialog extends StatelessWidget {
                               ),
                             ),
 
-                          // Section Title: Unmet Conditions
+                          // Section Title: Unmet Conditions or Status Details
                           Row(
                             children: [
                               Icon(
-                                Icons.rule_folder_rounded,
+                                isDuplicate ? Icons.history_toggle_off_rounded : Icons.rule_folder_rounded,
                                 size: 18,
                                 color: colorScheme.error,
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                '${strings.dialogUnmetConditionsTitle} (${conditions.length}):',
+                                isDuplicate
+                                    ? (strings.isAr ? 'بيانات وحالة الفاتورة:' : 'Receipt Status Details:')
+                                    : '${strings.dialogUnmetConditionsTitle} (${conditions.length}):',
                                 style: GoogleFonts.cairo(
                                   fontSize: 13,
                                   fontWeight: FontWeight.bold,
@@ -504,6 +506,8 @@ class ReceiptValidationReportDialog extends StatelessWidget {
   Widget _buildConditionTile(BuildContext context, ValidationConditionItem item) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final currentLocale = Localizations.maybeLocaleOf(context)?.languageCode ?? 'ar';
+    final strings = AppStrings.fromLocale(currentLocale);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -554,15 +558,19 @@ class ReceiptValidationReportDialog extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
-                        color: colorScheme.error.withValues(alpha: 0.12),
+                        color: isDuplicate
+                            ? Colors.amber.shade100
+                            : colorScheme.error.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        'غير مطابق ✗',
+                        isDuplicate
+                            ? '${strings.duplicateReceiptBadge} ⚠️'
+                            : (strings.isAr ? 'غير مطابق ✗' : (strings.isHi ? 'शर्त अधूरी ✗' : 'Not Met ✗')),
                         style: GoogleFonts.cairo(
                           fontSize: 10.5,
                           fontWeight: FontWeight.bold,
-                          color: colorScheme.error,
+                          color: isDuplicate ? Colors.amber.shade900 : colorScheme.error,
                         ),
                       ),
                     ),

@@ -117,11 +117,186 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     }
   }
 
+  Widget _buildProfileMenu(
+    BuildContext context,
+    ColorScheme colorScheme,
+    AppStrings strings,
+    bool isMobile,
+  ) {
+    String sessionEmail = kPrimaryAdminEmail;
+    try {
+      sessionEmail = ref.watch(adminSessionEmailProvider) ??
+          ref.read(firebaseServiceProvider).currentUser?.email ??
+          kPrimaryAdminEmail;
+    } catch (_) {}
+
+    return PopupMenuButton<String>(
+      tooltip: strings.adminProfileTooltip,
+      position: PopupMenuPosition.under,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+        ),
+      ),
+      color: colorScheme.surfaceContainerHigh,
+      elevation: 6,
+      onSelected: (value) {
+        if (value == 'sign_out') {
+          _handleSignOut(context, strings);
+        }
+      },
+      itemBuilder: (BuildContext ctx) => [
+        // 1. Profile Info Header Card
+        PopupMenuItem<String>(
+          enabled: false,
+          child: Container(
+            constraints: const BoxConstraints(minWidth: 200),
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: colorScheme.primaryContainer,
+                  child: Icon(
+                    Icons.admin_panel_settings_rounded,
+                    color: colorScheme.primary,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        strings.systemAdminRole,
+                        style: GoogleFonts.cairo(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: colorScheme.onSurface,
+                        ),
+                      ),
+                      Text(
+                        sessionEmail,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.cairo(
+                          fontSize: 11,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: const BoxDecoration(
+                              color: Colors.green,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            strings.activeSessionLabel,
+                            style: GoogleFonts.cairo(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.green.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const PopupMenuDivider(height: 1),
+        // 2. Sign Out Action
+        PopupMenuItem<String>(
+          value: 'sign_out',
+          child: Row(
+            children: [
+              Icon(
+                Icons.logout_rounded,
+                color: colorScheme.error,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                strings.signOutBtn,
+                style: GoogleFonts.cairo(
+                  color: colorScheme.error,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 6 : 10,
+          vertical: isMobile ? 4 : 6,
+        ),
+        decoration: BoxDecoration(
+          color: colorScheme.primaryContainer.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: colorScheme.primary.withValues(alpha: 0.35),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircleAvatar(
+              radius: isMobile ? 12 : 14,
+              backgroundColor: colorScheme.primary,
+              child: const Icon(
+                Icons.person_rounded,
+                color: Colors.white,
+                size: 16,
+              ),
+            ),
+            if (!isMobile) ...[
+              const SizedBox(width: 6),
+              Text(
+                strings.systemAdminRole,
+                style: GoogleFonts.cairo(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 2),
+              Icon(
+                Icons.arrow_drop_down_rounded,
+                size: 18,
+                color: colorScheme.primary,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final firestore = ref.watch(firestoreProvider);
+    FirebaseFirestore? firestore;
+    try {
+      firestore = ref.watch(firestoreProvider);
+    } catch (_) {
+      firestore = null;
+    }
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600;
     final isTablet = screenWidth >= 600 && screenWidth < 1000;
@@ -141,50 +316,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               )
             : null,
         customActions: [
-          if (!isMobile) ...[
-            FilledButton.tonalIcon(
-              onPressed: () => setState(() => _selectedIndex = 8),
-              style: FilledButton.styleFrom(
-                backgroundColor: _selectedIndex == 8 ? colorScheme.primaryContainer : null,
-              ),
-              icon: const Icon(Icons.flash_on_rounded, size: 18, color: Colors.amber),
-              label: Text(
-                isAr ? 'اختبار سرعة AI ⚡' : 'AI Speed KPI ⚡',
-                style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
-          if (isMobile) ...[
-            IconButton(
-              icon: Icon(Icons.open_in_browser_rounded, color: colorScheme.primary),
-              tooltip: strings.previewClientApp,
-              onPressed: () => Navigator.of(context).pushNamed('/'),
-            ),
-            IconButton(
-              icon: Icon(Icons.logout_rounded, color: colorScheme.error),
-              tooltip: strings.signOutBtn,
-              onPressed: () => _handleSignOut(context, strings),
-            ),
-          ] else ...[
-            FilledButton.tonalIcon(
-              onPressed: () => Navigator.of(context).pushNamed('/'),
-              icon: const Icon(Icons.open_in_browser_rounded, size: 18),
-              label: Text(strings.previewClientApp, style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold)),
-            ),
-            const SizedBox(width: 8),
-            OutlinedButton.icon(
-              onPressed: () => _handleSignOut(context, strings),
-              icon: Icon(Icons.logout_rounded, size: 18, color: colorScheme.error),
-              label: Text(
-                strings.signOutBtn,
-                style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold, color: colorScheme.error),
-              ),
-              style: OutlinedButton.styleFrom(
-                side: BorderSide(color: colorScheme.error.withValues(alpha: 0.4)),
-              ),
-            ),
-          ],
+          _buildProfileMenu(context, colorScheme, strings, isMobile),
         ],
       ),
       body: Row(
@@ -340,7 +472,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     );
   }
 
-  Widget _buildMainView(FirebaseFirestore firestore, AppStrings strings, bool isAr) {
+  Widget _buildMainView(FirebaseFirestore? firestore, AppStrings strings, bool isAr) {
     switch (_selectedIndex) {
       case 0:
         return _buildCampaignsDashboard(firestore, strings, isAr);
@@ -374,9 +506,16 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   }
 
   // Fast & Instant Loading StreamBuilder + FutureBuilder Fallback for Campaigns
-  Widget _buildCampaignsDashboard(FirebaseFirestore firestore, AppStrings strings, bool isAr) {
+  Widget _buildCampaignsDashboard(FirebaseFirestore? firestore, AppStrings strings, bool isAr) {
+    Stream<QuerySnapshot>? eventsStream;
+    try {
+      if (firestore != null) {
+        eventsStream = firestore.collection('events').snapshots();
+      }
+    } catch (_) {}
+
     return StreamBuilder<QuerySnapshot>(
-      stream: firestore.collection('events').snapshots(),
+      stream: eventsStream,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Center(
@@ -395,8 +534,15 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         }
 
         if (!snapshot.hasData) {
+          Future<QuerySnapshot>? futureGet;
+          try {
+            if (firestore != null) {
+              futureGet = firestore.collection('events').get();
+            }
+          } catch (_) {}
+
           return FutureBuilder<QuerySnapshot>(
-            future: firestore.collection('events').get(),
+            future: futureGet,
             builder: (context, futureSnapshot) {
               if (futureSnapshot.connectionState == ConnectionState.waiting && !futureSnapshot.hasData) {
                 return Center(
@@ -426,7 +572,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     );
   }
 
-  Widget _buildCampaignsList(List<QueryDocumentSnapshot> rawDocs, FirebaseFirestore firestore, AppStrings strings, bool isAr) {
+  Widget _buildCampaignsList(List<QueryDocumentSnapshot> rawDocs, FirebaseFirestore? firestore, AppStrings strings, bool isAr) {
     final activeCountry = ref.watch(activeCountryProvider);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -864,7 +1010,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   Widget _buildCampaignCard(
     BuildContext context,
     EventModel event,
-    FirebaseFirestore firestore,
+    FirebaseFirestore? firestore,
     CountryCurrency activeCountry,
     AppStrings strings,
     bool isAr,
@@ -982,7 +1128,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                       child: Switch(
                         value: event.isActive,
                         onChanged: (value) async {
-                          await firestore.collection('events').doc(event.id).update({'isActive': value});
+                          if (firestore != null) {
+                            await firestore.collection('events').doc(event.id).update({'isActive': value});
+                          }
                           if (event.companySlug.isNotEmpty) {
                             await ref.read(companyGiftsServiceProvider).syncCompanyGiftsAvailableQuantities(event.companySlug);
                           }
@@ -1128,6 +1276,80 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 14),
+
+            // Granular Portal Access Toggles & Live Controls (M3 Dual Control Strip)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.tune_rounded, size: 16, color: colorScheme.primary),
+                      const SizedBox(width: 8),
+                      Text(
+                        isAr ? 'التحكم في بوابات الوصول المباشرة (Portal Access Controls):' : 'Direct Portal Access Controls:',
+                        style: GoogleFonts.cairo(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 10,
+                    children: [
+                      // 1. Promoter & Client Portal Switch
+                      _buildPortalControlTile(
+                        context,
+                        title: strings.promoterPortalLabel,
+                        subtitle: isAr ? 'رابط رفع الفواتير والجوائز' : 'Receipts & Games Link',
+                        icon: Icons.qr_code_scanner_rounded,
+                        isActive: event.isActive && event.isPromoterActive,
+                        colorScheme: colorScheme,
+                        isAr: isAr,
+                        tooltip: event.isPromoterActive
+                            ? strings.promoterPortalToggleTooltipActive
+                            : strings.promoterPortalToggleTooltipPaused,
+                        onChanged: (val) async {
+                          if (firestore != null) {
+                            await firestore.collection('events').doc(event.id).update({'isPromoterActive': val});
+                          }
+                        },
+                      ),
+                      // 2. Company Manager Portal Switch
+                      _buildPortalControlTile(
+                        context,
+                        title: strings.managerPortalLabel,
+                        subtitle: isAr ? 'رابط التقارير والتحليلات' : 'Analytics & Audit Link',
+                        icon: Icons.business_center_rounded,
+                        isActive: event.isActive && event.isManagerActive,
+                        colorScheme: colorScheme,
+                        isAr: isAr,
+                        tooltip: event.isManagerActive
+                            ? strings.managerPortalToggleTooltipActive
+                            : strings.managerPortalToggleTooltipPaused,
+                        onChanged: (val) async {
+                          if (firestore != null) {
+                            await firestore.collection('events').doc(event.id).update({'isManagerActive': val});
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 16),
 
             // Action Buttons (Material Design 3 Standard with Rich Tooltips)
@@ -1225,7 +1447,11 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     onPressed: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (context) => ClientReceiptUploadScreen(event: event),
+                          builder: (context) => ClientReceiptUploadScreen(
+                            event: event,
+                            companySlug: companySlug,
+                            initialEventId: event.id,
+                          ),
                         ),
                       );
                     },
@@ -1300,6 +1526,100 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildPortalControlTile(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required bool isActive,
+    required ColorScheme colorScheme,
+    required bool isAr,
+    required String tooltip,
+    required ValueChanged<bool> onChanged,
+  }) {
+    final statusColor = isActive ? Colors.green.shade700 : Colors.amber.shade900;
+    final statusBg = isActive ? Colors.green.shade50 : Colors.amber.shade50;
+    final statusBorder = isActive ? Colors.green.shade200 : Colors.amber.shade300;
+    final statusText = isActive ? (isAr ? 'مفعلة 🟢' : 'Active 🟢') : (isAr ? 'متوقفة ⏸️' : 'Paused ⏸️');
+
+    return Container(
+      constraints: const BoxConstraints(minWidth: 260, maxWidth: 340),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isActive ? colorScheme.outlineVariant.withValues(alpha: 0.6) : Colors.amber.shade300,
+          width: isActive ? 1 : 1.5,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: isActive ? colorScheme.primaryContainer : Colors.amber.shade100,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              icon,
+              size: 18,
+              color: isActive ? colorScheme.onPrimaryContainer : Colors.amber.shade900,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.cairo(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: statusBg,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: statusBorder),
+                  ),
+                  child: Text(
+                    statusText,
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: statusColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Tooltip(
+            message: tooltip,
+            waitDuration: const Duration(milliseconds: 300),
+            child: Transform.scale(
+              scale: 0.85,
+              child: Switch(
+                value: isActive,
+                onChanged: onChanged,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

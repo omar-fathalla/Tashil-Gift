@@ -12,12 +12,13 @@ import '../../../core/widgets/m3_button_groups.dart';
 import '../../admin/domain/event_model.dart';
 import '../../admin/presentation/campaign_reports_screen.dart';
 import '../../validation/presentation/invoices_log_screen.dart';
+import 'company_prizes_stock_report_screen.dart';
 import '../../../core/utils/url_builder.dart';
 import '../../../core/utils/slug_utils.dart';
-
+import '../../../core/widgets/campaign_suspended_screen.dart';
 
 /// Dedicated Executive Company Manager & Partner Portal (بوابة مدير وشريك الشركة)
-/// Provides a secure, white-labeled, scoped analytics and invoice audit environment
+/// Provides a secure, white-labeled, scoped analytics, invoice audit, and real-time prizes inventory
 /// strictly filtered to the company's campaigns and transactions.
 class CompanyManagerPortalScreen extends ConsumerStatefulWidget {
   final String companySlug;
@@ -34,7 +35,7 @@ class CompanyManagerPortalScreen extends ConsumerStatefulWidget {
 }
 
 class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPortalScreen> {
-  int _selectedTab = 0; // 0 = Analytics & Insights, 1 = Invoice Audit Feed
+  int _selectedTab = 0; // 0 = Analytics & Insights, 1 = Invoice Audit Feed, 2 = Prizes & Stock Balance
 
   void _copyPortalLink(BuildContext context, AppStrings strings) {
     final url = AppUrlBuilder.buildManagerPortalUrl(widget.companySlug);
@@ -101,6 +102,19 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
       }
     }
 
+    final bool isManagerSuspended = (initialEvent != null && (!initialEvent.isActive || !initialEvent.isManagerActive)) ||
+        (companyEvents.isNotEmpty && companyEvents.every((e) => !e.isActive || !e.isManagerActive));
+
+    if (isManagerSuspended) {
+      return CampaignSuspendedScreen(
+        portalType: SuspendedPortalType.manager,
+        event: initialEvent ?? (companyEvents.isNotEmpty ? companyEvents.first : null),
+        companySlug: widget.companySlug,
+        companyName: companyDisplayName,
+        onRefresh: () => setState(() {}),
+      );
+    }
+
     return Scaffold(
       backgroundColor: colorScheme.surface,
       appBar: SwitchPointHeader(
@@ -134,7 +148,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
       ),
       body: Column(
         children: [
-          // 1. Executive Top Bar with Company Info & Tab Switcher
+          // 1. Executive Top Bar with Company Info & 3-Tab Switcher
           _buildExecutiveHeader(
             context: context,
             colorScheme: colorScheme,
@@ -164,6 +178,14 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                 // Tab 1: Invoices Log & Audit
                 InvoicesLogScreen(
                   key: ValueKey('invoices_${widget.companySlug}'),
+                  lockedCompanySlug: widget.companySlug,
+                  lockedCompanyName: companyDisplayName,
+                  isEmbedded: true,
+                ),
+
+                // Tab 2: Real-time Prizes & Stock Balance System
+                CompanyPrizesStockReportScreen(
+                  key: ValueKey('prizes_stock_${widget.companySlug}'),
                   lockedCompanySlug: widget.companySlug,
                   lockedCompanyName: companyDisplayName,
                   isEmbedded: true,
@@ -246,11 +268,14 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     required bool isMobile,
   }) {
     final analyticsLabel = isMobile
-        ? (isAr ? 'التقارير والتحليلات' : (isHi ? 'विश्लेषण और रिपोर्ट' : 'Analytics & Reports'))
+        ? (isAr ? 'التقارير' : (isHi ? 'रिपोर्ट' : 'Reports'))
         : strings.analyticsTitle;
     final invoicesLabel = isMobile
-        ? (isAr ? 'سجل الفواتير والتدقيق' : (isHi ? 'इनवॉइस लॉग' : 'Invoices & Audit'))
+        ? (isAr ? 'الفواتير' : (isHi ? 'इनवॉइस' : 'Invoices'))
         : strings.invoicesAuditTitle;
+    final prizesStockLabel = isMobile
+        ? (isAr ? 'رصيد الهدايا' : (isHi ? 'उपहार शेष' : 'Prizes Stock'))
+        : strings.prizesStockTitle;
 
     return Container(
       padding: EdgeInsets.symmetric(
@@ -268,7 +293,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final isNarrow = constraints.maxWidth < 680;
+          final isNarrow = constraints.maxWidth < 780;
 
           if (isNarrow) {
             return Column(
@@ -360,7 +385,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                   ],
                 ),
                 const SizedBox(height: 10),
-                // Mobile Bottom: Full-Width 2-Segment Button Group
+                // Mobile Bottom: Full-Width 3-Segment Button Group
                 M3ConnectedButtonGroup<int>(
                   height: 44,
                   borderRadius: 14,
@@ -379,6 +404,13 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                       selectedIcon: Icons.receipt_long_rounded,
                       label: invoicesLabel,
                       tooltip: isAr ? 'سجل الفواتير وتدقيق المنتجات والمبيعات وعمليات التصدير' : 'Invoices Log, Product Audit & CSV',
+                    ),
+                    M3ButtonSegment<int>(
+                      value: 2,
+                      icon: Icons.inventory_2_rounded,
+                      selectedIcon: Icons.inventory_2_rounded,
+                      label: prizesStockLabel,
+                      tooltip: isAr ? 'مراقبة لحظية شاملة لرصيد وجرد الهدايا والمخزون في الفروع' : 'Real-time Prize Stock & Branch Inventory',
                     ),
                   ],
                   selectedValue: _selectedTab,
@@ -479,7 +511,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                 ],
               ),
 
-              // Enhanced M3 Connected Button Group for the 2 Portal Tabs
+              // Enhanced M3 Connected Button Group for the 3 Portal Tabs
               M3ConnectedButtonGroup<int>(
                 height: 48,
                 borderRadius: 16,
@@ -497,6 +529,13 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                     selectedIcon: Icons.receipt_long_rounded,
                     label: strings.invoicesAuditTitle,
                     tooltip: isAr ? 'سجل الفواتير وتدقيق المنتجات والمبيعات وعمليات التصدير' : 'Invoices Log, Product Audit & CSV',
+                  ),
+                  M3ButtonSegment<int>(
+                    value: 2,
+                    icon: Icons.inventory_2_rounded,
+                    selectedIcon: Icons.inventory_2_rounded,
+                    label: strings.prizesStockTitle,
+                    tooltip: isAr ? 'مراقبة لحظية شاملة لرصيد وجرد الهدايا والمخزون في الفروع' : 'Real-time Prize Stock & Branch Inventory',
                   ),
                 ],
                 selectedValue: _selectedTab,

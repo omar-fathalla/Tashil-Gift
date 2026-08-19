@@ -65,8 +65,12 @@ class MyApp extends ConsumerWidget {
         // 1. Promoter & Customer submission link (/c/almarai or /client/adco)
         if (uri.pathSegments.length >= 2 && (uri.pathSegments[0] == 'c' || uri.pathSegments[0] == 'client')) {
           final slug = uri.pathSegments[1];
+          final eventId = uri.queryParameters['event'];
           return MaterialPageRoute(
-            builder: (context) => ClientReceiptUploadScreen(companySlug: slug),
+            builder: (context) => ClientReceiptUploadScreen(
+              companySlug: slug,
+              initialEventId: eventId,
+            ),
             settings: settings,
           );
         }
@@ -103,8 +107,12 @@ class MyApp extends ConsumerWidget {
             );
           case '/submit':
             final slug = uri.queryParameters['company'] ?? 'almarai';
+            final eventId = uri.queryParameters['event'];
             return MaterialPageRoute(
-              builder: (context) => ClientReceiptUploadScreen(companySlug: slug),
+              builder: (context) => ClientReceiptUploadScreen(
+                companySlug: slug,
+                initialEventId: eventId,
+              ),
               settings: settings,
             );
           case '/':

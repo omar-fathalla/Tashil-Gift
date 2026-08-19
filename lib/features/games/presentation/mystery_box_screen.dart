@@ -138,6 +138,14 @@ class _MysteryBoxScreenState extends ConsumerState<MysteryBoxScreen>
           'prize_won': _wonPrizes.join(' + '),
           'prizes_won': _wonPrizes,
           'remaining_chances': _remainingChances,
+          'event_id': widget.eventId,
+          'claimed_gifts': [{
+            'giftId': '',
+            'giftName': _wonPrize,
+            'quantity': 1,
+            'unitValue': 0.0,
+            'isVoucher': false,
+          }],
         });
 
         if (widget.eventId.isNotEmpty) {

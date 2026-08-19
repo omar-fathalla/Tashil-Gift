@@ -12,6 +12,7 @@ import '../../../core/animations/m3_motion.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../core/widgets/switch_point_branding.dart';
+import '../../admin/domain/event_model.dart';
 import 'winner_celebration_dialog.dart';
 import 'game_demo_banner.dart';
 
@@ -25,6 +26,9 @@ class DirectGiftClaimScreen extends ConsumerStatefulWidget {
   final int quantity;
   final String? branchId;
   final bool isDemo;
+  final double? unitValue;
+  final bool? isVoucher;
+  final List<LinkedGiftAllocation> linkedGifts;
 
   const DirectGiftClaimScreen({
     super.key,
@@ -34,6 +38,9 @@ class DirectGiftClaimScreen extends ConsumerStatefulWidget {
     this.quantity = 1,
     this.branchId,
     this.isDemo = false,
+    this.unitValue,
+    this.isVoucher,
+    this.linkedGifts = const [],
   });
 
   @override
@@ -49,7 +56,84 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
   bool _isClaiming = false;
   bool _isClaimed = false;
   int? _remainingStock;
-  bool _isLoadingStock = true;
+
+  String? _resolvedPrizeName;
+  double? _resolvedUnitValue;
+  bool? _resolvedIsVoucher;
+  List<LinkedGiftAllocation>? _resolvedLinkedGifts;
+
+  List<LinkedGiftAllocation> get _effectiveLinkedGifts =>
+      (_resolvedLinkedGifts != null && _resolvedLinkedGifts!.isNotEmpty)
+          ? _resolvedLinkedGifts!
+          : widget.linkedGifts;
+
+  bool get _effectiveIsVoucher {
+    if (_resolvedIsVoucher != null) return _resolvedIsVoucher!;
+    if (widget.isVoucher != null) return widget.isVoucher!;
+    if (_effectiveLinkedGifts.isNotEmpty) {
+      return _effectiveLinkedGifts.any((g) => g.isVoucher);
+    }
+    final name = _effectivePrizeName.toLowerCase();
+    if (name.contains('فواتشر') || name.contains('voucher') || name.contains('قسيمة')) {
+      return true;
+    }
+    // Explicit physical product indicators
+    if (name.contains('مل') ||
+        name.contains('ml') ||
+        name.contains('جم') ||
+        name.contains('gm') ||
+        name.contains('شامبو') ||
+        name.contains('بلسم') ||
+        name.contains('قطعة')) {
+      return false;
+    }
+    return false;
+  }
+
+  double? get _effectiveUnitValue {
+    if (!_effectiveIsVoucher) return null;
+    if (_resolvedUnitValue != null && _resolvedUnitValue! > 0) {
+      return _resolvedUnitValue;
+    }
+    if (widget.unitValue != null && widget.unitValue! > 0) {
+      return widget.unitValue;
+    }
+    if (_effectiveLinkedGifts.isNotEmpty) {
+      final total = _effectiveLinkedGifts.fold<double>(0.0, (sum, g) => sum + g.totalMonetaryValue);
+      if (total > 0) return total;
+    }
+    final match = RegExp(r'(\d+)').firstMatch(widget.prizeName);
+    if (match != null) {
+      return double.tryParse(match.group(1)!);
+    }
+    return null;
+  }
+
+  String get _effectivePrizeName {
+    if (_resolvedPrizeName != null &&
+        _resolvedPrizeName!.isNotEmpty &&
+        _resolvedPrizeName != 'هدية ترويجية مميزة' &&
+        _resolvedPrizeName != 'هدية فورية مميزة') {
+      return _resolvedPrizeName!;
+    }
+    String name = widget.prizeName.trim();
+    if (name.isEmpty ||
+        name == 'هدية ترويجية مميزة' ||
+        name == 'هدية فورية مميزة' ||
+        RegExp(r'^[a-zA-Z0-9_-]{15,35}$').hasMatch(name)) {
+      if (_effectiveLinkedGifts.isNotEmpty) {
+        return _effectiveLinkedGifts.map((g) => g.quantity > 1 ? '${g.quantity} × ${g.giftName}' : g.giftName).join(' + ');
+      }
+      if (_effectiveIsVoucher && _effectiveUnitValue != null && _effectiveUnitValue! > 0) {
+        final val = _effectiveUnitValue == _effectiveUnitValue!.roundToDouble() ? _effectiveUnitValue!.toInt() : _effectiveUnitValue;
+        return 'فواتشر بقيمة $val جنيه';
+      }
+      if (_effectiveIsVoucher) {
+        return 'كارت فواتشر مشتريات';
+      }
+    }
+    return name.isNotEmpty ? name : 'هدية فورية معتمدة';
+  }
 
   @override
   void initState() {
@@ -58,26 +142,18 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
       vsync: this,
       duration: const Duration(milliseconds: 700),
     );
-
-    _scaleAnimation = CurvedAnimation(
-      parent: _animController,
-      curve: Curves.easeOutBack,
-    );
-
     _fadeAnimation = CurvedAnimation(
       parent: _animController,
-      curve: Curves.easeIn,
+      curve: Curves.easeOut,
     );
-
+    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animController,
+        curve: Curves.elasticOut,
+      ),
+    );
     _animController.forward();
-
-    // Fetch remaining stock for promoter awareness
     _fetchRemainingStock();
-
-    // Play subtle joyful unlock sound effect upon viewing instant gift
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(gameAudioServiceProvider).playGiftUnlock();
-    });
   }
 
   @override
@@ -87,11 +163,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
   }
 
   Future<void> _fetchRemainingStock() async {
-    if (widget.isDemo || widget.eventId.isEmpty) {
-      if (mounted) setState(() => _isLoadingStock = false);
-      return;
-    }
-
+    if (widget.eventId.isEmpty) return;
     try {
       final doc = await ref
           .read(firestoreProvider)
@@ -100,13 +172,65 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
           .get();
 
       if (doc.exists && doc.data() != null) {
-        final prizes = List<Map<String, dynamic>>.from(doc.data()!['allocatedPrizes'] ?? []);
+        final data = doc.data()!;
+        final promoRulesRaw = data['promotionalRules'] as List?;
+        final prizesRaw = data['allocatedPrizes'] as List?;
+
+        String? discoveredName;
+        List<LinkedGiftAllocation>? discoveredLinkedGifts;
+        double? discoveredUnitVal;
+        bool? discoveredIsVoucher;
+
+        PromotionalRuleItem? matchedRuleItem;
+        if (promoRulesRaw != null && promoRulesRaw.isNotEmpty) {
+          final rules = promoRulesRaw
+              .map((r) => PromotionalRuleItem.fromMap(Map<String, dynamic>.from(r as Map)))
+              .toList();
+
+          final target = widget.prizeName.trim();
+          if (target.isNotEmpty &&
+              target != 'هدية ترويجية مميزة' &&
+              target != 'هدية فورية مميزة' &&
+              !RegExp(r'^[a-zA-Z0-9_-]{15,35}$').hasMatch(target)) {
+            matchedRuleItem = rules.cast<PromotionalRuleItem?>().firstWhere(
+              (r) => r != null && (
+                     r.rewardValue == target ||
+                     r.linkedGiftsSummary == target ||
+                     r.ruleTitle == target ||
+                     r.linkedGifts.any((g) => g.giftName == target)),
+              orElse: () => null,
+            );
+          }
+        }
+
+        if (matchedRuleItem != null) {
+          discoveredName = matchedRuleItem.rewardValue.isNotEmpty
+              ? matchedRuleItem.rewardValue
+              : matchedRuleItem.linkedGiftsSummary;
+          discoveredLinkedGifts = matchedRuleItem.linkedGifts.isNotEmpty
+              ? matchedRuleItem.linkedGifts
+              : null;
+          discoveredIsVoucher = matchedRuleItem.rewardType == 'voucher' ||
+              matchedRuleItem.totalVoucherValue > 0 ||
+              (discoveredName.contains('فواتشر') || discoveredName.contains('قسيمة'));
+          discoveredUnitVal = discoveredIsVoucher
+              ? (matchedRuleItem.totalVoucherValue > 0
+                  ? matchedRuleItem.totalVoucherValue
+                  : (matchedRuleItem.rewardAmount > 0 ? matchedRuleItem.rewardAmount : null))
+              : null;
+        }
+
+        final prizes = List<Map<String, dynamic>>.from(prizesRaw ?? []);
         int foundRemaining = -1;
 
         for (final p in prizes) {
-          final matches = p['giftId'] == widget.prizeName || p['name'] == widget.prizeName;
+          final matches = p['giftId'] == widget.prizeName ||
+              p['name'] == widget.prizeName ||
+              (discoveredName != null && p['name'] == discoveredName);
           if (matches) {
-            if (widget.branchId != null && widget.branchId!.isNotEmpty && p['branchId'] == widget.branchId) {
+            if (widget.branchId != null &&
+                widget.branchId!.isNotEmpty &&
+                p['branchId'] == widget.branchId) {
               foundRemaining = (p['remainingQuantity'] as num?)?.toInt() ?? 0;
               break;
             } else if (foundRemaining == -1) {
@@ -118,15 +242,30 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
         if (mounted) {
           setState(() {
             _remainingStock = foundRemaining >= 0 ? foundRemaining : null;
-            _isLoadingStock = false;
+            final isPlaceholder = widget.prizeName.isEmpty ||
+                widget.prizeName == 'هدية ترويجية مميزة' ||
+                widget.prizeName == 'هدية فورية مميزة' ||
+                RegExp(r'^[a-zA-Z0-9_-]{15,35}$').hasMatch(widget.prizeName);
+
+            if (isPlaceholder) {
+              if (discoveredName != null && discoveredName.isNotEmpty) {
+                _resolvedPrizeName = discoveredName;
+              }
+              if (discoveredLinkedGifts != null && discoveredLinkedGifts.isNotEmpty) {
+                _resolvedLinkedGifts = discoveredLinkedGifts;
+              }
+              if (discoveredUnitVal != null && discoveredUnitVal > 0) {
+                _resolvedUnitValue = discoveredUnitVal;
+              }
+              if (discoveredIsVoucher != null) {
+                _resolvedIsVoucher = discoveredIsVoucher;
+              }
+            }
           });
         }
-      } else {
-        if (mounted) setState(() => _isLoadingStock = false);
       }
     } catch (e) {
       debugPrint('Error fetching remaining prize stock: $e');
-      if (mounted) setState(() => _isLoadingStock = false);
     }
   }
 
@@ -158,18 +297,42 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
 
     try {
       final effectiveQuantity = widget.quantity > 0 ? widget.quantity : 1;
+      final finalPrizeName = _effectivePrizeName;
+      final finalUnitValue = _effectiveUnitValue;
+      final finalIsVoucher = _effectiveIsVoucher;
+      final finalLinkedGifts = _effectiveLinkedGifts;
+
       final displayPrize = effectiveQuantity > 1
-          ? '${widget.prizeName} (عدد $effectiveQuantity)'
-          : widget.prizeName;
+          ? '$finalPrizeName (عدد $effectiveQuantity)'
+          : finalPrizeName;
 
       if (!widget.isDemo && widget.transactionId.isNotEmpty) {
         final firestore = ref.read(firestoreProvider);
+        final claimedGiftsList = finalLinkedGifts.isNotEmpty
+            ? finalLinkedGifts.map((g) => {
+                'giftId': g.giftId,
+                'giftName': g.giftName,
+                'quantity': g.quantity * effectiveQuantity,
+                'unitValue': g.unitValue,
+                'isVoucher': g.isVoucher,
+              }).toList()
+            : [{
+                'giftId': '',
+                'giftName': finalPrizeName,
+                'quantity': effectiveQuantity,
+                'unitValue': finalUnitValue ?? 0.0,
+                'isVoucher': finalIsVoucher,
+              }];
+
         // 1. Update receipts_transactions record
         await firestore.collection('receipts_transactions').doc(widget.transactionId).update({
           'game_played': true,
           'game_type': 'directGift',
           'prize_won': displayPrize,
-          'prizes_won': List.filled(effectiveQuantity, widget.prizeName),
+          'prizes_won': List.filled(effectiveQuantity, finalPrizeName),
+          'claimed_gifts': claimedGiftsList,
+          'event_id': widget.eventId,
+          'branch_id': widget.branchId ?? '',
           'remaining_chances': 0,
           'claim_status': 'handed_over',
           'claimed_at': DateTime.now().toIso8601String(),
@@ -178,12 +341,27 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
         // 2. Decrement inventory from campaign/branch
         if (widget.eventId.isNotEmpty) {
           final giftsService = ref.read(companyGiftsServiceProvider);
-          await giftsService.decrementCampaignPrize(
-            widget.eventId,
-            widget.prizeName,
-            branchId: widget.branchId,
-            count: effectiveQuantity,
-          );
+          if (finalLinkedGifts.isNotEmpty) {
+            for (final giftAlloc in finalLinkedGifts) {
+              await giftsService.decrementCampaignPrize(
+                widget.eventId,
+                giftAlloc.giftId.isNotEmpty ? giftAlloc.giftId : giftAlloc.giftName,
+                branchId: widget.branchId,
+                count: giftAlloc.quantity * effectiveQuantity,
+                unitValue: giftAlloc.unitValue,
+                isVoucher: giftAlloc.isVoucher,
+              );
+            }
+          } else {
+            await giftsService.decrementCampaignPrize(
+              widget.eventId,
+              finalPrizeName,
+              branchId: widget.branchId,
+              count: effectiveQuantity,
+              unitValue: finalUnitValue,
+              isVoucher: finalIsVoucher,
+            );
+          }
         }
       } else {
         // Demo simulation pause
@@ -204,6 +382,9 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
       await showWinnerCelebrationDialog(
         context: context,
         prizeName: displayPrize,
+        unitValue: finalUnitValue,
+        isVoucher: finalIsVoucher,
+        linkedGifts: finalLinkedGifts,
         remainingChances: 0,
         onNextChance: null,
         onNextCustomer: () {
@@ -350,18 +531,139 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                       const SizedBox(height: 8),
 
                                       // Designated Prize Name
-                                      Text(
-                                        widget.prizeName.isNotEmpty
-                                            ? widget.prizeName
-                                            : (isAr ? 'هدية ترويجية متميزة' : 'Promotional Gift'),
-                                        textAlign: TextAlign.center,
-                                        style: GoogleFonts.cairo(
-                                          fontSize: 26,
-                                          fontWeight: FontWeight.bold,
-                                          color: colorScheme.onSurface,
-                                          height: 1.3,
-                                        ),
-                                      ),
+                                       Builder(
+                                         builder: (context) {
+                                           final cleanPrizeName = _effectivePrizeName;
+                                           final resolvedUnitValue = _effectiveUnitValue;
+                                           final resolvedIsVoucher = _effectiveIsVoucher;
+                                           final linkedGifts = _effectiveLinkedGifts;
+
+                                           final formattedVal = resolvedUnitValue != null && resolvedUnitValue > 0
+                                               ? (resolvedUnitValue == resolvedUnitValue.roundToDouble()
+                                                   ? resolvedUnitValue.toInt().toString()
+                                                   : resolvedUnitValue.toString())
+                                               : '';
+
+                                           return Column(
+                                             children: [
+                                               Text(
+                                                 cleanPrizeName.isNotEmpty
+                                                     ? cleanPrizeName
+                                                     : (isAr ? 'هدية ترويجية متميزة' : 'Promotional Gift'),
+                                                 textAlign: TextAlign.center,
+                                                 style: GoogleFonts.cairo(
+                                                   fontSize: 26,
+                                                   fontWeight: FontWeight.bold,
+                                                   color: colorScheme.onSurface,
+                                                   height: 1.3,
+                                                 ),
+                                               ),
+                                               if (resolvedIsVoucher && formattedVal.isNotEmpty) ...[
+                                                 const SizedBox(height: 12),
+                                                 Container(
+                                                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                                                   decoration: BoxDecoration(
+                                                     gradient: const LinearGradient(
+                                                       colors: [
+                                                         Color(0xFFFFB300),
+                                                         Color(0xFFFF6D00),
+                                                       ],
+                                                       begin: Alignment.topLeft,
+                                                       end: Alignment.bottomRight,
+                                                     ),
+                                                     borderRadius: BorderRadius.circular(16),
+                                                     boxShadow: [
+                                                       BoxShadow(
+                                                         color: const Color(0xFFFF8F00).withValues(alpha: 0.4),
+                                                         blurRadius: 14,
+                                                         offset: const Offset(0, 4),
+                                                       ),
+                                                     ],
+                                                   ),
+                                                   child: Row(
+                                                     mainAxisSize: MainAxisSize.min,
+                                                     children: [
+                                                       const Icon(Icons.payments_rounded, color: Colors.white, size: 22),
+                                                       const SizedBox(width: 8),
+                                                       Text(
+                                                         'بقيمة $formattedVal ج.م',
+                                                         style: GoogleFonts.cairo(
+                                                           fontSize: 20,
+                                                           fontWeight: FontWeight.w900,
+                                                           color: Colors.white,
+                                                         ),
+                                                       ),
+                                                     ],
+                                                   ),
+                                                 ),
+                                               ],
+                                               // Multi-Gift Breakdown Display
+                                               if (linkedGifts.length > 1 ||
+                                                   (linkedGifts.length == 1 && linkedGifts.first.quantity > 1)) ...[
+                                                 const SizedBox(height: 12),
+                                                 Container(
+                                                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                                   decoration: BoxDecoration(
+                                                     color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                                                     borderRadius: BorderRadius.circular(12),
+                                                     border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                                                   ),
+                                                   child: Column(
+                                                     children: [
+                                                       Text(
+                                                         strings.cardsBreakdownTitle,
+                                                         style: GoogleFonts.cairo(
+                                                           fontSize: 11,
+                                                           fontWeight: FontWeight.bold,
+                                                           color: colorScheme.primary,
+                                                         ),
+                                                       ),
+                                                       const SizedBox(height: 4),
+                                                       Wrap(
+                                                         spacing: 6,
+                                                         runSpacing: 4,
+                                                         alignment: WrapAlignment.center,
+                                                         children: linkedGifts.map((g) {
+                                                           final totalCount = g.quantity * effectiveQuantity;
+                                                           return Container(
+                                                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                             decoration: BoxDecoration(
+                                                               color: Colors.amber.shade50,
+                                                               borderRadius: BorderRadius.circular(8),
+                                                               border: Border.all(color: Colors.amber.shade300),
+                                                             ),
+                                                             child: Row(
+                                                               mainAxisSize: MainAxisSize.min,
+                                                               children: [
+                                                                 Icon(
+                                                                   g.isVoucher
+                                                                       ? Icons.confirmation_number_rounded
+                                                                       : Icons.card_giftcard_rounded,
+                                                                   size: 13,
+                                                                   color: Colors.amber.shade900,
+                                                                 ),
+                                                                 const SizedBox(width: 4),
+                                                                 Text(
+                                                                   '$totalCount × ${g.giftName}',
+                                                                   style: GoogleFonts.cairo(
+                                                                     fontSize: 11.5,
+                                                                     fontWeight: FontWeight.bold,
+                                                                     color: Colors.amber.shade900,
+                                                                   ),
+                                                                 ),
+                                                               ],
+                                                             ),
+                                                           );
+                                                         }).toList(),
+                                                       ),
+                                                     ],
+                                                   ),
+                                                 ),
+                                               ],
+                                             ],
+                                           );
+                                         },
+                                       ),
                                       const SizedBox(height: 16),
 
                                       // Multiplier Badge (Only shown if customer earned >1 gifts)

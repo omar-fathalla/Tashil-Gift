@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -26,15 +27,21 @@ import '../../games/presentation/spin_the_wheel_screen.dart';
 import '../../games/presentation/scratch_card_screen.dart';
 import '../../games/presentation/direct_gift_claim_screen.dart';
 import '../../validation/presentation/widgets/receipt_validation_dialog.dart';
+import 'widgets/campaign_gift_balance_dialog.dart';
+import 'widgets/campaign_brief_dialog.dart';
+import '../../../core/widgets/campaign_suspended_screen.dart';
+
 
 class ClientReceiptUploadScreen extends ConsumerStatefulWidget {
   final String? companySlug;
   final EventModel? event;
+  final String? initialEventId;
 
   const ClientReceiptUploadScreen({
     super.key,
     this.companySlug,
     this.event,
+    this.initialEventId,
   });
 
   @override
@@ -45,6 +52,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
   EventModel? _activeEvent;
   bool _isLoadingEvent = true;
   String? _errorMessage;
+  StreamSubscription? _eventSubscription;
 
   XFile? _receiptImage;
   bool _isAiLoading = false;
@@ -57,11 +65,16 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
   @override
   void initState() {
     super.initState();
-    _loadEvent();
+    if (widget.event != null) {
+      _activeEvent = widget.event;
+      _isLoadingEvent = false;
+    }
+    _subscribeToLiveEvent();
   }
 
   @override
   void dispose() {
+    _eventSubscription?.cancel();
     _customerPhoneController.dispose();
     _customerNameController.dispose();
     super.dispose();
@@ -77,60 +90,151 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
     }
   }
 
-  Future<void> _loadEvent() async {
-    if (widget.event != null) {
-      setState(() {
-        _activeEvent = widget.event;
-        _isLoadingEvent = false;
-      });
-      return;
-    }
-
+  void _subscribeToLiveEvent() {
+    _eventSubscription?.cancel();
     try {
       final firestore = ref.read(firestoreProvider);
-      final slug = widget.companySlug ?? 'almarai';
+      final targetEventId = widget.initialEventId ?? widget.event?.id;
+      final slug = (widget.companySlug ?? widget.event?.companySlug ?? 'almarai').trim().toLowerCase();
 
-      final query = await firestore
-          .collection('events')
-          .where('companySlug', isEqualTo: slug)
-          .where('isActive', isEqualTo: true)
-          .limit(1)
-          .get();
-
-      if (query.docs.isNotEmpty) {
-        setState(() {
-          _activeEvent = EventModel.fromFirestore(query.docs.first);
-          _isLoadingEvent = false;
-        });
-      } else {
-        // Fallback to any active event
-        final fallbackQuery = await firestore
+      // 1. If explicit eventId is provided, listen directly to that specific event document
+      if (targetEventId != null && targetEventId.isNotEmpty) {
+        _eventSubscription = firestore
             .collection('events')
-            .where('isActive', isEqualTo: true)
-            .limit(1)
-            .get();
+            .doc(targetEventId)
+            .snapshots()
+            .listen(
+          (doc) {
+            if (!mounted) return;
+            if (doc.exists && doc.data() != null) {
+              setState(() {
+                _activeEvent = EventModel.fromFirestore(doc);
+                _isLoadingEvent = false;
+                _errorMessage = null;
+              });
+            } else {
+              _fallbackToSlugStream(slug);
+            }
+          },
+          onError: (e) {
+            if (!mounted) return;
+            _fallbackToSlugStream(slug);
+          },
+        );
+        return;
+      }
 
-        if (fallbackQuery.docs.isNotEmpty) {
+      _fallbackToSlugStream(slug);
+    } catch (_) {}
+  }
+
+  void _fallbackToSlugStream(String slug) {
+    _eventSubscription?.cancel();
+    try {
+      final firestore = ref.read(firestoreProvider);
+
+      _eventSubscription = firestore.collection('events').snapshots().listen(
+        (snapshot) {
+          if (!mounted) return;
+          final docs = snapshot.docs;
+          if (docs.isEmpty) {
+            setState(() {
+              _activeEvent = null;
+              _errorMessage = 'لا يوجد أي حملات مسجلة في النظام حالياً.';
+              _isLoadingEvent = false;
+            });
+            return;
+          }
+
+        // Convert all valid event models
+        final events = docs.map((d) {
+          try {
+            return EventModel.fromFirestore(d);
+          } catch (_) {
+            return null;
+          }
+        }).whereType<EventModel>().toList();
+
+        // 1. Try match by document ID == slug
+        EventModel? matched = events.cast<EventModel?>().firstWhere(
+          (e) => e!.id == slug,
+          orElse: () => null,
+        );
+
+        // 2. Try match by companySlug == slug
+        if (matched == null) {
+          final slugMatches = events.where((e) => e.companySlug.trim().toLowerCase() == slug).toList();
+          if (slugMatches.isNotEmpty) {
+            slugMatches.sort((a, b) {
+              if (a.isActive != b.isActive) {
+                return a.isActive ? -1 : 1;
+              }
+              final aDate = a.createdAt ?? a.startDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+              final bDate = b.createdAt ?? b.startDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+              return bDate.compareTo(aDate);
+            });
+            matched = slugMatches.first;
+          }
+        }
+
+        // 3. Try match by targetCompany contains or equal to slug
+        if (matched == null) {
+          final companyMatches = events.where((e) =>
+            e.targetCompany.trim().toLowerCase() == slug ||
+            e.targetCompany.trim().toLowerCase().contains(slug) ||
+            slug.contains(e.targetCompany.trim().toLowerCase())
+          ).toList();
+          if (companyMatches.isNotEmpty) {
+            companyMatches.sort((a, b) {
+              if (a.isActive != b.isActive) {
+                return a.isActive ? -1 : 1;
+              }
+              final aDate = a.createdAt ?? a.startDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+              final bDate = b.createdAt ?? b.startDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+              return bDate.compareTo(aDate);
+            });
+            matched = companyMatches.first;
+          }
+        }
+
+        // 4. Fallback to any active event if none found
+        if (matched == null) {
+          final activeList = events.where((e) => e.isActive).toList();
+          if (activeList.isNotEmpty) {
+            activeList.sort((a, b) {
+              final aDate = a.createdAt ?? a.startDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+              final bDate = b.createdAt ?? b.startDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+              return bDate.compareTo(aDate);
+            });
+            matched = activeList.first;
+          }
+        }
+
+        if (matched != null) {
           setState(() {
-            _activeEvent = EventModel.fromFirestore(fallbackQuery.docs.first);
+            _activeEvent = matched;
             _isLoadingEvent = false;
+            _errorMessage = null;
           });
         } else {
           setState(() {
-            _errorMessage = 'لا يوجد حملة مفعالة لهذه الشركة حالياً.';
+            _errorMessage = 'لا توجد حملة مفعالة لهذه الشركة حالياً.';
             _isLoadingEvent = false;
           });
         }
-      }
-    } catch (e) {
-      setState(() {
-        _errorMessage = AppErrorHandler.getFriendlyMessage(
-          e,
-          defaultMessage: 'حدث خطأ أثناء تحميل بيانات الحملة من الخادم.',
-        );
-        _isLoadingEvent = false;
-      });
-    }
+      },
+      onError: (e) {
+        if (!mounted) return;
+        setState(() {
+          _errorMessage = AppErrorHandler.getFriendlyMessage(
+            e,
+            defaultMessage: 'حدث خطأ أثناء تحميل بيانات الحملة من الخادم.',
+          );
+          _isLoadingEvent = false;
+        });
+      },
+    );
+    } catch (_) {}
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -315,7 +419,8 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
 
       final receiptNumber = result.receiptNumber.trim();
 
-      // Duplicate receipt check
+      // Check for existing receipt to update/upsert
+      DocumentSnapshot<Map<String, dynamic>>? existingDoc;
       if (receiptNumber.isNotEmpty) {
         final existing = await firestore
             .collection('receipts_transactions')
@@ -324,33 +429,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
             .get();
 
         if (existing.docs.isNotEmpty) {
-          if (!mounted) return;
-          final activeCountry = ref.read(activeCountryProvider);
-          final conditions = [
-            ValidationConditionItem(
-              title: 'حالة الفاتورة (مستخدمة مسبقاً)',
-              description: 'رقم الفاتورة ($receiptNumber) تم استخدامه مسبقاً والمطالبة بجائزته في النظام، ولا يمكن إعادة استخدامه لمنع التكرار.',
-              icon: Icons.history_toggle_off_rounded,
-              isMet: false,
-            ),
-          ];
-
-          showReceiptValidationReportDialog(
-            context: context,
-            title: 'عفواً، الفاتورة مسجلة مسبقاً',
-            subtitle: 'تم التحقق من قاعدة البيانات وتبيّن وجود تسجيل سابق لهذه الفاتورة:',
-            conditions: conditions,
-            receiptNumber: receiptNumber,
-            storeChain: result.storeChainDetected,
-            branch: result.branchDetected,
-            receiptDate: result.receiptDate,
-            totalValue: totalValue,
-            requiredMinimum: _activeEvent!.minimumSpend,
-            currencySymbol: activeCountry.currencySymbol,
-            imageUrl: previewImgUrl,
-            isDuplicate: true,
-          );
-          return;
+          existingDoc = existing.docs.first;
         }
       }
 
@@ -391,13 +470,19 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         imageUrl = 'data:$mimeType;base64,${base64Encode(bytes)}';
       }
 
-      // 3. Store transaction in Firestore with Duration & KPI metrics
+      // 3. Store transaction in Firestore with Duration & KPI metrics (Upsert)
       setState(() {
-        _aiPhaseText = '3/3 جاري تسجيل المعاملة وتجهيز الجائزة...';
+        _aiPhaseText = '3/3 جاري حفظ المعاملة وتجهيز الجائزة...';
       });
 
-      final transactionRef = firestore.collection('receipts_transactions').doc();
-      await transactionRef.set({
+      final int calculatedChances = result.chancesEarned > 0 ? result.chancesEarned : 1;
+      final DocumentReference<Map<String, dynamic>> transactionRef =
+          existingDoc != null ? existingDoc.reference : firestore.collection('receipts_transactions').doc();
+      final bool isExistingRecord = existingDoc != null;
+      final existingData = existingDoc?.data() ?? {};
+      final bool wasGamePlayed = existingData['game_played'] == true;
+
+      final Map<String, dynamic> transactionData = {
         'receipt_number': receiptNumber,
         'total_value': totalValue,
         'target_company_total': totalValue,
@@ -407,9 +492,8 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         'branch_detected': result.branchDetected,
         'is_branch_matched': result.isBranchMatched,
         'retail_chain_name': _activeEvent!.retailChainName,
-        'image_url': imageUrl,
-        'storage_path': storagePath,
-        'timestamp': FieldValue.serverTimestamp(),
+        if (imageUrl.isNotEmpty) 'image_url': imageUrl,
+        if (imageUrl.isNotEmpty) 'storage_path': storagePath,
         'campaignId': _activeEvent!.id,
         'companySlug': _activeEvent!.companySlug,
         'targetCompany': _activeEvent!.targetCompany,
@@ -419,13 +503,51 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         'analysis_duration_seconds': result.durationSeconds,
         'analysis_duration_ms': result.durationMs,
         'ai_kpi_rating': result.kpiRating,
-        'chances_earned': result.chancesEarned > 0 ? result.chancesEarned : 1,
+        'chances_earned': calculatedChances,
         'allow_multiple_chances': _activeEvent!.allowMultipleChances,
-        'game_played': false,
-        'prize_won': null,
-      });
+      };
+
+      if (isExistingRecord) {
+        transactionData['updated_at'] = FieldValue.serverTimestamp();
+        transactionData['is_updated_via_ai'] = true;
+        await transactionRef.set(transactionData, SetOptions(merge: true));
+      } else {
+        transactionData['timestamp'] = FieldValue.serverTimestamp();
+        transactionData['game_played'] = false;
+        transactionData['prize_won'] = null;
+        await transactionRef.set(transactionData);
+      }
 
       if (!mounted) return;
+
+      if (isExistingRecord && wasGamePlayed) {
+        final activeCountry = ref.read(activeCountryProvider);
+        final strings = AppStrings.of(ref);
+        showReceiptValidationReportDialog(
+          context: context,
+          title: strings.duplicateReceiptAlreadyDrawnTitle,
+          subtitle: strings.duplicateReceiptAlreadyDrawnSubtitle,
+          conditions: [
+            ValidationConditionItem(
+              title: strings.duplicateReceiptConditionTitle,
+              description: strings.duplicateReceiptConditionDesc,
+              icon: Icons.history_toggle_off_rounded,
+              isMet: false,
+            ),
+          ],
+          receiptNumber: receiptNumber,
+          storeChain: result.storeChainDetected,
+          branch: result.branchDetected,
+          receiptDate: result.receiptDate,
+          totalValue: totalValue,
+          requiredMinimum: _activeEvent!.minimumSpend,
+          currencySymbol: activeCountry.currencySymbol,
+          imageUrl: imageUrl.isNotEmpty ? imageUrl : previewImgUrl,
+          isDuplicate: true,
+        );
+        _resetFormForNextCustomer();
+        return;
+      }
 
       // Reset image preview immediately
       setState(() {
@@ -444,11 +566,85 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       final gameType = currentEvent?.gameType ?? (totalValue >= 500 ? 'scratchCard' : 'spinTheWheel');
 
       if (gameType == 'directGift' || gameType == 'direct_gift') {
-        final designatedPrize = prizeNames.isNotEmpty
-            ? prizeNames.first
+        // Check promotional rules using our robust multi-tiered AI & NLP PromotionalRuleMatcher
+        final matchedRule = PromotionalRuleMatcher.match(
+          result: result,
+          promotionalRules: currentEvent?.promotionalRules ?? const [],
+        );
+
+        final designatedPrizeObj = (currentEvent?.availablePrizes.isNotEmpty ?? false)
+            ? currentEvent!.availablePrizes.first
             : ((currentEvent?.allocatedPrizes.isNotEmpty ?? false)
-                ? currentEvent!.allocatedPrizes.first.name
-                : 'هدية فورية مميزة');
+                ? currentEvent!.allocatedPrizes.first
+                : null);
+
+        String designatedPrize;
+        List<LinkedGiftAllocation> resolvedLinkedGifts = [];
+        double? resolvedUnitValue;
+        bool resolvedIsVoucher = false;
+
+        if (matchedRule != null) {
+          resolvedLinkedGifts = matchedRule.linkedGifts;
+          if (matchedRule.rewardValue.isNotEmpty) {
+            designatedPrize = matchedRule.rewardValue;
+          } else if (matchedRule.linkedGiftsSummary.isNotEmpty) {
+            designatedPrize = matchedRule.linkedGiftsSummary;
+          } else {
+            designatedPrize = designatedPrizeObj?.name ?? (prizeNames.isNotEmpty ? prizeNames.first : '');
+          }
+
+          resolvedIsVoucher = matchedRule.rewardType == 'voucher' ||
+              matchedRule.totalVoucherValue > 0 ||
+              designatedPrize.contains('فواتشر') ||
+              designatedPrize.toLowerCase().contains('voucher') ||
+              designatedPrize.contains('قسيمة');
+
+          resolvedUnitValue = resolvedIsVoucher
+              ? (matchedRule.totalVoucherValue > 0
+                  ? matchedRule.totalVoucherValue
+                  : (matchedRule.rewardAmount > 0 ? matchedRule.rewardAmount : designatedPrizeObj?.unitValue))
+              : 0.0;
+        } else if (result.matchedRewardValue.trim().isNotEmpty) {
+          designatedPrize = result.matchedRewardValue.trim();
+          resolvedIsVoucher = result.matchedRewardType == 'voucher' ||
+              result.matchedRewardAmount > 0 ||
+              designatedPrize.contains('فواتشر') ||
+              designatedPrize.contains('قسيمة');
+          resolvedUnitValue = resolvedIsVoucher
+              ? (result.matchedRewardAmount > 0 ? result.matchedRewardAmount : designatedPrizeObj?.unitValue)
+              : 0.0;
+        } else {
+          designatedPrize = designatedPrizeObj?.name ??
+              (prizeNames.isNotEmpty ? prizeNames.first : '');
+          resolvedUnitValue = designatedPrizeObj?.unitValue;
+          resolvedIsVoucher = designatedPrizeObj?.isVoucher ?? false;
+        }
+
+        // Self-heal ONLY if empty or raw doc id or generic placeholder
+        if (designatedPrize.isEmpty ||
+            designatedPrize == 'هدية فورية مميزة' ||
+            designatedPrize == 'هدية ترويجية مميزة' ||
+            RegExp(r'^[a-zA-Z0-9_-]{15,35}$').hasMatch(designatedPrize)) {
+          if (resolvedLinkedGifts.isNotEmpty) {
+            designatedPrize = resolvedLinkedGifts.map((g) => g.quantity > 1 ? '${g.quantity} × ${g.giftName}' : g.giftName).join(' + ');
+            resolvedIsVoucher = resolvedLinkedGifts.any((g) => g.isVoucher);
+            resolvedUnitValue = resolvedIsVoucher
+                ? resolvedLinkedGifts.fold<double>(0.0, (acc, g) => acc + g.totalMonetaryValue)
+                : 0.0;
+          } else if (resolvedIsVoucher || (resolvedUnitValue != null && resolvedUnitValue > 0)) {
+            final val = (resolvedUnitValue != null && resolvedUnitValue > 0)
+                ? (resolvedUnitValue == resolvedUnitValue.roundToDouble() ? resolvedUnitValue.toInt() : resolvedUnitValue)
+                : 50;
+            designatedPrize = 'فواتشر بقيمة $val جنيه';
+            resolvedIsVoucher = true;
+            resolvedUnitValue ??= 50.0;
+          } else {
+            designatedPrize = 'هدية فورية معتمدة';
+            resolvedIsVoucher = false;
+            resolvedUnitValue = 0.0;
+          }
+        }
+
         final promoQuantity = (currentEvent?.allowMultipleChances ?? false) ? totalChances : 1;
         await Navigator.of(context).push(
           MaterialPageRoute(
@@ -458,6 +654,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
               prizeName: designatedPrize,
               quantity: promoQuantity,
               branchId: (currentEvent?.branchIds.isNotEmpty ?? false) ? currentEvent!.branchIds.first : null,
+              unitValue: resolvedUnitValue,
+              isVoucher: resolvedIsVoucher,
+              linkedGifts: resolvedLinkedGifts,
             ),
           ),
         );
@@ -552,34 +751,19 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       );
     }
 
-    if (_errorMessage != null) {
-      return Scaffold(
-        backgroundColor: colorScheme.surface,
-        appBar: AppBar(title: Text(strings.systemNoticeAlert, style: GoogleFonts.cairo())),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Card(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              color: colorScheme.errorContainer.withValues(alpha: 0.3),
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.warning_amber_rounded, color: colorScheme.error, size: 48),
-                    const SizedBox(height: 16),
-                    Text(
-                      _errorMessage!,
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold, color: colorScheme.error),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
+    if (_errorMessage != null || (_activeEvent != null && (!_activeEvent!.isActive || !_activeEvent!.isPromoterActive))) {
+      return CampaignSuspendedScreen(
+        portalType: SuspendedPortalType.promoter,
+        event: _activeEvent,
+        companySlug: widget.companySlug,
+        companyName: _activeEvent?.targetCompany,
+        onRefresh: () {
+          setState(() {
+            _isLoadingEvent = true;
+            _errorMessage = null;
+          });
+          _subscribeToLiveEvent();
+        },
       );
     }
 
@@ -589,7 +773,49 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       backgroundColor: colorScheme.surface,
       appBar: SwitchPointHeader(
         subtitle: '${strings.clientPortalSubtitle} — ${event.targetCompany}',
+        customActions: [
+          // 1. Campaign Concept & Offer Rules Action Button (Brief & Conditions)
+          Tooltip(
+            message: strings.promoterCampaignBriefTooltip,
+            waitDuration: const Duration(milliseconds: 400),
+            child: IconButton.filledTonal(
+              icon: Icon(
+                Icons.campaign_rounded,
+                size: isMobile ? 18 : 20,
+                color: colorScheme.primary,
+              ),
+              padding: EdgeInsets.all(isMobile ? 6 : 8),
+              constraints: isMobile ? const BoxConstraints() : null,
+              visualDensity: isMobile ? VisualDensity.compact : VisualDensity.standard,
+              onPressed: () {
+                CampaignBriefDialog.show(context, event);
+              },
+            ),
+          ),
+          SizedBox(width: isMobile ? 2 : 6),
+
+          // 2. Remaining Gift Inventory & Branch Balance Action Button
+          Tooltip(
+            message: strings.promoterGiftsBalanceTooltip,
+            waitDuration: const Duration(milliseconds: 400),
+            child: IconButton.filledTonal(
+              icon: Icon(
+                Icons.card_giftcard_rounded,
+                size: isMobile ? 18 : 20,
+                color: colorScheme.primary,
+              ),
+              padding: EdgeInsets.all(isMobile ? 6 : 8),
+              constraints: isMobile ? const BoxConstraints() : null,
+              visualDensity: isMobile ? VisualDensity.compact : VisualDensity.standard,
+              onPressed: () {
+                CampaignGiftBalanceDialog.show(context, event);
+              },
+            ),
+          ),
+          SizedBox(width: isMobile ? 2 : 6),
+        ],
       ),
+
       body: Column(
         children: [
           Expanded(
@@ -840,9 +1066,6 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
 
                           // 3. Receipt Upload Dropzone (M3 Interactive Card)
                           Container(
-                            height: _receiptImage == null
-                                ? (isMobile ? 260 : 280)
-                                : (isMobile ? 290 : 340),
                             decoration: BoxDecoration(
                               color: colorScheme.surfaceContainerLowest,
                               border: Border.all(
@@ -851,103 +1074,115 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                     : colorScheme.outlineVariant.withValues(alpha: 0.7),
                                 width: _receiptImage != null ? 2.0 : 1.2,
                               ),
-                              borderRadius: BorderRadius.circular(20),
+                              borderRadius: BorderRadius.circular(22),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: colorScheme.shadow.withValues(alpha: 0.04),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
                             ),
                             child: _receiptImage == null
                                 ? Padding(
                                     padding: EdgeInsets.symmetric(
-                                      horizontal: isMobile ? 12 : 20,
-                                      vertical: isMobile ? 12 : 20,
+                                      horizontal: isMobile ? 16 : 24,
+                                      vertical: isMobile ? 22 : 28,
                                     ),
                                     child: Column(
+                                      mainAxisSize: MainAxisSize.min,
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
                                         Container(
-                                          padding: EdgeInsets.all(isMobile ? 12 : 16),
+                                          padding: EdgeInsets.all(isMobile ? 14 : 18),
                                           decoration: BoxDecoration(
-                                            color: colorScheme.primaryContainer.withValues(alpha: 0.45),
+                                            color: colorScheme.primaryContainer.withValues(alpha: 0.5),
                                             shape: BoxShape.circle,
                                           ),
                                           child: Icon(
                                             Icons.receipt_long_rounded,
-                                            size: isMobile ? 32 : 42,
+                                            size: isMobile ? 36 : 44,
                                             color: colorScheme.primary,
                                           ),
                                         ),
-                                        const SizedBox(height: 10),
+                                        const SizedBox(height: 12),
                                         Text(
                                           strings.receiptAuditSubtitle,
                                           textAlign: TextAlign.center,
                                           style: GoogleFonts.cairo(
-                                            fontSize: isMobile ? 13 : 15,
+                                            fontSize: isMobile ? 14 : 15.5,
                                             fontWeight: FontWeight.bold,
                                             color: colorScheme.onSurface,
+                                            height: 1.3,
                                           ),
                                         ),
-                                        const SizedBox(height: 14),
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: AnimatedPressable(
-                                                onTap: () => _pickImage(ImageSource.camera),
-                                                child: FilledButton.icon(
-                                                  onPressed: () => _pickImage(ImageSource.camera),
-                                                  icon: const Icon(Icons.camera_alt_rounded, size: 18),
-                                                  label: Text(
-                                                    strings.captureReceiptAction,
-                                                    textAlign: TextAlign.center,
-                                                    style: GoogleFonts.cairo(
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: isMobile ? 12 : 13.5,
-                                                    ),
-                                                  ),
-                                                  style: FilledButton.styleFrom(
-                                                    padding: EdgeInsets.symmetric(
-                                                      horizontal: isMobile ? 6 : 14,
-                                                      vertical: isMobile ? 10 : 12,
-                                                    ),
-                                                    shape: RoundedRectangleBorder(
-                                                      borderRadius: BorderRadius.circular(14),
-                                                    ),
-                                                  ),
+                                        const SizedBox(height: 20),
+                                        // 1. Primary Action: Camera Capture
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: AnimatedPressable(
+                                            onTap: () => _pickImage(ImageSource.camera),
+                                            child: FilledButton.icon(
+                                              onPressed: () => _pickImage(ImageSource.camera),
+                                              icon: const Icon(Icons.camera_alt_rounded, size: 20),
+                                              label: Text(
+                                                strings.captureReceiptAction,
+                                                textAlign: TextAlign.center,
+                                                style: GoogleFonts.cairo(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: isMobile ? 13.5 : 14.5,
+                                                ),
+                                              ),
+                                              style: FilledButton.styleFrom(
+                                                padding: EdgeInsets.symmetric(
+                                                  horizontal: 16,
+                                                  vertical: isMobile ? 14 : 16,
+                                                ),
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius: BorderRadius.circular(16),
+                                                ),
+                                                elevation: 1,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        // 2. Secondary Action: Pick from Gallery / Files
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: AnimatedPressable(
+                                            onTap: () => _pickImage(ImageSource.gallery),
+                                            child: FilledButton.tonalIcon(
+                                              onPressed: () => _pickImage(ImageSource.gallery),
+                                              icon: const Icon(Icons.photo_library_rounded, size: 20),
+                                              label: Text(
+                                                strings.pickFromGalleryAction,
+                                                textAlign: TextAlign.center,
+                                                style: GoogleFonts.cairo(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: isMobile ? 13.5 : 14.5,
+                                                ),
+                                              ),
+                                              style: FilledButton.styleFrom(
+                                                padding: EdgeInsets.symmetric(
+                                                  horizontal: 16,
+                                                  vertical: isMobile ? 13 : 15,
+                                                ),
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius: BorderRadius.circular(16),
                                                 ),
                                               ),
                                             ),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: AnimatedPressable(
-                                                onTap: () => _pickImage(ImageSource.gallery),
-                                                child: FilledButton.tonalIcon(
-                                                  onPressed: () => _pickImage(ImageSource.gallery),
-                                                  icon: const Icon(Icons.photo_library_rounded, size: 18),
-                                                  label: Text(
-                                                    strings.pickFromGalleryAction,
-                                                    textAlign: TextAlign.center,
-                                                    style: GoogleFonts.cairo(
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: isMobile ? 12 : 13.5,
-                                                    ),
-                                                  ),
-                                                  style: FilledButton.styleFrom(
-                                                    padding: EdgeInsets.symmetric(
-                                                      horizontal: isMobile ? 6 : 14,
-                                                      vertical: isMobile ? 10 : 12,
-                                                    ),
-                                                    shape: RoundedRectangleBorder(
-                                                      borderRadius: BorderRadius.circular(14),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
+                                          ),
                                         ),
                                       ],
                                     ),
                                   )
-                                : Stack(
-                                    alignment: Alignment.center,
-                                    children: [
+                                : SizedBox(
+                                    height: isMobile ? 300 : 360,
+                                    child: Stack(
+                                      alignment: Alignment.center,
+                                      children: [
                                       ClipRRect(
                                         borderRadius: BorderRadius.circular(18),
                                         child: kIsWeb
@@ -1053,6 +1288,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                       ),
                                     ],
                                   ),
+                                ),
                           ),
 
                           // 4. M3 Action Button & Progress Tracker
