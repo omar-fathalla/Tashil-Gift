@@ -63,5 +63,53 @@ void main() {
       expect(fromMap.name, prize.name);
       expect(fromMap.remainingQuantity, 6);
     });
+
+    test('Branch names normalize variants (فرع سموحة, سموحة, فرع سموحة (الإسكندرية)) into a single canonical branch', () {
+      final canonicalBranches = [
+        'فرع سموحة (الإسكندرية)',
+        'فرع عجمي ستار (الإسكندرية)',
+        'فرع المحلة الكبرى (الغربية)',
+        'شبين الكوم (شبين الكوم)',
+        'عمارات العبور - صلاح سالم (القاهرة)',
+        'المنصورة (المنصورة)',
+      ];
+
+      // Simulated detected branches from 5 invoices
+      final invoiceBranchDetections = [
+        'فرع سموحة',
+        'فرع سموحة',
+        'سموحة',
+        'فرع سموحة',
+        'فرع سموحة',
+      ];
+
+      // Aggregation simulation
+      final Map<String, int> branchInvoiceCounts = {};
+      final Map<String, double> branchRevenues = {};
+
+      for (int i = 0; i < invoiceBranchDetections.length; i++) {
+        final raw = invoiceBranchDetections[i];
+        final spend = (i == 2) ? 299.0 : 171.25; // 4 * 171.25 = 685.0 + 299.0 = 984.0
+
+        // Canonical normalization matching logic
+        String matched = raw;
+        for (final c in canonicalBranches) {
+          final normRaw = raw.replaceAll('فرع ', '').replaceAll('ة', 'ه').trim();
+          final normC = c.replaceAll('فرع ', '').replaceAll(RegExp(r'\(.*?\)'), '').replaceAll('ة', 'ه').trim();
+          if (normRaw == normC || normC.contains(normRaw)) {
+            matched = c;
+            break;
+          }
+        }
+
+        branchInvoiceCounts[matched] = (branchInvoiceCounts[matched] ?? 0) + 1;
+        branchRevenues[matched] = (branchRevenues[matched] ?? 0) + spend;
+      }
+
+      // Must merge all 5 invoices into 1 single unified branch entry
+      expect(branchInvoiceCounts.length, 1);
+      expect(branchInvoiceCounts['فرع سموحة (الإسكندرية)'], 5);
+      expect(branchRevenues['فرع سموحة (الإسكندرية)'], 984.0);
+    });
   });
 }

@@ -34,10 +34,9 @@ class MyApp extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
     final currentLocale = ref.watch(localeProvider);
     final isAr = currentLocale.languageCode == 'ar';
-    final isHi = currentLocale.languageCode == 'hi';
 
     return MaterialApp(
-      title: isAr ? 'تسهيل جيفت' : (isHi ? 'तशहील गिफ्ट' : 'Tashil Gift'),
+      title: 'Tashil Gift',
       theme: AppTheme.getLightTheme(),
       darkTheme: AppTheme.getDarkTheme(),
       themeMode: themeMode,

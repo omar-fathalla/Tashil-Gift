@@ -270,9 +270,12 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
               final spendVal = (data['target_company_total'] ?? data['total_value'] as num?)?.toDouble() ?? 0.0;
               totalSalesVolume += spendVal;
 
-              // Branch aggregation
-              final branchName = (data['branch_detected'] ?? data['branchName'] ?? data['store_chain_detected'] ?? '').toString().trim();
-              final effectiveBranch = branchName.isNotEmpty ? branchName : (isAr ? 'فرع غير محدد' : 'Unspecified Branch');
+              // Smart Branch aggregation with canonical matching & deduplication
+              final rawBranch = (data['branch_detected'] ?? data['branchName'] ?? data['store_chain_detected'] ?? '').toString().trim();
+              final allKnownBranches = _selectedEvent != null
+                  ? _selectedEvent!.branchNames
+                  : scopedEvents.expand((e) => e.branchNames).toSet().toList();
+              final effectiveBranch = _normalizeBranchName(rawBranch, allKnownBranches, isAr);
               if (!branchStatsMap.containsKey(effectiveBranch)) {
                 branchStatsMap[effectiveBranch] = _BranchStat(branchName: effectiveBranch);
               }
@@ -369,6 +372,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
                           activeCountry: activeCountry,
                           isAr: isAr,
                           isHi: isHi,
+                          isMobile: isMobile,
                         ),
                         const SizedBox(height: 16),
                       ],
@@ -638,70 +642,235 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
   // ---------------------------------------------------------------------------
   // 2. Active Event Details Badge Card
   // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // 2. Active Event Details Badge Card
+  // ---------------------------------------------------------------------------
   Widget _buildEventDetailsBadgeCard({
     required EventModel event,
     required ColorScheme colorScheme,
     required CountryCurrency activeCountry,
     required bool isAr,
     required bool isHi,
+    required bool isMobile,
   }) {
-    final statusColor = event.isActive ? Colors.green : Colors.amber.shade800;
+    final statusColor = event.isActive ? const Color(0xFF006C50) : const Color(0xFFD97706);
+    final statusText = event.isActive
+        ? (isAr ? 'حملة ترويجية نشطة' : 'Active Campaign')
+        : (isAr ? 'حملة متوقفة / منتهية' : 'Inactive Campaign');
+
+    final branches = event.branchNames;
+    final branchesCount = branches.isNotEmpty ? branches.length : (event.isAllBranches ? 1 : 0);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       decoration: BoxDecoration(
-        color: colorScheme.primaryContainer.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3)),
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        alignment: WrapAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${isAr ? "الحملة المحددة: " : "Selected Campaign: "}${event.eventName}',
-                style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 14, color: colorScheme.primary),
-              ),
-            ],
-          ),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              // Company Chip
-              _buildMetaPill(
-                icon: Icons.business_rounded,
-                label: event.targetCompany,
-                colorScheme: colorScheme,
-              ),
-              // Store Chain & Branch Chip
-              if (event.retailChainName.isNotEmpty)
-                _buildMetaPill(
-                  icon: Icons.storefront_rounded,
-                  label: event.branchesDisplaySummary.isNotEmpty ? '${event.retailChainName} - ${event.branchesDisplaySummary}' : event.retailChainName,
-                  colorScheme: colorScheme,
+          // 1. Top Header Row: Campaign Title, Status Badge & Key Meta Pills
+          Padding(
+            padding: EdgeInsets.all(isMobile ? 14 : 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top line: Status + Campaign Name
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(
+                        Icons.campaign_rounded,
+                        color: colorScheme.primary,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: statusColor,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                statusText,
+                                style: GoogleFonts.cairo(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: statusColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            event.eventName,
+                            style: GoogleFonts.cairo(
+                              fontSize: isMobile ? 15 : 17,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurface,
+                              height: 1.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              // Minimum Spend Chip
-              _buildMetaPill(
-                icon: Icons.monetization_on_outlined,
-                label: event.minimumSpend > 0
-                    ? '${isAr ? "الحد الأدنى: " : "Min: "}${event.minimumSpend.toStringAsFixed(0)} ${activeCountry.currencySymbol}'
-                    : (isAr ? 'بدون حد أدنى' : 'No Min Spend'),
-                colorScheme: colorScheme,
-              ),
-            ],
+                const SizedBox(height: 14),
+
+                // Key Meta Pills (Target Company, Retail Chain, Minimum Spend, Total Branches)
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    // Target Company
+                    _buildMetaPill(
+                      icon: Icons.business_rounded,
+                      label: event.targetCompany,
+                      colorScheme: colorScheme,
+                    ),
+                    // Retail Chain
+                    if (event.retailChainName.isNotEmpty)
+                      _buildMetaPill(
+                        icon: Icons.store_mall_directory_rounded,
+                        label: '${isAr ? "سلسلة: " : "Chain: "}${event.retailChainName}',
+                        colorScheme: colorScheme,
+                      ),
+                    // Minimum Spend
+                    _buildMetaPill(
+                      icon: Icons.monetization_on_outlined,
+                      label: event.minimumSpend > 0
+                          ? '${isAr ? "الحد الأدنى: " : "Min: "}${event.minimumSpend.toStringAsFixed(0)} ${activeCountry.currencySymbol}'
+                          : (isAr ? 'بدون حد أدنى' : 'No Min Spend'),
+                      colorScheme: colorScheme,
+                    ),
+                    // Covered Branches Count Pill
+                    _buildMetaPill(
+                      icon: Icons.storefront_rounded,
+                      label: event.isAllBranches
+                          ? (isAr ? 'تغطية شاملة (كافة الفروع)' : 'All Branches Covered')
+                          : '$branchesCount ${isAr ? "فروع ومنافذ معتمدة" : "Covered Branches"}',
+                      colorScheme: colorScheme,
+                      isHighlighted: true,
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
+
+          // 2. Beautiful Branches & Outlets List (if specific branches exist)
+          if (!event.isAllBranches && branches.isNotEmpty) ...[
+            Divider(
+              height: 1,
+              thickness: 1,
+              color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+            ),
+            Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 14 : 18,
+                vertical: 12,
+              ),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(20),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.pin_drop_outlined,
+                        size: 15,
+                        color: colorScheme.primary,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        isAr
+                            ? 'المنافذ والفروع المعتمدة لسحب الجوائز ($branchesCount فرع):'
+                            : 'Authorized Award Outlets ($branchesCount Branches):',
+                        style: GoogleFonts.cairo(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final b in branches)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colorScheme.surface,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.store_rounded,
+                                size: 13,
+                                color: colorScheme.primary,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                b,
+                                style: GoogleFonts.cairo(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: colorScheme.onSurface,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -711,26 +880,92 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
     required IconData icon,
     required String label,
     required ColorScheme colorScheme,
+    bool isHighlighted = false,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        color: isHighlighted
+            ? colorScheme.primaryContainer.withValues(alpha: 0.7)
+            : colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isHighlighted
+              ? colorScheme.primary.withValues(alpha: 0.4)
+              : colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: colorScheme.primary),
+          Icon(
+            icon,
+            size: 14,
+            color: isHighlighted ? colorScheme.primary : colorScheme.onSurfaceVariant,
+          ),
           const SizedBox(width: 6),
           Text(
             label,
-            style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600, color: colorScheme.onSurface),
+            style: GoogleFonts.cairo(
+              fontSize: 11,
+              fontWeight: isHighlighted ? FontWeight.bold : FontWeight.w600,
+              color: isHighlighted ? colorScheme.primary : colorScheme.onSurface,
+            ),
           ),
         ],
       ),
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Canonical Branch Name Normalization Helpers
+  // ---------------------------------------------------------------------------
+  static String _normalizeBranchName(
+    String rawBranch,
+    List<String> canonicalBranches,
+    bool isAr,
+  ) {
+    final clean = rawBranch.trim();
+    if (clean.isEmpty) return isAr ? 'فرع غير محدد' : 'Unspecified Branch';
+
+    // 1. Match against campaign canonical branches
+    for (final canonical in canonicalBranches) {
+      if (_isBranchMatch(clean, canonical)) {
+        return canonical;
+      }
+    }
+
+    // 2. Standardize formatting
+    return _standardizeBranchName(clean);
+  }
+
+  static bool _isBranchMatch(String a, String b) {
+    final normA = _cleanBranchForComparison(a);
+    final normB = _cleanBranchForComparison(b);
+    if (normA.isEmpty || normB.isEmpty) return false;
+    return normA == normB || normA.contains(normB) || normB.contains(normA);
+  }
+
+  static String _cleanBranchForComparison(String s) {
+    String str = s.toLowerCase().trim();
+    str = str.replaceAll(RegExp(r'[\u064B-\u065F]'), ''); // diacritics
+    str = str.replaceAll(RegExp(r'[أإآ]'), 'ا');
+    str = str.replaceAll('ة', 'ه');
+    str = str.replaceAll('ى', 'ي');
+    str = str.replaceAll(RegExp(r'\(.*?\)'), ''); // remove city in parentheses
+    str = str.replaceAll(RegExp(r'^(فرع|branch|مفرع)\s+'), ''); // remove prefix
+    str = str.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return str;
+  }
+
+  static String _standardizeBranchName(String raw) {
+    String clean = raw.trim();
+    if (!clean.startsWith('فرع ') &&
+        !clean.toLowerCase().startsWith('branch ') &&
+        !clean.startsWith('سلسلة ')) {
+      return 'فرع $clean';
+    }
+    return clean;
   }
 
   // ---------------------------------------------------------------------------

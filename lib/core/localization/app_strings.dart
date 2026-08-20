@@ -29,7 +29,7 @@ class AppStrings {
   // ---------------------------------------------------------------------------
   // 1. Common / Shared Actions
   // ---------------------------------------------------------------------------
-  String get appTitle => _t(ar: 'تسهيل جيفت', en: 'Tashil Gift', hi: 'तशहील गिफ्ट');
+  String get appTitle => _t(ar: 'Tashil Gift', en: 'Tashil Gift', hi: 'Tashil Gift');
   String get brandSubtitle => _t(
     ar: 'حلول الترويج والتحقق الذكي متعدد الشركات',
     en: 'Smart Multi-Company Promotion & AI Verification',
@@ -1433,6 +1433,159 @@ class AppStrings {
     ar: 'تم السحب مسبقاً',
     en: 'Already Drawn',
     hi: 'पहले ही ड्रा हुआ',
+  );
+
+  // ---------------------------------------------------------------------------
+  // 23. Promoter Invoices Log & Branch History
+  // ---------------------------------------------------------------------------
+  String get promoterInvoicesLogTooltip => _t(
+    ar: 'سجل الفواتير والمدخلات للفروع',
+    en: 'Campaign & Branch Invoices Log',
+    hi: 'अभियान और शाखा रसीदें',
+  );
+  String get promoterInvoicesDialogTitle => _t(
+    ar: 'سجل فواتير الحملة ومدخلات الفروع',
+    en: 'Campaign & Branch Invoices Log',
+    hi: 'अभियान और शाखा रसीदें',
+  );
+  String get promoterInvoicesDialogSubtitle => _t(
+    ar: 'مرجع كامل لجميع الفواتير المدخلة مع تصفية وتثبيت الفرع',
+    en: 'Complete reference of submitted invoices with branch filtering & pinning',
+    hi: 'शाखा फ़िल्टरिंग और पिनिंग के साथ प्रस्तुत रसीदों का पूरा संदर्भ',
+  );
+  String get promoterAllBranchesOption => _t(
+    ar: 'جميع الفروع',
+    en: 'All Branches',
+    hi: 'सभी शाखाएं',
+  );
+  String get pinMyBranchTooltip => _t(
+    ar: 'تثبيت كفرعي الافتراضي',
+    en: 'Pin as my default branch',
+    hi: 'मेरी डिफ़ॉल्ट शाखा के रूप में पिन करें',
+  );
+  String get unpinBranchTooltip => _t(
+    ar: 'إلغاء تثبيت الفرع',
+    en: 'Unpin branch',
+    hi: 'शाखा अनपिन करें',
+  );
+  String get pinnedBranchBadge => _t(
+    ar: 'فرعي المثبت 📌',
+    en: 'Pinned Branch 📌',
+    hi: 'पिन की गई शाखा 📌',
+  );
+  String get branchPinnedSuccess => _t(
+    ar: 'تم تثبيت هذا الفرع كفرعك الافتراضي بنجاح',
+    en: 'Branch pinned as your default branch successfully',
+    hi: 'शाखा को आपकी डिफ़ॉल्ट शाखा के रूप में सफलतापूर्वक पिन किया गया',
+  );
+  String get branchUnpinnedSuccess => _t(
+    ar: 'تم إلغاء تثبيت الفرع الافتراضي',
+    en: 'Default branch unpinned',
+    hi: 'डिफ़ॉल्ट शाखा अनपिन की गई',
+  );
+  String get searchInvoicesPlaceholder => _t(
+    ar: 'بحث برقم الفاتورة، هاتف العميل، التاريخ، أو اسم العميل...',
+    en: 'Search by receipt #, customer phone, date, or name...',
+    hi: 'रसीद #, ग्राहक फोन, तारीख, या नाम से खोजें...',
+  );
+  String get totalInvoicesCountLabel => _t(
+    ar: 'إجمالي الفواتير',
+    en: 'Total Invoices',
+    hi: 'कुल रसीदें',
+  );
+  String get totalInvoicesValueLabel => _t(
+    ar: 'إجمالي القيمة',
+    en: 'Total Value',
+    hi: 'कुल मूल्य',
+  );
+  String get noInvoicesForBranch => _t(
+    ar: 'لا توجد فواتير مسجلة لهذا الفرع حتى الآن.',
+    en: 'No invoices recorded for this branch yet.',
+    hi: 'इस शाखा के लिए अभी तक कोई रसीद दर्ज नहीं है।',
+  );
+  String get noInvoicesFoundSearch => _t(
+    ar: 'لا توجد فواتير مطابقة لمعايير البحث.',
+    en: 'No invoices matching search criteria.',
+    hi: 'खोज मानदंडों से मेल खाने वाली कोई रसीद नहीं मिली।',
+  );
+  String get viewReceiptDetails => _t(
+    ar: 'تفاصيل الفاتورة',
+    en: 'Receipt Details',
+    hi: 'रसीद विवरण',
+  );
+  String get receiptZoomImage => _t(
+    ar: 'معاينة صورة الفاتورة',
+    en: 'Preview Receipt Image',
+    hi: 'रसीद छवि पूर्वावलोकन',
+  );
+
+  // ---------------------------------------------------------------------------
+  // 24. Branch Prize Allocation & Supply Management (Manager Portal)
+  // ---------------------------------------------------------------------------
+  String get adjustBranchAllocationTitle => _t(
+    ar: 'تعديل وتزويد حصة الفرع',
+    en: 'Adjust & Supply Branch Allocation',
+    hi: 'शाखा कोटा संशोधित और आपूर्ति करें',
+  );
+  String get adjustBranchAllocationSubtitle => _t(
+    ar: 'زيادة أو تعديل رصيد الهدايا المخصص لهذا الفرع في الفعالية',
+    en: 'Increase or adjust the allocated prize quantity for this branch in the campaign',
+    hi: 'इस अभियान में इस शाखा के लिए आवंटित उपहार मात्रा बढ़ाएं या समायोजित करें',
+  );
+  String get quickSupplyBranchBtn => _t(
+    ar: 'تزويد رصيد الفرع',
+    en: 'Supply Branch Stock',
+    hi: 'शाखा स्टॉक आपूर्ति करें',
+  );
+  String get availableMasterStockLabel => _t(
+    ar: 'الرصيد المتاح للشركة بالمخزن',
+    en: 'Available Company Master Stock',
+    hi: 'कंपनी मास्टर स्टॉक उपलब्ध',
+  );
+  String get currentBranchAllocation => _t(
+    ar: 'الحصة الحالية للفرع',
+    en: 'Current Branch Allocation',
+    hi: 'वर्तमान शाखा आवंटन',
+  );
+  String get currentBranchRemaining => _t(
+    ar: 'المتبقي الحالي بالفرع',
+    en: 'Current Left in Branch',
+    hi: 'शाखा में शेष वर्तमान',
+  );
+  String get currentBranchClaimed => _t(
+    ar: 'المصروف / المسلّم للعملاء',
+    en: 'Awarded to Shoppers',
+    hi: 'ग्राहकों को दिया गया',
+  );
+  String get addQuantityLabel => _t(
+    ar: 'الكمية الإضافية المراد تزويدها (+)',
+    en: 'Additional Quantity to Supply (+)',
+    hi: 'आपूर्ति के लिए अतिरिक्त मात्रा (+)',
+  );
+  String get newTotalBranchAllocation => _t(
+    ar: 'إجمالي الحصة الجديد بعد التزويد',
+    en: 'New Total Branch Allocation',
+    hi: 'आपूर्ति के बाद नया कुल शाखा आवंटन',
+  );
+  String get branchAllocationSuccessMsg => _t(
+    ar: 'تم تحديث وتزويد حصة الفرع بنجاح وتفعيلها في السحب',
+    en: 'Branch prize allocation updated & activated successfully',
+    hi: 'शाखा उपहार आवंटन सफलतापूर्वक अपडेट और सक्रिय किया गया',
+  );
+  String get cannotReduceBelowClaimedError => _t(
+    ar: 'لا يمكن تقليل حصة الفرع عن عدد الهدايا التي تم صرفها بالفعل للعملاء',
+    en: 'Cannot reduce branch allocation below already awarded/claimed prizes',
+    hi: 'शाखा आवंटन को पहले से दिए गए उपहारों से कम नहीं किया जा सकता',
+  );
+  String get supplyReasonOptionalLabel => _t(
+    ar: 'ملاحظات / سبب التزويد (اختياري)',
+    en: 'Notes / Supply Reason (Optional)',
+    hi: 'टिप्पणियाँ / आपूर्ति का कारण (वैकल्पिक)',
+  );
+  String get saveBranchAllocationBtn => _t(
+    ar: 'حفظ وتحديث حصة الفرع',
+    en: 'Save & Update Branch Quota',
+    hi: 'शाखा कोटा सहेजें और अपडेट करें',
   );
 }
 

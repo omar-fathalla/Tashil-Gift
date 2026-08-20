@@ -9,6 +9,7 @@ import '../../../core/utils/error_handler.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
+import '../../../core/services/company_gifts_service.dart';
 import '../domain/company_gift_model.dart';
 
 class CompanyGiftsScreen extends ConsumerStatefulWidget {
@@ -30,6 +31,812 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
   final FocusNode _giftQuantityFocusNode = FocusNode();
   final FocusNode _voucherUnitValueFocusNode = FocusNode();
   bool _isLoading = false;
+
+  static String _formatDate(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+
+  static String _formatDateOnly(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  }
+
+  void _showAddSupplyBatchDialog(CompanyGiftModel gift) {
+    final TextEditingController batchQtyController = TextEditingController();
+    final TextEditingController refNumberController = TextEditingController();
+    final TextEditingController notesController = TextEditingController();
+    DateTime selectedDate = DateTime.now();
+    final colorScheme = Theme.of(context).colorScheme;
+    final isAr = ref.isArabic;
+    final giftTitle = gift.giftName.isNotEmpty ? gift.giftName : 'الهدية';
+    final isVoucher = gift.isVoucher;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final parsedQty = batchQtyController.text.trim().toIntOrNull() ?? 0;
+            final newTotal = gift.totalQuantity + parsedQty;
+            final newAvail = gift.availableQuantity + parsedQty;
+
+            return AlertDialog(
+              backgroundColor: colorScheme.surfaceContainerHigh,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(Icons.add_shopping_cart_rounded, color: Colors.green[700], size: 22),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isAr ? 'توريد دفعة جديدة للمخزون' : 'Add Supply Batch',
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 16, color: colorScheme.onSurface),
+                        ),
+                        Text(
+                          giftTitle,
+                          style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.primary, fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Stock Summary Chip
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            isAr ? 'الرصيد الحالي: ${gift.totalQuantity} (${gift.availableQuantity} متاح)' : 'Current: ${gift.totalQuantity} (${gift.availableQuantity} avail)',
+                            style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600, color: colorScheme.onSurfaceVariant),
+                          ),
+                          if (parsedQty > 0)
+                            Text(
+                              isAr ? 'بعد التوريد: $newTotal ($newAvail متاح)' : 'After: $newTotal ($newAvail avail)',
+                              style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green[700]),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Batch Quantity
+                    TextField(
+                      controller: batchQtyController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
+                      autofocus: true,
+                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                      onChanged: (_) => setDialogState(() {}),
+                      decoration: InputDecoration(
+                        labelText: isVoucher ? 'كمية الدفعة (عدد الكروت) *' : 'كمية الدفعة الموردة (قطع) *',
+                        hintText: 'مثال: 100',
+                        prefixIcon: const Icon(Icons.numbers_rounded),
+                        filled: true,
+                        fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Supply Date Picker
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2024),
+                          lastDate: DateTime(2030),
+                        );
+                        if (picked != null) {
+                          setDialogState(() {
+                            selectedDate = DateTime(picked.year, picked.month, picked.day, selectedDate.hour, selectedDate.minute);
+                          });
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.calendar_today_rounded, size: 18, color: colorScheme.primary),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    isAr ? 'تاريخ التوريد والاستلام' : 'Supply Date',
+                                    style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                                  ),
+                                  Text(
+                                    _formatDateOnly(selectedDate),
+                                    style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              isAr ? 'تغيير التاريخ' : 'Change',
+                              style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.primary, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Reference / PO Number
+                    TextField(
+                      controller: refNumberController,
+                      style: GoogleFonts.cairo(),
+                      decoration: InputDecoration(
+                        labelText: isAr ? 'رقم إذن التوريد / المرجع / الفاتورة (اختياري)' : 'PO / Delivery Ref # (Optional)',
+                        hintText: isAr ? 'مثال: إذن استلام 849 / PO-2026' : 'e.g. PO-849',
+                        prefixIcon: const Icon(Icons.tag_rounded),
+                        filled: true,
+                        fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Notes
+                    TextField(
+                      controller: notesController,
+                      style: GoogleFonts.cairo(),
+                      maxLines: 2,
+                      decoration: InputDecoration(
+                        labelText: isAr ? 'ملاحظات الدفعة والمصدر (اختياري)' : 'Batch Notes & Source (Optional)',
+                        hintText: isAr ? 'مثال: توريد دفعة إضافية من المورد' : 'e.g. Extra supply from supplier',
+                        prefixIcon: const Icon(Icons.notes_rounded),
+                        filled: true,
+                        fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(isAr ? 'إلغاء' : 'Cancel', style: GoogleFonts.cairo()),
+                ),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.green[700],
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  onPressed: () async {
+                    final qty = batchQtyController.text.trim().toIntOrNull();
+                    if (qty == null || qty <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(isAr ? 'يرجى إدخال كمية صحيحة أكبر من الصفر' : 'Please enter a valid quantity > 0', style: GoogleFonts.cairo()),
+                          backgroundColor: colorScheme.error,
+                        ),
+                      );
+                      return;
+                    }
+
+                    try {
+                      await ref.read(companyGiftsServiceProvider).addSupplyBatch(
+                        giftId: gift.id,
+                        quantity: qty,
+                        supplyDate: selectedDate,
+                        referenceNumber: refNumberController.text.trim(),
+                        notes: notesController.text.trim(),
+                        addedBy: 'مسؤول النظام',
+                      );
+
+                      if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              isAr ? 'تم تسجيل توريد الدفعة الجديدة (+ $qty) بنجاح' : 'Supply batch (+ $qty) added successfully',
+                              style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                            ),
+                            backgroundColor: Colors.green[700],
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(AppErrorHandler.getFriendlyMessage(e), style: GoogleFonts.cairo()), backgroundColor: colorScheme.error),
+                        );
+                      }
+                    }
+                  },
+                  icon: const Icon(Icons.check_rounded, size: 18),
+                  label: Text(isAr ? 'حفظ وتوريد الدفعة' : 'Add Supply Batch', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showStockAdjustmentDialog(CompanyGiftModel gift) {
+    final TextEditingController adjQtyController = TextEditingController();
+    final TextEditingController notesController = TextEditingController();
+    bool isIncrease = true;
+    String selectedReason = 'جرد دوري ومطابقة فعلية';
+    final colorScheme = Theme.of(context).colorScheme;
+    final isAr = ref.isArabic;
+    final giftTitle = gift.giftName.isNotEmpty ? gift.giftName : 'الهدية';
+
+    final reasonsList = [
+      'جرد دوري ومطابقة فعلية',
+      'تالف / هالك أثناء التخزين',
+      'عينات ترويجية ودعائية',
+      'تصحيح خطأ إدخال سابق',
+      'مرتجع من فرع / حملة',
+      'أخرى',
+    ];
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final parsedQty = adjQtyController.text.trim().toIntOrNull() ?? 0;
+            final delta = isIncrease ? parsedQty : -parsedQty;
+            final newTotal = (gift.totalQuantity + delta).clamp(0, 999999);
+            final newAvail = (gift.availableQuantity + delta).clamp(0, newTotal);
+
+            return AlertDialog(
+              backgroundColor: colorScheme.surfaceContainerHigh,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(Icons.tune_rounded, color: Colors.amber[900], size: 22),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isAr ? 'تسوية مخزنية وجردية' : 'Stock Adjustment',
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 16, color: colorScheme.onSurface),
+                        ),
+                        Text(
+                          giftTitle,
+                          style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.primary, fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Increase / Decrease Switcher
+                    SegmentedButton<bool>(
+                      segments: [
+                        ButtonSegment<bool>(
+                          value: true,
+                          icon: const Icon(Icons.add_circle_outline_rounded, color: Colors.green),
+                          label: Text(isAr ? 'تسوية بالزيادة (+)' : 'Adjustment (+)', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                        ),
+                        ButtonSegment<bool>(
+                          value: false,
+                          icon: const Icon(Icons.remove_circle_outline_rounded, color: Colors.red),
+                          label: Text(isAr ? 'تسوية بالنقص / هالك (-)' : 'Adjustment (-)', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                      selected: {isIncrease},
+                      onSelectionChanged: (set) {
+                        setDialogState(() {
+                          isIncrease = set.first;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Stock Summary
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            isAr ? 'الرصيد: ${gift.totalQuantity} (${gift.availableQuantity} متاح)' : 'Stock: ${gift.totalQuantity} (${gift.availableQuantity} avail)',
+                            style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600, color: colorScheme.onSurfaceVariant),
+                          ),
+                          if (parsedQty > 0)
+                            Text(
+                              isAr ? 'الناتج: $newTotal ($newAvail متاح)' : 'Result: $newTotal ($newAvail avail)',
+                              style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: isIncrease ? Colors.green[700] : Colors.red[700]),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Quantity
+                    TextField(
+                      controller: adjQtyController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
+                      autofocus: true,
+                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                      onChanged: (_) => setDialogState(() {}),
+                      decoration: InputDecoration(
+                        labelText: isAr ? 'كمية التسوية *' : 'Adjustment Quantity *',
+                        hintText: 'مثال: 5',
+                        prefixIcon: const Icon(Icons.exposure_rounded),
+                        filled: true,
+                        fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Reason Dropdown
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedReason,
+                      decoration: InputDecoration(
+                        labelText: isAr ? 'سبب التسوية *' : 'Adjustment Reason *',
+                        filled: true,
+                        fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                      ),
+                      items: reasonsList.map((r) {
+                        return DropdownMenuItem<String>(
+                          value: r,
+                          child: Text(r, style: GoogleFonts.cairo(fontSize: 13)),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setDialogState(() {
+                            selectedReason = val;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Notes
+                    TextField(
+                      controller: notesController,
+                      style: GoogleFonts.cairo(),
+                      maxLines: 2,
+                      decoration: InputDecoration(
+                        labelText: isAr ? 'ملاحظات تفصيلية' : 'Detailed Notes',
+                        hintText: isAr ? 'اكتب ملاحظات حول سبب التسوية أو رقم المحضر' : 'Enter notes or report number',
+                        prefixIcon: const Icon(Icons.notes_rounded),
+                        filled: true,
+                        fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(isAr ? 'إلغاء' : 'Cancel', style: GoogleFonts.cairo()),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: isIncrease ? Colors.green[700] : Colors.red[700],
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  onPressed: () async {
+                    final qty = adjQtyController.text.trim().toIntOrNull();
+                    if (qty == null || qty <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(isAr ? 'يرجى إدخال كمية صحيحة أكبر من الصفر' : 'Please enter a valid quantity > 0', style: GoogleFonts.cairo()),
+                          backgroundColor: colorScheme.error,
+                        ),
+                      );
+                      return;
+                    }
+
+                    try {
+                      await ref.read(companyGiftsServiceProvider).adjustStock(
+                        giftId: gift.id,
+                        isIncrease: isIncrease,
+                        quantity: qty,
+                        reason: selectedReason,
+                        notes: notesController.text.trim(),
+                        performedBy: 'مسؤول النظام',
+                      );
+
+                      if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              isAr
+                                  ? (isIncrease ? 'تمت إضافة تسوية بالزيادة (+ $qty) بنجاح' : 'تم تسجيل خصم التسوية (- $qty) بنجاح')
+                                  : (isIncrease ? 'Adjustment (+ $qty) recorded' : 'Adjustment (- $qty) recorded'),
+                              style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                            ),
+                            backgroundColor: isIncrease ? Colors.green[700] : Colors.amber[900],
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(AppErrorHandler.getFriendlyMessage(e), style: GoogleFonts.cairo()), backgroundColor: colorScheme.error),
+                        );
+                      }
+                    }
+                  },
+                  child: Text(isAr ? 'حفظ التسوية' : 'Save Adjustment', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showBatchesAndMovementLedgerDialog(CompanyGiftModel gift) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isAr = ref.isArabic;
+    final giftTitle = gift.giftName.isNotEmpty ? gift.giftName : 'الهدية';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: colorScheme.surfaceContainerHigh,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        return DefaultTabController(
+          length: 2,
+          child: DraggableScrollableSheet(
+            initialChildSize: 0.75,
+            minChildSize: 0.4,
+            maxChildSize: 0.92,
+            expand: false,
+            builder: (context, scrollController) {
+              return Column(
+                children: [
+                  // Handle pill
+                  Container(
+                    margin: const EdgeInsets.only(top: 12, bottom: 8),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: colorScheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: colorScheme.primaryContainer,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(Icons.history_edu_rounded, color: colorScheme.primary, size: 22),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                isAr ? 'سجل التوريدات وحركات المخزون' : 'Supply Batches & Movement Ledger',
+                                style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 16, color: colorScheme.onSurface),
+                              ),
+                              Text(
+                                giftTitle,
+                                style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.primary, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // KPI Summary Bar
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          Column(
+                            children: [
+                              Text(isAr ? 'إجمالي التوريد' : 'Total Supplied', style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant)),
+                              Text('${gift.totalQuantity}', style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold, color: colorScheme.primary)),
+                            ],
+                          ),
+                          Container(width: 1, height: 28, color: colorScheme.outlineVariant),
+                          Column(
+                            children: [
+                              Text(isAr ? 'المخصص بالحملات' : 'Campaign Alloc', style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant)),
+                              Text('${gift.totalQuantity - gift.availableQuantity}', style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.orange[800])),
+                            ],
+                          ),
+                          Container(width: 1, height: 28, color: colorScheme.outlineVariant),
+                          Column(
+                            children: [
+                              Text(isAr ? 'المتاح بالمستودع' : 'Warehouse Avail', style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant)),
+                              Text('${gift.availableQuantity}', style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green[800])),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // Tab Bar
+                  TabBar(
+                    labelColor: colorScheme.primary,
+                    unselectedLabelColor: colorScheme.onSurfaceVariant,
+                    indicatorColor: colorScheme.primary,
+                    tabs: [
+                      Tab(text: isAr ? 'دفعات التوريد (${gift.batches.length})' : 'Supply Batches (${gift.batches.length})'),
+                      Tab(text: isAr ? 'سجل حركات المخزون التفصيلي' : 'Stock Movement Ledger'),
+                    ],
+                  ),
+
+                  // Tab Content
+                  Expanded(
+                    child: TabBarView(
+                      children: [
+                        // Tab 1: Supply Batches List
+                        gift.batches.isEmpty
+                            ? Center(
+                                child: Text(isAr ? 'لا توجد دفعات مسجلة' : 'No batches recorded', style: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant)),
+                              )
+                            : ListView.separated(
+                                controller: scrollController,
+                                padding: const EdgeInsets.all(16),
+                                itemCount: gift.batches.length,
+                                separatorBuilder: (context, index) => const SizedBox(height: 10),
+                                itemBuilder: (context, idx) {
+                                  final batch = gift.batches[idx];
+                                  return Container(
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      color: colorScheme.surface,
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: BoxDecoration(
+                                            color: Colors.green.withValues(alpha: 0.15),
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                          child: Text(
+                                            '#${batch.batchNumber}',
+                                            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: Colors.green[800], fontSize: 13),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Text(
+                                                    '${isAr ? 'دفعة توريد' : 'Supply Batch'} +${batch.quantity} ${gift.isVoucher ? (isAr ? 'كارت' : 'cards') : (isAr ? 'قطعة' : 'pcs')}',
+                                                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: colorScheme.onSurface),
+                                                  ),
+                                                  Text(
+                                                    _formatDate(batch.supplyDate),
+                                                    style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                                                  ),
+                                                ],
+                                              ),
+                                              if (batch.referenceNumber.isNotEmpty) ...[
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  '${isAr ? 'المرجع / إذن التوريد' : 'Ref #'}: ${batch.referenceNumber}',
+                                                  style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.primary, fontWeight: FontWeight.w600),
+                                                ),
+                                              ],
+                                              if (batch.notes.isNotEmpty) ...[
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  batch.notes,
+                                                  style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+
+                        // Tab 2: Stock Movement Ledger (Live Stream)
+                        StreamBuilder<List<GiftStockMovement>>(
+                          stream: ref.read(companyGiftsServiceProvider).stockMovementsStream(gift.companySlug, giftId: gift.id),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState == ConnectionState.waiting) {
+                              return const Center(child: CircularProgressIndicator.adaptive());
+                            }
+                            final movements = snapshot.data ?? [];
+                            if (movements.isEmpty) {
+                              return Center(
+                                child: Text(isAr ? 'لا توجد حركات مخزنية مسجلة بعد' : 'No stock movements recorded yet', style: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant)),
+                              );
+                            }
+
+                            return ListView.separated(
+                              controller: scrollController,
+                              padding: const EdgeInsets.all(16),
+                              itemCount: movements.length,
+                              separatorBuilder: (context, index) => const SizedBox(height: 10),
+                              itemBuilder: (context, idx) {
+                                final m = movements[idx];
+                                final isAdd = m.isAddition;
+                                final color = isAdd ? Colors.green[800] : (m.movementType == 'campaign_allocation' ? Colors.orange[900] : Colors.red[800]);
+                                final bgColor = isAdd ? Colors.green.withValues(alpha: 0.12) : (m.movementType == 'campaign_allocation' ? Colors.orange.withValues(alpha: 0.12) : Colors.red.withValues(alpha: 0.12));
+
+                                return Container(
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.surface,
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: bgColor,
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Icon(
+                                          isAdd ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
+                                          color: color,
+                                          size: 18,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Text(
+                                                  isAr ? m.typeLabelAr : m.typeLabelEn,
+                                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: colorScheme.onSurface),
+                                                ),
+                                                Text(
+                                                  '${m.quantityChange > 0 ? '+' : ''}${m.quantityChange}',
+                                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 14, color: color),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              '${isAr ? 'الرصيد بعد الحركة' : 'Stock After'}: ${m.newTotal} (${m.newAvailable} ${isAr ? 'متاح' : 'avail'})',
+                                              style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600, color: colorScheme.onSurfaceVariant),
+                                            ),
+                                            if (m.reference.isNotEmpty) ...[
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                '${isAr ? 'المرجع' : 'Ref'}: ${m.reference}',
+                                                style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.primary),
+                                              ),
+                                            ],
+                                            if (m.notes.isNotEmpty) ...[
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                m.notes,
+                                                style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                                              ),
+                                            ],
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              _formatDate(m.timestamp),
+                                              style: GoogleFonts.cairo(fontSize: 10, color: colorScheme.outline),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
 
   @override
   void dispose() {
@@ -1409,6 +2216,31 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                                                       ),
                                                     ),
                                                   ),
+                                                  if (gift.batchCount > 1) ...[
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.blue.withValues(alpha: 0.15),
+                                                        borderRadius: BorderRadius.circular(8),
+                                                        border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                                                      ),
+                                                      child: Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                          Icon(Icons.layers_rounded, size: 12, color: Colors.blue[800]),
+                                                          const SizedBox(width: 4),
+                                                          Text(
+                                                            '${gift.batchCount} دفعات توريد',
+                                                            style: GoogleFonts.cairo(
+                                                              fontSize: 11,
+                                                              color: Colors.blue[900],
+                                                              fontWeight: FontWeight.bold,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ],
                                                   if (totalQty - availableQty > 0) ...[
                                                     Container(
                                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -1449,42 +2281,105 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                                                       ),
                                                     ),
                                                   ),
+                                                  if (gift.isLowStock) ...[
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.red.withValues(alpha: 0.15),
+                                                        borderRadius: BorderRadius.circular(8),
+                                                        border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                                                      ),
+                                                      child: Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                          const Icon(Icons.warning_amber_rounded, size: 12, color: Colors.red),
+                                                          const SizedBox(width: 4),
+                                                          Text(
+                                                            'مخزون منخفض',
+                                                            style: GoogleFonts.cairo(
+                                                              fontSize: 11,
+                                                              color: Colors.red[900],
+                                                              fontWeight: FontWeight.bold,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Row(
+                                                children: [
+                                                  IconButton.filledTonal(
+                                                    icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
+                                                    tooltip: 'توريد دفعة جديدة للمخزون (Supply Batch)',
+                                                    onPressed: () => _showAddSupplyBatchDialog(gift),
+                                                    style: IconButton.styleFrom(
+                                                      backgroundColor: Colors.green.withValues(alpha: 0.15),
+                                                      foregroundColor: Colors.green[800],
+                                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  IconButton.filledTonal(
+                                                    icon: const Icon(Icons.tune_rounded, size: 18),
+                                                    tooltip: 'تسوية مخزنية (جرد دوري / هالك / تعديل)',
+                                                    onPressed: () => _showStockAdjustmentDialog(gift),
+                                                    style: IconButton.styleFrom(
+                                                      backgroundColor: Colors.amber.withValues(alpha: 0.15),
+                                                      foregroundColor: Colors.amber[900],
+                                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  IconButton.filledTonal(
+                                                    icon: const Icon(Icons.history_edu_rounded, size: 18),
+                                                    tooltip: 'سجل التوريدات وحركات المخزون',
+                                                    onPressed: () => _showBatchesAndMovementLedgerDialog(gift),
+                                                    style: IconButton.styleFrom(
+                                                      backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.7),
+                                                      foregroundColor: colorScheme.primary,
+                                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  IconButton.filledTonal(
+                                                    icon: const Icon(Icons.edit, size: 18),
+                                                    tooltip: 'تعديل بيانات الهدية',
+                                                    onPressed: () => _showEditGiftDialog({
+                                                      'id': gift.id,
+                                                      'giftName': gift.giftName,
+                                                      'totalQuantity': gift.totalQuantity,
+                                                      'availableQuantity': gift.availableQuantity,
+                                                      'giftType': gift.giftType,
+                                                      'unitValue': gift.unitValue,
+                                                    }),
+                                                    style: IconButton.styleFrom(
+                                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  IconButton.filledTonal(
+                                                    icon: const Icon(Icons.delete, size: 18),
+                                                    tooltip: 'حذف الهدية',
+                                                    onPressed: () => _deleteGift(gift.id),
+                                                    style: IconButton.styleFrom(
+                                                      backgroundColor: colorScheme.errorContainer,
+                                                      foregroundColor: colorScheme.onErrorContainer,
+                                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                                    ),
+                                                  ),
                                                 ],
                                               ),
                                             ],
                                           ),
                                         ),
-                                        IconButton.filledTonal(
-                                          icon: const Icon(Icons.edit, size: 20),
-                                          tooltip: 'تعديل الكمية المتاحة',
-                                          onPressed: () => _showEditGiftDialog({
-                                            'id': gift.id,
-                                            'giftName': gift.giftName,
-                                            'totalQuantity': gift.totalQuantity,
-                                            'availableQuantity': gift.availableQuantity,
-                                            'giftType': gift.giftType,
-                                            'unitValue': gift.unitValue,
-                                          }),
-                                          style: IconButton.styleFrom(
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        IconButton.filledTonal(
-                                          icon: const Icon(Icons.delete, size: 20),
-                                          tooltip: 'حذف الهدية',
-                                          onPressed: () => _deleteGift(gift.id),
-                                          style: IconButton.styleFrom(
-                                            backgroundColor: colorScheme.errorContainer,
-                                            foregroundColor: colorScheme.onErrorContainer,
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                          ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                ),
-                              );
+                                );
                             },
                           );
                         },

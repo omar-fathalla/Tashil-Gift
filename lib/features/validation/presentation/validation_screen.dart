@@ -452,6 +452,33 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           }
         }
 
+        // Smart branch ID resolution matching AI-detected branch name with campaign branches
+        String? resolvedBranchId;
+        if (activeEvent.branchIds.isNotEmpty) {
+          final detectedBranchClean = result.branchDetected.trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
+          if (detectedBranchClean.isNotEmpty) {
+            for (int i = 0; i < activeEvent.branchNames.length; i++) {
+              final bName = activeEvent.branchNames[i].trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
+              if (bName.isNotEmpty && (bName.contains(detectedBranchClean) || detectedBranchClean.contains(bName))) {
+                if (i < activeEvent.branchIds.length) {
+                  resolvedBranchId = activeEvent.branchIds[i];
+                  break;
+                }
+              }
+            }
+            if (resolvedBranchId == null) {
+              for (final p in activeEvent.allocatedPrizes) {
+                final pBranchName = p.branchName.trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
+                if (pBranchName.isNotEmpty && (pBranchName.contains(detectedBranchClean) || detectedBranchClean.contains(pBranchName))) {
+                  resolvedBranchId = p.branchId;
+                  break;
+                }
+              }
+            }
+          }
+          resolvedBranchId ??= activeEvent.branchIds.first;
+        }
+
         final promoQuantity = activeEvent.allowMultipleChances ? totalChances : 1;
         await Navigator.of(context).push(
           MaterialPageRoute(
@@ -460,7 +487,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
               eventId: activeEvent.id,
               prizeName: designatedPrize,
               quantity: promoQuantity,
-              branchId: activeEvent.branchIds.isNotEmpty ? activeEvent.branchIds.first : null,
+              branchId: resolvedBranchId,
               unitValue: resolvedUnitValue,
               isVoucher: resolvedIsVoucher,
               linkedGifts: resolvedLinkedGifts,

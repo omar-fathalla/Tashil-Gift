@@ -88,26 +88,47 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   List<BranchModel> _availableBranches = [];
   bool _isLoadingBranches = false;
 
-  String? get _selectedRetailChainId => _selectedRetailChainIds.isNotEmpty ? _selectedRetailChainIds.join(',') : null;
-  String? get _selectedRetailChainName => _selectedRetailChainNames.isNotEmpty ? _selectedRetailChainNames.join(' • ') : null;
-  bool get _isAllBranches => _selectedRetailChainIds.isEmpty || _selectedRetailChainIds.every((id) => _chainIsAllBranchesMap[id] ?? true);
-  List<String> get _selectedBranchIds {
-    final list = <String>[];
-    for (final id in _selectedRetailChainIds) {
-      if (!(_chainIsAllBranchesMap[id] ?? true)) {
-        list.addAll(_chainSelectedBranchIdsMap[id] ?? {});
-      }
-    }
-    return list;
+  String? get _selectedRetailChainId {
+    final unique = _selectedRetailChainIds.toSet().where((s) => s.isNotEmpty).toList();
+    return unique.isNotEmpty ? unique.join(',') : null;
   }
-  List<String> get _selectedBranchNames {
-    final list = <String>[];
+
+  String? get _selectedRetailChainName {
+    final unique = _selectedRetailChainNames.toSet().where((s) => s.isNotEmpty).toList();
+    return unique.isNotEmpty ? unique.join(' • ') : null;
+  }
+
+  bool get _isAllBranches => _selectedRetailChainIds.isEmpty || _selectedRetailChainIds.every((id) => _chainIsAllBranchesMap[id] ?? true);
+
+  /// Returns the strictly deduplicated list of selected branch IDs across all selected chains
+  List<String> get _selectedBranchIds {
+    final uniqueIds = <String>{};
     for (final id in _selectedRetailChainIds) {
       if (!(_chainIsAllBranchesMap[id] ?? true)) {
-        list.addAll(_chainSelectedBranchNamesMap[id] ?? {});
+        uniqueIds.addAll(_chainSelectedBranchIdsMap[id] ?? {});
       }
     }
-    return list;
+    return uniqueIds.toList();
+  }
+
+  /// Returns the corresponding list of branch display names aligned 1:1 with `_selectedBranchIds`
+  List<String> get _selectedBranchNames {
+    return _selectedBranchIds.map(_getBranchDisplayName).toList();
+  }
+
+  /// Resolves the human-readable display name (including city if available) for any branch ID
+  String _getBranchDisplayName(String branchId) {
+    final b = _availableBranches.where((b) => b.id == branchId).firstOrNull;
+    if (b != null) {
+      return b.city.isNotEmpty ? '${b.branchName} (${b.city})' : b.branchName;
+    }
+    if (widget.eventToEdit != null) {
+      final idx = widget.eventToEdit!.branchIds.indexOf(branchId);
+      if (idx >= 0 && idx < widget.eventToEdit!.branchNames.length) {
+        return widget.eventToEdit!.branchNames[idx];
+      }
+    }
+    return branchId;
   }
 
   @override
@@ -137,14 +158,34 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     _endDate = e?.endDate;
 
     if (e != null && e.retailChainId.isNotEmpty) {
-      final rawChainIds = e.retailChainId.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
-      final rawChainNames = e.retailChainName.split('•').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      final rawChainIds = <String>[];
+      final seenChainIds = <String>{};
+      for (final s in e.retailChainId.split(',')) {
+        final trimmed = s.trim();
+        if (trimmed.isNotEmpty && seenChainIds.add(trimmed)) {
+          rawChainIds.add(trimmed);
+        }
+      }
+
+      final rawChainNames = <String>[];
+      final seenChainNames = <String>{};
+      for (final s in e.retailChainName.split('•')) {
+        final trimmed = s.trim();
+        if (trimmed.isNotEmpty && seenChainNames.add(trimmed)) {
+          rawChainNames.add(trimmed);
+        }
+      }
+
       _selectedRetailChainIds = List<String>.from(rawChainIds);
       _selectedRetailChainNames = List<String>.from(rawChainNames);
+
+      final uniqueBranchIds = e.branchIds.toSet();
+      final uniqueBranchNames = e.branchNames.toSet();
+
       for (final cId in rawChainIds) {
         _chainIsAllBranchesMap[cId] = e.isAllBranches;
-        _chainSelectedBranchIdsMap[cId] = Set<String>.from(e.branchIds);
-        _chainSelectedBranchNamesMap[cId] = Set<String>.from(e.branchNames);
+        _chainSelectedBranchIdsMap[cId] = Set<String>.from(uniqueBranchIds);
+        _chainSelectedBranchNamesMap[cId] = Set<String>.from(uniqueBranchNames);
         _loadBranchesForChain(cId);
       }
     }
@@ -201,6 +242,45 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         setState(() {
           _chainBranchesMap[chainId] = branches;
           _updateAvailableBranches();
+
+          // Reconcile and filter selected branches so each chain only owns its own branches
+          if (widget.eventToEdit != null && !(_chainIsAllBranchesMap[chainId] ?? true)) {
+            final chainBranchIds = branches.map((b) => b.id).toSet();
+            final currentSelectedIds = _chainSelectedBranchIdsMap[chainId] ?? {};
+
+            // Keep only IDs that actually belong to this chain
+            final validIds = currentSelectedIds.where((id) => chainBranchIds.contains(id)).toSet();
+
+            // Also check name match in case IDs were slightly different or from older data
+            final matchedByName = branches.where((b) =>
+                (widget.eventToEdit?.branchNames ?? []).contains(b.branchName) ||
+                currentSelectedIds.contains(b.branchName)
+            ).toList();
+
+            if (validIds.isNotEmpty) {
+              _chainSelectedBranchIdsMap[chainId] = validIds;
+              _chainSelectedBranchNamesMap[chainId] = branches
+                  .where((b) => validIds.contains(b.id))
+                  .map((b) => b.branchName)
+                  .toSet();
+            } else if (matchedByName.isNotEmpty) {
+              _chainSelectedBranchIdsMap[chainId] = matchedByName.map((b) => b.id).toSet();
+              _chainSelectedBranchNamesMap[chainId] = matchedByName.map((b) => b.branchName).toSet();
+            } else if (_selectedRetailChainIds.length == 1 && branches.isNotEmpty) {
+              // If this is the only chain, match all known branches
+              final allInChain = branches.where((b) =>
+                  currentSelectedIds.contains(b.id) ||
+                  (widget.eventToEdit?.branchNames ?? []).contains(b.branchName)
+              ).toList();
+              if (allInChain.isNotEmpty) {
+                _chainSelectedBranchIdsMap[chainId] = allInChain.map((b) => b.id).toSet();
+                _chainSelectedBranchNamesMap[chainId] = allInChain.map((b) => b.branchName).toSet();
+              }
+            } else {
+              _chainSelectedBranchIdsMap[chainId] = {};
+              _chainSelectedBranchNamesMap[chainId] = {};
+            }
+          }
         });
       }
     } catch (_) {
@@ -1588,9 +1668,17 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
             if (widget.eventToEdit != null) {
               try {
                 originalPrize = widget.eventToEdit!.allocatedPrizes.firstWhere(
-                  (p) => p.giftId == giftKey || p.name == giftKey,
+                  (p) =>
+                      (p.giftId == giftKey || p.name == giftKey) &&
+                      (branchId.isEmpty || p.branchId == branchId || p.branchName == branchName),
                 );
-              } catch (_) {}
+              } catch (_) {
+                try {
+                  originalPrize = widget.eventToEdit!.allocatedPrizes.firstWhere(
+                    (p) => p.giftId == giftKey || p.name == giftKey,
+                  );
+                } catch (_) {}
+              }
             }
 
             String finalName = matchedGift?.giftName ?? originalPrize?.name ?? giftKey;
@@ -1610,11 +1698,18 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               }
             }
 
+            // Preserve claimed count on edit so remaining is not reset to total
+            int calculatedRemaining = quantity;
+            if (originalPrize != null) {
+              final alreadyClaimed = (originalPrize.allocatedQuantity - originalPrize.remainingQuantity).clamp(0, originalPrize.allocatedQuantity);
+              calculatedRemaining = (quantity - alreadyClaimed).clamp(0, quantity);
+            }
+
             return AllocatedPrize(
               giftId: giftKey,
               name: finalName,
               allocatedQuantity: quantity,
-              remainingQuantity: quantity,
+              remainingQuantity: calculatedRemaining,
               giftType: finalType,
               unitValue: finalUnitValue,
               branchId: branchId,
@@ -1635,9 +1730,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               }
             }
           } else {
-            for (int i = 0; i < _selectedBranchIds.length; i++) {
-              final bId = _selectedBranchIds[i];
-              final bName = i < _selectedBranchNames.length ? _selectedBranchNames[i] : bId;
+            for (final bId in _selectedBranchIds) {
+              final bName = _getBranchDisplayName(bId);
               final bAllocations = _branchAllocationQuantities[bId] ?? {};
               for (final entry in bAllocations.entries) {
                 if (entry.value > 0) {
@@ -4634,7 +4728,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               ),
             ] else ...[
               Text(
-                'السلاسل والفروع المشمولة في هذه الحملة (${_selectedRetailChainIds.length} سلاسل):',
+                'السلاسل والفروع المشمولة في هذه الحملة (${_selectedRetailChainIds.length} سلاسل • ${_isAllBranches ? 'جميع الفروع' : '${_selectedBranchIds.length} فرع مشمول'}):',
                 style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 14, color: colorScheme.primary),
               ),
               const SizedBox(height: 10),
@@ -4922,20 +5016,43 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       subtitle: _isAllBranches 
           ? 'اختر الهدايا ووزع الكميات المخصصة للحملة ككل'
           : 'اختر الفرع المستهدف بالضغط عليه، ثم خصص كميات الهدايا الخاصة به من الرصيد المتبقي',
-      actionBadge: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: totalAllocatedUnits > 0 ? colorScheme.primaryContainer : colorScheme.secondaryContainer,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          '$totalAllocatedUnits وحدة مخصصة',
-          style: GoogleFonts.cairo(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: totalAllocatedUnits > 0 ? colorScheme.onPrimaryContainer : colorScheme.onSecondaryContainer,
+      actionBadge: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!_isAllBranches && _selectedBranchIds.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: colorScheme.secondaryContainer,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '${_selectedBranchIds.length} فروع مشمولة',
+                style: GoogleFonts.cairo(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onSecondaryContainer,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: totalAllocatedUnits > 0 ? colorScheme.primaryContainer : colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '$totalAllocatedUnits وحدة مخصصة',
+              style: GoogleFonts.cairo(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: totalAllocatedUnits > 0 ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
+              ),
+            ),
           ),
-        ),
+        ],
       ),
       children: [
         if (_companyGifts.isEmpty)
@@ -4976,7 +5093,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       Icon(Icons.storefront_rounded, size: 18, color: colorScheme.primary),
                       const SizedBox(width: 8),
                       Text(
-                        'اضغط على الفرع لضبط حصته من الهدايا:',
+                        'اضغط على الفرع لضبط حصته من الهدايا (إجمالي الفروع: ${_selectedBranchIds.length} فرع):',
                         style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
                       ),
                       const Spacer(),
@@ -5016,10 +5133,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     spacing: 8,
                     runSpacing: 8,
                     children: _selectedBranchIds.map((bId) {
-                      final bIndex = _selectedBranchIds.indexOf(bId);
-                      final bName = bIndex >= 0 && bIndex < _selectedBranchNames.length 
-                          ? _selectedBranchNames[bIndex] 
-                          : bId;
+                      final bName = _getBranchDisplayName(bId);
                       final isSelected = bId == activeBranchId;
                       final branchAllocUnits = _getBranchAllocatedUnits(bId);
 
@@ -5077,6 +5191,12 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                           text: activeBranchName,
                           style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: colorScheme.primary),
                         ),
+                        if (!_isAllBranches && _selectedBranchIds.length > 1) ...[
+                          TextSpan(
+                            text: ' (فرع ${_selectedBranchIds.indexOf(activeBranchId) + 1} من ${_selectedBranchIds.length})',
+                            style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -5323,7 +5443,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       Icon(Icons.assessment_outlined, size: 18, color: colorScheme.primary),
                       const SizedBox(width: 8),
                       Text(
-                        'ملخص توزيع الهدايا عبر الفروع المختارة:',
+                        'ملخص توزيع الهدايا عبر الفروع المختارة (${_selectedBranchIds.length} فرع):',
                         style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
                       ),
                     ],
@@ -5332,10 +5452,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   const Divider(height: 1),
                   const SizedBox(height: 8),
                   ..._selectedBranchIds.map((bId) {
-                    final bIndex = _selectedBranchIds.indexOf(bId);
-                    final bName = bIndex >= 0 && bIndex < _selectedBranchNames.length 
-                        ? _selectedBranchNames[bIndex] 
-                        : bId;
+                    final bName = _getBranchDisplayName(bId);
                     final bAllocations = _branchAllocationQuantities[bId] ?? {};
                     final Map<String, int> resolvedGiftsMap = {};
                     for (final entry in bAllocations.entries) {

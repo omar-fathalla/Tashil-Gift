@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_service.dart';
 import '../../features/admin/domain/company_gift_model.dart';
+import '../../features/admin/domain/event_model.dart';
 
 final companyGiftsServiceProvider = Provider<CompanyGiftsService>((ref) {
   final firestore = ref.watch(firestoreProvider);
@@ -151,22 +152,396 @@ class CompanyGiftsService {
     return usage;
   }
 
-  /// Adds a new gift to a company's master inventory.
+  /// Stream of all stock movements and audit logs for a company (or a specific gift).
+  Stream<List<GiftStockMovement>> stockMovementsStream(String companySlug, {String? giftId}) {
+    final slug = companySlug.toLowerCase().trim();
+    if (slug.isEmpty) return Stream.value([]);
+
+    Query query = _firestore
+        .collection('gift_stock_movements')
+        .where('companySlug', isEqualTo: slug);
+
+    if (giftId != null && giftId.isNotEmpty) {
+      query = query.where('giftId', isEqualTo: giftId);
+    }
+
+    return query.snapshots().map((snap) {
+      final list = snap.docs.map((d) => GiftStockMovement.fromFirestore(d)).toList();
+      list.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      return list;
+    });
+  }
+
+  /// Adds a new supply batch to an existing gift in the master inventory.
+  /// Automatically updates totalQuantity, availableQuantity, and logs to `gift_stock_movements`.
+  Future<void> addSupplyBatch({
+    required String giftId,
+    required int quantity,
+    required DateTime supplyDate,
+    String referenceNumber = '',
+    String notes = '',
+    String addedBy = 'مسؤول النظام',
+  }) async {
+    if (quantity <= 0) return;
+
+    final docRef = _firestore.collection('company_gifts').doc(giftId);
+    final docSnap = await docRef.get();
+    if (!docSnap.exists) return;
+
+    final gift = CompanyGiftModel.fromFirestore(docSnap);
+    final previousTotal = gift.totalQuantity;
+    final previousAvailable = gift.availableQuantity;
+    final newTotal = previousTotal + quantity;
+    final newAvailable = previousAvailable + quantity;
+
+    final nextBatchNum = gift.batches.length + 1;
+    final newBatch = GiftSupplyBatch(
+      id: 'batch_${DateTime.now().millisecondsSinceEpoch}',
+      batchNumber: nextBatchNum,
+      quantity: quantity,
+      supplyDate: supplyDate,
+      referenceNumber: referenceNumber.trim(),
+      notes: notes.trim(),
+      addedBy: addedBy.trim(),
+    );
+
+    final updatedBatches = List<GiftSupplyBatch>.from(gift.batches)..add(newBatch);
+
+    final batch = _firestore.batch();
+    batch.update(docRef, {
+      'totalQuantity': newTotal,
+      'availableQuantity': newAvailable,
+      'batches': updatedBatches.map((b) => b.toMap()).toList(),
+    });
+
+    // Add movement audit record
+    final movementRef = _firestore.collection('gift_stock_movements').doc();
+    final movement = GiftStockMovement(
+      id: movementRef.id,
+      companySlug: gift.companySlug,
+      giftId: gift.id,
+      giftName: gift.giftName,
+      movementType: 'supply_batch',
+      quantityChange: quantity,
+      previousTotal: previousTotal,
+      newTotal: newTotal,
+      previousAvailable: previousAvailable,
+      newAvailable: newAvailable,
+      reference: referenceNumber.trim().isNotEmpty ? referenceNumber.trim() : 'إذن توريد دفعة رقم $nextBatchNum',
+      notes: notes.trim(),
+      performedBy: addedBy.trim().isNotEmpty ? addedBy.trim() : 'مسؤول النظام',
+      timestamp: supplyDate,
+    );
+    batch.set(movementRef, movement.toFirestore());
+
+    await batch.commit();
+  }
+
+  /// Adjusts the stock of a gift (either increase or decrease) with a formal audit reason.
+  Future<void> adjustStock({
+    required String giftId,
+    required bool isIncrease,
+    required int quantity,
+    required String reason,
+    String notes = '',
+    String performedBy = 'مسؤول النظام',
+  }) async {
+    if (quantity <= 0) return;
+
+    final docRef = _firestore.collection('company_gifts').doc(giftId);
+    final docSnap = await docRef.get();
+    if (!docSnap.exists) return;
+
+    final gift = CompanyGiftModel.fromFirestore(docSnap);
+    final previousTotal = gift.totalQuantity;
+    final previousAvailable = gift.availableQuantity;
+
+    final qtyChange = isIncrease ? quantity : -quantity;
+    final newTotal = (previousTotal + qtyChange).clamp(0, 9999999);
+    final newAvailable = (previousAvailable + qtyChange).clamp(0, newTotal);
+
+    final batch = _firestore.batch();
+    batch.update(docRef, {
+      'totalQuantity': newTotal,
+      'availableQuantity': newAvailable,
+    });
+
+    // Add movement audit record
+    final movementRef = _firestore.collection('gift_stock_movements').doc();
+    final movement = GiftStockMovement(
+      id: movementRef.id,
+      companySlug: gift.companySlug,
+      giftId: gift.id,
+      giftName: gift.giftName,
+      movementType: isIncrease ? 'adjustment_add' : 'adjustment_deduct',
+      quantityChange: qtyChange,
+      previousTotal: previousTotal,
+      newTotal: newTotal,
+      previousAvailable: previousAvailable,
+      newAvailable: newAvailable,
+      reference: reason.trim(),
+      notes: notes.trim(),
+      performedBy: performedBy.trim().isNotEmpty ? performedBy.trim() : 'مسؤول النظام',
+      timestamp: DateTime.now(),
+    );
+    batch.set(movementRef, movement.toFirestore());
+
+    await batch.commit();
+  }
+
+  /// Returns unused remaining prizes from a campaign back to the company master warehouse.
+  Future<void> returnUnusedCampaignStock({
+    required String eventId,
+    required String giftId,
+    required int returnQty,
+    String eventName = '',
+    String performedBy = 'مسؤول النظام',
+  }) async {
+    if (returnQty <= 0) return;
+
+    final docRef = _firestore.collection('company_gifts').doc(giftId);
+    final docSnap = await docRef.get();
+    if (!docSnap.exists) return;
+
+    final gift = CompanyGiftModel.fromFirestore(docSnap);
+    final previousTotal = gift.totalQuantity;
+    final previousAvailable = gift.availableQuantity;
+    final newAvailable = (previousAvailable + returnQty).clamp(0, gift.totalQuantity);
+
+    final batch = _firestore.batch();
+    batch.update(docRef, {
+      'availableQuantity': newAvailable,
+    });
+
+    final movementRef = _firestore.collection('gift_stock_movements').doc();
+    final movement = GiftStockMovement(
+      id: movementRef.id,
+      companySlug: gift.companySlug,
+      giftId: gift.id,
+      giftName: gift.giftName,
+      movementType: 'campaign_return',
+      quantityChange: returnQty,
+      previousTotal: previousTotal,
+      newTotal: previousTotal,
+      previousAvailable: previousAvailable,
+      newAvailable: newAvailable,
+      reference: eventName.isNotEmpty ? 'استرجاع من حملة: $eventName' : 'استرجاع فائض حملة',
+      notes: 'إرجاع $returnQty قطعة غير مستهلكة إلى الرصيد المتاح للشركة',
+      performedBy: performedBy,
+      timestamp: DateTime.now(),
+    );
+    batch.set(movementRef, movement.toFirestore());
+
+    await batch.commit();
+  }
+
+  /// Updates or supplies prize allocation for a specific branch in a campaign event.
+  /// Enforces validation that new allocation cannot be less than already claimed/awarded prizes.
+  /// Automatically updates event's allocatedPrizes, logs a GiftStockMovement audit entry,
+  /// and synchronizes the company's master available inventory.
+  Future<void> updateBranchPrizeAllocation({
+    required String companySlug,
+    required String eventId,
+    required String branchName,
+    String branchId = '',
+    required String giftKey,
+    required int newAllocatedQuantity,
+    String notes = '',
+    String performedBy = 'مدير الشركة',
+  }) async {
+    final slug = companySlug.toLowerCase().trim();
+    if (eventId.isEmpty) return;
+
+    final eventRef = _firestore.collection('events').doc(eventId);
+    final eventSnap = await eventRef.get();
+    if (!eventSnap.exists) {
+      throw Exception('Campaign event not found: $eventId');
+    }
+
+    final eventData = eventSnap.data() ?? {};
+    final eventName = eventData['eventName'] as String? ?? 'حملة ترويجية';
+    final rawPrizes = (eventData['allocatedPrizes'] as List<dynamic>?) ?? [];
+
+    List<AllocatedPrize> prizes = rawPrizes
+        .map((p) => AllocatedPrize.fromMap(Map<String, dynamic>.from(p as Map)))
+        .toList();
+
+    // Match the target allocated prize for this branch & gift
+    final targetBranchNorm = branchName.trim().toLowerCase();
+    final targetBranchIdNorm = branchId.trim().toLowerCase();
+    final targetGiftKeyNorm = giftKey.trim().toLowerCase();
+
+    int matchedIndex = -1;
+    for (int i = 0; i < prizes.length; i++) {
+      final p = prizes[i];
+      final pBranchNorm = p.branchName.trim().toLowerCase();
+      final pBranchIdNorm = p.branchId.trim().toLowerCase();
+      final pGiftIdNorm = p.giftId.trim().toLowerCase();
+      final pNameNorm = p.name.trim().toLowerCase();
+
+      final branchMatches = (targetBranchIdNorm.isNotEmpty && pBranchIdNorm == targetBranchIdNorm) ||
+          (pBranchNorm == targetBranchNorm);
+      final giftMatches = pGiftIdNorm == targetGiftKeyNorm || pNameNorm == targetGiftKeyNorm;
+
+      if (branchMatches && giftMatches) {
+        matchedIndex = i;
+        break;
+      }
+    }
+
+    // Also find master gift record for audit/details if available
+    CompanyGiftModel? masterGift;
+    try {
+      final gifts = await getGiftsForCompany(slug);
+      masterGift = gifts.firstWhere(
+        (g) => g.id.toLowerCase() == targetGiftKeyNorm || g.giftName.trim().toLowerCase() == targetGiftKeyNorm,
+      );
+    } catch (_) {}
+
+    int oldAllocated = 0;
+    int oldRemaining = 0;
+    int claimed = 0;
+    String finalGiftId = masterGift?.id ?? giftKey;
+    String finalGiftName = masterGift?.giftName ?? giftKey;
+    String finalGiftType = masterGift?.giftType ?? 'product';
+    double finalUnitValue = masterGift?.unitValue ?? 0.0;
+
+    if (matchedIndex != -1) {
+      final p = prizes[matchedIndex];
+      oldAllocated = p.allocatedQuantity;
+      oldRemaining = p.remainingQuantity;
+      claimed = (oldAllocated - oldRemaining).clamp(0, oldAllocated);
+      finalGiftId = p.giftId.isNotEmpty ? p.giftId : finalGiftId;
+      finalGiftName = p.name.isNotEmpty ? p.name : finalGiftName;
+      finalGiftType = p.giftType;
+      finalUnitValue = p.unitValue;
+    }
+
+    if (newAllocatedQuantity < claimed) {
+      throw Exception(
+        'لا يمكن تقليل حصة الفرع إلى $newAllocatedQuantity حيث تم صرف $claimed جائزة للعملاء بالفعل.',
+      );
+    }
+
+    final delta = newAllocatedQuantity - oldAllocated;
+    final newRemaining = (oldRemaining + delta).clamp(0, newAllocatedQuantity);
+
+    final updatedPrize = AllocatedPrize(
+      giftId: finalGiftId,
+      name: finalGiftName,
+      allocatedQuantity: newAllocatedQuantity,
+      remainingQuantity: newRemaining,
+      branchId: branchId.isNotEmpty ? branchId : (matchedIndex != -1 ? prizes[matchedIndex].branchId : ''),
+      branchName: branchName.isNotEmpty ? branchName : (matchedIndex != -1 ? prizes[matchedIndex].branchName : ''),
+      giftType: finalGiftType,
+      unitValue: finalUnitValue,
+    );
+
+    if (matchedIndex != -1) {
+      prizes[matchedIndex] = updatedPrize;
+    } else {
+      prizes.add(updatedPrize);
+    }
+
+    final batch = _firestore.batch();
+    batch.update(eventRef, {
+      'allocatedPrizes': prizes.map((p) => p.toMap()).toList(),
+    });
+
+    // Write movement audit if there is a non-zero quantity change
+    if (delta != 0) {
+      final movementRef = _firestore.collection('gift_stock_movements').doc();
+      final isIncrease = delta > 0;
+      final movement = GiftStockMovement(
+        id: movementRef.id,
+        companySlug: slug,
+        giftId: finalGiftId,
+        giftName: finalGiftName,
+        movementType: isIncrease ? 'branch_allocation_increase' : 'branch_allocation_decrease',
+        quantityChange: delta,
+        previousTotal: oldAllocated,
+        newTotal: newAllocatedQuantity,
+        previousAvailable: oldRemaining,
+        newAvailable: newRemaining,
+        reference: 'تعديل حصة $branchName في $eventName',
+        notes: notes.trim().isNotEmpty
+            ? notes.trim()
+            : (isIncrease
+                ? 'تزويد إضافي (+ $delta) لـ $branchName (المخصص: $newAllocatedQuantity، المتبقي: $newRemaining)'
+                : 'تخفيض حصة ($delta) لـ $branchName (المخصص: $newAllocatedQuantity، المتبقي: $newRemaining)'),
+        performedBy: performedBy.trim().isNotEmpty ? performedBy.trim() : 'مدير الشركة',
+        timestamp: DateTime.now(),
+      );
+      batch.set(movementRef, movement.toFirestore());
+    }
+
+    await batch.commit();
+
+    // Synchronize company available quantities
+    await syncCompanyGiftsAvailableQuantities(slug);
+  }
+
+  /// Adds a new gift to a company's master inventory with initial batch creation.
   Future<void> addGift({
     required String companySlug,
     required String companyName,
     required String giftName,
     required int quantity,
+    String giftType = 'product',
+    double unitValue = 0.0,
+    String referenceNumber = '',
+    String notes = '',
+    String addedBy = 'مسؤول النظام',
   }) async {
-    await _firestore.collection('company_gifts').add({
+    final docRef = _firestore.collection('company_gifts').doc();
+    final now = DateTime.now();
+
+    final initialBatch = GiftSupplyBatch(
+      id: 'batch_${now.millisecondsSinceEpoch}',
+      batchNumber: 1,
+      quantity: quantity,
+      supplyDate: now,
+      referenceNumber: referenceNumber.trim().isNotEmpty ? referenceNumber.trim() : 'الرصيد الافتتاحي (دفعة 1)',
+      notes: notes.trim().isNotEmpty ? notes.trim() : 'دفعة التوريد الافتتاحية الأولى',
+      addedBy: addedBy.trim(),
+    );
+
+    final batch = _firestore.batch();
+    batch.set(docRef, {
+      'id': docRef.id,
       'companySlug': companySlug.toLowerCase().trim(),
       'companyName': companyName,
       'giftName': giftName.trim(),
       'name': giftName.trim(),
       'totalQuantity': quantity,
       'availableQuantity': quantity,
+      'giftType': giftType,
+      'unitValue': unitValue,
+      'orderIndex': now.millisecondsSinceEpoch ~/ 1000,
+      'batches': [initialBatch.toMap()],
       'createdAt': FieldValue.serverTimestamp(),
     });
+
+    final movementRef = _firestore.collection('gift_stock_movements').doc();
+    final movement = GiftStockMovement(
+      id: movementRef.id,
+      companySlug: companySlug.toLowerCase().trim(),
+      giftId: docRef.id,
+      giftName: giftName.trim(),
+      movementType: 'supply_batch',
+      quantityChange: quantity,
+      previousTotal: 0,
+      newTotal: quantity,
+      previousAvailable: 0,
+      newAvailable: quantity,
+      reference: referenceNumber.trim().isNotEmpty ? referenceNumber.trim() : 'الرصيد الافتتاحي (دفعة 1)',
+      notes: notes.trim().isNotEmpty ? notes.trim() : 'تكويد وتوريد أولي للهدية',
+      performedBy: addedBy,
+      timestamp: now,
+    );
+    batch.set(movementRef, movement.toFirestore());
+
+    await batch.commit();
   }
 
   /// Updates the quantity of an existing gift in the master inventory.
@@ -191,28 +566,6 @@ class CompanyGiftsService {
   /// Deletes a gift from the master inventory.
   Future<void> deleteGift(String giftId) async {
     await _firestore.collection('company_gifts').doc(giftId).delete();
-  }
-
-  /// Allocates a quantity from the master inventory to a campaign.
-  /// Decreases availableQuantity by the allocated amount.
-  Future<bool> allocateGiftToCampaign(String giftId, int quantity) async {
-    final doc = await _firestore.collection('company_gifts').doc(giftId).get();
-    if (!doc.exists) return false;
-
-    final available = (doc.data()!['availableQuantity'] ?? 0) as int;
-    if (available < quantity) return false;
-
-    await _firestore.collection('company_gifts').doc(giftId).update({
-      'availableQuantity': FieldValue.increment(-quantity),
-    });
-    return true;
-  }
-
-  /// Returns allocated quantity back to the master inventory (e.g. when a campaign is deleted).
-  Future<void> deallocateGift(String giftId, int quantity) async {
-    await _firestore.collection('company_gifts').doc(giftId).update({
-      'availableQuantity': FieldValue.increment(quantity),
-    });
   }
 
   static String _normalizePrizeText(String text) {
@@ -278,14 +631,20 @@ class CompanyGiftsService {
 
       int score = 0;
 
-      // 1. Branch match weighting
-      final isExactBranch = branchId != null && branchId.isNotEmpty && pBranchId == branchId;
-      final isGeneralBranch = pBranchId.isEmpty;
+      // 1. Branch match weighting (support branchId, branchName, and normalized branch name)
+      final pBranchName = (p['branchName'] ?? '').toString().trim();
+      final isExactBranch = branchId != null &&
+          branchId.isNotEmpty &&
+          (pBranchId == branchId ||
+              pBranchName == branchId ||
+              _normalizePrizeText(pBranchName) == _normalizePrizeText(branchId) ||
+              (_normalizePrizeText(branchId).isNotEmpty && _normalizePrizeText(pBranchName).contains(_normalizePrizeText(branchId))));
+      final isGeneralBranch = pBranchId.isEmpty && pBranchName.isEmpty;
       if (isExactBranch) {
         score += 120;
       } else if (isGeneralBranch) {
         score += 60;
-      } else if (branchId != null && branchId.isNotEmpty && pBranchId.isNotEmpty && pBranchId != branchId) {
+      } else if (branchId != null && branchId.isNotEmpty && (pBranchId.isNotEmpty || pBranchName.isNotEmpty) && !isExactBranch) {
         // Different specific branch penalty
         score -= 80;
       }

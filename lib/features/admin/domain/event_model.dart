@@ -489,18 +489,42 @@ class EventModel {
               .toList() ??
           [],
       gameType: data['gameType'] ?? 'wheel',
-      allocatedPrizes: (data['allocatedPrizes'] as List<dynamic>?)
+      allocatedPrizes: _deduplicatePrizes((data['allocatedPrizes'] as List<dynamic>?)
               ?.map((e) => AllocatedPrize.fromMap(Map<String, dynamic>.from(e as Map)))
               .toList() ??
-          [],
-      retailChainId: data['retailChainId'] ?? '',
-      retailChainName: data['retailChainName'] ?? '',
-      branchIds: List<String>.from(data['branchIds'] ?? []),
-      branchNames: List<String>.from(data['branchNames'] ?? []),
+          []),
+      retailChainId: (data['retailChainId'] ?? '').toString(),
+      retailChainName: (data['retailChainName'] ?? '').toString(),
+      branchIds: _deduplicateStrings(List<String>.from(data['branchIds'] ?? [])),
+      branchNames: _deduplicateStrings(List<String>.from(data['branchNames'] ?? [])),
       isAllBranches: data['isAllBranches'] ?? true,
       allowMultipleChances: data['allowMultipleChances'] == true,
       maxChancesPerReceipt: (data['maxChancesPerReceipt'] as num?)?.toInt() ?? 0,
     );
+  }
+
+  static List<String> _deduplicateStrings(List<String> list) {
+    final seen = <String>{};
+    final result = <String>[];
+    for (final item in list) {
+      final trimmed = item.trim();
+      if (trimmed.isNotEmpty && seen.add(trimmed)) {
+        result.add(trimmed);
+      }
+    }
+    return result;
+  }
+
+  static List<AllocatedPrize> _deduplicatePrizes(List<AllocatedPrize> list) {
+    final seenKeys = <String>{};
+    final result = <AllocatedPrize>[];
+    for (final prize in list) {
+      final key = '${prize.branchId}_${prize.giftId}_${prize.name}';
+      if (seenKeys.add(key)) {
+        result.add(prize);
+      }
+    }
+    return result;
   }
 
   Map<String, dynamic> toFirestore() {
@@ -525,11 +549,11 @@ class EventModel {
       'aiValidationSummary': aiValidationSummary,
       'promotionalRules': promotionalRules.map((r) => r.toMap()).toList(),
       'gameType': gameType,
-      'allocatedPrizes': allocatedPrizes.map((p) => p.toMap()).toList(),
+      'allocatedPrizes': _deduplicatePrizes(allocatedPrizes).map((p) => p.toMap()).toList(),
       'retailChainId': retailChainId,
       'retailChainName': retailChainName,
-      'branchIds': branchIds,
-      'branchNames': branchNames,
+      'branchIds': _deduplicateStrings(branchIds),
+      'branchNames': _deduplicateStrings(branchNames),
       'isAllBranches': isAllBranches,
       'allowMultipleChances': allowMultipleChances,
       'maxChancesPerReceipt': maxChancesPerReceipt,

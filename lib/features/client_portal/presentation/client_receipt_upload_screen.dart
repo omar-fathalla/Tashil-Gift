@@ -29,6 +29,7 @@ import '../../games/presentation/direct_gift_claim_screen.dart';
 import '../../validation/presentation/widgets/receipt_validation_dialog.dart';
 import 'widgets/campaign_gift_balance_dialog.dart';
 import 'widgets/campaign_brief_dialog.dart';
+import 'widgets/promoter_invoices_dialog.dart';
 import '../../../core/widgets/campaign_suspended_screen.dart';
 
 
@@ -645,6 +646,33 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           }
         }
 
+        // Smart branch ID resolution matching AI-detected branch name with campaign branches
+        String? resolvedBranchId;
+        if (currentEvent != null && currentEvent.branchIds.isNotEmpty) {
+          final detectedBranchClean = result.branchDetected.trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
+          if (detectedBranchClean.isNotEmpty) {
+            for (int i = 0; i < currentEvent.branchNames.length; i++) {
+              final bName = currentEvent.branchNames[i].trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
+              if (bName.isNotEmpty && (bName.contains(detectedBranchClean) || detectedBranchClean.contains(bName))) {
+                if (i < currentEvent.branchIds.length) {
+                  resolvedBranchId = currentEvent.branchIds[i];
+                  break;
+                }
+              }
+            }
+            if (resolvedBranchId == null) {
+              for (final p in currentEvent.allocatedPrizes) {
+                final pBranchName = p.branchName.trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
+                if (pBranchName.isNotEmpty && (pBranchName.contains(detectedBranchClean) || detectedBranchClean.contains(pBranchName))) {
+                  resolvedBranchId = p.branchId;
+                  break;
+                }
+              }
+            }
+          }
+          resolvedBranchId ??= currentEvent.branchIds.first;
+        }
+
         final promoQuantity = (currentEvent?.allowMultipleChances ?? false) ? totalChances : 1;
         await Navigator.of(context).push(
           MaterialPageRoute(
@@ -653,7 +681,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
               eventId: currentEventId,
               prizeName: designatedPrize,
               quantity: promoQuantity,
-              branchId: (currentEvent?.branchIds.isNotEmpty ?? false) ? currentEvent!.branchIds.first : null,
+              branchId: resolvedBranchId,
               unitValue: resolvedUnitValue,
               isVoucher: resolvedIsVoucher,
               linkedGifts: resolvedLinkedGifts,
@@ -661,7 +689,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           ),
         );
         _resetFormForNextCustomer();
-      } else if (gameType == 'scratchCard' || totalValue >= 500) {
+      } else if (gameType == 'scratch' || gameType == 'scratchCard' || (gameType.isEmpty && totalValue >= 500)) {
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => ScratchCardScreen(
@@ -809,6 +837,26 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
               visualDensity: isMobile ? VisualDensity.compact : VisualDensity.standard,
               onPressed: () {
                 CampaignGiftBalanceDialog.show(context, event);
+              },
+            ),
+          ),
+          SizedBox(width: isMobile ? 2 : 6),
+
+          // 3. Invoices Log & Branch History Reference Action Button
+          Tooltip(
+            message: strings.promoterInvoicesLogTooltip,
+            waitDuration: const Duration(milliseconds: 400),
+            child: IconButton.filledTonal(
+              icon: Icon(
+                Icons.receipt_long_rounded,
+                size: isMobile ? 18 : 20,
+                color: colorScheme.primary,
+              ),
+              padding: EdgeInsets.all(isMobile ? 6 : 8),
+              constraints: isMobile ? const BoxConstraints() : null,
+              visualDensity: isMobile ? VisualDensity.compact : VisualDensity.standard,
+              onPressed: () {
+                PromoterInvoicesDialog.show(context, event);
               },
             ),
           ),

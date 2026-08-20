@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/services/firebase_service.dart';
 import '../../../../core/localization/app_strings.dart';
@@ -48,6 +49,57 @@ class CampaignGiftBalanceDialog extends ConsumerStatefulWidget {
 
 class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceDialog> {
   String? _selectedBranchKey;
+  String? _pinnedBranchKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedBranch();
+  }
+
+  Future<void> _loadSavedBranch() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedForEvent = prefs.getString('pinned_branch_event_${widget.event.id}');
+      final savedGlobal = prefs.getString('pinned_branch_global');
+      final effectiveSaved = (savedForEvent != null && savedForEvent.isNotEmpty)
+          ? savedForEvent
+          : savedGlobal;
+
+      if (mounted && effectiveSaved != null && effectiveSaved.isNotEmpty) {
+        setState(() {
+          _selectedBranchKey = effectiveSaved;
+          _pinnedBranchKey = effectiveSaved;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _savePinnedBranch(String branchKey) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('pinned_branch_event_${widget.event.id}', branchKey);
+      await prefs.setString('pinned_branch_global', branchKey);
+      if (mounted) {
+        setState(() {
+          _pinnedBranchKey = branchKey;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _clearPinnedBranch() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('pinned_branch_event_${widget.event.id}');
+      await prefs.remove('pinned_branch_global');
+      if (mounted) {
+        setState(() {
+          _pinnedBranchKey = null;
+        });
+      }
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -122,9 +174,11 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
 
               final branchKeys = branchPrizesMap.keys.toList();
 
-              // Fallback if no specific branch is selected yet
+              // Fallback / auto-select pinned branch or first branch if no specific branch is selected yet
               if (_selectedBranchKey == null || !branchPrizesMap.containsKey(_selectedBranchKey)) {
-                if (branchKeys.isNotEmpty) {
+                if (_pinnedBranchKey != null && branchPrizesMap.containsKey(_pinnedBranchKey)) {
+                  _selectedBranchKey = _pinnedBranchKey;
+                } else if (branchKeys.isNotEmpty) {
                   _selectedBranchKey = branchKeys.first;
                 }
               }
@@ -161,7 +215,7 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // Branch Selection Chips (if campaign has multiple branches)
+                          // Branch Selection Dropdown (if campaign has multiple branches)
                           if (branchKeys.length > 1) ...[
                             Text(
                               strings.selectBranchToViewStock,
@@ -409,93 +463,180 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
     required Map<String, List<AllocatedPrize>> branchPrizesMap,
     required bool isMobile,
   }) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: branchKeys.map((key) {
-          final isSelected = key == _selectedBranchKey;
-          final name = branchNames[key] ?? key;
-          final prizes = branchPrizesMap[key] ?? [];
-          int remainingInBranch = 0;
-          for (final p in prizes) {
-            remainingInBranch += p.remainingQuantity;
-          }
+    final effectiveValue = (branchKeys.contains(_selectedBranchKey))
+        ? _selectedBranchKey
+        : (branchKeys.isNotEmpty ? branchKeys.first : null);
 
-          return Padding(
-            padding: const EdgeInsets.only(left: 8),
-            child: InkWell(
-              onTap: () {
-                setState(() {
-                  _selectedBranchKey = key;
-                });
-              },
-              borderRadius: BorderRadius.circular(14),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? colorScheme.primaryContainer
-                      : colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: isSelected
-                        ? colorScheme.primary
-                        : colorScheme.outlineVariant.withValues(alpha: 0.5),
-                    width: isSelected ? 1.8 : 1,
-                  ),
-                  boxShadow: isSelected
-                      ? [
-                          BoxShadow(
-                            color: colorScheme.primary.withValues(alpha: 0.15),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ]
-                      : null,
-                ),
+    final isPinned = _pinnedBranchKey != null && _pinnedBranchKey == effectiveValue;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Dropdown Form Field for Branch Selection
+        Container(
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isPinned ? colorScheme.primary.withValues(alpha: 0.5) : colorScheme.outlineVariant.withValues(alpha: 0.5),
+              width: isPinned ? 1.5 : 1.0,
+            ),
+          ),
+          child: DropdownButtonFormField<String>(
+            key: ValueKey('branch_picker_${effectiveValue}_${branchKeys.length}'),
+            initialValue: effectiveValue,
+            isExpanded: true,
+            dropdownColor: colorScheme.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(16),
+            icon: Icon(Icons.arrow_drop_down_circle_outlined, color: colorScheme.primary, size: 20),
+            decoration: InputDecoration(
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 12 : 16,
+                vertical: isMobile ? 10 : 12,
+              ),
+              border: InputBorder.none,
+              prefixIcon: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Icon(Icons.storefront_rounded, color: colorScheme.primary, size: 22),
+              ),
+              prefixIconConstraints: const BoxConstraints(minWidth: 42, minHeight: 42),
+            ),
+            items: branchKeys.map((key) {
+              final name = branchNames[key] ?? key;
+              final prizes = branchPrizesMap[key] ?? [];
+              int remainingInBranch = 0;
+              for (final p in prizes) {
+                remainingInBranch += p.remainingQuantity;
+              }
+              final isItemPinned = _pinnedBranchKey == key;
+
+              return DropdownMenuItem<String>(
+                value: key,
                 child: Row(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      isSelected ? Icons.check_circle_rounded : Icons.store_rounded,
-                      size: 16,
-                      color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      name,
-                      style: GoogleFonts.cairo(
-                        fontSize: isMobile ? 12 : 13,
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                        color: isSelected ? colorScheme.onPrimaryContainer : colorScheme.onSurface,
+                    Expanded(
+                      child: Text(
+                        name,
+                        style: GoogleFonts.cairo(
+                          fontWeight: FontWeight.bold,
+                          fontSize: isMobile ? 13 : 14,
+                          color: colorScheme.onSurface,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     const SizedBox(width: 8),
+                    if (isItemPinned) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        margin: const EdgeInsets.only(left: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.amber.shade700.withValues(alpha: 0.4)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.push_pin_rounded, size: 12, color: Colors.amber.shade800),
+                            const SizedBox(width: 3),
+                            Text(
+                              'مثبت',
+                              style: GoogleFonts.cairo(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.amber.shade900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
-                        color: isSelected
-                            ? colorScheme.primary.withValues(alpha: 0.15)
-                            : colorScheme.secondaryContainer.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(6),
+                        color: remainingInBranch > 0
+                            ? colorScheme.primaryContainer.withValues(alpha: 0.7)
+                            : colorScheme.errorContainer.withValues(alpha: 0.7),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        '$remainingInBranch',
+                        '$remainingInBranch متبقي',
                         style: GoogleFonts.cairo(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: isSelected ? colorScheme.primary : colorScheme.onSecondaryContainer,
+                          color: remainingInBranch > 0
+                              ? colorScheme.onPrimaryContainer
+                              : colorScheme.onErrorContainer,
                         ),
                       ),
                     ),
                   ],
                 ),
-              ),
+              );
+            }).toList(),
+            onChanged: (newKey) {
+              if (newKey != null) {
+                setState(() {
+                  _selectedBranchKey = newKey;
+                });
+                // Automatically save branch to local storage so next time it opens immediately on it
+                _savePinnedBranch(newKey);
+              }
+            },
+          ),
+        ),
+
+        const SizedBox(height: 8),
+
+        // Pin / Save branch toggle bar
+        InkWell(
+          onTap: () {
+            if (effectiveValue == null) return;
+            if (isPinned) {
+              _clearPinnedBranch();
+            } else {
+              _savePinnedBranch(effectiveValue);
+            }
+          },
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            child: Row(
+              children: [
+                Icon(
+                  isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+                  size: 16,
+                  color: isPinned ? Colors.amber.shade800 : colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    isPinned
+                        ? 'تم تثبيت هذا الفرع كافتراضي (يفتح تلقائياً عند فتح النافذة)'
+                        : 'انقر لتثبيت هذا الفرع كفرعك الافتراضي الدائم',
+                    style: GoogleFonts.cairo(
+                      fontSize: 11.5,
+                      fontWeight: isPinned ? FontWeight.bold : FontWeight.normal,
+                      color: isPinned ? Colors.amber.shade900 : colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                if (isPinned)
+                  Text(
+                    'إلغاء التثبيت',
+                    style: GoogleFonts.cairo(
+                      fontSize: 11,
+                      color: colorScheme.error,
+                      fontWeight: FontWeight.w600,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+              ],
             ),
-          );
-        }).toList(),
-      ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -525,26 +666,23 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
           Row(
             children: [
               Icon(
-                Icons.analytics_rounded,
+                Icons.analytics_outlined,
                 color: colorScheme.primary,
                 size: 18,
               ),
               const SizedBox(width: 8),
-              Text(
-                strings.totalBranchStock,
-                style: GoogleFonts.cairo(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.onSurface,
+              Expanded(
+                child: Text(
+                  strings.totalBranchStock,
+                  style: GoogleFonts.cairo(
+                    fontWeight: FontWeight.bold,
+                    fontSize: isMobile ? 12.5 : 13.5,
+                    color: colorScheme.onSurface,
+                  ),
                 ),
               ),
-              const Spacer(),
               RichText(
                 text: TextSpan(
-                  style: GoogleFonts.cairo(
-                    color: colorScheme.onSurface,
-                    fontSize: 13,
-                  ),
                   children: [
                     TextSpan(
                       text: '$remaining',
@@ -593,6 +731,7 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
     final remaining = prize.remainingQuantity;
     final total = prize.allocatedQuantity;
     final ratio = total > 0 ? (remaining / total).clamp(0.0, 1.0) : 0.0;
+    final isVoucher = prize.isVoucher;
 
     final isOut = remaining <= 0;
     final isLow = remaining > 0 && remaining <= 2;
@@ -635,11 +774,15 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
                 decoration: BoxDecoration(
                   color: isOut
                       ? colorScheme.errorContainer.withValues(alpha: 0.5)
-                      : (isLow ? Colors.amber.shade100 : colorScheme.primaryContainer.withValues(alpha: 0.6)),
+                      : (isLow
+                          ? Colors.amber.shade100
+                          : (isVoucher
+                              ? colorScheme.primaryContainer.withValues(alpha: 0.8)
+                              : colorScheme.primaryContainer.withValues(alpha: 0.6))),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
-                  Icons.card_giftcard_rounded,
+                  isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
                   color: isOut
                       ? colorScheme.error
                       : (isLow ? Colors.amber.shade900 : colorScheme.primary),
@@ -726,28 +869,23 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
     ColorScheme colorScheme,
     AppStrings strings,
   ) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 32),
       child: Column(
         children: [
           Icon(
-            Icons.inventory_2_outlined,
-            size: 40,
-            color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+            Icons.card_giftcard_outlined,
+            size: 48,
+            color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Text(
             strings.noGiftsAllocatedForBranch,
-            textAlign: TextAlign.center,
             style: GoogleFonts.cairo(
-              fontSize: 13,
+              fontSize: 14,
               color: colorScheme.onSurfaceVariant,
             ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),

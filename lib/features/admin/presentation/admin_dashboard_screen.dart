@@ -1505,6 +1505,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       message: tooltip,
       waitDuration: const Duration(milliseconds: 400),
       child: Container(
+        constraints: const BoxConstraints(maxWidth: 480),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: customBg ?? colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
@@ -1516,12 +1517,16 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           children: [
             Icon(icon, size: 15, color: customColor ?? colorScheme.primary),
             const SizedBox(width: 6),
-            Text(
-              label,
-              style: GoogleFonts.cairo(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: customColor ?? colorScheme.onSurface,
+            Flexible(
+              child: Text(
+                label,
+                style: GoogleFonts.cairo(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: customColor ?? colorScheme.onSurface,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
