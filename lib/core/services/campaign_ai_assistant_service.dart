@@ -241,6 +241,9 @@ $rawIdeaText
     List<PromotionalRuleItem> promotionalRules = const [],
     String retailChainName = '',
     List<String> allowedBranches = const [],
+    bool allowMultipleChances = false,
+    String multiplierBasis = 'both',
+    int maxChancesPerReceipt = 0,
   }) {
     final buffer = StringBuffer();
     buffer.writeln('أنت مدقق فواتير فائق الدقة ومسؤول عن فحص وتدقيق فواتير عروض ومهرجانات شركة "$targetCompany".');
@@ -257,6 +260,7 @@ $rawIdeaText
       if (allowedBranches.isNotEmpty) {
         buffer.writeln('- الفروع المعتمدة حصراً: [${allowedBranches.join("، ")}].');
       }
+      buffer.writeln('- الأولوية لكود المتجر ورقم الـ POS: يجب استخراج كود الفرع من حقل Store أو POS أو رقم المعاملة/الباركود ومطابقته أولاً، مع تجاهل أي إعلانات افتتاح فروع أخرى مطبوعة في تذييل الفاتورة.');
       buffer.writeln();
     }
 
@@ -269,6 +273,19 @@ $rawIdeaText
     if (requiredProducts.isNotEmpty) {
       buffer.writeln('📦 قائمة المنتجات المشروطة:');
       buffer.writeln('- يشترط احتواء الفاتورة على صنف أو أكثر من: [${requiredProducts.join("، ")}].');
+      buffer.writeln();
+    }
+
+    if (allowMultipleChances) {
+      buffer.writeln('✨ نظام مضاعفة الفرص والجوائز (Multipliers):');
+      final maxCapText = maxChancesPerReceipt > 0 ? ' (بحد أقصى $maxChancesPerReceipt بالفاتورة الواحدة)' : '';
+      if (multiplierBasis == 'quantity') {
+        buffer.writeln('- تتضاعف الجوائز والفرص طردياً مع تكرار ومضاعفة كمية المنتج المشروط بالفاتورة (مثال: شراء 1 قطعة = 1 هدية/فرصة، شراء 2 قطعة = 2 هدية/فرصتان)$maxCapText.');
+      } else if (multiplierBasis == 'spend') {
+        buffer.writeln('- تتضاعف فرص السحب لكل مضاعف للحد الأدنى للإنفاق ($minimumSpend ج.م)$maxCapText.');
+      } else {
+        buffer.writeln('- تتضاعف الجوائز الفورية بمضاعفة كميات الأصناف المشروطة، وتتضاعف فرص السحب بمضاعفة قيمة الشراء ($minimumSpend ج.م)$maxCapText.');
+      }
       buffer.writeln();
     }
 

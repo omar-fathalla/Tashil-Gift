@@ -21,12 +21,14 @@ enum DateFilterType { all, today, last7Days, thisMonth, custom }
 class InvoicesLogScreen extends ConsumerStatefulWidget {
   final String? lockedCompanySlug;
   final String? lockedCompanyName;
+  final String? initialEventId;
   final bool isEmbedded;
 
   const InvoicesLogScreen({
     super.key,
     this.lockedCompanySlug,
     this.lockedCompanyName,
+    this.initialEventId,
     this.isEmbedded = false,
   });
 
@@ -50,10 +52,25 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialEventId != null && widget.initialEventId!.isNotEmpty) {
+      _selectedCampaignId = widget.initialEventId!;
+    }
     if (widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty) {
       _selectedCompanySlug = widget.lockedCompanySlug!;
     }
     _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void didUpdateWidget(covariant InvoicesLogScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialEventId != oldWidget.initialEventId &&
+        widget.initialEventId != null &&
+        widget.initialEventId!.isNotEmpty) {
+      setState(() {
+        _selectedCampaignId = widget.initialEventId!;
+      });
+    }
   }
 
   @override

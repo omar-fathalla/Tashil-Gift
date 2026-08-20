@@ -61,6 +61,11 @@ class AppStrings {
   String get requiredField => _t(ar: 'هذا الحقل مطلوب', en: 'This field is required', hi: 'यह फ़ील्ड आवश्यक है');
   String get viewAll => _t(ar: 'عرض الكل', en: 'View All', hi: 'सभी देखें');
   String get exportExcelCsv => _t(ar: 'تصدير CSV / Excel', en: 'Export CSV / Excel', hi: 'CSV / Excel निर्यात करें');
+  String operationFailed(String details) => _t(
+    ar: 'فشلت العملية: $details',
+    en: 'Operation failed: $details',
+    hi: 'ऑपरेशन विफल रहा: $details',
+  );
 
   // ---------------------------------------------------------------------------
   // 2. Navigation & Sidebar
@@ -113,6 +118,23 @@ class AppStrings {
     ar: 'هل أنت متأكد من رغبتك في حذف هذه الحملة نهائياً؟',
     en: 'Are you sure you want to permanently delete this campaign?',
     hi: 'क्या आप वाकई इस अभियान को हमेशा के लिए हटाना चाहते हैं?',
+  );
+  String get deleteCampaignBtn => _t(ar: 'حذف الحملة', en: 'Delete Campaign', hi: 'अभियान हटाएं');
+  String get deleteCampaignTooltip => _t(
+    ar: 'حذف هذه الحملة نهائياً من النظام واسترجاع جوائزها للمخزن',
+    en: 'Permanently delete this campaign and release gifts to master stock',
+    hi: 'इस अभियान को हटाएं और स्टॉक वापस करें',
+  );
+  String get deleteCampaignConfirmTitle => _t(ar: 'حذف الحملة نهائياً', en: 'Permanently Delete Campaign', hi: 'अभियान हमेशा के लिए हटाएं');
+  String get deleteCampaignConfirmBody => _t(
+    ar: 'هل أنت متأكد من رغبتك في حذف هذه الحملة نهائياً؟\nسيتم إزالة الحملة وتعطيل روابطها واسترجاع أرصدة الهدايا غير المستلمة لمخزن الشركة.',
+    en: 'Are you sure you want to permanently delete this campaign?\nThis will remove the campaign, deactivate links, and restore unallocated gifts to company stock.',
+    hi: 'क्या आप वाकई इस अभियान को हटाना चाहते हैं?\nअभियान हटा दिया जाएगा और शेष उपहार वापस स्टॉक में आ जाएंगे।',
+  );
+  String get campaignDeletedSuccess => _t(
+    ar: 'تم حذف الحملة بنجاح واسترجاع الأرصدة.',
+    en: 'Campaign deleted successfully and stock restored.',
+    hi: 'अभियान सफलतापूर्वक हटा दिया गया।',
   );
   String get noEventsFound => _t(
     ar: 'لا توجد حملات مسجلة حالياً. يمكنك إنشاء أول حملة ترويجية الآن.',
@@ -1586,6 +1608,46 @@ class AppStrings {
     ar: 'حفظ وتحديث حصة الفرع',
     en: 'Save & Update Branch Quota',
     hi: 'शाखा कोटा सहेजें और अपडेट करें',
+  );
+  String get editBranchAllocationBtn => _t(
+    ar: 'تعديل الحصة',
+    en: 'Edit Quota',
+    hi: 'कोटा संपादित करें',
+  );
+  String get zeroAllocationBtn => _t(
+    ar: 'تصفير الحصة (0)',
+    en: 'Zero Out (0)',
+    hi: 'शून्य करें (0)',
+  );
+  String get zeroAllAllocationsBtn => _t(
+    ar: 'تصفير حصص جميع الفروع (0)',
+    en: 'Zero All Branches (0)',
+    hi: 'सभी शाखा कोटा शून्य करें (0)',
+  );
+  String get setAllocationDirectlyLabel => _t(
+    ar: 'المخصص الإجمالي للفرع',
+    en: 'Total Branch Allocation',
+    hi: 'कुल शाखा आवंटन',
+  );
+  String get editGiftAllocationsTitle => _t(
+    ar: 'تعديل وتصفير مخصصات الفروع',
+    en: 'Edit & Zero Branch Allocations',
+    hi: 'शाखा आवंटन संशोधित और शून्य करें',
+  );
+  String get editGiftAllocationsSubtitle => _t(
+    ar: 'تعديل أو تصفير حصة كل فرع من هذا الصنف وإرجاع الفائض للمخزن المركزي',
+    en: 'Adjust or zero out each branch quota for this gift & return surplus to master stock',
+    hi: 'इस उपहार के लिए प्रत्येक शाखा कोटा समायोजित या शून्य करें',
+  );
+  String get saveAllAllocationsBtn => _t(
+    ar: 'حفظ وتحديث كافة المخصصات',
+    en: 'Save & Update All Allocations',
+    hi: 'सभी आवंटन सहेजें और अपडेट करें',
+  );
+  String get allocationsSavedSuccess => _t(
+    ar: 'تم تحديث مخصصات الفروع بنجاح ومزامنة المخزن المركزي',
+    en: 'Branch allocations updated successfully & master stock synchronized',
+    hi: 'शाखा आवंटन सफलतापूर्वक अपडेट और मास्टर स्टॉक सिंक किया गया',
   );
 }
 

@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:al_mraay/features/admin/domain/event_model.dart';
 import 'package:al_mraay/features/admin/domain/retail_chain_model.dart';
+import '../utils/arabic_numbers_utils.dart';
 
 /// Provide your actual Gemini API Key here or load from environment variables
 const String _geminiApiKey =
@@ -384,6 +386,7 @@ class AiReceiptService {
     DateTime? endDate,
     String customPrompt = '',
     bool allowMultipleChances = false,
+    String multiplierBasis = 'both',
     int maxChancesPerReceipt = 0,
     List<PromotionalRuleItem> promotionalRules = const [],
   }) async {
@@ -447,7 +450,11 @@ $rulesListFormatted
         branchSignaturesText = '''
 - دليل الفروع والبصمات الهيكلية المعتمدة لنقاط البيع (Store Branches & POS Signatures):
 $sigsList
-استخدم هذه الأكواد والعناوين والبصمات لمطابقة الفرع والسلسلة بدقة قاطعة 100% حتى لو كان الشعار باهتاً أو الاسم مختصراً أو مذكوراً برقم الكود فقط.
+
+⚠️ تعليمات وقواعد أولوية مطابقة الفرع المعتمد (Mandatory Branch Matching Rules):
+1. [أولوية مطلقة رقم 1]: طابق كود المتجر ورقم الـ POS المطبوع على الفاتورة (مثل "Store: 224" أو "Store: 243" أو "POS: 224" أو رقم المتجر ضمن كود المعاملة/الباركود مثل "93/3/224/...") مع دليل أكواد وبصمات الفروع المعتمدة أعلاه.
+2. [تجاهل نصوص الإعلانات والافتتاحات في التذييل]: لا تستخدم أبداً العبارات الدعائية أو الإعلانات المطبوعة في تذييل الفاتورة أو أسفلها (مثل: "تم افتتاح فرع مدينة بدر" أو "زوروا فرعنا الجديد") لتحديد الفرع؛ فهذه إعلانات تسويقية عامة لجميع الفروع وليست الفرع الذي أصدر الفاتورة. الفرع الحقيقي المصدر هو المكتوب في رأس الفاتورة والمطابق لرقم المتجر (Store Code / POS).
+3. [النتيجة]: إذا تطابق كود المتجر مع أي فرع من الفروع المعتمدة في القائمة (مثال: Store 224 يطابق فرع عجمي ستار المعتمد)، فيجب تعيين (isBranchMatched = true) وتعيين (branchDetected = اسم الفرع المعتمد المطابق للكود).
 ''';
       }
 
@@ -457,7 +464,7 @@ $sigsList
           branchCondition = '''
 - السلسلة المعتمدة للحملة: "$retailChainName".
 - الفروع المعتمدة حصراً لهذا العرض: [${allowedBranches.join("، ")}].
-- المطلوب للفرع: افحص رأس الفاتورة بدقة واستخرج اسم السلسلة في (storeChainDetected) واسم الفرع أو عنوانه أو رقمه في (branchDetected). إذا كانت الفاتورة صادرة من أحد الفروع المعتمدة المذكورة أعلاه، حدد (isBranchMatched = true). إذا كانت من فرع آخر أو سلسلة أخرى، حدد (isBranchMatched = false) و (isValid = false) واكتب في (message) أن الفاتورة صادرة من فرع غير مشمول بالعرض.
+- المطلوب للفرع: افحص رأس الفاتورة وكود المتجر (Store ID / POS) بدقة واستخرج اسم السلسلة في (storeChainDetected) واسم الفرع أو عنوانه أو رقمه في (branchDetected). إذا كانت الفاتورة صادرة من أحد الفروع المعتمدة المذكورة أعلاه (أو يحمل كود المتجر لفرع معتمد)، حدد (isBranchMatched = true). إذا كانت من فرع آخر أو سلسلة أخرى، حدد (isBranchMatched = false) و (isValid = false) واكتب في (message) أن الفاتورة صادرة من فرع غير مشمول بالعرض.
 $branchSignaturesText
 ''';
         } else {
@@ -472,10 +479,21 @@ $branchSignaturesText
       }
 
       String chancesCondition = '';
-      if (allowMultipleChances && minimumSpend > 0) {
-        chancesCondition = '''
-- مضاعفة فرص السحب واللعب: الحد الأدنى المطلوب هو $minimumSpend ج.م. كل مضاعف لهذا المبلغ من منتجات الشركة يمنح العميل فرصة إضافية (المعادلة: إجمالي منتجات الشركة مقسوماً على $minimumSpend مقرباً لأقرب رقم صحيح لأسفل). احسب عدد الفرص وضعه في حقل (chancesEarned)${maxChancesPerReceipt > 0 ? ' بحد أقصى $maxChancesPerReceipt فرص' : ''}.
+      if (allowMultipleChances) {
+        final maxCapText = maxChancesPerReceipt > 0 ? ' بحد أقصى $maxChancesPerReceipt بالفاتورة الواحدة' : '';
+        if (multiplierBasis == 'quantity') {
+          chancesCondition = '''
+- مضاعفة الجوائز والفرص بناءً على كميات المنتجات: تتضاعف الجوائز والفرص طردياً مع تكرار ومضاعفة كمية المنتج المشروط بالفاتورة (مثال: شراء 1 قطعة = 1 هدية/فرصة، شراء 2 قطعة = 2 هدية/فرصتان، شراء 3 قطع = 3 هدايا/فرص)$maxCapText.
 ''';
+        } else if (multiplierBasis == 'spend') {
+          chancesCondition = '''
+- مضاعفة فرص السحب واللعب بناءً على المبلغ: الحد الأدنى المطلوب هو $minimumSpend ج.م. كل مضاعف لهذا المبلغ من منتجات الشركة يمنح العميل فرصة إضافية$maxCapText.
+''';
+        } else {
+          chancesCondition = '''
+- مضاعفة الجوائز والفرص: تتضاعف الجوائز الفورية بمضاعفة كميات الأصناف المشروطة، وتتضاعف فرص السحب بمضاعفة قيمة الشراء ($minimumSpend ج.م)$maxCapText.
+''';
+        }
       }
 
       String finalPromptText;
@@ -564,21 +582,79 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         final Map<String, dynamic> jsonMap = _cleanAndParseJson(response.text!);
         var result = AiReceiptAnalysisResult.fromJson(jsonMap, durationMs: durationMs);
 
-        // Calculate / enforce chances earned based on spend multipliers
+        // Calculate / enforce chances & rewards earned based on quantity and spend multipliers
         int calculatedChances = result.chancesEarned;
         if (result.isValid) {
+          int spendChances = 1;
           if (minimumSpend > 0 && result.targetCompanyTotal >= minimumSpend) {
-            if (allowMultipleChances) {
+            if (allowMultipleChances && (multiplierBasis == 'spend' || multiplierBasis == 'both')) {
               final computed = (result.targetCompanyTotal / minimumSpend).floor();
-              calculatedChances = computed > 0 ? computed : 1;
-              if (maxChancesPerReceipt > 0 && calculatedChances > maxChancesPerReceipt) {
-                calculatedChances = maxChancesPerReceipt;
+              spendChances = computed > 0 ? computed : 1;
+              if (maxChancesPerReceipt > 0 && spendChances > maxChancesPerReceipt) {
+                spendChances = maxChancesPerReceipt;
               }
-            } else {
-              calculatedChances = 1;
             }
-          } else if (minimumSpend <= 0) {
+          }
+
+          int quantityMultiplier = 1;
+          if (allowMultipleChances && (multiplierBasis == 'quantity' || multiplierBasis == 'both')) {
+            if (promotionalRules.isNotEmpty) {
+              final matchedRule = promotionalRules.where((r) => r.id == result.matchedRuleId).firstOrNull;
+              if (matchedRule != null && matchedRule.allowMultipliers) {
+                final triggerNameLower = matchedRule.triggerProduct.toLowerCase().trim();
+                int totalMatchedQty = 0;
+                for (final p in result.extractedProducts) {
+                  final pNameLower = p.name.toLowerCase().trim();
+                  if (triggerNameLower.isEmpty ||
+                      pNameLower.contains(triggerNameLower) ||
+                      triggerNameLower.contains(pNameLower) ||
+                      p.isTargetCompany) {
+                    totalMatchedQty += p.quantity > 0 ? p.quantity : 1;
+                  }
+                }
+                if (totalMatchedQty > 0) {
+                  final minQty = matchedRule.minQuantity > 0 ? matchedRule.minQuantity : 1;
+                  final computed = (totalMatchedQty / minQty).floor();
+                  quantityMultiplier = computed > 0 ? computed : 1;
+                  if (maxChancesPerReceipt > 0 && quantityMultiplier > maxChancesPerReceipt) {
+                    quantityMultiplier = maxChancesPerReceipt;
+                  }
+                }
+              } else if (result.extractedProducts.isNotEmpty) {
+                final targetItems = result.extractedProducts.where((p) => p.isTargetCompany).toList();
+                final totalTargetQty = targetItems.fold<int>(0, (sum, p) => sum + (p.quantity > 0 ? p.quantity : 1));
+                if (totalTargetQty > 1) {
+                  quantityMultiplier = totalTargetQty;
+                  if (maxChancesPerReceipt > 0 && quantityMultiplier > maxChancesPerReceipt) {
+                    quantityMultiplier = maxChancesPerReceipt;
+                  }
+                }
+              }
+            } else if (result.extractedProducts.isNotEmpty) {
+              final targetItems = result.extractedProducts.where((p) => p.isTargetCompany).toList();
+              final totalTargetQty = targetItems.fold<int>(0, (sum, p) => sum + (p.quantity > 0 ? p.quantity : 1));
+              if (totalTargetQty > 1) {
+                quantityMultiplier = totalTargetQty;
+                if (maxChancesPerReceipt > 0 && quantityMultiplier > maxChancesPerReceipt) {
+                  quantityMultiplier = maxChancesPerReceipt;
+                }
+              }
+            }
+          }
+
+          if (multiplierBasis == 'quantity') {
+            calculatedChances = quantityMultiplier;
+          } else if (multiplierBasis == 'spend') {
+            calculatedChances = spendChances;
+          } else {
+            calculatedChances = math.max(quantityMultiplier, spendChances);
+          }
+
+          if (calculatedChances <= 0) {
             calculatedChances = result.chancesEarned > 0 ? result.chancesEarned : 1;
+          }
+          if (maxChancesPerReceipt > 0 && calculatedChances > maxChancesPerReceipt) {
+            calculatedChances = maxChancesPerReceipt;
           }
         } else {
           calculatedChances = 0;
@@ -600,6 +676,74 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
             return item;
           }).toList();
           result = result.copyWith(extractedProducts: enrichedProducts);
+        }
+
+        // Deterministic POS & Store Code Reconciler in Dart
+        if (registeredBranches.isNotEmpty) {
+          final combinedReceiptText = '${result.receiptNumber} ${result.branchDetected} ${result.message} ${result.storeChainDetected}'.toEnglishDigits();
+
+          BranchModel? matchedBranchByCode;
+
+          for (final branch in registeredBranches) {
+            final storeId = (branch.receiptSignature?.storeId ?? '').trim().toEnglishDigits();
+            final branchCode = branch.branchCode.trim().toEnglishDigits();
+
+            bool matches = false;
+
+            if (storeId.isNotEmpty && storeId != '0') {
+              final storeRegex = RegExp(
+                r'(?:Store|المتجر|فرع|POS|Pos|pos)[\s:]*' + RegExp.escape(storeId) + r'\b|' +
+                r'[\/\-_]' + RegExp.escape(storeId) + r'[\/\-_]',
+                caseSensitive: false,
+              );
+              if (storeRegex.hasMatch(combinedReceiptText) || combinedReceiptText.contains('/$storeId/')) {
+                matches = true;
+              }
+            }
+
+            if (!matches && branchCode.isNotEmpty && branchCode != '0' && branchCode != 'DEF') {
+              final codeRegex = RegExp(
+                r'(?:Store|كود|فرع|POS|Pos|pos)[\s:]*' + RegExp.escape(branchCode) + r'\b|' +
+                r'[\/\-_]' + RegExp.escape(branchCode) + r'[\/\-_]',
+                caseSensitive: false,
+              );
+              if (codeRegex.hasMatch(combinedReceiptText) || combinedReceiptText.contains('/$branchCode/')) {
+                matches = true;
+              }
+            }
+
+            if (matches) {
+              matchedBranchByCode = branch;
+              break;
+            }
+          }
+
+          if (matchedBranchByCode != null) {
+            final isAllowed = isAllBranches || allowedBranches.isEmpty || allowedBranches.any((ab) {
+              final cleanAb = ab.trim().toLowerCase();
+              final cleanBName = matchedBranchByCode!.branchName.trim().toLowerCase();
+              final cleanCity = matchedBranchByCode.city.trim().toLowerCase();
+              return cleanAb.contains(cleanBName) || cleanBName.contains(cleanAb) || (cleanCity.isNotEmpty && cleanAb.contains(cleanCity));
+            });
+
+            if (isAllowed) {
+              final fixedBranchName = matchedBranchByCode.branchName;
+              final prevBranchName = result.branchDetected;
+              final wasBranchFailure = !result.isBranchMatched;
+
+              result = result.copyWith(
+                isBranchMatched: true,
+                branchDetected: fixedBranchName,
+                storeChainDetected: matchedBranchByCode.retailChainName.isNotEmpty ? matchedBranchByCode.retailChainName : result.storeChainDetected,
+                isValid: wasBranchFailure
+                    ? (result.targetCompanyTotal >= (minimumSpend > 0 ? minimumSpend : 0) && (promotionalRules.isEmpty || result.extractedProducts.isNotEmpty || result.matchedRuleId.isNotEmpty))
+                    : result.isValid,
+                message: wasBranchFailure
+                    ? (result.message.contains('فرع') ? 'تم التحقق من الفاتورة ومطابقة الفرع بنجاح بناءً على كود المتجر المعتمد ($fixedBranchName).' : result.message)
+                    : (prevBranchName.isNotEmpty ? result.message.replaceAll(prevBranchName, fixedBranchName) : result.message),
+              );
+            }
+          }
         }
 
         // Branch matching fallback validation

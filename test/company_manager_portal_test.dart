@@ -7,6 +7,7 @@ import 'package:al_mraay/features/company_portal/presentation/company_manager_po
 import 'package:al_mraay/features/company_portal/presentation/company_prizes_stock_report_screen.dart';
 import 'package:al_mraay/features/admin/presentation/campaign_reports_screen.dart';
 import 'package:al_mraay/features/validation/presentation/invoices_log_screen.dart';
+import 'package:al_mraay/core/utils/slug_utils.dart';
 
 void main() {
   group('Dual Link Architecture & Company Manager Portal Tests', () {
@@ -154,28 +155,39 @@ void main() {
       expect(reports.isEmbedded, isTrue);
     });
 
-    test('InvoicesLogScreen accepts lockedCompanySlug parameter for secure data scoping', () {
+    test('InvoicesLogScreen accepts lockedCompanySlug and initialEventId parameters for secure data scoping', () {
       const invoices = InvoicesLogScreen(
         lockedCompanySlug: 'lamar',
         lockedCompanyName: 'لمار',
+        initialEventId: 'event_123',
         isEmbedded: true,
       );
 
       expect(invoices.lockedCompanySlug, equals('lamar'));
       expect(invoices.lockedCompanyName, equals('لمار'));
+      expect(invoices.initialEventId, equals('event_123'));
       expect(invoices.isEmbedded, isTrue);
     });
 
-    test('CompanyPrizesStockReportScreen accepts lockedCompanySlug parameter for secure data scoping', () {
+    test('CompanyPrizesStockReportScreen accepts lockedCompanySlug and initialEventId parameters for secure data scoping', () {
       const prizesStock = CompanyPrizesStockReportScreen(
         lockedCompanySlug: 'unilever',
         lockedCompanyName: 'يونيليفر',
+        initialEventId: 'unilever_event_456',
         isEmbedded: true,
       );
 
       expect(prizesStock.lockedCompanySlug, equals('unilever'));
       expect(prizesStock.lockedCompanyName, equals('يونيليفر'));
+      expect(prizesStock.initialEventId, equals('unilever_event_456'));
       expect(prizesStock.isEmbedded, isTrue);
+    });
+
+    test('SlugUtils translates Unilever and Adco accurately to English slugs', () {
+      expect(SlugUtils.toSlug('يونيليفر'), equals('unilever'));
+      expect(SlugUtils.toSlug('يوني ليفر'), equals('unilever'));
+      expect(SlugUtils.toSlug('ادكو'), equals('adco'));
+      expect(SlugUtils.toSlug('أدكو'), equals('adco'));
     });
   });
 }

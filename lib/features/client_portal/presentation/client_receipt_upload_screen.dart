@@ -319,11 +319,13 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       // Fetch retail chain branch signatures if available for deterministic anti-fraud matching
       List<BranchModel> chainBranches = [];
       try {
-        if (_activeEvent!.retailChainId.isNotEmpty) {
-          chainBranches = await ref
-              .read(retailChainsServiceProvider)
-              .getBranchesForChain(_activeEvent!.retailChainId);
-        }
+        chainBranches = await ref
+            .read(retailChainsServiceProvider)
+            .getBranchesForEvent(
+              retailChainId: _activeEvent!.retailChainId,
+              branchIds: _activeEvent!.branchIds,
+              branchNames: _activeEvent!.branchNames,
+            );
       } catch (_) {}
 
       // Run Gemini AI analysis
@@ -343,6 +345,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         endDate: _activeEvent!.endDate,
         customPrompt: _activeEvent!.customPrompt,
         allowMultipleChances: _activeEvent!.allowMultipleChances,
+        multiplierBasis: _activeEvent!.multiplierBasis,
         maxChancesPerReceipt: _activeEvent!.maxChancesPerReceipt,
         promotionalRules: _activeEvent!.promotionalRules,
       );

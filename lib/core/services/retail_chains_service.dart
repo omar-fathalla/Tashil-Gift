@@ -190,13 +190,62 @@ class RetailChainsService {
 
   Future<List<BranchModel>> getBranchesForChain(String retailChainId) async {
     if (retailChainId.trim().isEmpty) return [];
-    final snapshot = await _branchesCollection
-        .where('retailChainId', isEqualTo: retailChainId)
-        .get();
-    final rawList = snapshot.docs
-        .map((doc) => BranchModel.fromFirestore(doc))
+    final chainIds = retailChainId
+        .split(RegExp(r'[,،]'))
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
         .toList();
-    return _deduplicateBranchList(rawList);
+    if (chainIds.isEmpty) return [];
+    if (chainIds.length == 1) {
+      final snapshot = await _branchesCollection
+          .where('retailChainId', isEqualTo: chainIds.first)
+          .get();
+      final rawList = snapshot.docs
+          .map((doc) => BranchModel.fromFirestore(doc))
+          .toList();
+      return _deduplicateBranchList(rawList);
+    }
+    final allBranches = await getAllBranches();
+    final filtered = allBranches.where((b) {
+      final bChain = b.retailChainId.trim().toLowerCase();
+      return chainIds.any((cid) => cid.toLowerCase() == bChain);
+    }).toList();
+    return _deduplicateBranchList(filtered);
+  }
+
+  /// Fetches all branches matching the event's chains, branch IDs, and branch names with their POS signatures.
+  Future<List<BranchModel>> getBranchesForEvent({
+    String retailChainId = '',
+    List<String> branchIds = const [],
+    List<String> branchNames = const [],
+  }) async {
+    final allBranches = await getAllBranches();
+    if (allBranches.isEmpty) return [];
+
+    final cleanChainIds = retailChainId
+        .split(RegExp(r'[,،]'))
+        .map((s) => s.trim().toLowerCase())
+        .where((s) => s.isNotEmpty)
+        .toSet();
+    final cleanBranchIds = branchIds.map((s) => s.trim().toLowerCase()).where((s) => s.isNotEmpty).toSet();
+    final cleanBranchNames = branchNames.map((s) => s.trim().toLowerCase()).where((s) => s.isNotEmpty).toSet();
+
+    if (cleanChainIds.isEmpty && cleanBranchIds.isEmpty && cleanBranchNames.isEmpty) {
+      return allBranches;
+    }
+
+    final filtered = allBranches.where((b) {
+      final bId = b.id.trim().toLowerCase();
+      final bName = b.branchName.trim().toLowerCase();
+      final bChain = b.retailChainId.trim().toLowerCase();
+      
+      if (cleanBranchIds.contains(bId)) return true;
+      if (cleanBranchNames.contains(bName)) return true;
+      if (cleanChainIds.contains(bChain)) return true;
+      return false;
+    }).toList();
+
+    return _deduplicateBranchList(filtered.isNotEmpty ? filtered : allBranches);
   }
 
   Stream<List<BranchModel>> getAllBranchesStream() {
@@ -271,6 +320,34 @@ class RetailChainsService {
     await _recalculateChainBranchesCount(branch.retailChainId);
 
     return false;
+  }
+
+  /// Finds an existing registered branch matching by code, storeId, or branch name.
+  Future<BranchModel?> findMatchingBranch(BranchModel branch) async {
+    final cleanCode = branch.branchCode.trim().toUpperCase().toEnglishDigits();
+    final cleanName = branch.branchName.trim().toLowerCase();
+    final storeId = branch.receiptSignature?.storeId.trim().toEnglishDigits() ?? '';
+
+    final existingBranchesSnap = await _branchesCollection
+        .where('retailChainId', isEqualTo: branch.retailChainId)
+        .get();
+
+    for (final doc in existingBranchesSnap.docs) {
+      final data = doc.data();
+      final existingCode = (data['branchCode']?.toString() ?? '').trim().toUpperCase().toEnglishDigits();
+      final existingName = (data['branchName']?.toString() ?? '').trim().toLowerCase();
+      final sigMap = data['receiptSignature'] as Map<String, dynamic>?;
+      final existingStoreId = (sigMap?['storeId']?.toString() ?? '').trim().toEnglishDigits();
+
+      final matchesCode = cleanCode.isNotEmpty && cleanCode != 'DEF' && cleanCode != '0' && existingCode == cleanCode;
+      final matchesStoreId = storeId.isNotEmpty && existingStoreId.isNotEmpty && existingStoreId == storeId;
+      final matchesName = cleanName.isNotEmpty && existingName == cleanName;
+
+      if (matchesCode || matchesStoreId || matchesName) {
+        return BranchModel.fromFirestore(doc);
+      }
+    }
+    return null;
   }
 
   /// Adds or updates (upserts) a branch with smart receipt signature merging.

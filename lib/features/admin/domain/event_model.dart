@@ -336,10 +336,13 @@ class EventModel {
   final List<String> branchNames;
   final bool isAllBranches;
 
-  /// Whether to grant multiple draw/spin chances when the customer spends multiples of the minimum spend.
+  /// Whether to grant multiple draw/spin chances when the customer spends multiples of the minimum spend or buys multiples of products.
   final bool allowMultipleChances;
 
-  /// Maximum draw chances allowed per single receipt (0 = unlimited / no cap).
+  /// Multiplier Basis: 'quantity' (بناءً على كمية المنتجات), 'spend' (بناءً على قيمة الشراء), or 'both' (كلاهما معاً).
+  final String multiplierBasis;
+
+  /// Maximum draw chances / gifts allowed per single receipt (0 = unlimited / no cap).
   final int maxChancesPerReceipt;
 
   EventModel({
@@ -371,6 +374,7 @@ class EventModel {
     this.branchNames = const [],
     this.isAllBranches = true,
     this.allowMultipleChances = false,
+    this.multiplierBasis = 'both',
     this.maxChancesPerReceipt = 0,
   });
 
@@ -390,6 +394,9 @@ class EventModel {
     if (isExpired) return false;
     return true;
   }
+
+  bool get isQuantityMultiplier => multiplierBasis == 'quantity' || multiplierBasis == 'both';
+  bool get isSpendMultiplier => multiplierBasis == 'spend' || multiplierBasis == 'both';
 
   /// Granular portal access status helpers
   bool get canPromoterAccess => isActive && isPromoterActive && !isExpired && !isNotStartedYet;
@@ -436,8 +443,18 @@ class EventModel {
   /// Calculates the number of lottery/game chances earned based on the receipt spend.
   int calculateChancesEarned(double targetCompanySpend) {
     if (minimumSpend > 0 && targetCompanySpend < minimumSpend) return 0;
-    if (!allowMultipleChances || minimumSpend <= 0) return 1;
+    if (!allowMultipleChances || !isSpendMultiplier || minimumSpend <= 0) return 1;
     final int computed = (targetCompanySpend / minimumSpend).floor();
+    if (maxChancesPerReceipt > 0 && computed > maxChancesPerReceipt) {
+      return maxChancesPerReceipt;
+    }
+    return computed > 0 ? computed : 1;
+  }
+
+  /// Calculates the number of rewards / chances earned based on purchased product quantity.
+  int calculateQuantityMultiplier({required int matchedQuantity, required int minQuantityPerReward}) {
+    if (!allowMultipleChances || !isQuantityMultiplier || minQuantityPerReward <= 0) return 1;
+    final int computed = (matchedQuantity / minQuantityPerReward).floor();
     if (maxChancesPerReceipt > 0 && computed > maxChancesPerReceipt) {
       return maxChancesPerReceipt;
     }
@@ -499,6 +516,7 @@ class EventModel {
       branchNames: _deduplicateStrings(List<String>.from(data['branchNames'] ?? [])),
       isAllBranches: data['isAllBranches'] ?? true,
       allowMultipleChances: data['allowMultipleChances'] == true,
+      multiplierBasis: (data['multiplierBasis'] ?? 'both').toString(),
       maxChancesPerReceipt: (data['maxChancesPerReceipt'] as num?)?.toInt() ?? 0,
     );
   }
@@ -556,6 +574,7 @@ class EventModel {
       'branchNames': _deduplicateStrings(branchNames),
       'isAllBranches': isAllBranches,
       'allowMultipleChances': allowMultipleChances,
+      'multiplierBasis': multiplierBasis,
       'maxChancesPerReceipt': maxChancesPerReceipt,
     };
   }
@@ -589,6 +608,7 @@ class EventModel {
     List<String>? branchNames,
     bool? isAllBranches,
     bool? allowMultipleChances,
+    String? multiplierBasis,
     int? maxChancesPerReceipt,
   }) {
     return EventModel(
@@ -620,6 +640,7 @@ class EventModel {
       branchNames: branchNames ?? this.branchNames,
       isAllBranches: isAllBranches ?? this.isAllBranches,
       allowMultipleChances: allowMultipleChances ?? this.allowMultipleChances,
+      multiplierBasis: multiplierBasis ?? this.multiplierBasis,
       maxChancesPerReceipt: maxChancesPerReceipt ?? this.maxChancesPerReceipt,
     );
   }

@@ -199,26 +199,31 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
               final compName = data['companyName']?.toString() ?? '';
               final targetComp = data['target_company']?.toString() ?? '';
 
-              if (_selectedEvent == null) {
-                if (widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty) {
-                  final isSlugMatch = cSlug.toLowerCase() == widget.lockedCompanySlug!.toLowerCase();
-                  final isNameMatch = widget.lockedCompanyName != null &&
-                      widget.lockedCompanyName!.isNotEmpty &&
-                      (compName.toLowerCase() == widget.lockedCompanyName!.toLowerCase() ||
-                          targetComp.toLowerCase() == widget.lockedCompanyName!.toLowerCase());
-                  return isSlugMatch || isNameMatch;
+              if (_selectedEvent != null) {
+                if (cId.isNotEmpty) {
+                  return cId == _selectedEvent!.id;
                 }
-                return true;
+                if (_selectedEvent!.companySlug.isNotEmpty && cSlug.toLowerCase() == _selectedEvent!.companySlug.toLowerCase()) {
+                  return true;
+                }
+                if (_selectedEvent!.targetCompany.isNotEmpty &&
+                    (compName.toLowerCase() == _selectedEvent!.targetCompany.toLowerCase() ||
+                        targetComp.toLowerCase() == _selectedEvent!.targetCompany.toLowerCase())) {
+                  return true;
+                }
+                return false;
               }
 
-              if (cId.isNotEmpty && cId == _selectedEvent!.id) return true;
-              if (_selectedEvent!.companySlug.isNotEmpty && cSlug == _selectedEvent!.companySlug) return true;
-              if (_selectedEvent!.targetCompany.isNotEmpty &&
-                  (compName == _selectedEvent!.targetCompany || targetComp == _selectedEvent!.targetCompany)) {
-                return true;
+              if (widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty) {
+                final isSlugMatch = cSlug.toLowerCase() == widget.lockedCompanySlug!.toLowerCase();
+                final isNameMatch = widget.lockedCompanyName != null &&
+                    widget.lockedCompanyName!.isNotEmpty &&
+                    (compName.toLowerCase() == widget.lockedCompanyName!.toLowerCase() ||
+                        targetComp.toLowerCase() == widget.lockedCompanyName!.toLowerCase());
+                final isScopedEventMatch = scopedEvents.any((e) => e.id == cId);
+                return isSlugMatch || isNameMatch || isScopedEventMatch;
               }
-
-              return false;
+              return true;
             }).toList();
 
             return _buildReportsViewContent(

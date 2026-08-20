@@ -61,10 +61,34 @@ class MyApp extends ConsumerWidget {
       onGenerateRoute: (settings) {
         final uri = Uri.parse(settings.name ?? '/');
         
-        // 1. Promoter & Customer submission link (/c/almarai or /client/adco)
+        // 1. Direct Event Link (/event/xyz or /e/xyz)
+        if (uri.pathSegments.length >= 2 && (uri.pathSegments[0] == 'event' || uri.pathSegments[0] == 'e')) {
+          final eventId = uri.pathSegments[1];
+          return MaterialPageRoute(
+            builder: (context) => ClientReceiptUploadScreen(
+              companySlug: '',
+              initialEventId: eventId,
+            ),
+            settings: settings,
+          );
+        }
+
+        // 2. Direct Event Manager Portal Link (/event-portal/xyz or /ep/xyz)
+        if (uri.pathSegments.length >= 2 && (uri.pathSegments[0] == 'event-portal' || uri.pathSegments[0] == 'ep')) {
+          final eventId = uri.pathSegments[1];
+          return MaterialPageRoute(
+            builder: (context) => CompanyManagerPortalScreen(
+              companySlug: '',
+              initialEventId: eventId,
+            ),
+            settings: settings,
+          );
+        }
+
+        // 3. Promoter & Customer submission link (/c/almarai or /client/adco)
         if (uri.pathSegments.length >= 2 && (uri.pathSegments[0] == 'c' || uri.pathSegments[0] == 'client')) {
           final slug = uri.pathSegments[1];
-          final eventId = uri.queryParameters['event'];
+          final eventId = uri.queryParameters['event'] ?? uri.queryParameters['id'];
           return MaterialPageRoute(
             builder: (context) => ClientReceiptUploadScreen(
               companySlug: slug,
@@ -74,11 +98,11 @@ class MyApp extends ConsumerWidget {
           );
         }
 
-        // 2. Company Manager & Partner Portal link (/portal/adco or /p/juhayna)
+        // 4. Company Manager & Partner Portal link (/portal/adco or /p/juhayna or /portal/512)
         if (uri.pathSegments.length >= 2 &&
             (uri.pathSegments[0] == 'portal' || uri.pathSegments[0] == 'p' || uri.pathSegments[0] == 'company')) {
           final slug = uri.pathSegments[1];
-          final eventId = uri.queryParameters['event'];
+          final eventId = uri.queryParameters['event'] ?? uri.queryParameters['id'];
           return MaterialPageRoute(
             builder: (context) => CompanyManagerPortalScreen(
               companySlug: slug,
@@ -95,8 +119,15 @@ class MyApp extends ConsumerWidget {
               settings: settings,
             );
           case '/portal':
-            final slug = uri.queryParameters['company'] ?? 'adco';
-            final eventId = uri.queryParameters['event'];
+          case '/p':
+            final slug = uri.queryParameters['company'] ?? uri.queryParameters['slug'] ?? '';
+            final eventId = uri.queryParameters['event'] ?? uri.queryParameters['id'];
+            if (slug.isEmpty && (eventId == null || eventId.isEmpty)) {
+              return MaterialPageRoute(
+                builder: (context) => const AuthScreen(),
+                settings: settings,
+              );
+            }
             return MaterialPageRoute(
               builder: (context) => CompanyManagerPortalScreen(
                 companySlug: slug,
@@ -105,8 +136,9 @@ class MyApp extends ConsumerWidget {
               settings: settings,
             );
           case '/submit':
-            final slug = uri.queryParameters['company'] ?? 'almarai';
-            final eventId = uri.queryParameters['event'];
+          case '/c':
+            final slug = uri.queryParameters['company'] ?? uri.queryParameters['slug'] ?? '';
+            final eventId = uri.queryParameters['event'] ?? uri.queryParameters['id'];
             return MaterialPageRoute(
               builder: (context) => ClientReceiptUploadScreen(
                 companySlug: slug,

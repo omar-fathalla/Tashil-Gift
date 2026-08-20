@@ -28,6 +28,12 @@ class AppUrlBuilder {
   static String buildPromoterUrl(String companySlug, {String? eventId, bool forceProduction = false}) {
     final baseUrl = getBaseUrl(forceProduction: forceProduction);
     final cleanSlug = companySlug.trim().toLowerCase();
+    if (cleanSlug.isEmpty && eventId != null && eventId.isNotEmpty) {
+      return '$baseUrl/#/event/$eventId';
+    }
+    if (cleanSlug.isEmpty) {
+      return baseUrl;
+    }
     if (eventId != null && eventId.isNotEmpty) {
       return '$baseUrl/#/c/$cleanSlug?event=$eventId';
     }
@@ -39,6 +45,12 @@ class AppUrlBuilder {
   static String buildManagerPortalUrl(String companySlug, {String? eventId, bool forceProduction = false}) {
     final baseUrl = getBaseUrl(forceProduction: forceProduction);
     final cleanSlug = companySlug.trim().toLowerCase();
+    if (cleanSlug.isEmpty && eventId != null && eventId.isNotEmpty) {
+      return '$baseUrl/#/portal/$eventId';
+    }
+    if (cleanSlug.isEmpty) {
+      return baseUrl;
+    }
     if (eventId != null && eventId.isNotEmpty) {
       return '$baseUrl/#/portal/$cleanSlug?event=$eventId';
     }

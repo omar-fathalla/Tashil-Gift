@@ -1068,11 +1068,26 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                                 receiptSignature: sig,
                               );
 
-                              final wasUpdated = await service.upsertBranch(newBranch);
+                              // Check if branch already exists in this chain
+                              final existingBranch = await service.findMatchingBranch(newBranch);
 
-                              if (context.mounted) {
-                                Navigator.of(dialogCtx).pop();
-                                if (wasUpdated) {
+                              if (existingBranch != null) {
+                                if (!context.mounted) return;
+                                final shouldUpdate = await _showBranchUpdateDiffDialog(
+                                  context: context,
+                                  existingBranch: existingBranch,
+                                  newBranch: newBranch,
+                                  chainName: targetChainName,
+                                );
+
+                                if (shouldUpdate != true) {
+                                  // User cancelled update
+                                  return;
+                                }
+
+                                await service.upsertBranch(newBranch.copyWith(id: existingBranch.id));
+                                if (context.mounted) {
+                                  Navigator.of(dialogCtx).pop();
                                   await M3Feedback.showSuccess(
                                     context,
                                     title: isAr ? 'تم تحديث بيانات وبصمة الفرع بنجاح! 🔄' : 'Branch & Signature Updated! 🔄',
@@ -1080,7 +1095,11 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                                         ? 'تم تحديث فرع "$branchName" في سلسلة "$targetChainName" بالبصمة الجديدة المستخرجة من الإيصال (Store ID: ${sig.storeId}).'
                                         : 'Branch "$branchName" updated with new receipt POS signature.',
                                   );
-                                } else {
+                                }
+                              } else {
+                                await service.upsertBranch(newBranch);
+                                if (context.mounted) {
+                                  Navigator.of(dialogCtx).pop();
                                   await M3Feedback.showSuccess(
                                     context,
                                     title: isAr ? 'تم اعتماد الفرع والبصمة بنجاح! 🛡️' : 'Branch & Signature Saved!',
@@ -2646,5 +2665,351 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
         ],
       ),
     );
+  }
+
+  Future<bool?> _showBranchUpdateDiffDialog({
+    required BuildContext context,
+    required BranchModel existingBranch,
+    required BranchModel newBranch,
+    required String chainName,
+  }) {
+    final isAr = ref.isArabic;
+    final cs = Theme.of(context).colorScheme;
+
+    final existingSig = existingBranch.receiptSignature;
+    final newSig = newBranch.receiptSignature;
+
+    final List<_BranchFieldDiff> diffs = [
+      _BranchFieldDiff(
+        fieldLabel: isAr ? 'اسم الفرع' : 'Branch Name',
+        icon: Icons.store_rounded,
+        oldValue: existingBranch.branchName,
+        newValue: newBranch.branchName,
+      ),
+      _BranchFieldDiff(
+        fieldLabel: isAr ? 'كود المتجر (Store ID)' : 'Store ID',
+        icon: Icons.confirmation_number_rounded,
+        oldValue: existingSig?.storeId ?? '',
+        newValue: newSig?.storeId ?? '',
+      ),
+      _BranchFieldDiff(
+        fieldLabel: isAr ? 'كود الفرع المختصر' : 'Branch Code',
+        icon: Icons.pin_outlined,
+        oldValue: existingBranch.branchCode,
+        newValue: newBranch.branchCode,
+      ),
+      _BranchFieldDiff(
+        fieldLabel: isAr ? 'نسق رقم الـ POS' : 'POS Pattern',
+        icon: Icons.point_of_sale_rounded,
+        oldValue: existingSig?.posNumberPattern ?? '',
+        newValue: newSig?.posNumberPattern ?? '',
+      ),
+      _BranchFieldDiff(
+        fieldLabel: isAr ? 'نمط الباركود / المعاملة' : 'Receipt Pattern',
+        icon: Icons.qr_code_2_rounded,
+        oldValue: existingSig?.receiptPattern ?? '',
+        newValue: newSig?.receiptPattern ?? '',
+      ),
+      _BranchFieldDiff(
+        fieldLabel: isAr ? 'المدينة' : 'City',
+        icon: Icons.location_city_rounded,
+        oldValue: existingBranch.city,
+        newValue: newBranch.city,
+      ),
+      _BranchFieldDiff(
+        fieldLabel: isAr ? 'العنوان' : 'Address',
+        icon: Icons.place_outlined,
+        oldValue: existingBranch.address,
+        newValue: newBranch.address,
+      ),
+      _BranchFieldDiff(
+        fieldLabel: isAr ? 'الرقم الضريبي' : 'Tax Number',
+        icon: Icons.receipt_outlined,
+        oldValue: existingSig?.taxNumber ?? '',
+        newValue: newSig?.taxNumber ?? '',
+      ),
+      _BranchFieldDiff(
+        fieldLabel: isAr ? 'الخط الساخن' : 'Hotline',
+        icon: Icons.phone_in_talk_rounded,
+        oldValue: existingSig?.hotline ?? '',
+        newValue: newSig?.hotline ?? '',
+      ),
+    ];
+
+    final hasAnyChanges = diffs.any((d) => d.isChanged);
+
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: cs.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 680, maxHeight: 720),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade700.withValues(alpha: 0.12),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                    border: Border(bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.4))),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade700,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.published_with_changes_rounded, color: Colors.white, size: 22),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isAr ? 'الفرع مسجل مسبقاً - مراجعة وتأكيد التحديث' : 'Branch Already Registered - Review Update',
+                              style: GoogleFonts.cairo(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: cs.onSurface,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              isAr
+                                  ? 'تم العثور على سجل سابق لفرع "${existingBranch.branchName}" بسلسلة "$chainName". يرجى مراجعة التغييرات قبل الاعتماد.'
+                                  : 'Existing record found for "${existingBranch.branchName}" in "$chainName". Review changes before applying.',
+                              style: GoogleFonts.cairo(
+                                fontSize: 12.5,
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Diff Body
+                Flexible(
+                  child: ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    shrinkWrap: true,
+                    children: [
+                      if (!hasAnyChanges)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.teal.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.teal.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.check_circle_rounded, color: Colors.teal, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  isAr
+                                      ? 'جميع بيانات وبصمة الفاتورة متطابقة تماماً مع السجل الحالي في قاعدة البيانات.'
+                                      : 'All extracted receipt details match the existing database record.',
+                                  style: GoogleFonts.cairo(fontSize: 12.5, color: Colors.teal.shade800, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      ...diffs.map((diff) => _buildDiffRow(context, diff, isAr)),
+                    ],
+                  ),
+                ),
+
+                // Action Bar
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerLow,
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+                    border: Border(top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.4))),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                        icon: const Icon(Icons.close_rounded, size: 18),
+                        label: Text(
+                          isAr ? 'إلغاء والإبقاء على البيانات الحالية' : 'Cancel & Keep Existing',
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton.icon(
+                        onPressed: () => Navigator.of(ctx).pop(true),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.amber.shade800,
+                          foregroundColor: Colors.white,
+                        ),
+                        icon: const Icon(Icons.check_rounded, size: 18),
+                        label: Text(
+                          isAr ? 'تأكيد وتحديث بيانات الفرع' : 'Confirm & Apply Update',
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDiffRow(BuildContext context, _BranchFieldDiff diff, bool isAr) {
+    final cs = Theme.of(context).colorScheme;
+    final isChanged = diff.isChanged;
+    final oldDisplay = diff.oldValue.trim().isNotEmpty ? diff.oldValue.trim() : (isAr ? '(فارغ)' : '(Empty)');
+    final newDisplay = diff.newValue.trim().isNotEmpty ? diff.newValue.trim() : (isAr ? '(غير مستخرج)' : '(Not extracted)');
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: isChanged
+            ? Colors.amber.withValues(alpha: 0.08)
+            : cs.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isChanged ? Colors.amber.shade600.withValues(alpha: 0.4) : cs.outlineVariant.withValues(alpha: 0.3),
+          width: isChanged ? 1.2 : 1,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(diff.icon, size: 18, color: isChanged ? Colors.amber.shade800 : cs.onSurfaceVariant),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 140,
+            child: Text(
+              diff.fieldLabel,
+              style: GoogleFonts.cairo(
+                fontSize: 12.5,
+                fontWeight: FontWeight.bold,
+                color: cs.onSurface,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: cs.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                    ),
+                    child: Text(
+                      oldDisplay,
+                      style: GoogleFonts.cairo(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                        decoration: isChanged ? TextDecoration.lineThrough : null,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 16,
+                  color: isChanged ? Colors.amber.shade800 : cs.outlineVariant,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: isChanged ? Colors.amber.shade50 : cs.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isChanged ? Colors.amber.shade700 : cs.outlineVariant.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    child: Text(
+                      newDisplay,
+                      style: GoogleFonts.cairo(
+                        fontSize: 12,
+                        fontWeight: isChanged ? FontWeight.bold : FontWeight.normal,
+                        color: isChanged ? Colors.amber.shade900 : cs.onSurface,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (isChanged)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade700,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                isAr ? 'محدث' : 'Updated',
+                style: GoogleFonts.cairo(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            )
+          else
+            Icon(Icons.check_rounded, size: 16, color: Colors.teal.shade700),
+        ],
+      ),
+    );
+  }
+}
+
+class _BranchFieldDiff {
+  final String fieldLabel;
+  final IconData icon;
+  final String oldValue;
+  final String newValue;
+
+  _BranchFieldDiff({
+    required this.fieldLabel,
+    required this.icon,
+    required this.oldValue,
+    required this.newValue,
+  });
+
+  bool get isChanged {
+    final oldClean = oldValue.trim();
+    final newClean = newValue.trim();
+    return newClean.isNotEmpty && oldClean != newClean;
   }
 }

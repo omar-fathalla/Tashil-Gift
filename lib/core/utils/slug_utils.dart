@@ -159,6 +159,18 @@ class SlugUtils {
     'ريد': 'raid',
     'بايجون': 'baygon',
 
+    // FMCG Groups & Conglomerates
+    'يونيليفر': 'unilever',
+    'يوني ليفر': 'unilever',
+    'ادكو': 'adco',
+    'أدكو': 'adco',
+    'هنكل': 'henkel',
+    'بروكتر اند جامبل': 'pg',
+    'بي اند جي': 'pg',
+    'بي & جي': 'pg',
+    'مونديليز': 'mondelez',
+    'مارس': 'mars',
+
     // Retailers
     'فتح الله': 'fathalla',
     'أسواق فتح الله': 'fathalla',
@@ -200,6 +212,7 @@ class SlugUtils {
 
   /// Alias for generateEnglishSlug
   static String generateSlug(String input) => generateEnglishSlug(input);
+  static String toSlug(String input) => generateEnglishSlug(input);
 
   /// Generates a clean English slug from an input string (Arabic or English).
   static String generateEnglishSlug(String input) {

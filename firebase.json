@@ -2,9 +2,12 @@
   "firestore": {
     "rules": "firestore.rules"
   },
-  "storage": {
-    "rules": "storage.rules"
-  },
+  "storage": [
+    {
+      "bucket": "tashil-gift.firebasestorage.app",
+      "rules": "storage.rules"
+    }
+  ],
   "hosting": {
     "public": "build/web",
     "ignore": [

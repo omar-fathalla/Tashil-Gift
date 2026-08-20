@@ -70,6 +70,122 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     );
   }
 
+  Future<void> _showDeleteCampaignDialog(
+    BuildContext context,
+    EventModel event,
+    AppStrings strings,
+    FirebaseFirestore? firestore,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
+        final isAr = ref.isArabic;
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: cs.errorContainer.withValues(alpha: 0.7),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.delete_forever_rounded, color: cs.error, size: 24),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  strings.deleteCampaignConfirmTitle,
+                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 17),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      event.eventName,
+                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 14, color: cs.primary),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${isAr ? 'الشركة:' : 'Company:'} ${event.targetCompany} • ${isAr ? 'السلسلة:' : 'Chain:'} ${event.retailChainName}',
+                      style: GoogleFonts.cairo(fontSize: 12, color: cs.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                strings.deleteCampaignConfirmBody,
+                style: GoogleFonts.cairo(fontSize: 13, color: cs.onSurface),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(strings.cancel, style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
+            ),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: cs.error,
+                foregroundColor: cs.onError,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              icon: const Icon(Icons.delete_forever_rounded, size: 18),
+              label: Text(strings.deleteCampaignBtn, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true && firestore != null) {
+      try {
+        await firestore.collection('events').doc(event.id).delete();
+        if (event.companySlug.isNotEmpty) {
+          await ref.read(companyGiftsServiceProvider).syncCompanyGiftsAvailableQuantities(event.companySlug);
+        }
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(strings.campaignDeletedSuccess),
+              backgroundColor: Colors.red.shade700,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(AppStrings.of(ref).operationFailed(e.toString())),
+              backgroundColor: Colors.red.shade900,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
+  }
+
   Future<void> _handleSignOut(BuildContext context, AppStrings strings) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1479,6 +1595,30 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     icon: const Icon(Icons.edit_note_rounded, size: 18),
                     label: Text(isAr ? 'تعديل الحملة' : 'Edit Campaign', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13)),
                     style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+
+                // 7. Delete Campaign
+                Tooltip(
+                  message: strings.deleteCampaignTooltip,
+                  waitDuration: const Duration(milliseconds: 400),
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showDeleteCampaignDialog(context, event, strings, firestore),
+                    icon: Icon(Icons.delete_forever_rounded, size: 18, color: colorScheme.error),
+                    label: Text(
+                      strings.deleteCampaignBtn,
+                      style: GoogleFonts.cairo(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: colorScheme.error,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: colorScheme.error,
+                      side: BorderSide(color: colorScheme.error.withValues(alpha: 0.5)),
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),

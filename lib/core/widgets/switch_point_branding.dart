@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import '../constants/country_currency_config.dart';
+import '../constants/app_version_config.dart';
 import '../localization/locale_provider.dart';
 
 /// Company constants & metadata for Switch Point & Tashil Gift System
@@ -91,41 +92,44 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
 
           // Switch Point Brand Logo & Title with click-to-website
           if (isMobile)
-            InkWell(
-              onTap: () => SwitchPointInfo.launchLink(SwitchPointInfo.websiteUrl),
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        colorScheme.primary,
-                        colorScheme.tertiary,
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                    boxShadow: [
-                      BoxShadow(
-                        color: colorScheme.primary.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
+            Tooltip(
+              message: AppVersionConfig.tooltipText,
+              child: InkWell(
+                onTap: () => SwitchPointInfo.launchLink(SwitchPointInfo.websiteUrl),
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          colorScheme.primary,
+                          colorScheme.tertiary,
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.hub_rounded,
-                    color: Colors.white,
-                    size: 18,
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: [
+                        BoxShadow(
+                          color: colorScheme.primary.withValues(alpha: 0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.hub_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
                   ),
                 ),
               ),
             )
           else
-            Flexible(
+            Expanded(
               child: InkWell(
                 onTap: () => SwitchPointInfo.launchLink(SwitchPointInfo.websiteUrl),
                 borderRadius: BorderRadius.circular(12),
@@ -182,19 +186,22 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 4),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: colorScheme.primaryContainer,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    'v2.0',
-                                    style: GoogleFonts.cairo(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: colorScheme.onPrimaryContainer,
+                                const SizedBox(width: 5),
+                                Tooltip(
+                                  message: AppVersionConfig.tooltipText,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                    decoration: BoxDecoration(
+                                      color: colorScheme.primaryContainer,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      AppVersionConfig.versionDisplay,
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: colorScheme.onPrimaryContainer,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -218,8 +225,6 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
                 ),
               ),
             ),
-
-          const Spacer(),
 
           // Custom Actions (e.g. Preview button)
           if (customActions != null) ...customActions!,
@@ -726,6 +731,27 @@ class SwitchPointFooter extends StatelessWidget {
                               ),
                             ),
                           ],
+                        ),
+                      ),
+                    ),
+
+                    // Version Tag
+                    Tooltip(
+                      message: AppVersionConfig.tooltipText,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+                        ),
+                        child: Text(
+                          AppVersionConfig.fullBuildDisplay,
+                          style: GoogleFonts.cairo(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
                     ),

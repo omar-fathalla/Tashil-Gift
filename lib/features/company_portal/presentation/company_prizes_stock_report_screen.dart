@@ -55,6 +55,7 @@ class AggregatedGiftStock {
 class CompanyPrizesStockReportScreen extends ConsumerStatefulWidget {
   final String lockedCompanySlug;
   final String lockedCompanyName;
+  final String? initialEventId;
   final bool isEmbedded;
   final VoidCallback? onBack;
 
@@ -62,6 +63,7 @@ class CompanyPrizesStockReportScreen extends ConsumerStatefulWidget {
     super.key,
     required this.lockedCompanySlug,
     required this.lockedCompanyName,
+    this.initialEventId,
     this.isEmbedded = false,
     this.onBack,
   });
@@ -86,11 +88,26 @@ class _CompanyPrizesStockReportScreenState
   @override
   void initState() {
     super.initState();
+    if (widget.initialEventId != null && widget.initialEventId!.isNotEmpty) {
+      _selectedEventId = widget.initialEventId;
+    }
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text.trim().toLowerCase();
       });
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant CompanyPrizesStockReportScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialEventId != oldWidget.initialEventId &&
+        widget.initialEventId != null &&
+        widget.initialEventId!.isNotEmpty) {
+      setState(() {
+        _selectedEventId = widget.initialEventId;
+      });
+    }
   }
 
   @override
@@ -276,8 +293,10 @@ class _CompanyPrizesStockReportScreenState
                       inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
                       style: GoogleFonts.cairo(),
                       decoration: InputDecoration(
-                        labelText: isVoucher ? (isAr ? 'عدد الكروت (الرصيد الافتتاحي) *' : 'Total Number of Cards *') : (isAr ? 'الكمية المتاحة (قطع) *' : 'Initial Stock (Units) *'),
-                        hintText: '100',
+                        labelText: isVoucher
+                            ? (isAr ? 'عدد الكروت (الرصيد الافتتاحي - اختياري)' : 'Initial Cards Count (Optional)')
+                            : (isAr ? 'الكمية المتاحة (قطع - اختياري)' : 'Initial Stock (Units - Optional)'),
+                        hintText: isAr ? '0 أو اتركها فارغة' : '0 or leave blank',
                         prefixIcon: const Icon(Icons.numbers_rounded),
                         filled: true,
                         fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
@@ -330,7 +349,8 @@ class _CompanyPrizesStockReportScreenState
                   ),
                   onPressed: () async {
                     final name = nameController.text.trim();
-                    final qty = qtyController.text.trim().toIntOrNull() ?? 0;
+                    final qtyText = qtyController.text.trim();
+                    final qty = qtyText.isEmpty ? 0 : (qtyText.toIntOrNull() ?? 0);
                     final unitVal = unitValController.text.trim().toDoubleOrNull() ?? 0.0;
 
                     if (name.isEmpty) {
@@ -342,10 +362,10 @@ class _CompanyPrizesStockReportScreenState
                       );
                       return;
                     }
-                    if (qty <= 0) {
+                    if (qty < 0) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text(isAr ? 'يرجى إدخال كمية صحيحة أكبر من الصفر' : 'Please enter valid quantity > 0', style: GoogleFonts.cairo()),
+                          content: Text(isAr ? 'الكمية يجب ألا تكون سالبة' : 'Quantity cannot be negative', style: GoogleFonts.cairo()),
                           backgroundColor: colorScheme.error,
                         ),
                       );
@@ -904,6 +924,7 @@ class _CompanyPrizesStockReportScreenState
     required int currentRemaining,
     required String companySlug,
     required List<CompanyGiftModel> masterGifts,
+    bool initialDirectMode = false,
   }) {
     // Find master gift if available to show warehouse inventory
     final normGiftKey = giftId.trim().toLowerCase();
@@ -919,8 +940,10 @@ class _CompanyPrizesStockReportScreenState
     final isVoucher = masterGift?.isVoucher ?? (giftName.contains('فواتشر') || giftName.contains('voucher'));
     final unitLabel = isVoucher ? (isAr ? 'كارت' : 'cards') : (isAr ? 'قطعة' : 'pcs');
 
+    final TextEditingController directQtyController = TextEditingController(text: '$currentAllocated');
     final TextEditingController additionalQtyController = TextEditingController();
     final TextEditingController notesController = TextEditingController();
+    bool isDirectMode = initialDirectMode;
     bool isSaving = false;
     int additionalQty = 0;
 
@@ -929,10 +952,20 @@ class _CompanyPrizesStockReportScreenState
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            final parsedAdd = additionalQtyController.text.trim().toIntOrNull() ?? 0;
-            final effectiveAdd = parsedAdd != 0 ? parsedAdd : additionalQty;
-            final newAllocated = (currentAllocated + effectiveAdd).clamp(currentClaimed, 999999).toInt();
-            final newRemaining = (currentRemaining + effectiveAdd).clamp(0, newAllocated).toInt();
+            int newAllocated;
+            int effectiveAdd;
+
+            if (isDirectMode) {
+              final parsedDirect = directQtyController.text.trim().toIntOrNull() ?? currentAllocated;
+              newAllocated = parsedDirect.clamp(0, 999999);
+              effectiveAdd = newAllocated - currentAllocated;
+            } else {
+              final parsedAdd = additionalQtyController.text.trim().toIntOrNull() ?? 0;
+              effectiveAdd = parsedAdd != 0 ? parsedAdd : additionalQty;
+              newAllocated = (currentAllocated + effectiveAdd).clamp(0, 999999);
+            }
+
+            final newRemaining = (currentRemaining + effectiveAdd).clamp(0, newAllocated);
 
             return AlertDialog(
               backgroundColor: colorScheme.surfaceContainerHigh,
@@ -979,6 +1012,96 @@ class _CompanyPrizesStockReportScreenState
                       style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
                     ),
                     const SizedBox(height: 14),
+
+                    // Switcher between Direct Total vs Quick +/-
+                    Container(
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      padding: const EdgeInsets.all(4),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: InkWell(
+                              onTap: () {
+                                setDialogState(() {
+                                  isDirectMode = true;
+                                  directQtyController.text = '$newAllocated';
+                                });
+                              },
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: isDirectMode ? colorScheme.primary : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.edit_note_rounded,
+                                      size: 16,
+                                      color: isDirectMode ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      isAr ? 'تعديل / تصفير الحصة' : 'Set Quota (0)',
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDirectMode ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: InkWell(
+                              onTap: () {
+                                setDialogState(() {
+                                  isDirectMode = false;
+                                  additionalQtyController.text = '';
+                                  additionalQty = 0;
+                                });
+                              },
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: !isDirectMode ? colorScheme.primary : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.add_circle_outline_rounded,
+                                      size: 16,
+                                      color: !isDirectMode ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      isAr ? 'تزويد سريع (+)' : 'Quick Supply (+)',
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: !isDirectMode ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
 
                     // Event Context Badge
                     if (eventName.isNotEmpty)
@@ -1078,59 +1201,122 @@ class _CompanyPrizesStockReportScreenState
                       ),
                     ),
 
-                    const SizedBox(height: 16),
-
-                    // Quick Stepper Chips (+1, +5, +10, +25, +50)
-                    Text(
-                      isAr ? 'تزويد سريع (+):' : 'Quick Increment (+):',
-                      style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
-                    ),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      children: [1, 5, 10, 25, 50].map((inc) {
-                        return ActionChip(
-                          avatar: Icon(Icons.add_circle_outline_rounded, size: 16, color: colorScheme.primary),
-                          label: Text('+$inc $unitLabel', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold)),
-                          backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-                          onPressed: isSaving
-                              ? null
-                              : () {
-                                  setDialogState(() {
-                                    final currentVal = additionalQtyController.text.trim().toIntOrNull() ?? 0;
-                                    final newVal = currentVal + inc;
-                                    additionalQtyController.text = '$newVal';
-                                    additionalQty = newVal;
-                                  });
-                                },
-                        );
-                      }).toList(),
-                    ),
-
                     const SizedBox(height: 14),
 
-                    // Input Field for Additional Quantity
-                    TextField(
-                      controller: additionalQtyController,
-                      keyboardType: const TextInputType.numberWithOptions(signed: true),
-                      enabled: !isSaving,
-                      onChanged: (val) {
-                        setDialogState(() {
-                          additionalQty = val.trim().toIntOrNull() ?? 0;
-                        });
-                      },
-                      decoration: InputDecoration(
-                        labelText: strings.addQuantityLabel,
-                        hintText: isAr ? 'مثال: 5 أو 10 أو -2' : 'e.g. 5, 10, or -2',
-                        prefixIcon: const Icon(Icons.add_box_rounded),
-                        suffixText: unitLabel,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                        filled: true,
-                        fillColor: colorScheme.surface,
+                    if (isDirectMode) ...[
+                      // Direct Mode: Zero Button + Presets + Input
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            isAr ? 'تعيين الحصة مباشرة:' : 'Set Target Quota:',
+                            style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+                          ),
+                          ActionChip(
+                            avatar: const Icon(Icons.bolt_rounded, size: 16, color: Colors.red),
+                            label: Text(
+                              strings.zeroAllocationBtn,
+                              style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red[800]),
+                            ),
+                            backgroundColor: Colors.red.withValues(alpha: 0.1),
+                            side: BorderSide(color: Colors.red.withValues(alpha: 0.3)),
+                            onPressed: isSaving
+                                ? null
+                                : () {
+                                    setDialogState(() {
+                                      directQtyController.text = '0';
+                                    });
+                                  },
+                          ),
+                        ],
                       ),
-                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
-                    ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [0, 10, 25, 50, 100, 200].map((preset) {
+                          return ActionChip(
+                            label: Text('$preset $unitLabel', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold)),
+                            backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                            onPressed: isSaving
+                                ? null
+                                : () {
+                                    setDialogState(() {
+                                      directQtyController.text = '$preset';
+                                    });
+                                  },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: directQtyController,
+                        keyboardType: TextInputType.number,
+                        enabled: !isSaving,
+                        onChanged: (val) {
+                          setDialogState(() {});
+                        },
+                        decoration: InputDecoration(
+                          labelText: strings.setAllocationDirectlyLabel,
+                          hintText: isAr ? 'أدخل الرقم الجديد (مثال: 0 أو 50)' : 'Enter new amount (e.g. 0, 50)',
+                          prefixIcon: const Icon(Icons.edit_rounded),
+                          suffixText: unitLabel,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                          filled: true,
+                          fillColor: colorScheme.surface,
+                        ),
+                        style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                      ),
+                    ] else ...[
+                      // Quick Incremental Mode
+                      Text(
+                        isAr ? 'تزويد سريع (+):' : 'Quick Increment (+):',
+                        style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [1, 5, 10, 25, 50].map((inc) {
+                          return ActionChip(
+                            avatar: Icon(Icons.add_circle_outline_rounded, size: 16, color: colorScheme.primary),
+                            label: Text('+$inc $unitLabel', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold)),
+                            backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                            onPressed: isSaving
+                                ? null
+                                : () {
+                                    setDialogState(() {
+                                      final currentVal = additionalQtyController.text.trim().toIntOrNull() ?? 0;
+                                      final newVal = currentVal + inc;
+                                      additionalQtyController.text = '$newVal';
+                                      additionalQty = newVal;
+                                    });
+                                  },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: additionalQtyController,
+                        keyboardType: const TextInputType.numberWithOptions(signed: true),
+                        enabled: !isSaving,
+                        onChanged: (val) {
+                          setDialogState(() {
+                            additionalQty = val.trim().toIntOrNull() ?? 0;
+                          });
+                        },
+                        decoration: InputDecoration(
+                          labelText: strings.addQuantityLabel,
+                          hintText: isAr ? 'مثال: 5 أو 10 أو -2' : 'e.g. 5, 10, or -2',
+                          prefixIcon: const Icon(Icons.add_box_rounded),
+                          suffixText: unitLabel,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                          filled: true,
+                          fillColor: colorScheme.surface,
+                        ),
+                        style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                      ),
+                    ],
 
                     const SizedBox(height: 12),
 
@@ -1172,6 +1358,13 @@ class _CompanyPrizesStockReportScreenState
                                     color: effectiveAdd > 0 ? Colors.green[900] : (effectiveAdd < 0 ? Colors.orange[900] : colorScheme.onSurface),
                                   ),
                                 ),
+                                if (effectiveAdd < 0)
+                                  Text(
+                                    isAr
+                                        ? 'سيتم إرجاع ${effectiveAdd.abs()} $unitLabel إلى رصيد المخزن المركزي للشركة'
+                                        : '${effectiveAdd.abs()} $unitLabel will return to master stock',
+                                    style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.orange[900]),
+                                  ),
                               ],
                             ),
                           ),
@@ -1187,7 +1380,7 @@ class _CompanyPrizesStockReportScreenState
                       enabled: !isSaving,
                       decoration: InputDecoration(
                         labelText: strings.supplyReasonOptionalLabel,
-                        hintText: isAr ? 'مثال: تزويد إضافي لفرع جاردينيا' : 'e.g. Extra supply for Gardenia branch',
+                        hintText: isAr ? 'مثال: تعديل الحصة وتصفير الرصيد' : 'e.g. Quota adjustment & stock zeroing',
                         prefixIcon: const Icon(Icons.note_alt_outlined),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                         filled: true,
@@ -1204,13 +1397,13 @@ class _CompanyPrizesStockReportScreenState
                   child: Text(isAr ? 'إلغاء' : 'Cancel', style: GoogleFonts.cairo()),
                 ),
                 FilledButton.icon(
-                  onPressed: isSaving || (effectiveAdd == 0 && additionalQtyController.text.trim().isEmpty)
+                  onPressed: isSaving || (effectiveAdd == 0 && !isDirectMode && additionalQtyController.text.trim().isEmpty)
                       ? null
                       : () async {
-                          if (newAllocated < currentClaimed) {
+                          if (newAllocated < 0) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(strings.cannotReduceBelowClaimedError, style: GoogleFonts.cairo()),
+                                content: Text(isAr ? 'لا يمكن أن تكون الحصة سالبة' : 'Allocation cannot be negative', style: GoogleFonts.cairo()),
                                 backgroundColor: colorScheme.error,
                               ),
                             );
@@ -1267,11 +1460,320 @@ class _CompanyPrizesStockReportScreenState
                           }
                         },
                   icon: isSaving
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
                       : const Icon(Icons.check_rounded, size: 18),
                   label: Text(
                     strings.saveBranchAllocationBtn,
                     style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                  ),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showEditGiftAllocationsDialog({
+    required AggregatedGiftStock gift,
+    required CompanyGiftModel? masterGift,
+    required String companySlug,
+    required List<EventModel> events,
+    required AppStrings strings,
+    required bool isAr,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final unitLabel = (masterGift?.isVoucher ?? false) ? (isAr ? 'كارت' : 'cards') : (isAr ? 'قطعة' : 'pcs');
+
+    // Collect all matching branch allocations across events for this gift
+    final List<Map<String, dynamic>> branchAllocations = [];
+    final normGiftName = gift.giftName.trim().toLowerCase();
+    final normGiftId = gift.giftId.trim().toLowerCase();
+
+    for (final event in events) {
+      if (event.companySlug.toLowerCase().trim() != companySlug.toLowerCase().trim()) continue;
+      for (final prize in event.allocatedPrizes) {
+        final pName = prize.name.trim().toLowerCase();
+        final pId = prize.giftId.trim().toLowerCase();
+        if (pName == normGiftName || (normGiftId.isNotEmpty && pId == normGiftId)) {
+          final claimed = (prize.allocatedQuantity - prize.remainingQuantity).clamp(0, prize.allocatedQuantity);
+          branchAllocations.add({
+            'eventId': event.id,
+            'eventName': event.eventName,
+            'branchId': prize.branchId,
+            'branchName': prize.branchName.isNotEmpty ? prize.branchName : (isAr ? 'كافة الفروع / عام' : 'All Branches'),
+            'currentAllocated': prize.allocatedQuantity,
+            'currentClaimed': claimed,
+            'currentRemaining': prize.remainingQuantity,
+            'controller': TextEditingController(text: '${prize.allocatedQuantity}'),
+          });
+        }
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        bool isSaving = false;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: colorScheme.surfaceContainerHigh,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+              titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              actionsPadding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(Icons.tune_rounded, color: Colors.purple[800], size: 24),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          strings.editGiftAllocationsTitle,
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 17, color: colorScheme.onSurface),
+                        ),
+                        Text(
+                          gift.giftName,
+                          style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.primary, fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 550,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        strings.editGiftAllocationsSubtitle,
+                        style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Quick Action Bar: Zero All Branches (0)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            isAr ? 'الحصص الموزعة على الفروع:' : 'Branch Quotas:',
+                            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          ActionChip(
+                            avatar: const Icon(Icons.bolt_rounded, size: 16, color: Colors.red),
+                            label: Text(
+                              strings.zeroAllAllocationsBtn,
+                              style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red[800]),
+                            ),
+                            backgroundColor: Colors.red.withValues(alpha: 0.1),
+                            side: BorderSide(color: Colors.red.withValues(alpha: 0.3)),
+                            onPressed: isSaving
+                                ? null
+                                : () {
+                                    setDialogState(() {
+                                      for (final item in branchAllocations) {
+                                        (item['controller'] as TextEditingController).text = '0';
+                                      }
+                                    });
+                                  },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+
+                      if (branchAllocations.isEmpty)
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            isAr ? 'هذا الصنف غير مخصص في أي فعالية حالياً' : 'No active campaign allocations for this gift',
+                            style: GoogleFonts.cairo(fontSize: 13, color: colorScheme.onSurfaceVariant),
+                            textAlign: TextAlign.center,
+                          ),
+                        )
+                      else
+                        ...branchAllocations.map((item) {
+                          final branchName = item['branchName'] as String;
+                          final eventName = item['eventName'] as String;
+                          final claimed = item['currentClaimed'] as int;
+                          final controller = item['controller'] as TextEditingController;
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: colorScheme.surface,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 3,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        branchName,
+                                        style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
+                                      ),
+                                      Text(
+                                        eventName,
+                                        style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                                      ),
+                                      if (claimed > 0)
+                                        Text(
+                                          '${isAr ? 'تم صرف:' : 'Awarded:'} $claimed $unitLabel',
+                                          style: GoogleFonts.cairo(fontSize: 11, color: Colors.orange[800], fontWeight: FontWeight.bold),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                SizedBox(
+                                  width: 110,
+                                  child: TextField(
+                                    controller: controller,
+                                    keyboardType: TextInputType.number,
+                                    enabled: !isSaving,
+                                    decoration: InputDecoration(
+                                      labelText: isAr ? 'المخصص' : 'Allocated',
+                                      suffixText: unitLabel,
+                                      isDense: true,
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                      filled: true,
+                                      fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                                    ),
+                                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Tooltip(
+                                  message: isAr ? 'تصفير حصة هذا الفرع' : 'Zero out this branch quota',
+                                  child: IconButton.filledTonal(
+                                    icon: const Icon(Icons.backspace_outlined, size: 16),
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: Colors.red.withValues(alpha: 0.1),
+                                      foregroundColor: Colors.red[700],
+                                    ),
+                                    onPressed: isSaving
+                                        ? null
+                                        : () {
+                                            setDialogState(() {
+                                              controller.text = '0';
+                                            });
+                                          },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSaving ? null : () => Navigator.of(dialogContext).pop(),
+                  child: Text(isAr ? 'إلغاء' : 'Cancel', style: GoogleFonts.cairo()),
+                ),
+                FilledButton.icon(
+                  onPressed: isSaving || branchAllocations.isEmpty
+                      ? null
+                      : () async {
+                          setDialogState(() => isSaving = true);
+                          try {
+                            for (final item in branchAllocations) {
+                              final eventId = item['eventId'] as String;
+                              final branchId = item['branchId'] as String;
+                              final branchName = item['branchName'] as String;
+                              final controller = item['controller'] as TextEditingController;
+                              final newQty = controller.text.trim().toIntOrNull() ?? 0;
+
+                              if (newQty < 0) {
+                                throw Exception('لا يمكن إدخال كمية سالبة لفرع $branchName');
+                              }
+
+                              await ref.read(companyGiftsServiceProvider).updateBranchPrizeAllocation(
+                                companySlug: companySlug,
+                                eventId: eventId,
+                                branchName: branchName,
+                                branchId: branchId,
+                                giftKey: gift.giftId.isNotEmpty ? gift.giftId : gift.giftName,
+                                newAllocatedQuantity: newQty,
+                                notes: isAr ? 'تعديل وتصفير المخصص من جرد الأصناف' : 'Quota update from SKU Inventory',
+                                performedBy: 'مدير الشركة',
+                              );
+                            }
+
+                            if (dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop();
+                            }
+
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(strings.allocationsSavedSuccess),
+                                  backgroundColor: const Color(0xFF006C50),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            setDialogState(() => isSaving = false);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(AppErrorHandler.getFriendlyMessage(e), style: GoogleFonts.cairo()),
+                                  backgroundColor: colorScheme.error,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                  icon: isSaving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Icon(Icons.check_rounded, size: 18),
+                  label: Text(
+                    strings.saveAllAllocationsBtn,
+                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.purple[700],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                 ),
               ],
@@ -1726,9 +2228,11 @@ class _CompanyPrizesStockReportScreenState
         return AlertDialog(
           backgroundColor: colorScheme.surfaceContainerHigh,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-          title: Text(isAr ? 'تأكيد الحذف' : 'Confirm Delete', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: colorScheme.onSurface)),
+          title: Text(isAr ? 'تأكيد الحذف النهائي' : 'Confirm Permanent Deletion', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: colorScheme.onSurface)),
           content: Text(
-            isAr ? 'هل أنت متأكد من رغبتك في حذف هدية "${gift.giftName}" من مخزون الشركة؟' : 'Are you sure you want to delete "${gift.giftName}"?',
+            isAr
+                ? 'هل أنت متأكد من رغبتك في حذف هدية "${gift.giftName}" نهائياً من مخزون الشركة؟ سيتم مسح كافة مخصصاتها وتبعياتها من كافة الفعاليات والحملات.'
+                : 'Are you sure you want to permanently delete "${gift.giftName}"? All its allocations and dependencies will be removed across all campaigns.',
             style: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant),
           ),
           actions: [
@@ -1743,7 +2247,7 @@ class _CompanyPrizesStockReportScreenState
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: Text(isAr ? 'حذف' : 'Delete', style: GoogleFonts.cairo()),
+              child: Text(isAr ? 'حذف ومسح التبعيات' : 'Delete & Cascade', style: GoogleFonts.cairo()),
             ),
           ],
         );
@@ -1752,16 +2256,30 @@ class _CompanyPrizesStockReportScreenState
 
     if (confirm == true) {
       try {
-        await ref.read(firestoreProvider).collection('company_gifts').doc(gift.id).delete();
+        await ref.read(companyGiftsServiceProvider).deleteGiftCascade(
+          giftId: gift.id,
+          companySlug: gift.companySlug,
+          giftName: gift.giftName,
+          performedBy: 'مدير الشركة',
+        );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(isAr ? 'تم حذف الهدية من المخزون بنجاح' : 'Gift deleted successfully', style: GoogleFonts.cairo()),
+              content: Text(isAr ? 'تم حذف الهدية ومسح كافة تبعياتها بنجاح' : 'Gift and allocations deleted successfully', style: GoogleFonts.cairo()),
+              backgroundColor: const Color(0xFF006C50),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${isAr ? 'حدث خطأ أثناء الحذف:' : 'Error deleting:'} $e', style: GoogleFonts.cairo()),
               backgroundColor: colorScheme.error,
             ),
           );
         }
-      } catch (_) {}
+      }
     }
   }
 
@@ -2052,8 +2570,40 @@ class _CompanyPrizesStockReportScreenState
     // 4. Aggregate all prizes across filtered events & branches
     final Map<String, AggregatedGiftStock> aggregatedMap = {};
 
+    // 4a. Initialize from master gifts so every company gift is present seamlessly
+    for (final mg in masterGifts) {
+      final key = mg.giftName.trim().toLowerCase();
+      aggregatedMap[key] = AggregatedGiftStock(
+        giftId: mg.id,
+        giftName: mg.giftName,
+        sku: mg.id,
+        totalAllocated: 0,
+        totalClaimed: 0,
+        totalRemaining: 0,
+        branchRemainingMap: {},
+        branchAllocatedMap: {},
+        eventNames: [],
+      );
+    }
+
     for (final event in filteredEvents) {
       for (final prize in event.allocatedPrizes) {
+        // If master company gifts are present, ignore deleted/orphaned gifts
+        CompanyGiftModel? matchingMasterGift;
+        if (masterGifts.isNotEmpty) {
+          matchingMasterGift = masterGifts.where((mg) {
+            final mgName = _normalizePrizeKey(mg.giftName);
+            final pName = _normalizePrizeKey(prize.name);
+            return mg.id == prize.giftId ||
+                mgName == pName ||
+                (mgName.isNotEmpty && pName.isNotEmpty && (mgName.contains(pName) || pName.contains(mgName)));
+          }).firstOrNull;
+
+          if (matchingMasterGift == null) {
+            continue; // Skip deleted/orphaned gift
+          }
+        }
+
         // If branch filter is applied, skip prizes not in that branch
         if (_selectedBranch != null && _selectedBranch!.isNotEmpty) {
           final prizeBranch = prize.branchName.trim();
@@ -2062,44 +2612,54 @@ class _CompanyPrizesStockReportScreenState
           }
         }
 
-        final key = prize.name.trim().toLowerCase();
+        final canonicalGiftName = matchingMasterGift?.giftName ?? prize.name.trim();
+        final canonicalGiftId = matchingMasterGift?.id ?? (prize.giftId.isNotEmpty ? prize.giftId : canonicalGiftName);
+        final key = canonicalGiftName.toLowerCase();
         final branchKey = prize.branchName.isNotEmpty
             ? prize.branchName.trim()
             : (prize.branchId.isNotEmpty ? prize.branchId : (isAr ? 'الفرع الرئيسي' : 'Main Branch'));
 
         final rawClaimed = (prize.allocatedQuantity - prize.remainingQuantity).clamp(0, prize.allocatedQuantity);
-        final branchClaimed = getReconciledClaimed(prize.name, rawClaimed, branchKey);
+        final branchClaimed = prize.allocatedQuantity > 0
+            ? getReconciledClaimed(prize.name, rawClaimed, branchKey).clamp(0, prize.allocatedQuantity)
+            : 0;
         final branchRemaining = (prize.allocatedQuantity - branchClaimed).clamp(0, prize.allocatedQuantity);
 
         final existing = aggregatedMap[key];
         if (existing == null) {
-          final branchRem = <String, int>{branchKey: branchRemaining};
-          final branchAlloc = <String, int>{branchKey: prize.allocatedQuantity};
-          final claimed = getReconciledClaimed(prize.name, rawClaimed);
+          final branchRem = branchKey.isNotEmpty ? <String, int>{branchKey: branchRemaining} : <String, int>{};
+          final branchAlloc = branchKey.isNotEmpty ? <String, int>{branchKey: prize.allocatedQuantity} : <String, int>{};
+          final claimed = prize.allocatedQuantity > 0
+              ? getReconciledClaimed(prize.name, rawClaimed).clamp(0, prize.allocatedQuantity)
+              : 0;
           final remaining = (prize.allocatedQuantity - claimed).clamp(0, prize.allocatedQuantity);
 
           aggregatedMap[key] = AggregatedGiftStock(
-            giftId: prize.giftId.isNotEmpty ? prize.giftId : key,
-            giftName: prize.name.trim(),
-            sku: prize.giftId,
+            giftId: canonicalGiftId,
+            giftName: canonicalGiftName,
+            sku: canonicalGiftId,
             totalAllocated: prize.allocatedQuantity,
             totalClaimed: claimed,
             totalRemaining: remaining,
             branchRemainingMap: branchRem,
             branchAllocatedMap: branchAlloc,
-            eventNames: [event.eventName],
+            eventNames: prize.allocatedQuantity > 0 ? [event.eventName] : [],
           );
         } else {
           final newAllocated = existing.totalAllocated + prize.allocatedQuantity;
-          final newClaimed = getReconciledClaimed(prize.name, existing.totalClaimed + branchClaimed);
+          final newClaimed = newAllocated > 0
+              ? getReconciledClaimed(prize.name, existing.totalClaimed + branchClaimed).clamp(0, newAllocated)
+              : 0;
           final newRemaining = (newAllocated - newClaimed).clamp(0, newAllocated);
 
-          existing.branchRemainingMap[branchKey] =
-              (existing.branchRemainingMap[branchKey] ?? 0) + branchRemaining;
-          existing.branchAllocatedMap[branchKey] =
-              (existing.branchAllocatedMap[branchKey] ?? 0) + prize.allocatedQuantity;
+          if (branchKey.isNotEmpty && prize.allocatedQuantity > 0) {
+            existing.branchRemainingMap[branchKey] =
+                (existing.branchRemainingMap[branchKey] ?? 0) + branchRemaining;
+            existing.branchAllocatedMap[branchKey] =
+                (existing.branchAllocatedMap[branchKey] ?? 0) + prize.allocatedQuantity;
+          }
 
-          if (!existing.eventNames.contains(event.eventName)) {
+          if (!existing.eventNames.contains(event.eventName) && prize.allocatedQuantity > 0) {
             existing.eventNames.add(event.eventName);
           }
 
@@ -2113,26 +2673,6 @@ class _CompanyPrizesStockReportScreenState
             branchRemainingMap: existing.branchRemainingMap,
             branchAllocatedMap: existing.branchAllocatedMap,
             eventNames: existing.eventNames,
-          );
-        }
-      }
-    }
-
-    // If master gifts exist and some are not in campaigns yet, add them if no event filter
-    if (_selectedEventId == null && (_selectedBranch == null || _selectedBranch!.isEmpty)) {
-      for (final mg in masterGifts) {
-        final key = mg.giftName.trim().toLowerCase();
-        if (!aggregatedMap.containsKey(key)) {
-          aggregatedMap[key] = AggregatedGiftStock(
-            giftId: mg.id,
-            giftName: mg.giftName,
-            sku: mg.id,
-            totalAllocated: mg.totalQuantity,
-            totalClaimed: (mg.totalQuantity - mg.availableQuantity).clamp(0, mg.totalQuantity),
-            totalRemaining: mg.availableQuantity,
-            branchRemainingMap: {isAr ? 'المخزون الرئيسي للشركة' : 'Master Inventory': mg.availableQuantity},
-            branchAllocatedMap: {isAr ? 'المخزون الرئيسي للشركة' : 'Master Inventory': mg.totalQuantity},
-            eventNames: [isAr ? 'المستودع الرئيسي' : 'Master Warehouse'],
           );
         }
       }
@@ -2261,6 +2801,10 @@ class _CompanyPrizesStockReportScreenState
                     isMobile: isMobile,
                     gifts: allGiftsList,
                     masterGifts: masterGifts,
+                    companySlug: widget.lockedCompanySlug.isNotEmpty
+                        ? widget.lockedCompanySlug
+                        : (companyEvents.isNotEmpty ? companyEvents.first.companySlug : ''),
+                    events: companyEvents,
                   )
                 else if (_viewMode == 1)
                   _buildBranchBreakdownView(
@@ -2281,6 +2825,7 @@ class _CompanyPrizesStockReportScreenState
                     isHi: isHi,
                     isMobile: isMobile,
                     filteredEvents: filteredEvents,
+                    masterGifts: masterGifts,
                   ),
 
                 const SizedBox(height: 32),
@@ -2636,96 +3181,126 @@ class _CompanyPrizesStockReportScreenState
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               // Campaign Selector Dropdown
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                decoration: BoxDecoration(
-                  color: colorScheme.surface,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: colorScheme.outlineVariant.withValues(alpha: 0.6),
-                  ),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String?>(
-                    value: _selectedEventId,
-                    hint: Text(
-                      strings.allCampaignsOption,
-                      style: GoogleFonts.cairo(
-                        fontSize: 11,
-                        color: colorScheme.onSurfaceVariant,
+              Builder(
+                builder: (context) {
+                  final uniqueEvents = <String, EventModel>{};
+                  for (final ev in companyEvents) {
+                    if (ev.id.isNotEmpty && !uniqueEvents.containsKey(ev.id)) {
+                      uniqueEvents[ev.id] = ev;
+                    }
+                  }
+                  final cleanEvents = uniqueEvents.values.toList();
+                  final effectiveSelectedEventId = _selectedEventId != null && cleanEvents.any((ev) => ev.id == _selectedEventId)
+                      ? _selectedEventId
+                      : null;
+
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surface,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: colorScheme.outlineVariant.withValues(alpha: 0.6),
                       ),
                     ),
-                    icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
-                    items: [
-                      DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text(
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String?>(
+                        key: ValueKey('stock_campaign_${effectiveSelectedEventId}_${cleanEvents.length}'),
+                        value: effectiveSelectedEventId,
+                        hint: Text(
                           strings.allCampaignsOption,
                           style: GoogleFonts.cairo(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            color: colorScheme.onSurfaceVariant,
                           ),
                         ),
+                        icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+                        items: [
+                          DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text(
+                              strings.allCampaignsOption,
+                              style: GoogleFonts.cairo(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          for (final ev in cleanEvents)
+                            DropdownMenuItem<String?>(
+                              value: ev.id,
+                              child: Text(
+                                ev.eventName,
+                                style: GoogleFonts.cairo(fontSize: 12),
+                              ),
+                            ),
+                        ],
+                        onChanged: (val) => setState(() => _selectedEventId = val),
                       ),
-                      for (final ev in companyEvents)
-                        DropdownMenuItem<String?>(
-                          value: ev.id,
-                          child: Text(
-                            ev.eventName,
-                            style: GoogleFonts.cairo(fontSize: 12),
-                          ),
-                        ),
-                    ],
-                    onChanged: (val) => setState(() => _selectedEventId = val),
-                  ),
-                ),
+                    ),
+                  );
+                },
               ),
 
               // Branch Selector Dropdown
               if (distinctBranches.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surface,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: colorScheme.outlineVariant.withValues(alpha: 0.6),
-                    ),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String?>(
-                      value: _selectedBranch,
-                      hint: Text(
-                        strings.allBranchesOption,
-                        style: GoogleFonts.cairo(
-                          fontSize: 11,
-                          color: colorScheme.onSurfaceVariant,
+                Builder(
+                  builder: (context) {
+                    final cleanBranches = distinctBranches
+                        .where((b) => b.trim().isNotEmpty)
+                        .toSet()
+                        .toList()
+                      ..sort();
+                    final effectiveSelectedBranch = _selectedBranch != null && cleanBranches.contains(_selectedBranch)
+                        ? _selectedBranch
+                        : null;
+
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surface,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: colorScheme.outlineVariant.withValues(alpha: 0.6),
                         ),
                       ),
-                      icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
-                      items: [
-                        DropdownMenuItem<String?>(
-                          value: null,
-                          child: Text(
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String?>(
+                          key: ValueKey('stock_branch_${effectiveSelectedBranch}_${cleanBranches.length}'),
+                          value: effectiveSelectedBranch,
+                          hint: Text(
                             strings.allBranchesOption,
                             style: GoogleFonts.cairo(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                              color: colorScheme.onSurfaceVariant,
                             ),
                           ),
+                          icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+                          items: [
+                            DropdownMenuItem<String?>(
+                              value: null,
+                              child: Text(
+                                strings.allBranchesOption,
+                                style: GoogleFonts.cairo(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            for (final b in cleanBranches)
+                              DropdownMenuItem<String?>(
+                                value: b,
+                                child: Text(
+                                  b,
+                                  style: GoogleFonts.cairo(fontSize: 12),
+                                ),
+                              ),
+                          ],
+                          onChanged: (val) => setState(() => _selectedBranch = val),
                         ),
-                        for (final b in distinctBranches)
-                          DropdownMenuItem<String?>(
-                            value: b,
-                            child: Text(
-                              b,
-                              style: GoogleFonts.cairo(fontSize: 12),
-                            ),
-                          ),
-                      ],
-                      onChanged: (val) => setState(() => _selectedBranch = val),
-                    ),
-                  ),
+                      ),
+                    );
+                  },
                 ),
 
               // Stock Status Pills
@@ -3224,24 +3799,40 @@ class _CompanyPrizesStockReportScreenState
                 ),
                 if (masterGifts.isNotEmpty) ...[
                   const SizedBox(width: 10),
-                  DropdownButtonHideUnderline(
-                    child: DropdownButton<String?>(
-                      value: _movementGiftFilter,
-                      hint: Text(isAr ? 'كل الهدايا' : 'All Gifts', style: GoogleFonts.cairo(fontSize: 12)),
-                      items: [
-                        DropdownMenuItem<String?>(
-                          value: null,
-                          child: Text(isAr ? 'كل الهدايا' : 'All Gifts', style: GoogleFonts.cairo(fontSize: 12)),
+                  Builder(
+                    builder: (context) {
+                      final uniqueGifts = <String, CompanyGiftModel>{};
+                      for (final g in masterGifts) {
+                        if (g.id.isNotEmpty && !uniqueGifts.containsKey(g.id)) {
+                          uniqueGifts[g.id] = g;
+                        }
+                      }
+                      final cleanGifts = uniqueGifts.values.toList();
+                      final effectiveGiftFilter = _movementGiftFilter != null && cleanGifts.any((g) => g.id == _movementGiftFilter)
+                          ? _movementGiftFilter
+                          : null;
+
+                      return DropdownButtonHideUnderline(
+                        child: DropdownButton<String?>(
+                          key: ValueKey('stock_movement_gift_${effectiveGiftFilter}_${cleanGifts.length}'),
+                          value: effectiveGiftFilter,
+                          hint: Text(isAr ? 'كل الهدايا' : 'All Gifts', style: GoogleFonts.cairo(fontSize: 12)),
+                          items: [
+                            DropdownMenuItem<String?>(
+                              value: null,
+                              child: Text(isAr ? 'كل الهدايا' : 'All Gifts', style: GoogleFonts.cairo(fontSize: 12)),
+                            ),
+                            ...cleanGifts.map((g) {
+                              return DropdownMenuItem<String?>(
+                                value: g.id,
+                                child: Text(g.giftName, style: GoogleFonts.cairo(fontSize: 12)),
+                              );
+                            }),
+                          ],
+                          onChanged: (v) => setState(() => _movementGiftFilter = v),
                         ),
-                        ...masterGifts.map((g) {
-                          return DropdownMenuItem<String?>(
-                            value: g.id,
-                            child: Text(g.giftName, style: GoogleFonts.cairo(fontSize: 12)),
-                          );
-                        }),
-                      ],
-                      onChanged: (v) => setState(() => _movementGiftFilter = v),
-                    ),
+                      );
+                    },
                   ),
                 ],
               ],
@@ -3291,6 +3882,8 @@ class _CompanyPrizesStockReportScreenState
     required bool isMobile,
     required List<AggregatedGiftStock> gifts,
     required List<CompanyGiftModel> masterGifts,
+    required String companySlug,
+    required List<EventModel> events,
   }) {
     return Column(
       children: [
@@ -3303,6 +3896,8 @@ class _CompanyPrizesStockReportScreenState
             isMobile: isMobile,
             gift: gift,
             masterGifts: masterGifts,
+            companySlug: companySlug,
+            events: events,
           ),
       ],
     );
@@ -3316,6 +3911,8 @@ class _CompanyPrizesStockReportScreenState
     required bool isMobile,
     required AggregatedGiftStock gift,
     required List<CompanyGiftModel> masterGifts,
+    required String companySlug,
+    required List<EventModel> events,
   }) {
     final statusColor = gift.isOutOfStock
         ? const Color(0xFFB3261E)
@@ -3676,7 +4273,29 @@ class _CompanyPrizesStockReportScreenState
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
-                // 4. Edit Gift
+                // 4. Edit / Zero Branch Allocations Button
+                FilledButton.tonalIcon(
+                  onPressed: () => _showEditGiftAllocationsDialog(
+                    gift: gift,
+                    masterGift: masterGift,
+                    companySlug: companySlug,
+                    events: events,
+                    strings: strings,
+                    isAr: isAr,
+                  ),
+                  icon: const Icon(Icons.tune_rounded, size: 16),
+                  label: Text(
+                    isAr ? 'مخصصات الفروع (تعديل/تصفير)' : 'Branch Quotas',
+                    style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.purple.withValues(alpha: 0.15),
+                    foregroundColor: Colors.purple[800],
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                // 5. Edit Gift
                 IconButton.filledTonal(
                   onPressed: () => _showEditGiftDialog(masterGift),
                   icon: const Icon(Icons.edit_rounded, size: 16),
@@ -3751,6 +4370,17 @@ class _CompanyPrizesStockReportScreenState
 
     for (final event in filteredEvents) {
       for (final prize in event.allocatedPrizes) {
+        if (masterGifts.isNotEmpty) {
+          final isPresentInMaster = masterGifts.any((mg) {
+            final mgName = _normalizePrizeKey(mg.giftName);
+            final pName = _normalizePrizeKey(prize.name);
+            return mg.id == prize.giftId ||
+                mgName == pName ||
+                (mgName.isNotEmpty && pName.isNotEmpty && (mgName.contains(pName) || pName.contains(mgName)));
+          });
+          if (!isPresentInMaster) continue;
+        }
+
         final bName = prize.branchName.trim().isNotEmpty
             ? prize.branchName.trim()
             : (prize.branchId.trim().isNotEmpty
@@ -4020,36 +4650,77 @@ class _CompanyPrizesStockReportScreenState
                                   );
                                 },
                               )
-                            : FilledButton.tonalIcon(
-                                onPressed: () {
-                                  _showAdjustBranchAllocationDialog(
-                                    context: context,
-                                    colorScheme: colorScheme,
-                                    strings: strings,
-                                    isAr: isAr,
-                                    branchName: branchName,
-                                    branchId: p['branchId'] as String? ?? '',
-                                    eventId: p['eventId'] as String? ?? '',
-                                    eventName: p['eventName'] as String? ?? '',
-                                    giftId: p['giftId'] as String? ?? '',
-                                    giftName: p['giftName'] as String? ?? '',
-                                    currentAllocated: p['allocated'] as int? ?? 0,
-                                    currentClaimed: p['claimed'] as int? ?? 0,
-                                    currentRemaining: p['remaining'] as int? ?? 0,
-                                    companySlug: effectiveCompanySlug,
-                                    masterGifts: masterGifts,
-                                  );
-                                },
-                                icon: const Icon(Icons.add_circle_outline_rounded, size: 16),
-                                label: Text(
-                                  isAr ? 'تزويد' : 'Supply',
-                                  style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
-                                ),
-                                style: FilledButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  visualDensity: VisualDensity.compact,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                ),
+                            : Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: [
+                                  FilledButton.tonalIcon(
+                                    onPressed: () {
+                                      _showAdjustBranchAllocationDialog(
+                                        context: context,
+                                        colorScheme: colorScheme,
+                                        strings: strings,
+                                        isAr: isAr,
+                                        branchName: branchName,
+                                        branchId: p['branchId'] as String? ?? '',
+                                        eventId: p['eventId'] as String? ?? '',
+                                        eventName: p['eventName'] as String? ?? '',
+                                        giftId: p['giftId'] as String? ?? '',
+                                        giftName: p['giftName'] as String? ?? '',
+                                        currentAllocated: p['allocated'] as int? ?? 0,
+                                        currentClaimed: p['claimed'] as int? ?? 0,
+                                        currentRemaining: p['remaining'] as int? ?? 0,
+                                        companySlug: effectiveCompanySlug,
+                                        masterGifts: masterGifts,
+                                        initialDirectMode: false,
+                                      );
+                                    },
+                                    icon: const Icon(Icons.add_circle_outline_rounded, size: 15),
+                                    label: Text(
+                                      isAr ? 'تزويد' : 'Supply',
+                                      style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
+                                    ),
+                                    style: FilledButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      visualDensity: VisualDensity.compact,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                  ),
+                                  FilledButton.tonalIcon(
+                                    onPressed: () {
+                                      _showAdjustBranchAllocationDialog(
+                                        context: context,
+                                        colorScheme: colorScheme,
+                                        strings: strings,
+                                        isAr: isAr,
+                                        branchName: branchName,
+                                        branchId: p['branchId'] as String? ?? '',
+                                        eventId: p['eventId'] as String? ?? '',
+                                        eventName: p['eventName'] as String? ?? '',
+                                        giftId: p['giftId'] as String? ?? '',
+                                        giftName: p['giftName'] as String? ?? '',
+                                        currentAllocated: p['allocated'] as int? ?? 0,
+                                        currentClaimed: p['claimed'] as int? ?? 0,
+                                        currentRemaining: p['remaining'] as int? ?? 0,
+                                        companySlug: effectiveCompanySlug,
+                                        masterGifts: masterGifts,
+                                        initialDirectMode: true,
+                                      );
+                                    },
+                                    icon: const Icon(Icons.edit_note_rounded, size: 15),
+                                    label: Text(
+                                      isAr ? 'تعديل/تصفير' : 'Edit/Zero',
+                                      style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
+                                    ),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: Colors.purple.withValues(alpha: 0.12),
+                                      foregroundColor: Colors.purple[800],
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      visualDensity: VisualDensity.compact,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                  ),
+                                ],
                               ),
                       ],
                     ),
@@ -4110,6 +4781,7 @@ class _CompanyPrizesStockReportScreenState
     required bool isHi,
     required bool isMobile,
     required List<EventModel> filteredEvents,
+    required List<CompanyGiftModel> masterGifts,
   }) {
     return Column(
       children: [
@@ -4121,6 +4793,7 @@ class _CompanyPrizesStockReportScreenState
             isHi: isHi,
             isMobile: isMobile,
             event: event,
+            masterGifts: masterGifts,
           ),
       ],
     );
@@ -4133,11 +4806,23 @@ class _CompanyPrizesStockReportScreenState
     required bool isHi,
     required bool isMobile,
     required EventModel event,
+    required List<CompanyGiftModel> masterGifts,
   }) {
+    final validPrizes = event.allocatedPrizes.where((prize) {
+      if (masterGifts.isEmpty) return true;
+      return masterGifts.any((mg) {
+        final mgName = _normalizePrizeKey(mg.giftName);
+        final pName = _normalizePrizeKey(prize.name);
+        return mg.id == prize.giftId ||
+            mgName == pName ||
+            (mgName.isNotEmpty && pName.isNotEmpty && (mgName.contains(pName) || pName.contains(mgName)));
+      });
+    }).toList();
+
     int campaignAllocated = 0;
     int campaignRemaining = 0;
 
-    for (final p in event.allocatedPrizes) {
+    for (final p in validPrizes) {
       campaignAllocated += p.allocatedQuantity;
       campaignRemaining += p.remainingQuantity;
     }
@@ -4231,7 +4916,7 @@ class _CompanyPrizesStockReportScreenState
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                if (event.allocatedPrizes.isEmpty)
+                if (validPrizes.isEmpty)
                   Padding(
                     padding: const EdgeInsets.all(16),
                     child: Text(
@@ -4243,7 +4928,7 @@ class _CompanyPrizesStockReportScreenState
                     ),
                   )
                 else
-                  for (final prize in event.allocatedPrizes)
+                  for (final prize in validPrizes)
                     Container(
                       margin: const EdgeInsets.only(bottom: 8),
                       padding: const EdgeInsets.symmetric(

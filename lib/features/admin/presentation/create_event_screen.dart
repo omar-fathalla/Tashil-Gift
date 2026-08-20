@@ -59,6 +59,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   late final TextEditingController _termsController;
   late final TextEditingController _maxChancesController;
   bool _allowMultipleChances = false;
+  String _multiplierBasis = 'both';
   
   DateTime? _startDate;
   DateTime? _endDate;
@@ -148,6 +149,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     );
     _requiredProductsController = TextEditingController(text: e?.requiredProducts.join(', ') ?? '');
     _allowMultipleChances = e?.allowMultipleChances ?? false;
+    _multiplierBasis = e?.multiplierBasis ?? 'both';
     _maxChancesController = TextEditingController(
       text: (e?.maxChancesPerReceipt != null && e!.maxChancesPerReceipt > 0)
           ? e.maxChancesPerReceipt.toString()
@@ -986,7 +988,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     if (mounted) {
       setState(() {
         _companyGifts = gifts;
-        // Normalize keys in _branchAllocationQuantities so that every allocation uses canonical gift.id
+        // Normalize keys in _branchAllocationQuantities so that only valid existing gifts are kept
         for (final branchEntry in _branchAllocationQuantities.entries) {
           final bMap = branchEntry.value;
           final updatedMap = <String, int>{};
@@ -995,13 +997,26 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
             final qty = giftEntry.value;
             if (qty <= 0) continue;
             final matched = gifts.where((g) => g.id == key || g.giftName == key || _resolveGiftDisplayName(key) == g.giftName).firstOrNull;
-            final canonicalKey = matched?.id ?? key;
-            updatedMap[canonicalKey] = (updatedMap[canonicalKey] ?? 0) + qty;
+            if (matched != null) {
+              updatedMap[matched.id] = (updatedMap[matched.id] ?? 0) + qty;
+            }
           }
           bMap
             ..clear()
             ..addAll(updatedMap);
         }
+
+        // Clean up promotional rules from deleted gifts
+        _promotionalRules = _promotionalRules.where((rule) {
+          if (rule.linkedGifts.isNotEmpty) {
+            rule.linkedGifts.removeWhere((lg) => !gifts.any((g) => g.id == lg.giftId || g.giftName == lg.giftName));
+          }
+          if (rule.linkedGiftId != null && rule.linkedGiftId!.isNotEmpty) {
+            final exists = gifts.any((g) => g.id == rule.linkedGiftId || g.giftName == rule.linkedGiftName);
+            if (!exists) return false;
+          }
+          return true;
+        }).toList();
       });
     }
   }
@@ -1134,20 +1149,28 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
   void _updatePromptForMultipleChances(bool enabled) {
     String currentPrompt = _customPromptController.text;
-    const String clauseHeader = '- مضاعفة فرص السحب واللعب:';
+    currentPrompt = currentPrompt
+        .replaceAll(RegExp(r'\n?- مضاعفة (?:فرص السحب واللعب|الجوائز والفرص):[^\n]+'), '')
+        .trim();
     
     if (enabled) {
-      if (!currentPrompt.contains(clauseHeader)) {
-        final minSpendText = _minimumSpendController.text.trim().isNotEmpty
-            ? _minimumSpendController.text.trim()
-            : '{MIN_SPEND}';
-        final addedClause = '\n$clauseHeader الحد الأدنى المطلوب هو $minSpendText جنيه. كل مضاعف لهذا المبلغ من منتجات الشركة يمنح العميل فرصة سحب إضافية (مثال: ضعف المبلغ = فرصتان، 3 أضعاف = 3 فرص).';
-        _customPromptController.text = '$currentPrompt$addedClause';
+      final minSpendText = _minimumSpendController.text.trim().isNotEmpty
+          ? _minimumSpendController.text.trim()
+          : '{MIN_SPEND}';
+      final maxChances = _maxChancesController.text.trim();
+      final maxCapText = maxChances.isNotEmpty ? ' (بحد أقصى $maxChances بالفاتورة الواحدة)' : '';
+
+      String addedClause;
+      if (_multiplierBasis == 'quantity') {
+        addedClause = '\n- مضاعفة الجوائز والفرص: تتضاعف الجوائز والفرص طردياً مع تكرار ومضاعفة كمية المنتج المشروط بالفاتورة (مثال: شراء 1 قطعة = 1 هدية/فرصة، شراء قطعتين = هديتان/فرصتان)$maxCapText.';
+      } else if (_multiplierBasis == 'spend') {
+        addedClause = '\n- مضاعفة فرص السحب واللعب: الحد الأدنى المطلوب هو $minSpendText جنيه. كل مضاعف لهذا المبلغ من منتجات الشركة يمنح العميل فرصة سحب إضافية$maxCapText.';
+      } else {
+        addedClause = '\n- مضاعفة الجوائز والفرص: تتضاعف الجوائز الفورية بمضاعفة كميات الأصناف المشروطة، وتتضاعف فرص السحب بمضاعفة قيمة الشراء ($minSpendText جنيه)$maxCapText.';
       }
+      _customPromptController.text = '$currentPrompt$addedClause';
     } else {
-      _customPromptController.text = currentPrompt
-          .replaceAll(RegExp(r'\n?- مضاعفة فرص السحب واللعب:[^\n]+'), '')
-          .trim();
+      _customPromptController.text = currentPrompt;
     }
   }
 
@@ -1237,6 +1260,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       promotionalRules: _promotionalRules,
       retailChainName: _selectedRetailChainName ?? '',
       allowedBranches: _selectedBranchNames,
+      allowMultipleChances: _allowMultipleChances,
+      multiplierBasis: _multiplierBasis,
+      maxChancesPerReceipt: _maxChancesController.text.trim().toIntOrNull() ?? 0,
     );
 
     setState(() {
@@ -1256,40 +1282,65 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   }
 
   void _applyRulePreset(String presetKey) {
+    final isAr = ref.isArabic;
     if (presetKey == 'clear_360') {
       final matchedGift = _companyGifts.where((g) => g.giftName.contains('كلير') || g.giftName.contains('Clear')).firstOrNull;
+      if (matchedGift == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isAr ? 'صنف هدية كلير غير متوفر في مخزون هدايا الشركة حالياً' : 'Clear gift is not in company stock',
+              style: GoogleFonts.cairo(),
+            ),
+            backgroundColor: Colors.orange.shade800,
+          ),
+        );
+        return;
+      }
       final newRule = PromotionalRuleItem(
         id: 'rule_${_promotionalRules.length + 1}',
-        ruleTitle: 'عرض كلير 360 مل -> هدية كلير 90 مل',
+        ruleTitle: 'عرض كلير 360 مل -> هدية ${matchedGift.giftName}',
         triggerProduct: 'كلير 360 مل',
         minQuantity: 1,
         rewardType: 'free_product',
-        rewardValue: matchedGift?.giftName ?? 'كلير 90 مل هدية',
+        rewardValue: matchedGift.giftName,
         rewardAmount: 0.0,
         allowMultipliers: true,
-        linkedGiftId: matchedGift?.id,
-        linkedGiftName: matchedGift?.giftName,
-        linkedGifts: matchedGift != null
-            ? [LinkedGiftAllocation(giftId: matchedGift.id, giftName: matchedGift.giftName, quantity: 1, giftType: 'product')]
-            : [],
+        linkedGiftId: matchedGift.id,
+        linkedGiftName: matchedGift.giftName,
+        linkedGifts: [
+          LinkedGiftAllocation(giftId: matchedGift.id, giftName: matchedGift.giftName, quantity: 1, giftType: 'product'),
+        ],
       );
       setState(() => _promotionalRules.add(newRule));
     } else if (presetKey == 'tresemme_shrink') {
       final matchedGift = _companyGifts.where((g) => g.giftName.contains('تريزيمي') || g.giftName.contains('Tresemme')).firstOrNull;
+      if (matchedGift == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isAr ? 'صنف هدية تريزيمي غير متوفر في مخزون هدايا الشركة حالياً' : 'Tresemme gift is not in company stock',
+              style: GoogleFonts.cairo(),
+            ),
+            backgroundColor: Colors.orange.shade800,
+          ),
+        );
+        return;
+      }
       final newRule = PromotionalRuleItem(
         id: 'rule_${_promotionalRules.length + 1}',
-        ruleTitle: 'عرض شرنك 2ق تريزيمي -> هدية تريزيمي 250 مل',
+        ruleTitle: 'عرض شرنك 2ق تريزيمي -> هدية ${matchedGift.giftName}',
         triggerProduct: 'عرض شرنك 2ق تريزيمي، تريزيمي شرنك',
         minQuantity: 1,
         rewardType: 'free_product',
-        rewardValue: matchedGift?.giftName ?? 'تريزيمي 250 مل هدية',
+        rewardValue: matchedGift.giftName,
         rewardAmount: 0.0,
         allowMultipliers: true,
-        linkedGiftId: matchedGift?.id,
-        linkedGiftName: matchedGift?.giftName,
-        linkedGifts: matchedGift != null
-            ? [LinkedGiftAllocation(giftId: matchedGift.id, giftName: matchedGift.giftName, quantity: 1, giftType: 'product')]
-            : [],
+        linkedGiftId: matchedGift.id,
+        linkedGiftName: matchedGift.giftName,
+        linkedGifts: [
+          LinkedGiftAllocation(giftId: matchedGift.id, giftName: matchedGift.giftName, quantity: 1, giftType: 'product'),
+        ],
       );
       setState(() => _promotionalRules.add(newRule));
     } else if (presetKey == 'spray_1pc_50') {
@@ -1746,9 +1797,12 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
             }
           }
 
-          // Auto-include any gifts linked in promotional rules if not already present in prizes
+          // Auto-include any gifts linked in promotional rules if not already present in prizes and exists in company gifts
           for (final rule in _promotionalRules) {
             for (final linked in rule.linkedGifts) {
+              final isExistingInMaster = _companyGifts.isEmpty ||
+                  _companyGifts.any((g) => g.id == linked.giftId || g.giftName == linked.giftName);
+              if (!isExistingInMaster) continue;
               final alreadyInPrizes = prizes.any((p) => p.giftId == linked.giftId || p.name == linked.giftName);
               if (!alreadyInPrizes) {
                 prizes.add(resolveAllocatedPrize(
@@ -1760,6 +1814,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               }
             }
             if (rule.linkedGiftId != null && rule.linkedGiftId!.isNotEmpty) {
+              final isExistingInMaster = _companyGifts.isEmpty ||
+                  _companyGifts.any((g) => g.id == rule.linkedGiftId || g.giftName == rule.linkedGiftName);
+              if (!isExistingInMaster) continue;
               final alreadyInPrizes = prizes.any((p) => p.giftId == rule.linkedGiftId || p.name == rule.linkedGiftName);
               if (!alreadyInPrizes) {
                 prizes.add(resolveAllocatedPrize(
@@ -1780,6 +1837,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         branchNames: _isAllBranches ? [] : _selectedBranchNames,
         isAllBranches: _isAllBranches,
         allowMultipleChances: _allowMultipleChances,
+        multiplierBasis: _multiplierBasis,
         maxChancesPerReceipt: _maxChancesController.text.trim().toIntOrNull() ?? 0,
         promotionalIdea: _promotionalIdeaController.text.trim(),
         aiValidationSummary: _aiValidationSummary.trim(),
@@ -1824,6 +1882,95 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _deleteEvent() async {
+    if (widget.eventToEdit == null) return;
+    final strings = AppStrings.of(ref);
+    final cs = Theme.of(context).colorScheme;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: cs.errorContainer.withValues(alpha: 0.7),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.delete_forever_rounded, color: cs.error, size: 24),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                strings.deleteCampaignConfirmTitle,
+                style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 17),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          strings.deleteCampaignConfirmBody,
+          style: GoogleFonts.cairo(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(strings.cancel, style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: cs.error,
+              foregroundColor: cs.onError,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            icon: const Icon(Icons.delete_forever_rounded, size: 18),
+            label: Text(strings.deleteCampaignBtn, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() => _isLoading = true);
+      try {
+        final firestore = ref.read(firestoreProvider);
+        await firestore.collection('events').doc(widget.eventToEdit!.id).delete();
+        if (widget.eventToEdit!.companySlug.isNotEmpty) {
+          await ref.read(companyGiftsServiceProvider).syncCompanyGiftsAvailableQuantities(widget.eventToEdit!.companySlug);
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(strings.campaignDeletedSuccess),
+              backgroundColor: Colors.red.shade700,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          if (widget.onCancel != null) {
+            widget.onCancel!();
+          } else if (Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(strings.operationFailed(e.toString())),
+              backgroundColor: Colors.red.shade900,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
     }
   }
@@ -2895,23 +3042,54 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                 const SizedBox(height: 28),
 
                 // Save / Submit Button
-                FilledButton.icon(
-                  onPressed: _isLoading ? null : _saveEvent,
-                  icon: _isLoading
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.2),
-                        )
-                      : const Icon(Icons.check_circle_rounded, size: 22),
-                  label: Text(
-                    isEditing ? 'حفظ وتحديث بيانات الحملة' : 'حفظ وإنشاء الحملة الجديدة',
-                    style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
+                Row(
+                  children: [
+                    if (isEditing) ...[
+                      Expanded(
+                        flex: 1,
+                        child: OutlinedButton.icon(
+                          onPressed: _isLoading ? null : _deleteEvent,
+                          icon: Icon(Icons.delete_forever_rounded, size: 22, color: colorScheme.error),
+                          label: Text(
+                            strings.deleteCampaignBtn,
+                            style: GoogleFonts.cairo(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.error,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: colorScheme.error,
+                            side: BorderSide(color: colorScheme.error.withValues(alpha: 0.6), width: 1.5),
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                    ],
+                    Expanded(
+                      flex: 2,
+                      child: FilledButton.icon(
+                        onPressed: _isLoading ? null : _saveEvent,
+                        icon: _isLoading
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.2),
+                              )
+                            : const Icon(Icons.check_circle_rounded, size: 22),
+                        label: Text(
+                          isEditing ? 'حفظ وتحديث بيانات الحملة' : 'حفظ وإنشاء الحملة الجديدة',
+                          style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -3327,7 +3505,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'مضاعفة فرص السحب واللعب بناءً على قيمة الشراء',
+                      'مضاعفة فرص السحب والجوائز (Smart Multipliers)',
                       style: GoogleFonts.cairo(
                         fontSize: 14.5,
                         fontWeight: FontWeight.w700,
@@ -3336,7 +3514,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'منح العميل فرصة سحب إضافية لكل مضاعف للحد الأدنى من مشتريات الشركة في نفس الفاتورة.',
+                      'منح العميل فرص سحب أو جوائز إضافية عند تكرار شراء كميات المنتجات المشروطة أو مضاعفة قيمة الفاتورة.',
                       style: GoogleFonts.cairo(
                         fontSize: 12,
                         color: colorScheme.onSurfaceVariant,
@@ -3361,49 +3539,109 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
             const SizedBox(height: 14),
             Divider(height: 1, color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
             const SizedBox(height: 14),
-            // Formula Live Calculation Hint
+
+            // Multiplier Basis Mode Selector (M3 Segmented Button)
+            Text(
+              'طريقة احتساب المضاعفة:',
+              style: GoogleFonts.cairo(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment<String>(
+                    value: 'quantity',
+                    label: Text('📦 كمية المنتجات'),
+                    tooltip: 'مضاعفة الجوائز والفرص طردياً مع كمية المنتجات المشتراة',
+                  ),
+                  ButtonSegment<String>(
+                    value: 'spend',
+                    label: Text('💰 قيمة الشراء'),
+                    tooltip: 'مضاعفة الفرص لكل مضاعف للحد الأدنى للمبلغ',
+                  ),
+                  ButtonSegment<String>(
+                    value: 'both',
+                    label: Text('✨ كلاهما معاً'),
+                    tooltip: 'مضاعفة الجوائز حسب الكمية + فرص السحب حسب القيمة',
+                  ),
+                ],
+                selected: {_multiplierBasis},
+                onSelectionChanged: (newSelection) {
+                  setState(() {
+                    _multiplierBasis = newSelection.first;
+                    _updatePromptForMultipleChances(_allowMultipleChances);
+                  });
+                },
+                style: ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  textStyle: WidgetStatePropertyAll(
+                    GoogleFonts.cairo(fontSize: 12.5, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Formula Live Calculation & Explanation Box
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
                 color: colorScheme.surface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: colorScheme.primary.withValues(alpha: 0.2)),
+                border: Border.all(color: colorScheme.primary.withValues(alpha: 0.25)),
               ),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
-                    minSpend > 0 ? Icons.calculate_outlined : Icons.info_outline_rounded,
+                    _multiplierBasis == 'quantity'
+                        ? Icons.inventory_2_outlined
+                        : (_multiplierBasis == 'spend' ? Icons.calculate_outlined : Icons.auto_awesome_outlined),
                     size: 20,
                     color: colorScheme.primary,
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      minSpend > 0
-                          ? 'المعادلة الحية: كل ${minSpend.toStringAsFixed(0)} $currency = فرصة سحب واحدة (مثال: ${(minSpend * 2).toStringAsFixed(0)} $currency = فرصتان، ${(minSpend * 3).toStringAsFixed(0)} $currency = 3 فرص).'
-                          : 'تنبيه: لمضاعفة الفرص بناءً على المبلغ، يرجى إدخال الحد الأدنى للشراء أعلاه (أو تركها لمنح فرصة واحدة لكل فاتورة صالحة).',
+                      _multiplierBasis == 'quantity'
+                          ? '📦 مضاعفة حسب كمية المنتجات: عند شراء مضاعفات للكمية المشروطة في العرض (مثال: شراء 1 قطعة = 1 هدية/فرصة، شراء 2 قطعة = 2 هدية/فرصتان، شراء 3 قطع = 3 هدايا/فرص).'
+                          : (_multiplierBasis == 'spend'
+                              ? (minSpend > 0
+                                  ? '💰 مضاعفة حسب المبلغ: كل ${minSpend.toStringAsFixed(0)} $currency = فرصة سحب واحدة (مثال: ${(minSpend * 2).toStringAsFixed(0)} $currency = فرصتان، ${(minSpend * 3).toStringAsFixed(0)} $currency = 3 فرص).'
+                                  : 'تنبيه: لمضاعفة الفرص بناءً على المبلغ، يرجى إدخال الحد الأدنى للشراء أعلاه.')
+                              : '✨ نظام مركب ذكي: مضاعفة الجوائز الفورية عند تكرار كميات الأصناف المشروطة + مضاعفة فرص السحب واللعب لكل مضاعف للحد الأدنى من المبلغ (${minSpend > 0 ? minSpend.toStringAsFixed(0) : '...'} $currency).'),
                       style: GoogleFonts.cairo(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w600,
                         color: colorScheme.primary,
+                        height: 1.4,
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
+
             // Max chances limit per receipt input
             TextFormField(
               controller: _maxChancesController,
               keyboardType: TextInputType.number,
               inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
               style: GoogleFonts.cairo(),
+              onChanged: (_) {
+                _updatePromptForMultipleChances(_allowMultipleChances);
+              },
               decoration: _m3InputDecoration(
                 context: context,
-                labelText: 'الحد الأقصى للفرص في الفاتورة الواحدة (اختياري)',
-                hintText: 'اتركه فارغاً لعدد غير محدود من الفرص',
-                helperText: 'مثال: إذا حددت 3، فلن يحصل العميل على أكثر من 3 فرص حتى لو اشترى بأكثر من ذلك.',
+                labelText: 'سقف الحماية: الحد الأقصى للفرص / الجوائز بالفاتورة (اختياري)',
+                hintText: 'اتركه فارغاً لعدد غير محدود من الفرص/الجوائز',
+                helperText: 'مثال: إذا حددت 3، فلن يحصل العميل على أكثر من 3 جوائز أو فرص بالفاتورة الواحدة مهما زادت الكمية أو القيمة لحماية مخزون الحملة وميزانيتها.',
                 prefixIcon: Icons.military_tech_outlined,
               ),
             ),

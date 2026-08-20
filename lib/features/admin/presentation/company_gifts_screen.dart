@@ -944,12 +944,12 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
     }
 
     final qtyText = _giftQuantityController.text.trim();
-    final quantity = qtyText.toIntOrNull();
-    if (quantity == null || quantity <= 0) {
+    final quantity = qtyText.isEmpty ? 0 : (qtyText.toIntOrNull() ?? 0);
+    if (quantity < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'الكمية يجب أن تكون رقماً صحيحاً أكبر من الصفر',
+            'الكمية يجب ألا تكون سالبة',
             style: GoogleFonts.cairo(),
           ),
           behavior: SnackBarBehavior.floating,
@@ -999,27 +999,17 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
     });
 
     try {
-      final docRef = ref.read(firestoreProvider).collection('company_gifts').doc();
       final slug = _selectedCompanySlug!.toLowerCase().trim();
       final companyName = _selectedCompanyName ?? _selectedCompanySlug!;
 
-      await docRef.set({
-        'id': docRef.id,
-        'companySlug': slug,
-        'companyName': companyName,
-        'name': name,
-        'giftName': name,
-        'totalQuantity': quantity,
-        'availableQuantity': quantity,
-        'giftType': _selectedGiftType,
-        'unitValue': unitVal,
-        'orderIndex': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        'createdAt': FieldValue.serverTimestamp(),
-      }).timeout(
-        const Duration(milliseconds: 500),
-        onTimeout: () {
-          // Firestore cache applies the mutation immediately and syncs to server in background
-        },
+      await ref.read(companyGiftsServiceProvider).addGift(
+        companySlug: slug,
+        companyName: companyName,
+        giftName: name,
+        quantity: quantity,
+        giftType: _selectedGiftType,
+        unitValue: unitVal,
+        addedBy: 'مسؤول النظام',
       );
 
       // Clear fields and return focus to gift name so user can add another gift immediately
@@ -1043,8 +1033,12 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                 Expanded(
                   child: Text(
                     _selectedGiftType == 'voucher'
-                        ? 'تمت إضافة $quantity كارت $name (بقيمة إجمالية ${(quantity * unitVal).toInt()} ج.م) بنجاح'
-                        : 'تمت إضافة الهدية "$name" بنجاح',
+                        ? (quantity > 0
+                            ? 'تمت إضافة $quantity كارت $name (بقيمة إجمالية ${(quantity * unitVal).toInt()} ج.م) بنجاح'
+                            : 'تم تكويد كارت $name برصيد 0 بنجاح')
+                        : (quantity > 0
+                            ? 'تمت إضافة الهدية "$name" بكمية $quantity قطعة بنجاح'
+                            : 'تم تكويد الهدية "$name" برصيد 0 بنجاح'),
                     style: GoogleFonts.cairo(color: Colors.white, fontWeight: FontWeight.w600),
                   ),
                 ),
@@ -1193,19 +1187,23 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
   }
 
   void _deleteGift(String giftId) async {
+    final isAr = ref.isArabic;
+    final colorScheme = Theme.of(context).colorScheme;
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) {
-        final colorScheme = Theme.of(context).colorScheme;
+      builder: (dialogContext) {
         return AlertDialog(
           backgroundColor: colorScheme.surfaceContainerHigh,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-          title: Text('تأكيد الحذف', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: colorScheme.onSurface)),
-          content: Text('هل أنت متأكد من رغبتك في حذف هذه الهدية؟', style: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant)),
+          title: Text(isAr ? 'تأكيد الحذف النهائي' : 'Confirm Permanent Deletion', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: colorScheme.onSurface)),
+          content: Text(
+            isAr ? 'هل أنت متأكد من رغبتك في حذف هذا الصنف نهائياً؟ سيتم مسح كافة مخصصاته وتبعياته من كافة الفعاليات والحملات.' : 'Are you sure you want to permanently delete this gift? All its allocations and dependencies will be removed across all campaigns.',
+            style: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant),
+          ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text('إلغاء', style: GoogleFonts.cairo()),
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(isAr ? 'إلغاء' : 'Cancel', style: GoogleFonts.cairo()),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
@@ -1213,8 +1211,8 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                 foregroundColor: colorScheme.onError,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text('حذف', style: GoogleFonts.cairo()),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(isAr ? 'حذف ومسح التبعيات' : 'Delete & Cascade', style: GoogleFonts.cairo()),
             ),
           ],
         );
@@ -1223,11 +1221,29 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
 
     if (confirm == true) {
       try {
-        await ref.read(firestoreProvider).collection('company_gifts').doc(giftId).delete().timeout(
-          const Duration(seconds: 4),
-          onTimeout: () {},
+        await ref.read(companyGiftsServiceProvider).deleteGiftCascade(
+          giftId: giftId,
+          companySlug: _selectedCompanySlug,
+          performedBy: 'مسؤول النظام',
         );
-      } catch (_) {}
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(isAr ? 'تم حذف الصنف ومسح كافة تبعياته بنجاح' : 'Gift and its allocations deleted successfully', style: GoogleFonts.cairo()),
+              backgroundColor: const Color(0xFF006C50),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${isAr ? 'حدث خطأ أثناء الحذف:' : 'Error deleting:'} $e', style: GoogleFonts.cairo()),
+              backgroundColor: colorScheme.error,
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -1740,8 +1756,8 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                                 onChanged: (_) => setState(() {}),
                                 style: GoogleFonts.cairo(),
                                 decoration: InputDecoration(
-                                  labelText: 'عدد الكروت (الكمية) *',
-                                  hintText: 'مثال: 200',
+                                  labelText: 'عدد الكروت (الكمية الافتتاحية)',
+                                  hintText: '0 أو اتركها فارغة',
                                   labelStyle: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant),
                                   filled: true,
                                   fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
@@ -1873,8 +1889,8 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                                 onSubmitted: (_) => _isLoading ? null : _addGift(),
                                 style: GoogleFonts.cairo(),
                                 decoration: InputDecoration(
-                                  labelText: 'الكمية (قطع)',
-                                  hintText: 'مثال: 10',
+                                  labelText: 'الكمية (قطع - اختياري)',
+                                  hintText: '0 أو اتركها فارغة',
                                   labelStyle: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant),
                                   hintStyle: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
                                   filled: true,

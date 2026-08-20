@@ -400,7 +400,6 @@ class CompanyGiftsService {
 
     int oldAllocated = 0;
     int oldRemaining = 0;
-    int claimed = 0;
     String finalGiftId = masterGift?.id ?? giftKey;
     String finalGiftName = masterGift?.giftName ?? giftKey;
     String finalGiftType = masterGift?.giftType ?? 'product';
@@ -410,17 +409,14 @@ class CompanyGiftsService {
       final p = prizes[matchedIndex];
       oldAllocated = p.allocatedQuantity;
       oldRemaining = p.remainingQuantity;
-      claimed = (oldAllocated - oldRemaining).clamp(0, oldAllocated);
       finalGiftId = p.giftId.isNotEmpty ? p.giftId : finalGiftId;
       finalGiftName = p.name.isNotEmpty ? p.name : finalGiftName;
       finalGiftType = p.giftType;
       finalUnitValue = p.unitValue;
     }
 
-    if (newAllocatedQuantity < claimed) {
-      throw Exception(
-        'لا يمكن تقليل حصة الفرع إلى $newAllocatedQuantity حيث تم صرف $claimed جائزة للعملاء بالفعل.',
-      );
+    if (newAllocatedQuantity < 0) {
+      throw Exception('لا يمكن أن تكون حصة التخصيص سالبة');
     }
 
     final delta = newAllocatedQuantity - oldAllocated;
@@ -493,18 +489,26 @@ class CompanyGiftsService {
     String notes = '',
     String addedBy = 'مسؤول النظام',
   }) async {
+    if (quantity < 0) {
+      throw Exception('الكمية لا يمكن أن تكون سالبة');
+    }
+
     final docRef = _firestore.collection('company_gifts').doc();
     final now = DateTime.now();
 
-    final initialBatch = GiftSupplyBatch(
-      id: 'batch_${now.millisecondsSinceEpoch}',
-      batchNumber: 1,
-      quantity: quantity,
-      supplyDate: now,
-      referenceNumber: referenceNumber.trim().isNotEmpty ? referenceNumber.trim() : 'الرصيد الافتتاحي (دفعة 1)',
-      notes: notes.trim().isNotEmpty ? notes.trim() : 'دفعة التوريد الافتتاحية الأولى',
-      addedBy: addedBy.trim(),
-    );
+    final List<Map<String, dynamic>> batchesList = [];
+    if (quantity > 0) {
+      final initialBatch = GiftSupplyBatch(
+        id: 'batch_${now.millisecondsSinceEpoch}',
+        batchNumber: 1,
+        quantity: quantity,
+        supplyDate: now,
+        referenceNumber: referenceNumber.trim().isNotEmpty ? referenceNumber.trim() : 'الرصيد الافتتاحي (دفعة 1)',
+        notes: notes.trim().isNotEmpty ? notes.trim() : 'دفعة التوريد الافتتاحية الأولى',
+        addedBy: addedBy.trim(),
+      );
+      batchesList.add(initialBatch.toMap());
+    }
 
     final batch = _firestore.batch();
     batch.set(docRef, {
@@ -518,7 +522,7 @@ class CompanyGiftsService {
       'giftType': giftType,
       'unitValue': unitValue,
       'orderIndex': now.millisecondsSinceEpoch ~/ 1000,
-      'batches': [initialBatch.toMap()],
+      'batches': batchesList,
       'createdAt': FieldValue.serverTimestamp(),
     });
 
@@ -528,14 +532,14 @@ class CompanyGiftsService {
       companySlug: companySlug.toLowerCase().trim(),
       giftId: docRef.id,
       giftName: giftName.trim(),
-      movementType: 'supply_batch',
+      movementType: quantity > 0 ? 'supply_batch' : 'gift_registered_zero_stock',
       quantityChange: quantity,
       previousTotal: 0,
       newTotal: quantity,
       previousAvailable: 0,
       newAvailable: quantity,
-      reference: referenceNumber.trim().isNotEmpty ? referenceNumber.trim() : 'الرصيد الافتتاحي (دفعة 1)',
-      notes: notes.trim().isNotEmpty ? notes.trim() : 'تكويد وتوريد أولي للهدية',
+      reference: referenceNumber.trim().isNotEmpty ? referenceNumber.trim() : (quantity > 0 ? 'الرصيد الافتتاحي (دفعة 1)' : 'تكويد صنف جديد'),
+      notes: notes.trim().isNotEmpty ? notes.trim() : (quantity > 0 ? 'تكويد وتوريد أولي للهدية' : 'تكويد الصنف في مخزون الشركة برصيد افتتاحي 0'),
       performedBy: addedBy,
       timestamp: now,
     );
@@ -563,9 +567,197 @@ class CompanyGiftsService {
     });
   }
 
+  /// Completely deletes a gift from the master inventory and cascades deletion
+  /// across all campaigns/events and promotional rules of that company.
+  Future<void> deleteGiftCascade({
+    required String giftId,
+    String? companySlug,
+    String? giftName,
+    String performedBy = 'مسؤول النظام',
+  }) async {
+    String slug = companySlug?.toLowerCase().trim() ?? '';
+    String targetName = giftName?.trim() ?? '';
+
+    // 1. Fetch gift document from Firestore if metadata is missing
+    final giftDocRef = _firestore.collection('company_gifts').doc(giftId);
+    final giftDocSnap = await giftDocRef.get();
+    if (giftDocSnap.exists) {
+      final giftData = giftDocSnap.data();
+      if (giftData != null) {
+        if (slug.isEmpty) {
+          slug = (giftData['companySlug'] ?? '').toString().toLowerCase().trim();
+        }
+        if (targetName.isEmpty) {
+          targetName = (giftData['giftName'] ?? giftData['name'] ?? '').toString().trim();
+        }
+      }
+    }
+
+    // 2. Delete the master company_gifts doc
+    await giftDocRef.delete();
+
+    // 3. Cascade clean up across events of this company
+    Query<Map<String, dynamic>> eventsQuery = _firestore.collection('events');
+    if (slug.isNotEmpty) {
+      eventsQuery = eventsQuery.where('companySlug', isEqualTo: slug);
+    }
+
+    final eventsSnap = await eventsQuery.get();
+    final cleanTarget = _normalizePrizeText(targetName);
+
+    for (final eventDoc in eventsSnap.docs) {
+      final eventData = eventDoc.data();
+      final allocatedPrizesRaw = eventData['allocatedPrizes'] as List<dynamic>? ?? [];
+      bool eventChanged = false;
+
+      final updatedPrizes = allocatedPrizesRaw.where((p) {
+        if (p is! Map<String, dynamic>) return false;
+        final pGiftId = (p['giftId'] ?? '').toString().trim();
+        final pName = (p['name'] ?? '').toString().trim();
+        final cleanPName = _normalizePrizeText(pName);
+
+        final matchesId = pGiftId.isNotEmpty && pGiftId == giftId;
+        final matchesName = cleanTarget.isNotEmpty &&
+            (cleanPName == cleanTarget || cleanPName.contains(cleanTarget) || cleanTarget.contains(cleanPName));
+
+        if (matchesId || matchesName) {
+          eventChanged = true;
+          return false; // Remove this prize
+        }
+        return true;
+      }).toList();
+
+      // Also clean up promotional rules
+      final rulesRaw = eventData['promotionalRules'] as List<dynamic>? ?? [];
+      final updatedRules = rulesRaw.where((r) {
+        if (r is! Map<String, dynamic>) return true;
+        final rGiftId = (r['linkedGiftId'] ?? '').toString().trim();
+        final rGiftName = (r['linkedGiftName'] ?? '').toString().trim();
+        final cleanRGiftName = _normalizePrizeText(rGiftName);
+
+        final matchesId = rGiftId.isNotEmpty && rGiftId == giftId;
+        final matchesName = cleanTarget.isNotEmpty &&
+            (cleanRGiftName == cleanTarget || cleanRGiftName.contains(cleanTarget) || cleanTarget.contains(cleanRGiftName));
+
+        if (matchesId || matchesName) {
+          eventChanged = true;
+          return false; // Remove rule
+        }
+
+        // Also check linkedGifts array inside the rule
+        final linkedGiftsRaw = r['linkedGifts'] as List<dynamic>? ?? [];
+        if (linkedGiftsRaw.isNotEmpty) {
+          final updatedLinked = linkedGiftsRaw.where((lg) {
+            if (lg is! Map<String, dynamic>) return true;
+            final lgGiftId = (lg['giftId'] ?? '').toString().trim();
+            final lgGiftName = (lg['giftName'] ?? '').toString().trim();
+            final cleanLgGiftName = _normalizePrizeText(lgGiftName);
+            if (lgGiftId == giftId || (cleanTarget.isNotEmpty && (cleanLgGiftName == cleanTarget || cleanLgGiftName.contains(cleanTarget)))) {
+              eventChanged = true;
+              return false;
+            }
+            return true;
+          }).toList();
+          r['linkedGifts'] = updatedLinked;
+        }
+
+        return true;
+      }).toList();
+
+      if (eventChanged) {
+        await _firestore.collection('events').doc(eventDoc.id).update({
+          'allocatedPrizes': updatedPrizes,
+          'promotionalRules': updatedRules,
+        });
+      }
+    }
+
+    // 4. Log deletion in movements audit ledger
+    final movementRef = _firestore.collection('gift_stock_movements').doc();
+    final movement = GiftStockMovement(
+      id: movementRef.id,
+      companySlug: slug,
+      giftId: giftId,
+      giftName: targetName.isNotEmpty ? targetName : 'هدية محذوفة',
+      movementType: 'gift_deleted',
+      quantityChange: 0,
+      previousTotal: 0,
+      newTotal: 0,
+      previousAvailable: 0,
+      newAvailable: 0,
+      reference: 'حذف صنف نهائياً',
+      notes: 'تم حذف الصنف ومسح كافة مخصصاته وتبعياته من كافة الفعاليات والحملات',
+      performedBy: performedBy,
+      timestamp: DateTime.now(),
+    );
+    await movementRef.set(movement.toFirestore());
+
+    // 5. Re-synchronize remaining active company gifts
+    if (slug.isNotEmpty) {
+      await syncCompanyGiftsAvailableQuantities(slug);
+    }
+  }
+
+  /// Cleans up any orphaned prizes in events that no longer exist in master company_gifts.
+  Future<void> cleanupOrphanedPrizesForCompany(String companySlug) async {
+    final slug = companySlug.toLowerCase().trim();
+    if (slug.isEmpty) return;
+
+    try {
+      // 1. Fetch valid master gifts for this company
+      final giftsSnap = await _firestore
+          .collection('company_gifts')
+          .where('companySlug', isEqualTo: slug)
+          .get();
+
+      final validGiftIds = giftsSnap.docs.map((d) => d.id.trim()).toSet();
+      final validGiftNames = giftsSnap.docs
+          .map((d) => _normalizePrizeText((d.data()['giftName'] ?? d.data()['name'] ?? '').toString()))
+          .where((s) => s.isNotEmpty)
+          .toSet();
+
+      // 2. Query events for this company
+      final eventsSnap = await _firestore
+          .collection('events')
+          .where('companySlug', isEqualTo: slug)
+          .get();
+
+      for (final eventDoc in eventsSnap.docs) {
+        final eventData = eventDoc.data();
+        final allocatedPrizesRaw = eventData['allocatedPrizes'] as List<dynamic>? ?? [];
+        bool eventChanged = false;
+
+        final updatedPrizes = allocatedPrizesRaw.where((p) {
+          if (p is! Map<String, dynamic>) return false;
+          final pGiftId = (p['giftId'] ?? '').toString().trim();
+          final pName = (p['name'] ?? '').toString().trim();
+          final cleanPName = _normalizePrizeText(pName);
+
+          final isValid = validGiftIds.contains(pGiftId) ||
+              validGiftNames.contains(cleanPName) ||
+              validGiftNames.any((v) => cleanPName.isNotEmpty && (cleanPName.contains(v) || v.contains(cleanPName)));
+
+          if (!isValid) {
+            eventChanged = true;
+            return false; // Remove orphaned prize
+          }
+          return true;
+        }).toList();
+
+        if (eventChanged) {
+          await _firestore.collection('events').doc(eventDoc.id).update({
+            'allocatedPrizes': updatedPrizes,
+          });
+        }
+      }
+    } catch (_) {
+      // Best-effort cleanup
+    }
+  }
+
   /// Deletes a gift from the master inventory.
-  Future<void> deleteGift(String giftId) async {
-    await _firestore.collection('company_gifts').doc(giftId).delete();
+  Future<void> deleteGift(String giftId, {String? companySlug, String? giftName}) async {
+    await deleteGiftCascade(giftId: giftId, companySlug: companySlug, giftName: giftName);
   }
 
   static String _normalizePrizeText(String text) {

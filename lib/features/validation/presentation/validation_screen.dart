@@ -9,11 +9,13 @@ import 'package:firebase_storage/firebase_storage.dart';
 import '../../../core/services/firebase_service.dart';
 import '../../../core/services/ai_receipt_service.dart';
 import '../../../core/services/company_products_service.dart';
+import '../../../core/services/retail_chains_service.dart';
 import '../../../core/utils/error_handler.dart';
 import '../../games/presentation/spin_the_wheel_screen.dart';
 import '../../games/presentation/scratch_card_screen.dart';
 import '../../games/presentation/direct_gift_claim_screen.dart';
 import '../../admin/domain/event_model.dart';
+import '../../admin/domain/retail_chain_model.dart';
 import '../../client_portal/presentation/widgets/campaign_gift_balance_dialog.dart';
 import '../../client_portal/presentation/widgets/campaign_brief_dialog.dart';
 import 'invoices_log_screen.dart';
@@ -130,6 +132,18 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
             item.productName: item.barcode,
       };
       
+      // Fetch retail chain branch signatures if available for deterministic anti-fraud matching
+      List<BranchModel> chainBranches = [];
+      try {
+        chainBranches = await ref
+            .read(retailChainsServiceProvider)
+            .getBranchesForEvent(
+              retailChainId: activeEvent.retailChainId,
+              branchIds: activeEvent.branchIds,
+              branchNames: activeEvent.branchNames,
+            );
+      } catch (_) {}
+      
       final result = await aiService.analyzeReceiptImage(
         bytes, 
         mimeType,
@@ -141,9 +155,12 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         retailChainName: activeEvent.retailChainName,
         allowedBranches: activeEvent.branchNames,
         isAllBranches: activeEvent.isAllBranches,
+        registeredBranches: chainBranches,
         startDate: activeEvent.startDate,
+        endDate: activeEvent.endDate,
         customPrompt: activeEvent.customPrompt,
         allowMultipleChances: activeEvent.allowMultipleChances,
+        multiplierBasis: activeEvent.multiplierBasis,
         maxChancesPerReceipt: activeEvent.maxChancesPerReceipt,
         promotionalRules: activeEvent.promotionalRules,
       );

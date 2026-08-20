@@ -37,8 +37,8 @@ class CompanyManagerPortalScreen extends ConsumerStatefulWidget {
 class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPortalScreen> {
   int _selectedTab = 0; // 0 = Analytics & Insights, 1 = Invoice Audit Feed, 2 = Prizes & Stock Balance
 
-  void _copyPortalLink(BuildContext context, AppStrings strings) {
-    final url = AppUrlBuilder.buildManagerPortalUrl(widget.companySlug);
+  void _copyPortalLink(BuildContext context, AppStrings strings, String effectiveSlug, String? eventId) {
+    final url = AppUrlBuilder.buildManagerPortalUrl(effectiveSlug, eventId: eventId);
     Clipboard.setData(ClipboardData(text: url));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -49,8 +49,8 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     );
   }
 
-  void _copyPromoterLink(BuildContext context, AppStrings strings) {
-    final url = AppUrlBuilder.buildPromoterUrl(widget.companySlug);
+  void _copyPromoterLink(BuildContext context, AppStrings strings, String effectiveSlug, String? eventId) {
+    final url = AppUrlBuilder.buildPromoterUrl(effectiveSlug, eventId: eventId);
     Clipboard.setData(ClipboardData(text: url));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -71,7 +71,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     required bool isMobile,
     required List<QueryDocumentSnapshot> allDocs,
   }) {
-    final companyEvents = allDocs
+    final allEvents = allDocs
         .map((doc) {
           try {
             return EventModel.fromFirestore(doc);
@@ -80,27 +80,87 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
           }
         })
         .whereType<EventModel>()
-        .where((e) =>
-            e.companySlug.toLowerCase() == widget.companySlug.toLowerCase() ||
-            e.targetCompany.toLowerCase().contains(widget.companySlug.toLowerCase()))
         .toList();
 
-    // Resolve company display name from existing events or format slug
-    String companyDisplayName = '';
-    if (companyEvents.isNotEmpty) {
-      companyDisplayName = companyEvents.first.targetCompany;
-    }
-    if (companyDisplayName.isEmpty) {
-      companyDisplayName = SlugUtils.formatSlugToName(widget.companySlug);
-    }
-
+    // 1. Multi-tier resolution for the active initial event
     EventModel? initialEvent;
+
+    // Tier A: Match by explicit initialEventId
     if (widget.initialEventId != null && widget.initialEventId!.isNotEmpty) {
-      final matches = companyEvents.where((e) => e.id == widget.initialEventId);
+      final matches = allEvents.where((e) => e.id == widget.initialEventId);
       if (matches.isNotEmpty) {
         initialEvent = matches.first;
       }
     }
+
+    // Tier B: Match if companySlug is actually an event ID
+    if (initialEvent == null && widget.companySlug.isNotEmpty) {
+      final matches = allEvents.where((e) => e.id == widget.companySlug.trim());
+      if (matches.isNotEmpty) {
+        initialEvent = matches.first;
+      }
+    }
+
+    // Tier C: Match by companySlug
+    if (initialEvent == null && widget.companySlug.isNotEmpty) {
+      final cleanSlug = widget.companySlug.trim().toLowerCase();
+      final matches = allEvents.where((e) => e.companySlug.trim().toLowerCase() == cleanSlug).toList();
+      if (matches.isNotEmpty) {
+        matches.sort((a, b) {
+          if (a.isActive != b.isActive) return a.isActive ? -1 : 1;
+          final aDate = a.createdAt ?? a.startDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final bDate = b.createdAt ?? b.startDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+          return bDate.compareTo(aDate);
+        });
+        initialEvent = matches.first;
+      }
+    }
+
+    // Tier D: Match by targetCompany or brand translation
+    if (initialEvent == null && widget.companySlug.isNotEmpty) {
+      final cleanSlug = widget.companySlug.trim().toLowerCase();
+      final matches = allEvents.where((e) {
+        final comp = e.targetCompany.trim().toLowerCase();
+        final brandSlug = SlugUtils.toSlug(comp);
+        return comp == cleanSlug || comp.contains(cleanSlug) || cleanSlug.contains(comp) || brandSlug == cleanSlug;
+      }).toList();
+      if (matches.isNotEmpty) {
+        matches.sort((a, b) {
+          if (a.isActive != b.isActive) return a.isActive ? -1 : 1;
+          final aDate = a.createdAt ?? a.startDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final bDate = b.createdAt ?? b.startDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+          return bDate.compareTo(aDate);
+        });
+        initialEvent = matches.first;
+      }
+    }
+
+    // 2. Resolve true effectiveSlug and companyDisplayName
+    final String effectiveSlug = initialEvent?.companySlug.isNotEmpty == true
+        ? initialEvent!.companySlug
+        : (widget.companySlug.isNotEmpty ? widget.companySlug : 'almarai');
+
+    String companyDisplayName = initialEvent?.targetCompany ?? '';
+    if (companyDisplayName.isEmpty) {
+      final matchedEvents = allEvents.where((e) =>
+          e.companySlug.toLowerCase() == effectiveSlug.toLowerCase() ||
+          e.targetCompany.toLowerCase().contains(effectiveSlug.toLowerCase())).toList();
+      if (matchedEvents.isNotEmpty) {
+        companyDisplayName = matchedEvents.first.targetCompany;
+      }
+    }
+    if (companyDisplayName.isEmpty) {
+      companyDisplayName = SlugUtils.formatSlugToName(effectiveSlug);
+    }
+
+    // 3. Resolve all scoped events for this company
+    final List<EventModel> companyEvents = allEvents.where((e) {
+      if (initialEvent != null && e.id == initialEvent.id) return true;
+      final matchSlug = e.companySlug.toLowerCase() == effectiveSlug.toLowerCase();
+      final matchName = companyDisplayName.isNotEmpty &&
+          e.targetCompany.toLowerCase() == companyDisplayName.toLowerCase();
+      return matchSlug || matchName;
+    }).toList();
 
     final bool isManagerSuspended = (initialEvent != null && (!initialEvent.isActive || !initialEvent.isManagerActive)) ||
         (companyEvents.isNotEmpty && companyEvents.every((e) => !e.isActive || !e.isManagerActive));
@@ -109,11 +169,13 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
       return CampaignSuspendedScreen(
         portalType: SuspendedPortalType.manager,
         event: initialEvent ?? (companyEvents.isNotEmpty ? companyEvents.first : null),
-        companySlug: widget.companySlug,
+        companySlug: effectiveSlug,
         companyName: companyDisplayName,
         onRefresh: () => setState(() {}),
       );
     }
+
+    final activeEventId = initialEvent?.id ?? widget.initialEventId;
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
@@ -128,7 +190,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
               padding: EdgeInsets.all(isMobile ? 5 : 8),
               constraints: isMobile ? const BoxConstraints() : null,
               visualDensity: isMobile ? VisualDensity.compact : VisualDensity.standard,
-              onPressed: () => _copyPromoterLink(context, strings),
+              onPressed: () => _copyPromoterLink(context, strings, effectiveSlug, activeEventId),
             ),
           ),
           SizedBox(width: isMobile ? 2 : 4),
@@ -140,7 +202,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
               padding: EdgeInsets.all(isMobile ? 5 : 8),
               constraints: isMobile ? const BoxConstraints() : null,
               visualDensity: isMobile ? VisualDensity.compact : VisualDensity.standard,
-              onPressed: () => _copyPortalLink(context, strings),
+              onPressed: () => _copyPortalLink(context, strings, effectiveSlug, activeEventId),
             ),
           ),
           SizedBox(width: isMobile ? 2 : 8),
@@ -168,25 +230,27 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
               children: [
                 // Tab 0: Comprehensive Reports & Analytics
                 CampaignReportsScreen(
-                  key: ValueKey('reports_${widget.companySlug}'),
+                  key: ValueKey('reports_${effectiveSlug}_${activeEventId ?? 'all'}'),
                   initialEvent: initialEvent,
-                  lockedCompanySlug: widget.companySlug,
+                  lockedCompanySlug: effectiveSlug,
                   lockedCompanyName: companyDisplayName,
                   isEmbedded: true,
                 ),
 
                 // Tab 1: Invoices Log & Audit
                 InvoicesLogScreen(
-                  key: ValueKey('invoices_${widget.companySlug}'),
-                  lockedCompanySlug: widget.companySlug,
+                  key: ValueKey('invoices_${effectiveSlug}_${activeEventId ?? 'all'}'),
+                  initialEventId: activeEventId,
+                  lockedCompanySlug: effectiveSlug,
                   lockedCompanyName: companyDisplayName,
                   isEmbedded: true,
                 ),
 
                 // Tab 2: Real-time Prizes & Stock Balance System
                 CompanyPrizesStockReportScreen(
-                  key: ValueKey('prizes_stock_${widget.companySlug}'),
-                  lockedCompanySlug: widget.companySlug,
+                  key: ValueKey('prizes_stock_${effectiveSlug}_${activeEventId ?? 'all'}'),
+                  initialEventId: activeEventId,
+                  lockedCompanySlug: effectiveSlug,
                   lockedCompanyName: companyDisplayName,
                   isEmbedded: true,
                 ),
