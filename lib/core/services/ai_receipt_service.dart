@@ -255,7 +255,7 @@ class AiReceiptService {
   AiReceiptService({this.modelName = 'gemini-3.7-flash'}) {
     _model = _createModel(modelName);
     _fallbackModel1 = _createModel('gemini-3.6-flash');
-    _fallbackModel2 = _createModel('gemini-3.5-flash');
+    _fallbackModel2 = _createModel('gemini-3.7-flash');
   }
 
   static GenerativeModel _createModel(String name) {
@@ -561,16 +561,16 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
       try {
         response = await _model.generateContent([
           Content.multi([prompt, imagePart]),
-        ]).timeout(const Duration(seconds: 12));
+        ]).timeout(const Duration(seconds: 30));
       } catch (e1) {
         try {
           response = await _fallbackModel1.generateContent([
             Content.multi([prompt, imagePart]),
-          ]).timeout(const Duration(seconds: 12));
+          ]).timeout(const Duration(seconds: 30));
         } catch (e2) {
           response = await _fallbackModel2.generateContent([
             Content.multi([prompt, imagePart]),
-          ]).timeout(const Duration(seconds: 12));
+          ]).timeout(const Duration(seconds: 30));
         }
       }
 
