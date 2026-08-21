@@ -40,6 +40,29 @@ class ChainProductsIntelligenceService {
   ) {
     final Map<String, List<_RawProductOccurrence>> occurrencesBySku = {};
 
+    // -------------------------------------------------------------------------
+    // PASS 1: Barcode Harvesting across all invoices (بناء قاموس الباركودات)
+    // -------------------------------------------------------------------------
+    final Map<String, String> nameToBarcodeMap = {};
+    for (final doc in docs) {
+      final rawProducts = doc.data()['extracted_products'] as List<dynamic>? ?? [];
+      for (final p in rawProducts) {
+        if (p is! Map) continue;
+        final name = p['name']?.toString().trim() ?? '';
+        final barcode = p['barcode']?.toString().trim() ?? '';
+        if (name.isNotEmpty && barcode.isNotEmpty && barcode.length >= 6) {
+          nameToBarcodeMap[normalizeName(name)] = barcode;
+          final cleanBaseName = normalizeName(name.replaceAll(RegExp(r'\([^)]*\)'), ' '));
+          if (cleanBaseName.isNotEmpty) {
+            nameToBarcodeMap[cleanBaseName] = barcode;
+          }
+        }
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // PASS 2: Aggregate Occurrences with Cross-Invoice Barcode Auto-Linking
+    // -------------------------------------------------------------------------
     for (final doc in docs) {
       final data = doc.data();
       final String receiptNumber = data['receipt_number']?.toString() ?? doc.id;
@@ -73,7 +96,20 @@ class ChainProductsIntelligenceService {
         if (quantity <= 0) quantity = 1;
 
         double price = (p['price'] as num?)?.toDouble() ?? 0.0;
-        final String barcode = p['barcode']?.toString().trim() ?? '';
+        String barcode = p['barcode']?.toString().trim() ?? '';
+        bool isAutoLinked = false;
+
+        // Auto-search and link barcode from other invoices if missing
+        if (barcode.isEmpty || barcode.length < 6) {
+          final norm = normalizeName(name);
+          final cleanBaseName = normalizeName(name.replaceAll(RegExp(r'\([^)]*\)'), ' '));
+          final foundBarcode = nameToBarcodeMap[norm] ?? nameToBarcodeMap[cleanBaseName];
+          if (foundBarcode != null && foundBarcode.isNotEmpty) {
+            barcode = foundBarcode;
+            isAutoLinked = true;
+          }
+        }
+
         double? originalPrice = (p['originalPrice'] as num?)?.toDouble();
         double discountAmount = (p['discountAmount'] as num?)?.toDouble() ?? 0.0;
         final double discountPercent = (p['discountPercent'] as num?)?.toDouble() ?? 0.0;
@@ -82,7 +118,6 @@ class ChainProductsIntelligenceService {
 
         // Auto-heal line total vs unit price math anomalies:
         if (quantity > 1) {
-          // If price looks like line total (e.g. 198 or 230 for 2 units where original unit price was 115)
           if (originalPrice != null && originalPrice > 0) {
             if (price >= originalPrice * 1.5) {
               price = price / quantity;
@@ -123,6 +158,7 @@ class ChainProductsIntelligenceService {
           branchName: branchName,
           receiptImageUrl: imageUrl,
           companySlug: companySlug,
+          isAutoLinked: isAutoLinked,
         );
 
         occurrencesBySku.putIfAbsent(skuKey, () => []).add(occurrence);
@@ -236,6 +272,7 @@ class ChainProductsIntelligenceService {
           priceHistory: priceHistory,
           totalScansCount: occurrences.length,
           totalQuantitySold: totalQuantitySold,
+          isBarcodeAutoLinked: occurrences.any((o) => o.isAutoLinked),
         ),
       );
     }
@@ -440,6 +477,7 @@ class _RawProductOccurrence {
   final String branchName;
   final String receiptImageUrl;
   final String companySlug;
+  final bool isAutoLinked;
 
   _RawProductOccurrence({
     required this.skuKey,
@@ -458,5 +496,6 @@ class _RawProductOccurrence {
     required this.branchName,
     required this.receiptImageUrl,
     required this.companySlug,
+    this.isAutoLinked = false,
   });
 }

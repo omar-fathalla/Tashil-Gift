@@ -1983,6 +1983,56 @@ class AppStrings {
     en: 'Successfully approved! Saved $count new products to $company catalog in Firebase.',
     hi: 'सफलतापूर्वक स्वीकृत! $company के लिए $count नए उत्पाद Firebase में सहेजे गए।',
   );
+  String get compactTableDensity => _t(
+    ar: 'عرض مدمج فائق الكثافة',
+    en: 'Compact High-Density',
+    hi: 'सघन उच्च-घनत्व',
+  );
+  String get standardTableDensity => _t(
+    ar: 'عرض عادي مريح',
+    en: 'Comfortable Standard',
+    hi: 'आरामदायक मानक',
+  );
+  String get densityToggleTooltip => _t(
+    ar: 'تبديل كثافة وحجم صفوف الجدول',
+    en: 'Toggle table row density',
+    hi: 'तालिका पंक्ति घनत्व बदलें',
+  );
+  String get discoveredProductsPendingApproval => _t(
+    ar: 'أصناف جديدة مكتشفة من الفواتير بانتظار المراجعة والاعتماد',
+    en: 'Discovered Products Pending Review & Approval',
+    hi: 'समीक्षा और अनुमोदन के लिए लंबित नए उत्पाद',
+  );
+  String get discoveredProductsPendingSubtitle => _t(
+    ar: 'تم استخراج هذه الأصناف تلقائياً من فواتير المشتريات ولم تسجل بعد في قاعدة البيانات. راجعها واضغط موافقة لاعتمادها.',
+    en: 'These products were extracted from invoices and are not yet in database. Review and click approve to catalog them.',
+    hi: 'ये उत्पाद रसीदों से निकाले गए हैं और अभी तक डेटाबेस में नहीं हैं। समीक्षा करें और अनुमोदित करें।',
+  );
+  String get barcodeAutoLinkedFromInvoices => _t(
+    ar: 'تم ربط الباركود تلقائياً من الفواتير',
+    en: 'Barcode auto-linked from invoices',
+    hi: 'रसीदों से बारकोड स्वतः लिंक किया गया',
+  );
+  String get barcodeMissingInAllInvoices => _t(
+    ar: 'لا يوجد باركود بالفواتير',
+    en: 'No barcode in invoices',
+    hi: 'रसीदों में कोई बारकोड नहीं',
+  );
+  String get approveAndCommitSelected => _t(
+    ar: 'اعتماد وإضافة الأصناف المحددة لقاعدة البيانات',
+    en: 'Approve & Save Selected to Database',
+    hi: 'चयनित को डेटाबेस में स्वीकृत और सहेजें',
+  );
+  String get reviewDiscoveredProductsBtn => _t(
+    ar: 'مراجعة الأصناف الجديدة',
+    en: 'Review New Products',
+    hi: 'नए उत्पादों की समीक्षा करें',
+  );
+  String get rowsPerPageLabel => _t(
+    ar: 'عدد الصفوف:',
+    en: 'Rows per page:',
+    hi: 'प्रति पृष्ठ पंक्तियाँ:',
+  );
 }
 
 

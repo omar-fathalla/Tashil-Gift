@@ -140,5 +140,21 @@ void main() {
       expect(ChainProductsIntelligenceService.inferCategory('شامبو صانسيلك لمعان تألق'), 'العناية بالشعر');
       expect(ChainProductsIntelligenceService.inferCategory('صابون دوف مرطب للبشرة'), 'العناية بالجسم');
     });
+
+    test('ChainProductItem serialization includes isBarcodeAutoLinked', () {
+      final item = ChainProductItem(
+        id: '6221155607447',
+        name: 'شامبو كلير 360 مل',
+        barcode: '6221155607447',
+        isBarcodeAutoLinked: true,
+      );
+
+      final json = item.toJson();
+      expect(json['isBarcodeAutoLinked'], isTrue);
+
+      final restored = ChainProductItem.fromJson(json);
+      expect(restored.isBarcodeAutoLinked, isTrue);
+      expect(restored.barcode, '6221155607447');
+    });
   });
 }

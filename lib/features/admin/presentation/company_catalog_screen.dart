@@ -16,6 +16,8 @@ import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../core/widgets/m3_button_groups.dart';
 import '../../../core/widgets/m3_progress_indicators.dart';
+import '../../../core/services/ai_product_discovery_service.dart';
+import 'widgets/ai_discovered_products_dialog.dart';
 import '../domain/company_model.dart';
 
 enum CatalogInputMode {
@@ -615,6 +617,63 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
     } finally {
       if (mounted) {
         setState(() => _isSavingProducts = false);
+      }
+    }
+  }
+
+  // --- DISCOVERED PRODUCTS FROM INVOICES SCAN & APPROVAL WORKFLOW ---
+  Future<void> _scanAndReviewDiscoveredProductsForCompany(CompanyModel company) async {
+    setState(() => _isAiAnalyzing = true);
+    final strings = AppStrings.of(ref);
+
+    try {
+      final firestore = ref.read(firestoreProvider);
+      final discoveryService = ref.read(aiProductDiscoveryServiceProvider);
+
+      // Fetch all receipts transactions
+      final txSnapshot = await firestore.collection('receipts_transactions').get();
+      
+      final relevantDocs = txSnapshot.docs.where((d) {
+        final data = d.data();
+        final cSlug = (data['companySlug'] ?? '').toString().trim().toLowerCase();
+        return cSlug.isEmpty || cSlug == company.slug.toLowerCase();
+      }).toList();
+
+      final discovered = await discoveryService.discoverProductsFromTransactions(
+        companySlug: company.slug,
+        companyName: company.name,
+        transactions: relevantDocs.isNotEmpty ? relevantDocs : txSnapshot.docs,
+      );
+
+      if (!mounted) return;
+      setState(() => _isAiAnalyzing = false);
+
+      if (discovered.isEmpty) {
+        M3Feedback.showToast(
+          context,
+          message: strings.noNewProductsDiscovered,
+          isSuccess: true,
+        );
+        return;
+      }
+
+      await AiDiscoveredProductsDialog.show(
+        context: context,
+        companySlug: company.slug,
+        companyName: company.name,
+        discoveredProducts: discovered,
+        onSavedSuccessfully: () {
+          if (mounted) setState(() {});
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isAiAnalyzing = false);
+        M3Feedback.showToast(
+          context,
+          message: AppErrorHandler.getFriendlyMessage(e, defaultMessage: 'حدث خطأ أثناء فحص الأصناف الجديدة'),
+          isSuccess: false,
+        );
       }
     }
   }
@@ -2531,6 +2590,108 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
   }
 
   // ---------------------------------------------------------------------------
+  // DISCOVERED PRODUCTS FROM INVOICES BANNER
+  // ---------------------------------------------------------------------------
+  Widget _buildDiscoveredProductsPendingBanner(
+    ColorScheme colorScheme,
+    FirebaseFirestore firestore,
+    CompanyModel selectedCompany,
+    AppStrings strings,
+  ) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: firestore
+          .collection('receipts_transactions')
+          .snapshots(),
+      builder: (context, snapshot) {
+        final docs = snapshot.data?.docs ?? [];
+        if (docs.isEmpty) return const SizedBox.shrink();
+
+        int receiptProductsCount = 0;
+        for (final doc in docs) {
+          final data = doc.data() as Map<String, dynamic>? ?? {};
+          final products = data['extracted_products'] as List<dynamic>? ?? [];
+          receiptProductsCount += products.length;
+        }
+
+        if (receiptProductsCount == 0) return const SizedBox.shrink();
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Colors.amber.shade50,
+                Colors.orange.shade50,
+              ],
+            ),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.amber.shade300),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade100,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.auto_awesome_rounded, color: Colors.amber.shade900, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      strings.discoveredProductsPendingApproval,
+                      style: GoogleFonts.cairo(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13.5,
+                        color: Colors.amber.shade900,
+                      ),
+                    ),
+                    Text(
+                      strings.discoveredProductsPendingSubtitle,
+                      style: GoogleFonts.cairo(
+                        fontSize: 11.5,
+                        color: Colors.amber.shade900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: _isAiAnalyzing
+                    ? null
+                    : () => _scanAndReviewDiscoveredProductsForCompany(selectedCompany),
+                icon: _isAiAnalyzing
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.rate_review_rounded, size: 16),
+                label: Text(
+                  _isAiAnalyzing ? 'جاري الفحص...' : strings.reviewDiscoveredProductsBtn,
+                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.amber.shade900,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // MODE B: استعراض منتجات الشركة المحددة (Paginated 20 Products View)
   // ---------------------------------------------------------------------------
   Widget _buildCompanyProductsView(
@@ -2538,6 +2699,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
     FirebaseFirestore firestore,
     CompanyModel selectedCompany,
   ) {
+    final strings = AppStrings.of(ref);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -2575,6 +2737,18 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                   ],
                 ),
               ),
+              Tooltip(
+                message: 'فحص فواتير المشتريات تلقائياً لاكتشاف أي أصناف جديدة لم تسجل بعد لـ (${selectedCompany.name}) ومراجعتها واعتمادها',
+                child: FilledButton.tonalIcon(
+                  onPressed: _isAiAnalyzing ? null : () => _scanAndReviewDiscoveredProductsForCompany(selectedCompany),
+                  icon: const Icon(Icons.auto_awesome_rounded, size: 16, color: Colors.amber),
+                  label: Text('فحص واكتشاف الأصناف', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
               Tooltip(
                 message: 'تعديل الاسم التجاري أو الكود الرقمي المعرف لـ (${selectedCompany.name})',
                 child: FilledButton.tonalIcon(
@@ -2632,6 +2806,9 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
           ),
         ),
         const SizedBox(height: 14),
+
+        // Live Discovered Products Banner
+        _buildDiscoveredProductsPendingBanner(colorScheme, firestore, selectedCompany, strings),
 
         // Product Search Field
         TextField(

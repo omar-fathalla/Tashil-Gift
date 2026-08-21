@@ -157,6 +157,7 @@ class ChainProductItem {
   final List<ProductPriceHistoryEntry> priceHistory; // Full history sorted newest to oldest
   final int totalScansCount; // Total times scanned in receipts
   final int totalQuantitySold; // Total quantity across receipts
+  final bool isBarcodeAutoLinked; // True if barcode was resolved/linked across other invoices
 
   const ChainProductItem({
     required this.id,
@@ -173,6 +174,7 @@ class ChainProductItem {
     this.priceHistory = const [],
     this.totalScansCount = 0,
     this.totalQuantitySold = 0,
+    this.isBarcodeAutoLinked = false,
   });
 
   /// Most recent price recorded overall
@@ -322,6 +324,7 @@ class ChainProductItem {
       priceHistory: history,
       totalScansCount: (json['totalScansCount'] as num?)?.toInt() ?? history.length,
       totalQuantitySold: (json['totalQuantitySold'] as num?)?.toInt() ?? 0,
+      isBarcodeAutoLinked: json['isBarcodeAutoLinked'] == true,
     );
   }
 
@@ -340,6 +343,7 @@ class ChainProductItem {
       'priceHistory': priceHistory.map((e) => e.toJson()).toList(),
       'totalScansCount': totalScansCount,
       'totalQuantitySold': totalQuantitySold,
+      'isBarcodeAutoLinked': isBarcodeAutoLinked,
       'minPrice': minPrice,
       'maxPrice': maxPrice,
       'cheapestChain': cheapestChain,
@@ -364,6 +368,7 @@ class ChainProductItem {
     List<ProductPriceHistoryEntry>? priceHistory,
     int? totalScansCount,
     int? totalQuantitySold,
+    bool? isBarcodeAutoLinked,
   }) {
     return ChainProductItem(
       id: id ?? this.id,
@@ -380,6 +385,7 @@ class ChainProductItem {
       priceHistory: priceHistory ?? this.priceHistory,
       totalScansCount: totalScansCount ?? this.totalScansCount,
       totalQuantitySold: totalQuantitySold ?? this.totalQuantitySold,
+      isBarcodeAutoLinked: isBarcodeAutoLinked ?? this.isBarcodeAutoLinked,
     );
   }
 }

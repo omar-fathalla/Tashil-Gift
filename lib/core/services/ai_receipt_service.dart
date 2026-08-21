@@ -362,7 +362,7 @@ class AiReceiptService {
   AiReceiptService({this.modelName = 'gemini-3.7-flash'}) {
     _model = _createModel(modelName);
     _fallbackModel1 = _createModel('gemini-3.6-flash');
-    _fallbackModel2 = _createModel('gemini-3.7-flash');
+    _fallbackModel2 = _createModel('gemini-3.6-flash');
   }
 
   static GenerativeModel _createModel(String name) {

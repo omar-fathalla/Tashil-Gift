@@ -24,3 +24,8 @@
 - **Single Unit Economics**: Whenever processing receipt items where `quantity >= 2`, `price` MUST strictly be the net selling price per single piece (`netLineTotal / quantity`), `originalPrice` MUST strictly be the gross regular price per single piece (`grossLineTotal / quantity`), and `discountAmount` MUST be the unit discount (`lineDiscount / quantity`). Never store or present line totals as unit prices.
 - **Enterprise Chain Consolidation**: Supermarket branches must resolve to their canonical parent Retail Chain (`normalizeRetailChain`: `أسواق فتح الله`, `جملة ماركت`, `بيت الجملة`, `كارفور`, `خير زمان`, `سبينس`, إلخ). Comparisons in tables, KPI cards, and dialogs must strictly be between Enterprise Chains.
 - Full details and auto-healing specifications are documented in [.agents/skills/retail-price-intelligence-standard/SKILL.md](file:///Users/fathalla/Development/Tashil%20Gift/.agents/skills/retail-price-intelligence-standard/SKILL.md).
+
+### 5. Standard AI Model Architecture Rule (معيار نموذج الذكاء الاصطناعي Gemini 3.7 Flash)
+- **Primary Model**: All AI services across the project (`AiReceiptService`, `CampaignAiAssistantService`, `BranchSignatureAiService`, `AiProductCatalogService`, `AiProductDiscoveryService`) MUST strictly use **`gemini-3.7-flash`** as the standard primary model.
+- **Fallbacks**: Secondary fallback models must follow `gemini-3.6-flash` and `gemini-2.5-flash`.
+- **API Key**: Gemini API calls must strictly use the authorized Tier 1 Google AI Studio API key provided in `AiConfig.geminiApiKey`.

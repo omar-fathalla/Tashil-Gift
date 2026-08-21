@@ -5,9 +5,12 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/constants/country_currency_config.dart';
+import '../../../../core/widgets/m3_button_groups.dart';
 import '../../domain/chain_product_model.dart';
 import 'product_price_history_dialog.dart';
 
+/// Ultra-Compact & High-Density Retail Chain Products Matrix Table
+/// جدول مصفوفة أسعار ومنتجات السلاسل التجارية فائق الكثافة والرشاقة
 class ChainProductsMatrixTable extends ConsumerStatefulWidget {
   final List<ChainProductItem> products;
   final List<String> distinctChains;
@@ -25,6 +28,7 @@ class ChainProductsMatrixTable extends ConsumerStatefulWidget {
 class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTable> {
   int _currentPage = 0;
   int _rowsPerPage = 25;
+  bool _isDenseMode = true; // High-Density mode by default for sleek, low-height rows
   final ScrollController _horizontalScrollController = ScrollController();
 
   @override
@@ -36,13 +40,34 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
   @override
   void didUpdateWidget(covariant ChainProductsMatrixTable oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Reset page if total products shrunk
     final maxPages = (widget.products.length / _rowsPerPage).ceil();
     if (_currentPage >= maxPages && maxPages > 0) {
       setState(() {
         _currentPage = maxPages - 1;
       });
     }
+  }
+
+  void _copyBarcode(String barcode, BuildContext context, bool isAr) {
+    Clipboard.setData(ClipboardData(text: barcode));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 16),
+            const SizedBox(width: 8),
+            Text(
+              isAr ? 'تم نسخ الباركود: $barcode' : 'Barcode copied: $barcode',
+              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.teal.shade700,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
   }
 
   @override
@@ -83,7 +108,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.45)),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
       ),
       color: cs.surfaceContainerLowest,
       clipBehavior: Clip.antiAlias,
@@ -91,7 +116,71 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Table Content Scrollable
+          // 1. Table Top Toolbar (Density Selector & Rows Count)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLow,
+              border: Border(bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.4))),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.table_chart_rounded, size: 18, color: cs.primary),
+                const SizedBox(width: 8),
+                Text(
+                  isAr ? 'مصفوفة الأسعار المقارنة' : 'Price Comparison Matrix',
+                  style: GoogleFonts.cairo(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: cs.onSurface,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: cs.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '$totalCount ${isAr ? 'صنف' : 'items'}',
+                    style: GoogleFonts.cairo(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: cs.primary,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+
+                // Density Toggle (عرض مدمج فائق الرشاقة vs عرض عادي)
+                Tooltip(
+                  message: strings.densityToggleTooltip,
+                  child: M3ConnectedButtonGroup<bool>(
+                    height: 32,
+                    borderRadius: 16,
+                    isExpanded: false,
+                    selectedValue: _isDenseMode,
+                    onSelected: (val) => setState(() => _isDenseMode = val),
+                    segments: [
+                      M3ButtonSegment(
+                        value: true,
+                        label: strings.compactTableDensity,
+                        icon: Icons.density_small_rounded,
+                      ),
+                      M3ButtonSegment(
+                        value: false,
+                        label: strings.standardTableDensity,
+                        icon: Icons.density_medium_rounded,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // 2. High-Density Scrollable Table Content
           LayoutBuilder(
             builder: (context, constraints) {
               return SingleChildScrollView(
@@ -100,138 +189,180 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                 child: ConstrainedBox(
                   constraints: BoxConstraints(minWidth: constraints.maxWidth),
                   child: DataTable(
-                    dataRowMinHeight: 78.0,
-                    dataRowMaxHeight: 96.0,
-                    headingRowHeight: 50.0,
+                    dataRowMinHeight: _isDenseMode ? 46.0 : 64.0,
+                    dataRowMaxHeight: _isDenseMode ? 52.0 : 74.0,
+                    headingRowHeight: _isDenseMode ? 40.0 : 48.0,
                     headingRowColor: WidgetStateProperty.all(cs.surfaceContainerLow),
                     headingTextStyle: GoogleFonts.cairo(
                       fontWeight: FontWeight.w700,
-                      fontSize: 12.5,
+                      fontSize: _isDenseMode ? 11.5 : 12.5,
                       color: cs.onSurface,
                     ),
                     dataTextStyle: GoogleFonts.cairo(
-                      fontSize: 12.5,
+                      fontSize: _isDenseMode ? 11.5 : 12.5,
                       color: cs.onSurface,
                     ),
-                    horizontalMargin: 16,
-                    columnSpacing: 20,
+                    horizontalMargin: 12,
+                    columnSpacing: _isDenseMode ? 14 : 20,
                     columns: [
-                      // Product info
+                      // Column 1: Product & Barcode
                       DataColumn(
-                        label: Text(isAr ? 'المنتج / الباركود' : 'Product / Barcode'),
+                        label: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.inventory_2_rounded, size: 14, color: cs.primary),
+                            const SizedBox(width: 6),
+                            Text(isAr ? 'المنتج / الباركود' : 'Product / Barcode'),
+                          ],
+                        ),
                       ),
-                      // Brand
+                      // Column 2: Brand
                       DataColumn(
                         label: Text(strings.brandLabel),
                       ),
-                      // Dynamic Enterprise Chain Columns
+                      // Columns 3+: Dynamic Enterprise Chain Columns
                       ...widget.distinctChains.map((chain) {
                         return DataColumn(
                           label: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.storefront_rounded, size: 15, color: cs.primary),
+                              Icon(Icons.storefront_rounded, size: 14, color: cs.primary),
                               const SizedBox(width: 5),
                               Text(chain),
                             ],
                           ),
                         );
                       }),
-                      // Price Variance
+                      // Column: Price Variance
                       DataColumn(
                         label: Text(strings.priceDifferenceLabel),
                       ),
-                      // Best Discount / Promo
+                      // Column: Best Promo
                       DataColumn(
-                        label: Text(isAr ? 'أفضل عرض / خصم' : 'Best Promo'),
+                        label: Text(isAr ? 'أفضل عرض' : 'Best Promo'),
                       ),
-                      // Actions
+                      // Column: Action / History
                       DataColumn(
-                        label: Text(isAr ? 'السجل والتفاصيل' : 'History'),
+                        label: Text(isAr ? 'السجل' : 'History'),
                       ),
                     ],
-                    rows: pageProducts.map((item) {
+                    rows: pageProducts.asMap().entries.map((entry) {
+                      final rowIndex = entry.key;
+                      final item = entry.value;
                       final minPrice = item.minPrice;
                       final maxPrice = item.maxPrice;
                       final hasMultipleChains = item.latestPricesByChain.length > 1;
 
+                      final isEven = rowIndex % 2 == 0;
+                      final rowColor = isEven
+                          ? Colors.transparent
+                          : cs.surfaceContainerHighest.withValues(alpha: 0.2);
+
                       return DataRow(
+                        color: WidgetStateProperty.all(rowColor),
                         cells: [
-                          // 1. Product Name & Barcode (Fixed Overflow Height)
+                          // 1. PRODUCT NAME & INLINE BARCODE PILL (Ultra-Compact)
                           DataCell(
                             Container(
-                              constraints: const BoxConstraints(maxWidth: 290),
-                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              constraints: BoxConstraints(maxWidth: _isDenseMode ? 280 : 320),
+                              padding: const EdgeInsets.symmetric(vertical: 3),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
+                                  // Product Title
                                   Text(
                                     item.name,
                                     style: GoogleFonts.cairo(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 12.5,
-                                      height: 1.25,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: _isDenseMode ? 11.5 : 12.5,
+                                      height: 1.2,
                                       color: cs.onSurface,
                                     ),
-                                    maxLines: 2,
+                                    maxLines: _isDenseMode ? 1 : 2,
                                     overflow: TextOverflow.ellipsis,
                                   ),
-                                  if (item.barcode.isNotEmpty) ...[
-                                    const SizedBox(height: 2),
-                                    Tooltip(
-                                      message: isAr ? 'انقر لنسخ الباركود' : 'Click to copy barcode',
-                                      child: InkWell(
-                                        borderRadius: BorderRadius.circular(4),
-                                        onTap: () {
-                                          Clipboard.setData(ClipboardData(text: item.barcode));
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              content: Text(isAr ? 'تم نسخ الباركود: ${item.barcode}' : 'Barcode copied: ${item.barcode}'),
-                                              duration: const Duration(seconds: 2),
-                                              behavior: SnackBarBehavior.floating,
+                                  const SizedBox(height: 2),
+
+                                  // Monospace Barcode Tag with Direct Copy & Auto-link Indicator
+                                  if (item.barcode.isNotEmpty)
+                                    InkWell(
+                                      borderRadius: BorderRadius.circular(4),
+                                      onTap: () => _copyBarcode(item.barcode, context, isAr),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.qr_code_2_rounded, size: 11, color: cs.primary),
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            item.barcode,
+                                            style: GoogleFonts.robotoMono(
+                                              fontSize: 9.5,
+                                              color: cs.onSurfaceVariant,
+                                              fontWeight: FontWeight.w600,
                                             ),
-                                          );
-                                        },
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.qr_code_2_rounded, size: 11, color: cs.onSurfaceVariant),
+                                          ),
+                                          const SizedBox(width: 3),
+                                          Icon(Icons.copy_rounded, size: 9, color: cs.primary.withValues(alpha: 0.7)),
+                                          if (item.isBarcodeAutoLinked) ...[
                                             const SizedBox(width: 4),
-                                            Text(
-                                              item.barcode,
-                                              style: GoogleFonts.cairo(
-                                                fontSize: 10,
-                                                color: cs.onSurfaceVariant,
-                                                fontWeight: FontWeight.w600,
-                                                fontFeatures: const [FontFeature.tabularFigures()],
+                                            Tooltip(
+                                              message: strings.barcodeAutoLinkedFromInvoices,
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0.5),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.blue.shade50,
+                                                  borderRadius: BorderRadius.circular(4),
+                                                  border: Border.all(color: Colors.blue.shade200, width: 0.5),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Icon(Icons.link_rounded, size: 9, color: Colors.blue.shade700),
+                                                    const SizedBox(width: 2),
+                                                    Text(
+                                                      isAr ? 'ربط تلقائي' : 'Linked',
+                                                      style: GoogleFonts.cairo(
+                                                        fontSize: 8.5,
+                                                        color: Colors.blue.shade800,
+                                                        fontWeight: FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
                                             ),
-                                            const SizedBox(width: 3),
-                                            Icon(Icons.copy_rounded, size: 9, color: cs.primary),
                                           ],
-                                        ),
+                                        ],
+                                      ),
+                                    )
+                                  else
+                                    Text(
+                                      strings.barcodeMissingInAllInvoices,
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 9,
+                                        color: cs.outlineVariant,
+                                        fontStyle: FontStyle.italic,
                                       ),
                                     ),
-                                  ],
                                 ],
                               ),
                             ),
                           ),
 
-                          // 2. Brand Chip
+                          // 2. BRAND CHIP (Compact)
                           DataCell(
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                               decoration: BoxDecoration(
-                                color: cs.secondaryContainer.withValues(alpha: 0.6),
+                                color: cs.secondaryContainer.withValues(alpha: 0.55),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
                                 item.brand.isNotEmpty ? item.brand : '—',
                                 style: GoogleFonts.cairo(
-                                  fontSize: 11,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.w700,
                                   color: cs.onSecondaryContainer,
                                 ),
@@ -239,28 +370,27 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                             ),
                           ),
 
-                          // 3. Dynamic Chain Price Cells (Structured Before Promo, After Promo, Discount)
+                          // 3. DYNAMIC CHAIN PRICE CELLS (Ultra-Compact Pill)
                           ...widget.distinctChains.map((chain) {
                             final chainSummary = item.chainSummaries[chain];
                             final price = item.latestPricesByChain[chain];
 
                             if (price == null && chainSummary == null) {
                               return DataCell(
-                                Text('—', style: GoogleFonts.cairo(color: cs.outlineVariant)),
+                                Text('—', style: GoogleFonts.cairo(color: cs.outlineVariant, fontSize: 11)),
                               );
                             }
 
                             final netUnitPrice = chainSummary?.netUnitPrice ?? price ?? 0.0;
                             final regularPrice = chainSummary?.regularUnitPrice ?? item.latestRegularPricesByChain[chain] ?? netUnitPrice;
                             final isOnPromotion = chainSummary?.isOnPromotion == true || (regularPrice > netUnitPrice);
-                            final unitDiscount = chainSummary?.unitDiscount ?? (regularPrice - netUnitPrice);
                             final discountPct = chainSummary?.discountPercent ?? (regularPrice > 0 ? ((regularPrice - netUnitPrice) / regularPrice) * 100 : 0.0);
                             final date = chainSummary?.lastReceiptDate ?? item.latestDatesByChain[chain] ?? '';
 
                             final isCheapest = hasMultipleChains && netUnitPrice == minPrice;
                             final isMostExpensive = hasMultipleChains && netUnitPrice == maxPrice && maxPrice > minPrice;
 
-                            Color bgColor = cs.surfaceContainerLow;
+                            Color bgColor = cs.surfaceContainerLow.withValues(alpha: 0.7);
                             Color textColor = cs.onSurface;
                             Border? border;
 
@@ -271,99 +401,85 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                             } else if (isMostExpensive) {
                               bgColor = Colors.red.shade50;
                               textColor = Colors.red.shade900;
-                              border = Border.all(color: Colors.red.shade200, width: 0.8);
+                              border = Border.all(color: Colors.red.shade200, width: 0.7);
                             }
 
                             return DataCell(
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: bgColor,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: border,
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // Row 1: Regular Price before discount (strikethrough) & Discount badge
-                                    if (isOnPromotion && regularPrice > netUnitPrice) ...[
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            '${regularPrice.toStringAsFixed(regularPrice == regularPrice.roundToDouble() ? 0 : 2)} $currency',
-                                            style: GoogleFonts.cairo(
-                                              fontSize: 10,
-                                              decoration: TextDecoration.lineThrough,
-                                              color: cs.error.withValues(alpha: 0.85),
-                                              fontWeight: FontWeight.w600,
-                                            ),
+                              Tooltip(
+                                message: '$chain\n${isAr ? 'تاريخ الفاتورة' : 'Receipt Date'}: ${date.isNotEmpty ? date : '—'}\n${isOnPromotion ? '${isAr ? 'السعر الأصلي' : 'Original'}: $regularPrice $currency' : ''}',
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: _isDenseMode ? 8 : 10,
+                                    vertical: _isDenseMode ? 3 : 5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: bgColor,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: border,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      // Net Selling Price
+                                      Text(
+                                        '${netUnitPrice.toStringAsFixed(netUnitPrice == netUnitPrice.roundToDouble() ? 0 : 2)} $currency',
+                                        style: GoogleFonts.cairo(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: _isDenseMode ? 11.5 : 12.5,
+                                          color: isCheapest ? Colors.green.shade900 : textColor,
+                                          fontFeatures: const [FontFeature.tabularFigures()],
+                                        ),
+                                      ),
+
+                                      // Best Price Star Badge
+                                      if (isCheapest) ...[
+                                        const SizedBox(width: 3),
+                                        const Icon(Icons.star_rounded, size: 13, color: Colors.amber),
+                                      ],
+
+                                      // Strikethrough & Promo Badge (if on offer)
+                                      if (isOnPromotion && regularPrice > netUnitPrice) ...[
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          regularPrice.toStringAsFixed(0),
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 9,
+                                            decoration: TextDecoration.lineThrough,
+                                            color: cs.error.withValues(alpha: 0.75),
+                                            fontWeight: FontWeight.w600,
                                           ),
-                                          const SizedBox(width: 4),
+                                        ),
+                                        if (discountPct > 0) ...[
+                                          const SizedBox(width: 2),
                                           Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0.5),
                                             decoration: BoxDecoration(
                                               color: Colors.green.shade100,
-                                              borderRadius: BorderRadius.circular(4),
+                                              borderRadius: BorderRadius.circular(3),
                                             ),
                                             child: Text(
-                                              discountPct > 0
-                                                  ? 'خصم ${discountPct.toStringAsFixed(0)}%'
-                                                  : 'وفر ${unitDiscount.toStringAsFixed(0)}',
+                                              '-${discountPct.toStringAsFixed(0)}%',
                                               style: GoogleFonts.cairo(
-                                                fontSize: 8.5,
+                                                fontSize: 7.5,
                                                 fontWeight: FontWeight.bold,
                                                 color: Colors.green.shade900,
                                               ),
                                             ),
                                           ),
                                         ],
-                                      ),
-                                      const SizedBox(height: 2),
-                                    ],
-
-                                    // Row 2: Net Unit Selling Price & Star Badge if cheapest
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          '${netUnitPrice.toStringAsFixed(netUnitPrice == netUnitPrice.roundToDouble() ? 0 : 2)} $currency',
-                                          style: GoogleFonts.cairo(
-                                            fontWeight: FontWeight.w900,
-                                            fontSize: 13,
-                                            color: isCheapest ? Colors.green.shade900 : textColor,
-                                            fontFeatures: const [FontFeature.tabularFigures()],
-                                          ),
-                                        ),
-                                        if (isCheapest) ...[
-                                          const SizedBox(width: 3),
-                                          const Icon(Icons.star_rounded, size: 14, color: Colors.amber),
-                                        ],
                                       ],
-                                    ),
-
-                                    // Row 3: Last Scan Date
-                                    if (date.isNotEmpty)
-                                      Text(
-                                        date,
-                                        style: GoogleFonts.cairo(
-                                          fontSize: 9,
-                                          color: cs.onSurfaceVariant,
-                                        ),
-                                      ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             );
                           }),
 
-                          // 4. Price Variance %
+                          // 4. PRICE VARIANCE %
                           DataCell(
                             hasMultipleChains && item.priceVariancePercent > 0
                                 ? Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                     decoration: BoxDecoration(
                                       color: cs.primaryContainer.withValues(alpha: 0.4),
                                       borderRadius: BorderRadius.circular(6),
@@ -371,21 +487,21 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                                     child: Text(
                                       '${item.priceVariancePercent.toStringAsFixed(1)}%',
                                       style: GoogleFonts.cairo(
-                                        fontSize: 11.5,
+                                        fontSize: 10.5,
                                         fontWeight: FontWeight.w700,
                                         color: cs.primary,
                                         fontFeatures: const [FontFeature.tabularFigures()],
                                       ),
                                     ),
                                   )
-                                : Text('0%', style: GoogleFonts.cairo(color: cs.onSurfaceVariant, fontSize: 11.5)),
+                                : Text('0%', style: GoogleFonts.cairo(color: cs.onSurfaceVariant, fontSize: 10.5)),
                           ),
 
-                          // 5. Best Discount / Promo
+                          // 5. BEST DISCOUNT / PROMO
                           DataCell(
                             item.maxObservedDiscountPercent > 0
                                 ? Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                     decoration: BoxDecoration(
                                       color: Colors.green.shade100,
                                       borderRadius: BorderRadius.circular(6),
@@ -393,20 +509,23 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                                     child: Text(
                                       '-${item.maxObservedDiscountPercent.toStringAsFixed(0)}%',
                                       style: GoogleFonts.cairo(
-                                        fontSize: 11,
+                                        fontSize: 10,
                                         fontWeight: FontWeight.w800,
                                         color: Colors.green.shade900,
                                         fontFeatures: const [FontFeature.tabularFigures()],
                                       ),
                                     ),
                                   )
-                                : Text('—', style: GoogleFonts.cairo(color: cs.outlineVariant)),
+                                : Text('—', style: GoogleFonts.cairo(color: cs.outlineVariant, fontSize: 10)),
                           ),
 
-                          // 6. Actions Button
+                          // 6. ACTIONS / HISTORY BUTTON (Sleek Mini Button)
                           DataCell(
-                            IconButton.filledTonal(
-                              icon: const Icon(Icons.history_rounded, size: 18),
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                              icon: Icon(Icons.history_rounded, size: 17, color: cs.primary),
                               tooltip: strings.priceHistoryTitle,
                               onPressed: () {
                                 showProductPriceHistoryDialog(
@@ -429,9 +548,9 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
           // Divider
           Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.4)),
 
-          // M3 Standard Pagination Bar (25 Rows per page default)
+          // 3. M3 Standard Pagination & Navigation Bar
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             color: cs.surfaceContainerLow,
             child: Wrap(
               alignment: WrapAlignment.spaceBetween,
@@ -443,14 +562,14 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.format_list_numbered_rounded, size: 16, color: cs.primary),
+                    Icon(Icons.format_list_numbered_rounded, size: 15, color: cs.primary),
                     const SizedBox(width: 6),
                     Text(
                       isAr
                           ? 'عرض ${startIndex + 1} - $endIndex من إجمالي $totalCount منتج'
                           : 'Showing ${startIndex + 1} - $endIndex of $totalCount products',
                       style: GoogleFonts.cairo(
-                        fontSize: 12,
+                        fontSize: 11.5,
                         fontWeight: FontWeight.w600,
                         color: cs.onSurfaceVariant,
                       ),
@@ -458,14 +577,13 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                   ],
                 ),
 
-                // Rows Per Page Selector & Page Controls
+                // Rows Per Page Selector & Page Navigation Controls
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Rows per page dropdown
                     Text(
-                      isAr ? 'الصفوف في الصفحة:' : 'Rows per page:',
-                      style: GoogleFonts.cairo(fontSize: 11.5, color: cs.onSurfaceVariant),
+                      strings.rowsPerPageLabel,
+                      style: GoogleFonts.cairo(fontSize: 11, color: cs.onSurfaceVariant),
                     ),
                     const SizedBox(width: 6),
                     DropdownButton<int>(
@@ -487,11 +605,12 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                         }
                       },
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 12),
 
                     // First Page Button
                     IconButton(
-                      icon: const Icon(Icons.first_page_rounded, size: 20),
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.first_page_rounded, size: 18),
                       tooltip: isAr ? 'الصفحة الأولى' : 'First page',
                       onPressed: _currentPage > 0
                           ? () => setState(() => _currentPage = 0)
@@ -500,7 +619,8 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
 
                     // Previous Page Button
                     IconButton(
-                      icon: const Icon(Icons.chevron_right_rounded, size: 22),
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.chevron_right_rounded, size: 20),
                       tooltip: isAr ? 'السابق' : 'Previous',
                       onPressed: _currentPage > 0
                           ? () => setState(() => _currentPage--)
@@ -509,7 +629,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
 
                     // Page Indicator Badge
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: cs.primaryContainer.withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(8),
@@ -519,7 +639,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                             ? 'صفحة ${_currentPage + 1} من ${totalPages > 0 ? totalPages : 1}'
                             : 'Page ${_currentPage + 1} of ${totalPages > 0 ? totalPages : 1}',
                         style: GoogleFonts.cairo(
-                          fontSize: 11.5,
+                          fontSize: 11,
                           fontWeight: FontWeight.bold,
                           color: cs.primary,
                         ),
@@ -528,7 +648,8 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
 
                     // Next Page Button
                     IconButton(
-                      icon: const Icon(Icons.chevron_left_rounded, size: 22),
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.chevron_left_rounded, size: 20),
                       tooltip: isAr ? 'التالي' : 'Next',
                       onPressed: _currentPage < totalPages - 1
                           ? () => setState(() => _currentPage++)
@@ -537,7 +658,8 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
 
                     // Last Page Button
                     IconButton(
-                      icon: const Icon(Icons.last_page_rounded, size: 20),
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.last_page_rounded, size: 18),
                       tooltip: isAr ? 'الصفحة الأخيرة' : 'Last page',
                       onPressed: _currentPage < totalPages - 1
                           ? () => setState(() => _currentPage = totalPages - 1)
@@ -553,3 +675,4 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
     );
   }
 }
+
