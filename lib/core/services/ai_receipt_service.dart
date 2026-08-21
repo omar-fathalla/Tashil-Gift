@@ -5,11 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:al_mraay/features/admin/domain/event_model.dart';
 import 'package:al_mraay/features/admin/domain/retail_chain_model.dart';
+import '../config/ai_config.dart';
 import '../utils/arabic_numbers_utils.dart';
-
-/// Provide your actual Gemini API Key here or load from environment variables
-const String _geminiApiKey =
-    'AIzaSyBiuLXCswnl2_xCQT9M3YCnaSc0nGZ94Nw';
 
 final aiReceiptServiceProvider = Provider<AiReceiptService>((ref) {
   return AiReceiptService();
@@ -264,7 +261,7 @@ class AiReceiptService {
   static GenerativeModel _createModel(String name) {
     return GenerativeModel(
       model: name,
-      apiKey: _geminiApiKey,
+      apiKey: AiConfig.geminiApiKey,
       systemInstruction: Content.system(
         'أنت مدقق مالي فائق السرعة والدقة في قراءة وتحليل فواتير السوبر ماركت وتدقيق عروض الشركات الاستهلاكية (FMCG). '
         'مهمتك فحص صور الفواتير فورياً واستخراج البيانات الأساسية: اسم السلسلة، الفرع، رقم الفاتورة، تاريخ الشراء، '
@@ -422,15 +419,18 @@ class AiReceiptService {
 - محرك القواعد والعروض الترويجية والجوائز المعتمدة (Promotional Rules Engine):
 $rulesListFormatted
 
-تعليمات مطابقة القواعد الترويجية وتحديد الجائزة المستحقة:
-1. افحص بدقة أسماء الأصناف في الفاتورة والكميات المشتراة (Quantities).
-2. في حال وجود أكثر من قاعدة لنفس المنتج بمستويات كميات مختلفة (مثل: شراء 1 اسبراي ريكسونا -> 50 ج.م، وشراء 2 اسبراي ريكسونا -> 125 ج.م)، يجب عليك اختيار القاعدة ذات الكمية المشروطة الأعلى التي حققها العميل (مثال: إذا اشترى 2، اختر قاعدة الـ 125 ج.م).
-3. قم بتعبئة حقل (matchedRuleId) بمعرف القاعدة المطابقة (مثل "rule_4" أو "rule_1").
-4. قم بتعبئة حقل (matchedRuleTitle) بعنوان القاعدة المطابقة.
-5. قم بتعبئة حقل (matchedRewardValue) بالنص الدقيق للجائزة المستحقة (مثل "فواتشر بقيمة 125 جنيه" أو "تريزيمي 250 مل هدية").
-6. قم بتعبئة حقل (matchedRewardAmount) بالقيمة النقدية للمكافأة إن وجدت (مثل 125.0 أو 50.0).
-7. قم بتعبئة حقل (matchedRewardType) بنوع المكافأة ("voucher" أو "free_product").
-8. إذا لم تنطبق أي من هذه القواعد الخاصة، اترك حقل (matchedRuleId) فارغاً "".
+⚠️ تعليمات مطابقة القواعد الترويجية وحساب المضاعفات (Promotional Rules & Multiplier Instructions):
+1. افحص بدقة أسماء الأصناف في الفاتورة واجمع إجمالي الكميات المشتراة من المنتج المشروط (Trigger Product Total Quantity).
+2. في حال وجود أكثر من قاعدة لنفس المنتج بمستويات كميات مختلفة (مثل: شراء 1 اسبراي ريكسونا -> 50 ج.م، وشراء 2 اسبراي ريكسونا -> 125 ج.م)، يجب عليك اختيار القاعدة ذات الكمية المشروطة الأعلى التي حققها العميل (مثال: إذا اشترى 2 أو أكثر، اختر قاعدة الـ 125 ج.م).
+3. [مضاعفة الجوائز والفرص]: إذا كانت القاعدة تتيح المضاعفة (تتضاعف الهدايا مع زيادة الكمية) أو كان العرض يتيح المضاعفة، وكان العميل قد اشترى مضاعفات الكمية المشروطة (مثال: اشترى 4 قطع أكس اسبراي والشرط شراء 2 قطعة للحصول على فواتشر 125 ج.م):
+   - احسب عدد مرات تكرار العرض (4 ÷ 2 = 2 مرات).
+   - قم بتعيين حقل (chancesEarned) بعدد مرات العرض المستحقة (مثلاً 2).
+   - قم بحساب إجمالي قيمة الفواتشر/المكافأة بضرب القيمة في عدد المرات في حقل (matchedRewardAmount) (مثلاً 125 × 2 = 250.0).
+   - قم بكتابة الجائزة المستحقة موضحة بالمضاعف في حقل (matchedRewardValue) (مثلاً "2 × فواتشر بقيمة 125 جنيه (إجمالي 250 جنيه)").
+4. قم بتعبئة حقل (matchedRuleId) بمعرف القاعدة المطابقة (مثل "rule_4" أو "rule_1").
+5. قم بتعبئة حقل (matchedRuleTitle) بعنوان القاعدة المطابقة.
+6. قم بتعبئة حقل (matchedRewardType) بنوع المكافأة ("voucher" أو "free_product").
+7. إذا لم تنطبق أي من هذه القواعد الخاصة، اترك حقل (matchedRuleId) فارغاً "".
 ''';
       }
 
@@ -1045,6 +1045,93 @@ class PromotionalRuleMatcher {
     return null;
   }
 
+  /// Evaluates the promotional rule, and deterministically calculates the quantity multiplier
+  /// and total voucher monetary value when buying multiples of the trigger products.
+  static MatchedPromotionalRuleResult? matchWithMultiplier({
+    AiReceiptAnalysisResult? result,
+    String matchedRuleId = '',
+    String matchedRuleTitle = '',
+    String matchedRewardValue = '',
+    List<ExtractedProductItem> extractedProducts = const [],
+    required List<PromotionalRuleItem> promotionalRules,
+    bool allowCampaignMultipliers = true,
+  }) {
+    final matchedRule = match(
+      result: result,
+      matchedRuleId: matchedRuleId,
+      matchedRuleTitle: matchedRuleTitle,
+      matchedRewardValue: matchedRewardValue,
+      extractedProducts: extractedProducts,
+      promotionalRules: promotionalRules,
+    );
+
+    if (matchedRule == null) return null;
+
+    final effectiveProducts = (result != null && result.extractedProducts.isNotEmpty)
+        ? result.extractedProducts
+        : extractedProducts;
+
+    // Calculate total quantity of trigger products purchased
+    int totalTriggerQty = 0;
+    if (effectiveProducts.isNotEmpty) {
+      final triggerTokens = _extractTokens(matchedRule.triggerProduct);
+      for (final p in effectiveProducts) {
+        final pNorm = _normalize(p.name);
+        bool matches = false;
+        for (final token in triggerTokens) {
+          if (token.length >= 2 && pNorm.contains(token)) {
+            matches = true;
+            break;
+          }
+        }
+        if (matches) {
+          totalTriggerQty += p.quantity > 0 ? p.quantity : 1;
+        }
+      }
+    }
+
+    // Determine multiplier
+    int multiplier = 1;
+    if ((matchedRule.allowMultipliers || allowCampaignMultipliers) &&
+        matchedRule.minQuantity > 0 &&
+        totalTriggerQty >= matchedRule.minQuantity) {
+      multiplier = totalTriggerQty ~/ matchedRule.minQuantity;
+      if (multiplier < 1) multiplier = 1;
+    } else if (result != null && result.chancesEarned > 1) {
+      multiplier = result.chancesEarned;
+    }
+
+    final double baseAmount = matchedRule.totalVoucherValue > 0
+        ? matchedRule.totalVoucherValue
+        : (matchedRule.rewardAmount > 0 ? matchedRule.rewardAmount : (result?.matchedRewardAmount ?? 0.0));
+    final double totalAmount = baseAmount * multiplier;
+
+    final multipliedLinkedGifts = matchedRule.linkedGifts.map((g) {
+      return g.copyWith(quantity: g.quantity * multiplier);
+    }).toList();
+
+    String prizeSummary;
+    if (multiplier > 1) {
+      if (matchedRule.rewardType == 'voucher' || baseAmount > 0) {
+        final totalInt = totalAmount == totalAmount.roundToDouble() ? totalAmount.toInt() : totalAmount;
+        prizeSummary = '$multiplier × ${matchedRule.rewardValue} (إجمالي $totalInt جنيه)';
+      } else {
+        prizeSummary = '$multiplier × ${matchedRule.rewardValue}';
+      }
+    } else {
+      prizeSummary = matchedRule.rewardValue;
+    }
+
+    return MatchedPromotionalRuleResult(
+      rule: matchedRule,
+      multiplier: multiplier,
+      totalTriggerQuantity: totalTriggerQty > 0 ? totalTriggerQty : matchedRule.minQuantity,
+      totalRewardAmount: totalAmount,
+      formattedPrizeSummary: prizeSummary,
+      multipliedLinkedGifts: multipliedLinkedGifts,
+    );
+  }
+
   static String _normalize(String s) {
     var str = s.toLowerCase().trim();
     str = str.replaceAll(RegExp(r'[أإآ]'), 'ا');
@@ -1073,6 +1160,25 @@ class PromotionalRuleMatcher {
     }
     return tokens.toSet().toList();
   }
+}
+
+/// Represents the resolved promotional rule result with multiplied rewards and chances
+class MatchedPromotionalRuleResult {
+  final PromotionalRuleItem rule;
+  final int multiplier; // e.g. 2
+  final int totalTriggerQuantity; // e.g. 4
+  final double totalRewardAmount; // e.g. 250.0
+  final String formattedPrizeSummary; // e.g. "2 × فواتشر بقيمة 125 جنيه (إجمالي 250 جنيه)"
+  final List<LinkedGiftAllocation> multipliedLinkedGifts;
+
+  MatchedPromotionalRuleResult({
+    required this.rule,
+    this.multiplier = 1,
+    this.totalTriggerQuantity = 1,
+    this.totalRewardAmount = 0.0,
+    required this.formattedPrizeSummary,
+    this.multipliedLinkedGifts = const [],
+  });
 }
 
 

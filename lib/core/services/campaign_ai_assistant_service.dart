@@ -3,9 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:al_mraay/features/admin/domain/event_model.dart';
 import 'package:al_mraay/features/admin/domain/company_gift_model.dart';
-
-const String _geminiApiKey =
-    'AIzaSyBiuLXCswnl2_xCQT9M3YCnaSc0nGZ94Nw';
+import '../config/ai_config.dart';
 
 final campaignAiAssistantServiceProvider = Provider<CampaignAiAssistantService>((ref) {
   return CampaignAiAssistantService();
@@ -61,7 +59,7 @@ class CampaignAiAssistantService {
   static GenerativeModel _createModel(String modelName) {
     return GenerativeModel(
       model: modelName,
-      apiKey: _geminiApiKey,
+      apiKey: AiConfig.geminiApiKey,
       systemInstruction: Content.system(
         'أنت كبير مستشاري التسويق وتدقيق العروض الترويجية لسلاسل السوبرماركت والتجزئة (FMCG Trade Marketing & Audit Specialist). '
         'مهمتك قراءة الأفكار والشروط الترويجية التي يكتبها مسؤول الحملة باللغة العربية (سواء كانت فصحى أو عامية أو شروط شراء محددة Buy X Get Y)، '

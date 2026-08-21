@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -574,16 +575,19 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           .map((p) => p.name)
           .toList() ?? <String>[];
 
-      final totalChances = result.chancesEarned > 0 ? result.chancesEarned : 1;
+      // Check promotional rules using our robust multi-tiered AI & NLP PromotionalRuleMatcher with Multipliers
+      final matchedResult = PromotionalRuleMatcher.matchWithMultiplier(
+        result: result,
+        promotionalRules: currentEvent?.promotionalRules ?? const [],
+        allowCampaignMultipliers: currentEvent?.allowMultipleChances ?? true,
+      );
+      final matchedRule = matchedResult?.rule;
+      final int effectiveMultiplier = matchedResult?.multiplier ?? (result.chancesEarned > 0 ? result.chancesEarned : 1);
+      final totalChances = math.max(result.chancesEarned > 0 ? result.chancesEarned : 1, effectiveMultiplier);
+
       final gameType = currentEvent?.gameType ?? (totalValue >= 500 ? 'scratchCard' : 'spinTheWheel');
 
       if (gameType == 'directGift' || gameType == 'direct_gift') {
-        // Check promotional rules using our robust multi-tiered AI & NLP PromotionalRuleMatcher
-        final matchedRule = PromotionalRuleMatcher.match(
-          result: result,
-          promotionalRules: currentEvent?.promotionalRules ?? const [],
-        );
-
         final designatedPrizeObj = (currentEvent?.availablePrizes.isNotEmpty ?? false)
             ? currentEvent!.availablePrizes.first
             : ((currentEvent?.allocatedPrizes.isNotEmpty ?? false)
@@ -595,26 +599,20 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         double? resolvedUnitValue;
         bool resolvedIsVoucher = false;
 
-        if (matchedRule != null) {
-          resolvedLinkedGifts = matchedRule.linkedGifts;
-          if (matchedRule.rewardValue.isNotEmpty) {
-            designatedPrize = matchedRule.rewardValue;
-          } else if (matchedRule.linkedGiftsSummary.isNotEmpty) {
-            designatedPrize = matchedRule.linkedGiftsSummary;
-          } else {
-            designatedPrize = designatedPrizeObj?.name ?? (prizeNames.isNotEmpty ? prizeNames.first : '');
-          }
+        if (matchedResult != null) {
+          resolvedLinkedGifts = matchedResult.multipliedLinkedGifts;
+          designatedPrize = matchedResult.formattedPrizeSummary;
 
-          resolvedIsVoucher = matchedRule.rewardType == 'voucher' ||
-              matchedRule.totalVoucherValue > 0 ||
+          resolvedIsVoucher = matchedRule?.rewardType == 'voucher' ||
+              matchedResult.totalRewardAmount > 0 ||
               designatedPrize.contains('فواتشر') ||
               designatedPrize.toLowerCase().contains('voucher') ||
               designatedPrize.contains('قسيمة');
 
           resolvedUnitValue = resolvedIsVoucher
-              ? (matchedRule.totalVoucherValue > 0
-                  ? matchedRule.totalVoucherValue
-                  : (matchedRule.rewardAmount > 0 ? matchedRule.rewardAmount : designatedPrizeObj?.unitValue))
+              ? (matchedResult.totalRewardAmount > 0
+                  ? matchedResult.totalRewardAmount
+                  : designatedPrizeObj?.unitValue)
               : 0.0;
         } else if (result.matchedRewardValue.trim().isNotEmpty) {
           designatedPrize = result.matchedRewardValue.trim();

@@ -4,10 +4,8 @@ import 'package:csv/csv.dart';
 import 'package:excel/excel.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
+import '../config/ai_config.dart';
 import '../utils/arabic_numbers_utils.dart';
-
-const String _geminiApiKey =
-    'AIzaSyBiuLXCswnl2_xCQT9M3YCnaSc0nGZ94Nw';
 
 final aiProductCatalogServiceProvider = Provider<AiProductCatalogService>((ref) {
   return AiProductCatalogService();
@@ -70,7 +68,7 @@ class AiProductCatalogService {
   AiProductCatalogService()
       : _model = GenerativeModel(
           model: 'gemini-3.7-flash',
-          apiKey: _geminiApiKey,
+          apiKey: AiConfig.geminiApiKey,
           generationConfig: GenerationConfig(
             responseMimeType: 'application/json',
             temperature: 0.1,

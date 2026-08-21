@@ -392,11 +392,13 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       final gameType = activeEvent.gameType;
 
       if (gameType == 'directGift' || gameType == 'direct_gift') {
-        // Check promotional rules using our robust multi-tiered AI & NLP PromotionalRuleMatcher
-        final matchedRule = PromotionalRuleMatcher.match(
+        // Check promotional rules using our robust multi-tiered AI & NLP PromotionalRuleMatcher with Multipliers
+        final matchedResult = PromotionalRuleMatcher.matchWithMultiplier(
           result: result,
           promotionalRules: activeEvent.promotionalRules,
+          allowCampaignMultipliers: activeEvent.allowMultipleChances,
         );
+        final matchedRule = matchedResult?.rule;
 
         final designatedPrizeObj = activeEvent.availablePrizes.isNotEmpty
             ? activeEvent.availablePrizes.first
@@ -407,26 +409,20 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         double? resolvedUnitValue;
         bool resolvedIsVoucher = false;
 
-        if (matchedRule != null) {
-          resolvedLinkedGifts = matchedRule.linkedGifts;
-          if (matchedRule.rewardValue.isNotEmpty) {
-            designatedPrize = matchedRule.rewardValue;
-          } else if (matchedRule.linkedGiftsSummary.isNotEmpty) {
-            designatedPrize = matchedRule.linkedGiftsSummary;
-          } else {
-            designatedPrize = designatedPrizeObj?.name ?? (prizeNames.isNotEmpty ? prizeNames.first : '');
-          }
+        if (matchedResult != null) {
+          resolvedLinkedGifts = matchedResult.multipliedLinkedGifts;
+          designatedPrize = matchedResult.formattedPrizeSummary;
 
-          resolvedIsVoucher = matchedRule.rewardType == 'voucher' ||
-              matchedRule.totalVoucherValue > 0 ||
+          resolvedIsVoucher = matchedRule?.rewardType == 'voucher' ||
+              matchedResult.totalRewardAmount > 0 ||
               designatedPrize.contains('فواتشر') ||
               designatedPrize.toLowerCase().contains('voucher') ||
               designatedPrize.contains('قسيمة');
 
           resolvedUnitValue = resolvedIsVoucher
-              ? (matchedRule.totalVoucherValue > 0
-                  ? matchedRule.totalVoucherValue
-                  : (matchedRule.rewardAmount > 0 ? matchedRule.rewardAmount : designatedPrizeObj?.unitValue))
+              ? (matchedResult.totalRewardAmount > 0
+                  ? matchedResult.totalRewardAmount
+                  : designatedPrizeObj?.unitValue)
               : 0.0;
         } else if (result.matchedRewardValue.trim().isNotEmpty) {
           designatedPrize = result.matchedRewardValue.trim();

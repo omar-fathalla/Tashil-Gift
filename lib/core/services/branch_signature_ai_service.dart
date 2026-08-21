@@ -3,10 +3,8 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import '../../features/admin/domain/retail_chain_model.dart';
+import '../config/ai_config.dart';
 import '../utils/arabic_numbers_utils.dart';
-
-const String _geminiApiKey =
-    'AIzaSyBiuLXCswnl2_xCQT9M3YCnaSc0nGZ94Nw';
 
 final branchSignatureAiServiceProvider = Provider<BranchSignatureAiService>((ref) {
   return BranchSignatureAiService();
@@ -159,7 +157,7 @@ class BranchSignatureAiService {
   static GenerativeModel _createModel(String modelName) {
     return GenerativeModel(
       model: modelName,
-      apiKey: _geminiApiKey,
+      apiKey: AiConfig.geminiApiKey,
       systemInstruction: Content.system(
         'أنت خبير هندسي متخصص في تحليل بصمات وهياكل بونات ونظم نقاط البيع (Retail POS Receipt Architecture & Store Signature Expert). '
         'مهمتك فحص صورة بونة الفاتورة المرفقة واستخراج البصمة الهيكلية القاطعة للسلسلة والفرع لمنع أي تزوير أو تلاعب: '
