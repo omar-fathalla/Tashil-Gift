@@ -308,13 +308,17 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       final mimeType = _receiptImage!.mimeType ?? 'image/jpeg';
 
       // Fetch company product barcodes catalog if available
-      final catalogItems = await productsService.getProductsForCompany(_activeEvent!.companySlug);
-      final registeredBarcodes = catalogItems.map((e) => "${e.productName} (${e.barcode})").toList();
-      final catalogBarcodeMap = {
-        for (final item in catalogItems)
-          if (item.productName.isNotEmpty && item.barcode.isNotEmpty)
-            item.productName: item.barcode,
-      };
+      List<String> registeredBarcodes = [];
+      Map<String, String> catalogBarcodeMap = {};
+      try {
+        final catalogItems = await productsService.getProductsForCompany(_activeEvent!.companySlug);
+        registeredBarcodes = catalogItems.map((e) => "${e.productName} (${e.barcode})").toList();
+        catalogBarcodeMap = {
+          for (final item in catalogItems)
+            if (item.productName.isNotEmpty && item.barcode.isNotEmpty)
+              item.productName: item.barcode,
+        };
+      } catch (_) {}
 
       // Fetch retail chain branch signatures if available for deterministic anti-fraud matching
       List<BranchModel> chainBranches = [];
@@ -470,8 +474,12 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         imageUrl = await storageRef.getDownloadURL().timeout(const Duration(seconds: 10));
       } catch (e) {
         debugPrint('Firebase Storage upload notice: $e');
-        // Resilient fallback: store base64 if storage is slow or unreachable so customer is never blocked
-        imageUrl = 'data:$mimeType;base64,${base64Encode(bytes)}';
+        // Resilient fallback: only store base64 if small (< 400KB) to strictly avoid exceeding Firestore 1MB limit
+        if (bytes.lengthInBytes <= 400 * 1024) {
+          imageUrl = 'data:$mimeType;base64,${base64Encode(bytes)}';
+        } else {
+          imageUrl = '';
+        }
       }
 
       // 3. Store transaction in Firestore with Duration & KPI metrics (Upsert)
@@ -717,7 +725,8 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         );
         _resetFormForNextCustomer();
       }
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('Receipt processing error: $e\n$stack');
       if (mounted) {
         _showPopupMessage(
           'تنبيه النظام',

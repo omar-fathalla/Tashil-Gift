@@ -255,10 +255,10 @@ class AiReceiptService {
   late final GenerativeModel _fallbackModel2;
   final String modelName;
 
-  AiReceiptService({this.modelName = 'gemini-flash-latest'}) {
+  AiReceiptService({this.modelName = 'gemini-2.5-flash'}) {
     _model = _createModel(modelName);
-    _fallbackModel1 = _createModel('gemini-3.5-flash');
-    _fallbackModel2 = _createModel('gemini-3.7-flash');
+    _fallbackModel1 = _createModel('gemini-2.0-flash');
+    _fallbackModel2 = _createModel('gemini-1.5-flash');
   }
 
   static GenerativeModel _createModel(String name) {
