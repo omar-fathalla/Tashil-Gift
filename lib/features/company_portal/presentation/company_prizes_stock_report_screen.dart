@@ -4365,41 +4365,136 @@ class _CompanyPrizesStockReportScreenState
     required List<AggregatedGiftStock> gifts,
     required List<CompanyGiftModel> masterGifts,
   }) {
-    // Group all prizes by branch name
+    // 1. Collect all distinct branches from filteredEvents
+    final List<Map<String, String>> targetBranches = [];
+    final Set<String> seenBranchNames = {};
+
+    if (_selectedBranch != null && _selectedBranch!.isNotEmpty) {
+      targetBranches.add({'id': _selectedBranch!, 'name': _selectedBranch!});
+    } else {
+      for (final event in filteredEvents) {
+        for (int i = 0; i < event.branchNames.length; i++) {
+          final bName = event.branchNames[i].trim();
+          final bId = i < event.branchIds.length ? event.branchIds[i].trim() : bName;
+          if (bName.isNotEmpty && !seenBranchNames.contains(bName)) {
+            seenBranchNames.add(bName);
+            targetBranches.add({'id': bId, 'name': bName});
+          }
+        }
+        for (final prize in event.allocatedPrizes) {
+          final bName = prize.branchName.trim();
+          final bId = prize.branchId.trim();
+          if (bName.isNotEmpty && !seenBranchNames.contains(bName)) {
+            seenBranchNames.add(bName);
+            targetBranches.add({'id': bId.isNotEmpty ? bId : bName, 'name': bName});
+          }
+        }
+      }
+    }
+
+    if (targetBranches.isEmpty) {
+      targetBranches.add({'id': '', 'name': isAr ? 'كافة الفروع / عام' : 'All Branches / General'});
+    }
+
+    // 2. Group all prizes by branch name
     final Map<String, List<Map<String, dynamic>>> branchGroups = {};
 
-    for (final event in filteredEvents) {
-      for (final prize in event.allocatedPrizes) {
+    for (final b in targetBranches) {
+      final bName = b['name']!;
+      final bId = b['id']!;
+      final List<Map<String, dynamic>> prizesForBranch = [];
+
+      for (final event in filteredEvents) {
         if (masterGifts.isNotEmpty) {
-          final isPresentInMaster = masterGifts.any((mg) {
-            final mgName = _normalizePrizeKey(mg.giftName);
-            final pName = _normalizePrizeKey(prize.name);
-            return mg.id == prize.giftId ||
-                mgName == pName ||
-                (mgName.isNotEmpty && pName.isNotEmpty && (mgName.contains(pName) || pName.contains(mgName)));
-          });
-          if (!isPresentInMaster) continue;
+          for (final mg in masterGifts) {
+            final matchingPrize = event.allocatedPrizes.where((prize) {
+              final mgName = _normalizePrizeKey(mg.giftName);
+              final pName = _normalizePrizeKey(prize.name);
+              final matchesGift = mg.id == prize.giftId ||
+                  mgName == pName ||
+                  (mgName.isNotEmpty && pName.isNotEmpty && (mgName.contains(pName) || pName.contains(mgName)));
+              final matchesBranch = prize.branchName.trim() == bName ||
+                  (bId.isNotEmpty && prize.branchId.trim() == bId);
+              return matchesGift && matchesBranch;
+            }).firstOrNull;
+
+            if (matchingPrize != null) {
+              final rawClaimed = (matchingPrize.allocatedQuantity - matchingPrize.remainingQuantity).clamp(0, matchingPrize.allocatedQuantity);
+              final branchClaimed = matchingPrize.allocatedQuantity > 0 ? rawClaimed : 0;
+              final branchRemaining = (matchingPrize.allocatedQuantity - branchClaimed).clamp(0, matchingPrize.allocatedQuantity);
+
+              prizesForBranch.add({
+                'eventId': event.id,
+                'eventName': event.eventName,
+                'giftId': mg.id,
+                'giftName': mg.giftName,
+                'giftType': mg.giftType,
+                'unitValue': mg.unitValue,
+                'branchId': bId,
+                'branchName': bName,
+                'allocated': matchingPrize.allocatedQuantity,
+                'remaining': branchRemaining,
+                'claimed': branchClaimed,
+              });
+            } else {
+              prizesForBranch.add({
+                'eventId': event.id,
+                'eventName': event.eventName,
+                'giftId': mg.id,
+                'giftName': mg.giftName,
+                'giftType': mg.giftType,
+                'unitValue': mg.unitValue,
+                'branchId': bId,
+                'branchName': bName,
+                'allocated': 0,
+                'remaining': 0,
+                'claimed': 0,
+              });
+            }
+          }
+        } else {
+          for (final prize in event.allocatedPrizes) {
+            final pBranch = prize.branchName.trim();
+            if (pBranch == bName || (bId.isNotEmpty && prize.branchId.trim() == bId)) {
+              final rawClaimed = (prize.allocatedQuantity - prize.remainingQuantity).clamp(0, prize.allocatedQuantity);
+              final branchClaimed = prize.allocatedQuantity > 0 ? rawClaimed : 0;
+              final branchRemaining = (prize.allocatedQuantity - branchClaimed).clamp(0, prize.allocatedQuantity);
+
+              prizesForBranch.add({
+                'eventId': event.id,
+                'eventName': event.eventName,
+                'giftId': prize.giftId,
+                'giftName': prize.name,
+                'giftType': prize.giftType,
+                'unitValue': prize.unitValue,
+                'branchId': bId,
+                'branchName': bName,
+                'allocated': prize.allocatedQuantity,
+                'remaining': branchRemaining,
+                'claimed': branchClaimed,
+              });
+            }
+          }
         }
+      }
 
-        final bName = prize.branchName.trim().isNotEmpty
-            ? prize.branchName.trim()
-            : (prize.branchId.trim().isNotEmpty
-                ? prize.branchId.trim()
-                : (isAr ? 'كافة الفروع / عام' : 'All Branches / General'));
+      // Filter by search query if any
+      if (_searchQuery.isNotEmpty) {
+        final matchesBranchName = bName.toLowerCase().contains(_searchQuery);
+        final matchingPrizes = prizesForBranch.where((p) {
+          final gName = (p['giftName'] as String? ?? '').toLowerCase();
+          return gName.contains(_searchQuery);
+        }).toList();
 
-        branchGroups.putIfAbsent(bName, () => []).add({
-          'eventId': event.id,
-          'eventName': event.eventName,
-          'giftId': prize.giftId,
-          'giftName': prize.name,
-          'giftType': prize.giftType,
-          'unitValue': prize.unitValue,
-          'branchId': prize.branchId,
-          'branchName': bName,
-          'allocated': prize.allocatedQuantity,
-          'remaining': prize.remainingQuantity,
-          'claimed': (prize.allocatedQuantity - prize.remainingQuantity).clamp(0, prize.allocatedQuantity),
-        });
+        if (matchesBranchName) {
+          branchGroups[bName] = prizesForBranch;
+        } else if (matchingPrizes.isNotEmpty) {
+          branchGroups[bName] = matchingPrizes;
+        }
+      } else {
+        if (prizesForBranch.isNotEmpty) {
+          branchGroups[bName] = prizesForBranch;
+        }
       }
     }
 
