@@ -86,5 +86,27 @@ void main() {
       expect(matchResult.totalRewardAmount, 125.0);
       expect(matchResult.formattedPrizeSummary, 'فواتشر بقيمة 125 جنيه');
     });
+
+    test('Customer buying 1 Axe spray alongside other Unilever products (Dove) gets exactly 1x 50 EGP voucher', () {
+      final extractedProducts = [
+        ExtractedProductItem(name: 'دوف هاند ووش بجوز الهند 500 مل', price: 85.0, quantity: 1, isTargetCompany: true, barcode: '6221155152268'),
+        ExtractedProductItem(name: 'اكس اسبراى ايس شيل 150 مل (خصم 15%)', price: 140.0, quantity: 1, isTargetCompany: true, barcode: '6221155611819'),
+        ExtractedProductItem(name: 'دوف اسبراي برائحة الخيار 150مل', price: 90.0, quantity: 1, isTargetCompany: true, barcode: '6221155652553'),
+      ];
+
+      final matchResult = PromotionalRuleMatcher.matchWithMultiplier(
+        extractedProducts: extractedProducts,
+        promotionalRules: rules,
+        allowCampaignMultipliers: true,
+      );
+
+      expect(matchResult, isNotNull);
+      expect(matchResult!.rule.id, 'rule_1');
+      expect(matchResult.totalTriggerQuantity, 1);
+      expect(matchResult.multiplier, 1);
+      expect(matchResult.totalRewardAmount, 50.0);
+      expect(matchResult.formattedPrizeSummary, 'فواتشر بقيمة 50 جنيه');
+      expect(matchResult.multipliedLinkedGifts.first.quantity, 1);
+    });
   });
 }

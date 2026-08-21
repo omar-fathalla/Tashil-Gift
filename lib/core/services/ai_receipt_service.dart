@@ -601,14 +601,18 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
             if (promotionalRules.isNotEmpty) {
               final matchedRule = promotionalRules.where((r) => r.id == result.matchedRuleId).firstOrNull;
               if (matchedRule != null && matchedRule.allowMultipliers) {
-                final triggerNameLower = matchedRule.triggerProduct.toLowerCase().trim();
+                final triggerTokens = PromotionalRuleMatcher._extractTokens(matchedRule.triggerProduct);
                 int totalMatchedQty = 0;
                 for (final p in result.extractedProducts) {
-                  final pNameLower = p.name.toLowerCase().trim();
-                  if (triggerNameLower.isEmpty ||
-                      pNameLower.contains(triggerNameLower) ||
-                      triggerNameLower.contains(pNameLower) ||
-                      p.isTargetCompany) {
+                  final pNorm = PromotionalRuleMatcher._normalize(p.name);
+                  bool matches = false;
+                  for (final token in triggerTokens) {
+                    if (token.length >= 2 && pNorm.contains(token)) {
+                      matches = true;
+                      break;
+                    }
+                  }
+                  if (matches || (triggerTokens.isEmpty && p.isTargetCompany)) {
                     totalMatchedQty += p.quantity > 0 ? p.quantity : 1;
                   }
                 }
@@ -642,7 +646,9 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
             }
           }
 
-          if (multiplierBasis == 'quantity') {
+          if (promotionalRules.isNotEmpty && result.matchedRuleId.isNotEmpty) {
+            calculatedChances = quantityMultiplier;
+          } else if (multiplierBasis == 'quantity') {
             calculatedChances = quantityMultiplier;
           } else if (multiplierBasis == 'spend') {
             calculatedChances = spendChances;
@@ -1001,31 +1007,19 @@ class PromotionalRuleMatcher {
       final matchingRulesWithScores = <PromotionalRuleItem, int>{};
 
       for (final rule in promotionalRules) {
-        final triggerTokens = _extractTokens(rule.triggerProduct);
-        if (triggerTokens.isEmpty) continue;
-
         int totalMatchedQty = 0;
-        int tokenMatches = 0;
+        int matchedItemCount = 0;
 
         for (final p in effectiveProducts) {
-          final pNorm = _normalize(p.name);
-          bool productMatched = false;
-
-          for (final token in triggerTokens) {
-            if (token.length >= 2 && pNorm.contains(token)) {
-              productMatched = true;
-              tokenMatches++;
-            }
-          }
-
-          if (productMatched) {
+          if (_matchesProduct(p, rule.triggerProduct)) {
             totalMatchedQty += p.quantity > 0 ? p.quantity : 1;
+            matchedItemCount++;
           }
         }
 
-        if (tokenMatches > 0 && totalMatchedQty >= rule.minQuantity) {
+        if (matchedItemCount > 0 && totalMatchedQty >= rule.minQuantity) {
           // Weight minQuantity heavily so 2-pcs tier beats 1-pc tier
-          final score = (rule.minQuantity * 100) + tokenMatches;
+          final score = (rule.minQuantity * 100) + matchedItemCount;
           matchingRulesWithScores[rule] = score;
         }
       }
@@ -1074,31 +1068,24 @@ class PromotionalRuleMatcher {
     // Calculate total quantity of trigger products purchased
     int totalTriggerQty = 0;
     if (effectiveProducts.isNotEmpty) {
-      final triggerTokens = _extractTokens(matchedRule.triggerProduct);
       for (final p in effectiveProducts) {
-        final pNorm = _normalize(p.name);
-        bool matches = false;
-        for (final token in triggerTokens) {
-          if (token.length >= 2 && pNorm.contains(token)) {
-            matches = true;
-            break;
-          }
-        }
-        if (matches) {
+        if (_matchesProduct(p, matchedRule.triggerProduct)) {
           totalTriggerQty += p.quantity > 0 ? p.quantity : 1;
         }
       }
     }
 
-    // Determine multiplier
+    // Determine multiplier strictly based on trigger product quantity
     int multiplier = 1;
-    if ((matchedRule.allowMultipliers || allowCampaignMultipliers) &&
-        matchedRule.minQuantity > 0 &&
-        totalTriggerQty >= matchedRule.minQuantity) {
-      multiplier = totalTriggerQty ~/ matchedRule.minQuantity;
-      if (multiplier < 1) multiplier = 1;
-    } else if (result != null && result.chancesEarned > 1) {
-      multiplier = result.chancesEarned;
+    if (matchedRule.minQuantity > 0 && totalTriggerQty >= matchedRule.minQuantity) {
+      if (matchedRule.allowMultipliers || allowCampaignMultipliers) {
+        multiplier = totalTriggerQty ~/ matchedRule.minQuantity;
+        if (multiplier < 1) multiplier = 1;
+      } else {
+        multiplier = 1;
+      }
+    } else {
+      multiplier = 1;
     }
 
     final double baseAmount = matchedRule.totalVoucherValue > 0
@@ -1132,6 +1119,35 @@ class PromotionalRuleMatcher {
     );
   }
 
+  static const Set<String> _noiseWords = {
+    'شراء', 'عرض', 'من', 'قطعة', 'قطع', 'علبة', 'عبوة', 'عدد', 'مع', 'على', 'في', 'او', 'or', 'and',
+    'مل', 'ml', 'جرام', 'جم', 'g', 'gm', 'كيلو', 'كجم', 'kg'
+  };
+
+  static bool _matchesProduct(ExtractedProductItem product, String triggerProduct) {
+    if (triggerProduct.trim().isEmpty) return product.isTargetCompany;
+
+    final pNorm = _normalize(product.name);
+    final parts = triggerProduct.split(RegExp(r'[,،/\+\n]|(\s+أو\s+)|(\s+or\s+)', caseSensitive: false));
+
+    for (final part in parts) {
+      final partNorm = _normalize(part);
+      if (partNorm.isEmpty) continue;
+
+      // 1. Direct substring match of whole phrase
+      if (pNorm.contains(partNorm)) return true;
+
+      // 2. Phrase matching (all non-noise words in phrase must be present)
+      final phraseWords = partNorm.split(' ').where((w) => w.length >= 2 && !_noiseWords.contains(w)).toList();
+
+      if (phraseWords.isNotEmpty) {
+        if (phraseWords.every((w) => pNorm.contains(w))) return true;
+      }
+    }
+
+    return false;
+  }
+
   static String _normalize(String s) {
     var str = s.toLowerCase().trim();
     str = str.replaceAll(RegExp(r'[أإآ]'), 'ا');
@@ -1147,14 +1163,7 @@ class PromotionalRuleMatcher {
     for (final part in parts) {
       final norm = _normalize(part);
       final words = norm.split(' ').where((w) {
-        return w.length >= 2 &&
-            w != 'شراء' &&
-            w != 'عرض' &&
-            w != 'من' &&
-            w != 'قطعة' &&
-            w != 'قطع' &&
-            w != 'علبة' &&
-            w != 'عبوة';
+        return w.length >= 2 && !_noiseWords.contains(w);
       }).toList();
       tokens.addAll(words);
     }
