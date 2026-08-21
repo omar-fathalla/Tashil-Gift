@@ -38,8 +38,52 @@ List<ValidationConditionItem> buildValidationConditionItems({
   bool isAllBranches = true,
   String receiptDate = '',
   bool hasTargetProducts = true,
+  bool isHandwritten = false,
+  bool isThermalPosReceipt = true,
+  bool isTampered = false,
+  bool isScreenCapture = false,
+  List<String> fraudReasons = const [],
 }) {
   final List<ValidationConditionItem> items = [];
+
+  // 0. Anti-Fraud & Physical Medium Verification
+  if (isHandwritten || message.contains('محررة بخط اليد') || message.contains('يدوياً') || fraudReasons.any((r) => r.contains('يدوياً') || r.contains('خط اليد'))) {
+    items.add(
+      const ValidationConditionItem(
+        title: 'فاتورة محررة يدوياً (مخالف للشروط والأحكام)',
+        description: 'تم رفض الفاتورة لأنها مكتوبة بخط اليد أو مسودة يدوية. العرض يشترط حصراً تقديم بون كاشير إلكتروني مطبوع من ماكينة السوبرماركت (Thermal POS Receipt).',
+        icon: Icons.edit_note_rounded,
+        isMet: false,
+      ),
+    );
+  } else if (isTampered || message.contains('تلاعب') || message.contains('شطب') || fraudReasons.any((r) => r.contains('تلاعب') || r.contains('شطب'))) {
+    items.add(
+      const ValidationConditionItem(
+        title: 'اشتباه في تلاعب أو شطب وتعديل يدوي',
+        description: 'تم رصد شطب أو تعديل يدوي في أرقام أو أسعار الفاتورة المطبوعة.',
+        icon: Icons.gavel_rounded,
+        isMet: false,
+      ),
+    );
+  } else if (isScreenCapture || message.contains('شاشة إلكترونية') || fraudReasons.any((r) => r.contains('شاشة'))) {
+    items.add(
+      const ValidationConditionItem(
+        title: 'صورة ملتقطة من شاشة إلكترونية',
+        description: 'تم رصد تصوير الفاتورة من شاشة هاتف أو حاسوب آخر. يرجى تصوير أصل الفاتورة الورقية مباشرة.',
+        icon: Icons.phone_android_rounded,
+        isMet: false,
+      ),
+    );
+  } else if (!isThermalPosReceipt || message.contains('ليس بون كاشير')) {
+    items.add(
+      const ValidationConditionItem(
+        title: 'نوع الإيصال غير معتمد',
+        description: 'المستند المرفوع ليس بون كاشير إلكتروني مطبوع من ماكينات نقاط البيع المعتمدة.',
+        icon: Icons.receipt_long_rounded,
+        isMet: false,
+      ),
+    );
+  }
 
   // 1. Minimum Spend Condition
   if (minimumSpend > 0 && targetCompanyTotal < minimumSpend) {

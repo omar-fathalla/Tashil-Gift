@@ -96,3 +96,10 @@ class ArabicToEnglishDigitsFormatter extends TextInputFormatter {
     );
   }
 }
+
+/// Static utilities for numeral normalization across the app
+class ArabicNumbersUtils {
+  static String convertEasternToArabicDigits(String input, {bool convertDecimal = true}) {
+    return input.toEnglishDigits(convertDecimal: convertDecimal);
+  }
+}

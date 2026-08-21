@@ -2727,6 +2727,78 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                                   ),
                                 ),
                               ),
+                              if (inv['is_handwritten'] == true)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.shade100,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.red.shade400),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.edit_note_rounded, size: 12, color: Colors.red.shade900),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        '✍️ محررة يدوياً (مخالف)',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.red.shade900,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              if (inv['is_tampered'] == true)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.shade100,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.orange.shade400),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.gavel_rounded, size: 12, color: Colors.orange.shade900),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        '⚠️ اشتباه تلاعب بالأرقام',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.orange.shade900,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              if (inv['is_screen_capture'] == true)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.purple.shade100,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.purple.shade400),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.phone_android_rounded, size: 12, color: Colors.purple.shade900),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        '📱 تصوير شاشة',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.purple.shade900,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               if (customerName != null && customerName.isNotEmpty)
                                 Text(
                                   '👤 $customerName ${customerPhone != null ? "($customerPhone)" : ""}',

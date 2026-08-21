@@ -20,6 +20,7 @@ import 'company_catalog_screen.dart';
 import 'company_gifts_screen.dart';
 import '../../games/presentation/game_types_screen.dart';
 import 'retail_chains_screen.dart';
+import 'chain_products_intelligence_screen.dart';
 import 'ai_speed_benchmark_screen.dart';
 import '../../../core/services/company_gifts_service.dart';
 import '../../../core/utils/url_builder.dart';
@@ -476,6 +477,11 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   label: Text(strings.navRetailChains),
                 ),
                 NavigationRailDestination(
+                  icon: const Icon(Icons.inventory_2_outlined),
+                  selectedIcon: const Icon(Icons.inventory_2_rounded),
+                  label: Text(strings.navProductsIntelligence),
+                ),
+                NavigationRailDestination(
                   icon: const Icon(Icons.receipt_long_outlined),
                   selectedIcon: const Icon(Icons.receipt_long_rounded),
                   label: Text(strings.navInvoicesAudit),
@@ -520,7 +526,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       ),
       bottomNavigationBar: isMobile
           ? NavigationBar(
-              selectedIndex: _selectedIndex > 8 ? 0 : _selectedIndex,
+              selectedIndex: _selectedIndex > 9 ? 0 : _selectedIndex,
               onDestinationSelected: (index) {
                 setState(() => _selectedIndex = index);
               },
@@ -545,6 +551,11 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   icon: const Icon(Icons.storefront_outlined),
                   selectedIcon: const Icon(Icons.storefront),
                   label: isAr ? 'السلاسل' : 'Chains',
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.inventory_2_outlined),
+                  selectedIcon: const Icon(Icons.inventory_2),
+                  label: isAr ? 'المنتجات' : 'Products',
                 ),
                 NavigationDestination(
                   icon: const Icon(Icons.receipt_long_outlined),
@@ -577,7 +588,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       floatingActionButton: _selectedIndex == 0
           ? FloatingActionButton.extended(
               onPressed: () {
-                setState(() => _selectedIndex = 5);
+                setState(() => _selectedIndex = 6);
               },
               backgroundColor: colorScheme.primary,
               foregroundColor: colorScheme.onPrimary,
@@ -603,18 +614,20 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       case 3:
         return const RetailChainsScreen();
       case 4:
-        return const InvoicesLogScreen();
+        return const ChainProductsIntelligenceScreen();
       case 5:
+        return const InvoicesLogScreen();
+      case 6:
         return CreateEventScreen(
           isEmbedded: true,
           onCancel: () => setState(() => _selectedIndex = 0),
           onSaved: () => setState(() => _selectedIndex = 0),
         );
-      case 6:
-        return const CompanyGiftsScreen();
       case 7:
-        return const GameTypesScreen();
+        return const CompanyGiftsScreen();
       case 8:
+        return const GameTypesScreen();
+      case 9:
         return const AiSpeedBenchmarkScreen();
       default:
         return _buildCampaignsDashboard(firestore, strings, isAr);
@@ -776,7 +789,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 const SizedBox(height: 24),
                 FilledButton.icon(
                   onPressed: () {
-                    setState(() => _selectedIndex = 5);
+                    setState(() => _selectedIndex = 6);
                   },
                   icon: const Icon(Icons.add_rounded, size: 20),
                   label: Text(strings.navCreateCampaign, style: GoogleFonts.cairo(fontSize: 15, fontWeight: FontWeight.bold)),

@@ -74,6 +74,7 @@ class AppStrings {
   String get navAnalytics => _t(ar: 'التقارير والتحليلات', en: 'Reports & Analytics', hi: 'रिपोर्ट और विश्लेषण');
   String get navCompanyCatalog => _t(ar: 'تكويد الشركات والمنتجات', en: 'Company & Product Catalog', hi: 'कंपनी और उत्पाद सूची');
   String get navRetailChains => _t(ar: 'السلاسل والمنافذ', en: 'Retail Chains & Outlets', hi: 'रिटेल चेन और स्टोर');
+  String get navProductsIntelligence => _t(ar: 'المنتجات والأسعار', en: 'Products & Prices', hi: 'उत्पाद और मूल्य');
   String get navInvoicesAudit => _t(ar: 'سجل الفواتير والتدقيق', en: 'Invoices Audit & Logs', hi: 'रसीद ऑडिट और लॉग');
   String get navCreateCampaign => _t(ar: 'إنشاء حملة جديدة', en: 'Create New Campaign', hi: 'नया अभियान बनाएं');
   String get navCompanyGifts => _t(ar: 'هدايا الشركات', en: 'Company Gifts', hi: 'कंपनी उपहार');
@@ -623,6 +624,86 @@ class AppStrings {
     ar: 'صالحة للاستخدام الفوري لدى الكاشير',
     en: 'Valid for immediate redemption at cashier',
     hi: 'कैशियर पर तुरंत उपयोग के लिए मान्य',
+  );
+  String get voucherIntelligenceTitle => _t(
+    ar: 'منظومة قسائم المشتريات والفواتشر',
+    en: 'Voucher Intelligence & Budget',
+    hi: 'वाउचर इंटेलिजेंस और बजट',
+  );
+  String get voucherIntelligenceSubtitle => _t(
+    ar: 'متابعة تفصيلية لأرصدة وفئات القسائم (25، 50 ج.م) والميزانيات المالية المرصودة والمصروفة والمتبقية',
+    en: 'Live tracking of voucher denominations (25, 50 EGP), allocated budgets, claimed, and branch stock',
+    hi: 'वाउचर श्रेणियों (25, 50 EGP), बजट, वितरण और शाखा स्टॉक की लाइव ट्रैकिंग',
+  );
+  String get totalVouchersAllocated => _t(
+    ar: 'إجمالي قسائم المشتريات',
+    en: 'Total Vouchers Allocated',
+    hi: 'कुल आवंटित वाउचर',
+  );
+  String get totalVouchersBudget => _t(
+    ar: 'الميزانية المالية المرصودة',
+    en: 'Total Financial Budget',
+    hi: 'कुल वित्तीय बजट',
+  );
+  String get claimedVouchersValue => _t(
+    ar: 'قيمة القسائم المصروفة',
+    en: 'Disbursed Voucher Value',
+    hi: 'वितरित वाउचर मूल्य',
+  );
+  String get remainingVouchersValue => _t(
+    ar: 'الرصيد المالي المتبقي',
+    en: 'Remaining Balance Value',
+    hi: 'शेष वित्तीय शेष',
+  );
+  String get voucherDenominationsLabel => _t(
+    ar: 'فئات القسائم المعتمدة',
+    en: 'Voucher Denominations',
+    hi: 'वाउचर श्रेणियां',
+  );
+  String get viewBranchVoucherMatrix => _t(
+    ar: 'كشف توزيع القسائم على الفروع',
+    en: 'Branch Voucher Matrix',
+    hi: 'शाखा वाउचर आवंटन विवरण',
+  );
+  String get generalGiftsStockTitle => _t(
+    ar: 'إجمالي حركة كافة الهدايا والأصناف',
+    en: 'General Gifts & Inventory Overview',
+    hi: 'सामान्य उपहार और इन्वेंटरी अवलोकन',
+  );
+  String get scopedToBranchNotice => _t(
+    ar: 'بيانات مخصصة لـ',
+    en: 'Scoped to',
+    hi: 'के लिए विशेष',
+  );
+  String get allBranchesScopeNotice => _t(
+    ar: 'شامل كافة الفروع والمنافذ',
+    en: 'All Branches & Outlets',
+    hi: 'सभी शाखाएं और आउटलेट',
+  );
+  String get voucherMatrixDialogTitle => _t(
+    ar: 'كشف توزيع قسائم المشتريات على الفروع والفئات',
+    en: 'Vouchers Allocation Matrix per Branch & Denomination',
+    hi: 'शाखा और श्रेणी अनुसार वाउचर आवंटन मैट्रिक्स',
+  );
+  String get voucherMatrixDialogSubtitle => _t(
+    ar: 'بيان تفصيلي بالأرصدة المخصصة، المصروفة، والمتبقية لكل فئة (25، 50 ج.م) والميزانيات المالية لكل فرع',
+    en: 'Itemized breakdown of allocated, claimed, and remaining units per denomination (25, 50 EGP) and budget per branch',
+    hi: 'प्रत्येक श्रेणी (25, 50 EGP) और शाखा के अनुसार आवंटित, वितरित और शेष वाउचर और बजट का विवरण',
+  );
+  String get filterToBranchBtn => _t(
+    ar: 'تصفية لهذا الفرع',
+    en: 'Filter Branch',
+    hi: 'शाखा फ़िल्टर करें',
+  );
+  String get activeDenominationsCount => _t(
+    ar: 'فئات نشطة',
+    en: 'Active Denominations',
+    hi: 'सक्रिय श्रेणियां',
+  );
+  String get vouchersCountUnit => _t(
+    ar: 'قسيمة مشتريات',
+    en: 'Voucher Cards',
+    hi: 'वाउचर कार्ड',
   );
 
 
@@ -1649,6 +1730,260 @@ class AppStrings {
     en: 'Branch allocations updated successfully & master stock synchronized',
     hi: 'शाखा आवंटन सफलतापूर्वक अपडेट और मास्टर स्टॉक सिंक किया गया',
   );
+
+  // ---------------------------------------------------------------------------
+  // 26. Chain Products & Price Intelligence (رصد ومقارنة أسعار المنتجات عبر السلاسل)
+  // ---------------------------------------------------------------------------
+  String get productsIntelligenceTitle => _t(
+    ar: 'رصد ومراقبة أسعار المنتجات عبر السلاسل',
+    en: 'Cross-Chain Products & Price Intelligence',
+    hi: 'क्रॉस-चेन उत्पाद और मूल्य खुफिया',
+  );
+  String get productsIntelligenceSubtitle => _t(
+    ar: 'مراقبة حية وشاملة لأسعار وتخفيضات وتاريخ تعديل المنتجات عبر كافة السلاسل والمتاجر',
+    en: 'Real-time comprehensive tracking of product prices, promotions & modification history across all retail chains',
+    hi: 'सभी खुदरा श्रृंखलाओं में उत्पाद की कीमतों, प्रचारों और संशोधन इतिहास की रीयल-टाइम ट्रैकिंग',
+  );
+  String get allChainsTab => _t(
+    ar: 'جميع السلاسل (مقارنة شاملة)',
+    en: 'All Chains (Matrix)',
+    hi: 'सभी श्रृंखलाएं (तुलना)',
+  );
+  String get metricTotalSkus => _t(
+    ar: 'إجمالي الأصناف المرصودة',
+    en: 'Tracked SKUs',
+    hi: 'ट्रैक किए गए उत्पाद',
+  );
+  String get metricActiveChains => _t(
+    ar: 'السلاسل النشطة',
+    en: 'Active Chains',
+    hi: 'सक्रिय खुदरा श्रृंखलाएं',
+  );
+  String get metricPromotedItems => _t(
+    ar: 'أصناف العروض والخصومات',
+    en: 'Promotions Detected',
+    hi: 'पहचाने गए प्रचार',
+  );
+  String get metricPriceFluctuations => _t(
+    ar: 'تنبيهات تغير الأسعار',
+    en: 'Price Change Alerts',
+    hi: 'मूल्य परिवर्तन अलर्ट',
+  );
+  String get searchProductPlaceholder => _t(
+    ar: 'ابحث باسم المنتج، الباركود، أو البراند...',
+    en: 'Search by product name, barcode, or brand...',
+    hi: 'उत्पाद नाम, बारकोड या ब्रांड द्वारा खोजें...',
+  );
+  String get viewModeCards => _t(
+    ar: 'بطاقات المنتجات',
+    en: 'Cards View',
+    hi: 'कार्ड दृश्य',
+  );
+  String get viewModeMatrix => _t(
+    ar: 'جدول المقارنة السعرية',
+    en: 'Price Matrix Table',
+    hi: 'मूल्य मैट्रिक्स तालिका',
+  );
+  String get cheapestStoreBadge => _t(
+    ar: 'الأرخص سعراً',
+    en: 'Cheapest Store',
+    hi: 'सबसे सस्ता स्टोर',
+  );
+  String get highestPriceStoreBadge => _t(
+    ar: 'الأعلى سعراً',
+    en: 'Highest Price',
+    hi: 'उच्चतम मूल्य',
+  );
+  String get priceDifferenceLabel => _t(
+    ar: 'فارق السعر:',
+    en: 'Price Gap:',
+    hi: 'मूल्य अंतर:',
+  );
+  String get priceHistoryTitle => _t(
+    ar: 'سجل وتاريخ تغير الأسعار',
+    en: 'Price History & Audit Log',
+    hi: 'मूल्य इतिहास और ऑडिट लॉग',
+  );
+  String get priceHistorySubtitle => _t(
+    ar: 'تتبع زمني لكافة الأسعار والخصومات المرصودة لهذا الصنف بالفواتير',
+    en: 'Chronological timeline of all observed prices & discounts on receipts for this SKU',
+    hi: 'इस उत्पाद के लिए सभी देखी गई कीमतों का कालानुक्रमिक इतिहास',
+  );
+  String get noProductsFound => _t(
+    ar: 'لم يتم العثور على منتجات مطابقة للبحث أو الفلتر الحالي.',
+    en: 'No products match your search or filter criteria.',
+    hi: 'कोई उत्पाद आपके खोज मानदंड से मेल नहीं खाता।',
+  );
+  String get noProductsInDatabase => _t(
+    ar: 'لم يتم رصد أي منتجات من الفواتير بعد.',
+    en: 'No products detected from receipts yet.',
+    hi: 'अभी तक रसीदों से कोई उत्पाद नहीं मिला है।',
+  );
+  String get lastObservedDateLabel => _t(
+    ar: 'آخر رصد:',
+    en: 'Last Observed:',
+    hi: 'अंतिम देखा गया:',
+  );
+  String get barcodeLabel => _t(
+    ar: 'الباركود:',
+    en: 'Barcode:',
+    hi: 'बारकोड:',
+  );
+  String get brandLabel => _t(
+    ar: 'العلامة التجارية:',
+    en: 'Brand:',
+    hi: 'ब्रांड:',
+  );
+  String get categoryLabel => _t(
+    ar: 'التصنيف:',
+    en: 'Category:',
+    hi: 'श्रेणी:',
+  );
+  String get scansCountLabel => _t(
+    ar: 'مرات الرصد بالفواتير:',
+    en: 'Total Receipt Scans:',
+    hi: 'कुल रसीद स्कैन:',
+  );
+  String get quantitySoldLabel => _t(
+    ar: 'الكمية الإجمالية بالفواتير:',
+    en: 'Total Qty in Invoices:',
+    hi: 'रसीदों में कुल मात्रा:',
+  );
+  String get originalPriceLabel => _t(
+    ar: 'السعر قبل الخصم:',
+    en: 'Original Price:',
+    hi: 'छूट से पहले मूल्य:',
+  );
+  String get discountAmountLabel => _t(
+    ar: 'قيمة الخصم:',
+    en: 'Discount Amount:',
+    hi: 'छूट राशि:',
+  );
+  String get netPriceLabel => _t(
+    ar: 'السعر الصافي:',
+    en: 'Net Price:',
+    hi: 'शुद्ध मूल्य:',
+  );
+  String get exportPriceIntelligenceCsv => _t(
+    ar: 'تصدير تقرير الأسعار (Excel/CSV)',
+    en: 'Export Price Report (Excel/CSV)',
+    hi: 'मूल्य रिपोर्ट निर्यात करें',
+  );
+  String get filterByBrand => _t(
+    ar: 'تصفية حسب البراند',
+    en: 'Filter by Brand',
+    hi: 'ब्रांड द्वारा फ़िल्टर करें',
+  );
+  String get filterByPromotionsOnly => _t(
+    ar: 'الأصناف المخفضة فقط',
+    en: 'Discounted Only',
+    hi: 'केवल छूट वाले',
+  );
+  String get sortByLatest => _t(
+    ar: 'الأحدث رصداً',
+    en: 'Recently Observed',
+    hi: 'हाल ही में देखा गया',
+  );
+  String get sortByPriceLow => _t(
+    ar: 'السعر: من الأقل للأعلى',
+    en: 'Price: Low to High',
+    hi: 'मूल्य: कम से अधिक',
+  );
+  String get sortByPriceHigh => _t(
+    ar: 'السعر: من الأعلى للأقل',
+    en: 'Price: High to Low',
+    hi: 'मूल्य: अधिक से कम',
+  );
+  String get sortByVariance => _t(
+    ar: 'الأعلى تفاوتاً في السعر',
+    en: 'Highest Price Variance',
+    hi: 'उच्चतम मूल्य भिन्नता',
+  );
+  String get viewReceiptPhoto => _t(
+    ar: 'معاينة صورة الفاتورة',
+    en: 'View Receipt Image',
+    hi: 'रसीद छवि देखें',
+  );
+
+  // ---------------------------------------------------------------------------
+  // AI Product Discovery & Company Products Filter
+  // ---------------------------------------------------------------------------
+  String get aiProductDiscoveryTitle => _t(
+    ar: 'استكشاف الأصناف الجديدة بالذكاء الاصطناعي',
+    en: 'AI Product Discovery from Invoices',
+    hi: 'रसीदों से एआई उत्पाद खोज',
+  );
+  String get aiProductDiscoverySubtitle => _t(
+    ar: 'تحليل الفواتير واكتشاف الأصناف التابعة للشركة وغير المسجلة بالداتابيز واعتمادها فوراً',
+    en: 'Scan invoices with AI to discover uncataloged company products and save to Firebase',
+    hi: 'एआई के साथ रसीदों को स्कैन करें और नए उत्पादों को डेटाबेस में सहेजें',
+  );
+  String get aiDiscoveredBannerTitle => _t(
+    ar: 'تم اكتشاف أصناف جديدة غير مسجلة عبر الفواتير!',
+    en: 'New uncataloged products discovered from invoices!',
+    hi: 'रसीदों से नए असूचीबद्ध उत्पाद खोजे गए!',
+  );
+  String aiDiscoveredBannerSubtitle(int count, String company) => _t(
+    ar: 'رصد الذكاء الاصطناعي ($count) أصناف جديدة تابعة لشركة $company. يمكنك مراجعتها واعتمادها لحفظها بقاعدة البيانات.',
+    en: 'AI detected $count new items for $company. Review and approve them to save into database.',
+    hi: 'एआई ने $company के लिए $count नए आइटम खोजे। डेटाबेस में सहेजने के लिए समीक्षा करें।',
+  );
+  String get reviewDiscoveredProducts => _t(
+    ar: 'فحص واعتماد الأصناف (AI Review)',
+    en: 'Review & Approve Products (AI)',
+    hi: 'उत्पादों की समीक्षा और अनुमोदन (AI)',
+  );
+  String get discoverFromInvoicesBtn => _t(
+    ar: 'استكشاف من الفواتير بالـ AI',
+    en: 'AI Discover from Invoices',
+    hi: 'रसीदों से एआई खोज',
+  );
+  String get approveAndSaveToCatalog => _t(
+    ar: 'موافقة وحفظ في كتالوج الشركة (Firebase)',
+    en: 'Approve & Save to Company Catalog (Firebase)',
+    hi: 'स्वीकार करें और कंपनी सूची में सहेजें (Firebase)',
+  );
+  String get selectAllProducts => _t(
+    ar: 'تحديد الكل',
+    en: 'Select All',
+    hi: 'सभी चुनें',
+  );
+  String get deselectAllProducts => _t(
+    ar: 'إلغاء تحديد الكل',
+    en: 'Deselect All',
+    hi: 'सभी अचयनित करें',
+  );
+  String get appearedInInvoices => _t(
+    ar: 'ظهر في الفواتير',
+    en: 'Appeared in Invoices',
+    hi: 'रसीदों में दिखाई दिया',
+  );
+  String get aiConfidenceHigh => _t(
+    ar: 'مطابقة مؤكدة',
+    en: 'High Confidence',
+    hi: 'उच्च विश्वास',
+  );
+  String get companyProductsOnlyFilter => _t(
+    ar: 'أصناف الشركة فقط',
+    en: 'Company Products Only',
+    hi: 'केवल कंपनी के उत्पाद',
+  );
+  String get allInvoiceProductsFilter => _t(
+    ar: 'كافة أصناف الفواتير',
+    en: 'All Invoice Products',
+    hi: 'सभी रसीद उत्पाद',
+  );
+  String get noNewProductsDiscovered => _t(
+    ar: 'جميع أصناف الفواتير مسجلة مسبقاً في كتالوج الشركة أو لا توجد أصناف جديدة غير مسجلة.',
+    en: 'All invoice items are already in catalog, or no new uncataloged products were found.',
+    hi: 'सभी रसीद आइटम पहले से ही कैटलॉग में हैं, या कोई नया उत्पाद नहीं मिला।',
+  );
+  String productsSavedSuccess(int count, String company) => _t(
+    ar: 'تمت الموافقة بنجاح! تم حفظ ($count) صنف جديد في قاعدة بيانات $company بالفايربيز.',
+    en: 'Successfully approved! Saved $count new products to $company catalog in Firebase.',
+    hi: 'सफलतापूर्वक स्वीकृत! $company के लिए $count नए उत्पाद Firebase में सहेजे गए।',
+  );
 }
+
 
 

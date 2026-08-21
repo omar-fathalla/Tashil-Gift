@@ -19,3 +19,8 @@
   - 📦 **Current Version & Build**: e.g. `v2.0.1 (Build #56)`
   - 🔗 **Firebase Admin Console**: `https://console.firebase.google.com/project/tashil-gift/overview`
   - 🌐 **Live Web Application**: `https://tashil-gift.web.app`
+
+### 4. Retail Price Intelligence & Unit Economics Rule (استخراج الأسعار ومقارنة السلاسل)
+- **Single Unit Economics**: Whenever processing receipt items where `quantity >= 2`, `price` MUST strictly be the net selling price per single piece (`netLineTotal / quantity`), `originalPrice` MUST strictly be the gross regular price per single piece (`grossLineTotal / quantity`), and `discountAmount` MUST be the unit discount (`lineDiscount / quantity`). Never store or present line totals as unit prices.
+- **Enterprise Chain Consolidation**: Supermarket branches must resolve to their canonical parent Retail Chain (`normalizeRetailChain`: `أسواق فتح الله`, `جملة ماركت`, `بيت الجملة`, `كارفور`, `خير زمان`, `سبينس`, إلخ). Comparisons in tables, KPI cards, and dialogs must strictly be between Enterprise Chains.
+- Full details and auto-healing specifications are documented in [.agents/skills/retail-price-intelligence-standard/SKILL.md](file:///Users/fathalla/Development/Tashil%20Gift/.agents/skills/retail-price-intelligence-standard/SKILL.md).

@@ -11,6 +11,9 @@ import '../../../core/constants/country_currency_config.dart';
 import '../../../core/widgets/switch_point_branding.dart';
 import '../../../core/widgets/m3_button_groups.dart';
 import '../domain/event_model.dart';
+import '../../../core/services/ai_product_discovery_service.dart';
+import 'widgets/ai_discovered_products_dialog.dart';
+
 
 /// Comprehensive Reports & Analytics Screen (منظومة التقارير والتحليلات الشاملة)
 /// Adheres strictly to Material Design 3, M3 Button Groups, Trilingual Localization,
@@ -43,8 +46,150 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
   // Search & Filter controllers
   final TextEditingController _productSearchController = TextEditingController();
   final TextEditingController _receiptSearchController = TextEditingController();
-  String _productSortBy = 'QTY'; // 'QTY', 'REVENUE', 'NAME'
+    String _productSortBy = 'QTY'; // 'QTY', 'REVENUE', 'NAME'
   String _receiptStatusFilter = 'ALL'; // 'ALL', 'VALID', 'INVALID'
+  bool _onlyCompanyProductsFilter = true; // Strict company products filtering
+
+  // AI Product Discovery State
+  bool _isScanningAi = false;
+  List<DiscoveredProductItem> _discoveredAiProducts = [];
+  bool _hasDiscoveredNewAiProducts = false;
+
+  Future<void> _scanForNewAiProducts(
+    List<QueryDocumentSnapshot> transactions,
+    String companySlug,
+    String companyName,
+  ) async {
+    if (_isScanningAi || transactions.isEmpty || companySlug.isEmpty) return;
+    setState(() => _isScanningAi = true);
+
+    try {
+      final discoveryService = ref.read(aiProductDiscoveryServiceProvider);
+      final discovered = await discoveryService.discoverProductsFromTransactions(
+        companySlug: companySlug,
+        companyName: companyName,
+        transactions: transactions,
+      );
+
+      if (mounted) {
+        setState(() {
+          _isScanningAi = false;
+          _discoveredAiProducts = discovered;
+          _hasDiscoveredNewAiProducts = discovered.isNotEmpty;
+        });
+
+        if (discovered.isEmpty) {
+          final strings = AppStrings.of(ref);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(strings.noNewProductsDiscovered),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        } else {
+          _openAiDiscoveredDialog(companySlug, companyName);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isScanningAi = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('حدث خطأ أثناء فحص الأصناف بالذكاء الاصطناعي: $e'),
+            backgroundColor: Colors.red.shade800,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  void _openAiDiscoveredDialog(String companySlug, String companyName) {
+    if (_discoveredAiProducts.isEmpty) return;
+    AiDiscoveredProductsDialog.show(
+      context: context,
+      companySlug: companySlug,
+      companyName: companyName,
+      discoveredProducts: _discoveredAiProducts,
+      onSavedSuccessfully: () {
+        setState(() {
+          _discoveredAiProducts.clear();
+          _hasDiscoveredNewAiProducts = false;
+        });
+      },
+    );
+  }
+
+  Widget _buildAiDiscoveredBanner(ColorScheme colorScheme, AppStrings strings, bool isAr) {
+    if (!_hasDiscoveredNewAiProducts || _discoveredAiProducts.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final companySlug = widget.lockedCompanySlug ?? _selectedEvent?.companySlug ?? '';
+    final companyName = widget.lockedCompanyName ?? _selectedEvent?.targetCompany ?? companySlug;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.indigo.shade50, Colors.purple.shade50],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.indigo.shade200),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.indigo.shade100,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.auto_awesome_rounded, color: Colors.indigo, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  strings.aiDiscoveredBannerTitle,
+                  style: GoogleFonts.cairo(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: Colors.indigo.shade900,
+                  ),
+                ),
+                Text(
+                  strings.aiDiscoveredBannerSubtitle(_discoveredAiProducts.length, companyName),
+                  style: GoogleFonts.cairo(
+                    fontSize: 11,
+                    color: Colors.indigo.shade800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.icon(
+            onPressed: () => _openAiDiscoveredDialog(companySlug, companyName),
+            icon: const Icon(Icons.check_circle_outline_rounded, size: 16),
+            label: Text(strings.reviewDiscoveredProducts, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12)),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.indigo.shade700,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -242,7 +387,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
     );
   }
 
-  Widget _buildReportsViewContent({
+    Widget _buildReportsViewContent({
     required BuildContext context,
     required ColorScheme colorScheme,
     required AppStrings strings,
@@ -260,200 +405,225 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
     final Map<String, _ProductStat> productStatsMap = {};
     final Map<String, _BranchStat> branchStatsMap = {};
 
+    final String effectiveCompanySlug = widget.lockedCompanySlug?.isNotEmpty == true
+        ? widget.lockedCompanySlug!
+        : (_selectedEvent?.companySlug ?? '');
+    final String effectiveCompanyName = widget.lockedCompanyName?.isNotEmpty == true
+        ? widget.lockedCompanyName!
+        : (_selectedEvent?.targetCompany ?? effectiveCompanySlug);
+
+    final bool isLockedToCompany = widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty;
+    final bool effectiveFilterCompanyOnly = isLockedToCompany || _onlyCompanyProductsFilter;
+
     for (final doc in filteredTransactions) {
-              final data = doc.data() as Map<String, dynamic>;
-              final bool isValid = data['isValid'] == true ||
-                  (data['is_valid'] == true) ||
-                  ((data['unfulfilled_conditions'] as List?)?.isEmpty ?? true);
+      final data = doc.data() as Map<String, dynamic>;
+      final bool isValid = data['isValid'] == true ||
+          (data['is_valid'] == true) ||
+          ((data['unfulfilled_conditions'] as List?)?.isEmpty ?? true);
 
-              if (isValid) {
-                acceptedInvoices++;
-              } else {
-                rejectedInvoices++;
-              }
+      if (isValid) {
+        acceptedInvoices++;
+      } else {
+        rejectedInvoices++;
+      }
 
-              final spendVal = (data['target_company_total'] ?? data['total_value'] as num?)?.toDouble() ?? 0.0;
-              totalSalesVolume += spendVal;
+      final spendVal = (data['target_company_total'] ?? data['total_value'] as num?)?.toDouble() ?? 0.0;
+      totalSalesVolume += spendVal;
 
-              // Smart Branch aggregation with canonical matching & deduplication
-              final rawBranch = (data['branch_detected'] ?? data['branchName'] ?? data['store_chain_detected'] ?? '').toString().trim();
-              final allKnownBranches = _selectedEvent != null
-                  ? _selectedEvent!.branchNames
-                  : scopedEvents.expand((e) => e.branchNames).toSet().toList();
-              final effectiveBranch = _normalizeBranchName(rawBranch, allKnownBranches, isAr);
-              if (!branchStatsMap.containsKey(effectiveBranch)) {
-                branchStatsMap[effectiveBranch] = _BranchStat(branchName: effectiveBranch);
-              }
-              branchStatsMap[effectiveBranch]!.receiptCount++;
-              branchStatsMap[effectiveBranch]!.totalRevenue += spendVal;
+      // Smart Branch aggregation with canonical matching & deduplication
+      final rawBranch = (data['branch_detected'] ?? data['branchName'] ?? data['store_chain_detected'] ?? '').toString().trim();
+      final allKnownBranches = _selectedEvent != null
+          ? _selectedEvent!.branchNames
+          : scopedEvents.expand((e) => e.branchNames).toSet().toList();
+      final effectiveBranch = _normalizeBranchName(rawBranch, allKnownBranches, isAr);
+      if (!branchStatsMap.containsKey(effectiveBranch)) {
+        branchStatsMap[effectiveBranch] = _BranchStat(branchName: effectiveBranch);
+      }
+      branchStatsMap[effectiveBranch]!.receiptCount++;
+      branchStatsMap[effectiveBranch]!.totalRevenue += spendVal;
 
-              // Product aggregation
-              final rawProducts = data['extracted_products'];
-              if (rawProducts is List) {
-                for (final p in rawProducts) {
-                  if (p is Map) {
-                    final name = p['name']?.toString().trim() ?? (isAr ? 'منتج غير معروف' : 'Unknown Item');
-                    if (name.isEmpty) continue;
+      // Product aggregation
+      final rawProducts = data['extracted_products'];
+      if (rawProducts is List) {
+        for (final p in rawProducts) {
+          if (p is Map) {
+            final name = p['name']?.toString().trim() ?? (isAr ? 'منتج غير معروف' : 'Unknown Item');
+            if (name.isEmpty) continue;
 
-                    final qty = (p['quantity'] as num?)?.toInt() ?? 1;
-                    final price = (p['price'] as num?)?.toDouble() ?? 0.0;
-                    final isTarget = p['isTargetCompany'] == true;
-                    final barcode = p['barcode']?.toString().trim() ?? '';
+            final qty = (p['quantity'] as num?)?.toInt() ?? 1;
+            final price = (p['price'] as num?)?.toDouble() ?? 0.0;
+            final isTarget = p['isTargetCompany'] == true;
+            final barcode = p['barcode']?.toString().trim() ?? '';
 
-                    totalUnitsSold += qty;
-
-                    if (!productStatsMap.containsKey(name)) {
-                      productStatsMap[name] = _ProductStat(
-                        name: name,
-                        totalQty: 0,
-                        totalRevenue: 0.0,
-                        isTargetCompany: isTarget,
-                        barcode: barcode,
-                      );
-                    }
-                    productStatsMap[name]!.totalQty += qty;
-                    productStatsMap[name]!.totalRevenue += (price * qty);
-                    if (barcode.isNotEmpty && productStatsMap[name]!.barcode.isEmpty) {
-                      productStatsMap[name]!.barcode = barcode;
-                    }
-                  }
-                }
-              }
+            // Strict company product filtering when scoped
+            if (effectiveFilterCompanyOnly && !isTarget) {
+              continue;
             }
 
-            final sortedProducts = productStatsMap.values.toList();
-            if (_productSortBy == 'QTY') {
-              sortedProducts.sort((a, b) => b.totalQty.compareTo(a.totalQty));
-            } else if (_productSortBy == 'REVENUE') {
-              sortedProducts.sort((a, b) => b.totalRevenue.compareTo(a.totalRevenue));
-            } else {
-              sortedProducts.sort((a, b) => a.name.compareTo(b.name));
+            totalUnitsSold += qty;
+
+            if (!productStatsMap.containsKey(name)) {
+              productStatsMap[name] = _ProductStat(
+                name: name,
+                totalQty: 0,
+                totalRevenue: 0.0,
+                isTargetCompany: isTarget,
+                barcode: barcode,
+              );
             }
+            productStatsMap[name]!.totalQty += qty;
+            productStatsMap[name]!.totalRevenue += (price * qty);
+            if (barcode.isNotEmpty && productStatsMap[name]!.barcode.isEmpty) {
+              productStatsMap[name]!.barcode = barcode;
+            }
+          }
+        }
+      }
+    }
 
-            final sortedBranches = branchStatsMap.values.toList()
-              ..sort((a, b) => b.totalRevenue.compareTo(a.totalRevenue));
+    final sortedProducts = productStatsMap.values.toList();
+    if (_productSortBy == 'QTY') {
+      sortedProducts.sort((a, b) => b.totalQty.compareTo(a.totalQty));
+    } else if (_productSortBy == 'REVENUE') {
+      sortedProducts.sort((a, b) => b.totalRevenue.compareTo(a.totalRevenue));
+    } else {
+      sortedProducts.sort((a, b) => a.name.compareTo(b.name));
+    }
 
-            final String topProductName = sortedProducts.isNotEmpty
-                ? sortedProducts.first.name
-                : (isAr ? 'لا توجد منتجات مسجلة' : (isHi ? 'कोई उत्पाद नहीं' : 'No items recorded'));
+    final sortedBranches = branchStatsMap.values.toList()
+      ..sort((a, b) => b.totalRevenue.compareTo(a.totalRevenue));
 
-            return LayoutBuilder(
-              builder: (context, constraints) {
-                final isWide = constraints.maxWidth > 900;
-                final isMobile = constraints.maxWidth < 700;
+    final String topProductName = sortedProducts.isNotEmpty
+        ? sortedProducts.first.name
+        : (isAr ? 'لا توجد منتجات مسجلة' : (isHi ? 'कोई उत्पाद नहीं' : 'No items recorded'));
 
-                return SingleChildScrollView(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isMobile ? 12 : 20,
-                    vertical: isMobile ? 12 : 20,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // 1. Unified Header Bar with Event Selector & Export Action
-                      _buildHeaderCard(
-                        context: context,
-                        colorScheme: colorScheme,
-                        strings: strings,
-                        isAr: isAr,
-                        isHi: isHi,
-                        allEvents: scopedEvents,
-                        isMobile: isMobile,
-                        onExport: () => _exportAnalyticsCsv(
-                          context: context,
-                          filteredTransactions: filteredTransactions,
-                          sortedProducts: sortedProducts,
-                          isAr: isAr,
-                          activeCountry: activeCountry,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth > 900;
+        final isMobile = constraints.maxWidth < 700;
 
-                      // 2. Active Campaign Information Card (if a specific campaign is selected)
-                      if (_selectedEvent != null) ...[
-                        _buildEventDetailsBadgeCard(
-                          event: _selectedEvent!,
-                          colorScheme: colorScheme,
-                          activeCountry: activeCountry,
-                          isAr: isAr,
-                          isHi: isHi,
-                          isMobile: isMobile,
-                        ),
-                        const SizedBox(height: 16),
-                      ],
+        return SingleChildScrollView(
+          padding: EdgeInsets.symmetric(
+            horizontal: isMobile ? 12 : 20,
+            vertical: isMobile ? 12 : 20,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 1. Unified Header Bar with Event Selector & Export Action & AI Discovery
+              _buildHeaderCard(
+                context: context,
+                colorScheme: colorScheme,
+                strings: strings,
+                isAr: isAr,
+                isHi: isHi,
+                allEvents: scopedEvents,
+                effectiveSlug: effectiveCompanySlug,
+                effectiveCompanyName: effectiveCompanyName,
+                filteredTransactions: filteredTransactions,
+                isMobile: isMobile,
+                onExport: () => _exportAnalyticsCsv(
+                  context: context,
+                  filteredTransactions: filteredTransactions,
+                  sortedProducts: sortedProducts,
+                  isAr: isAr,
+                  activeCountry: activeCountry,
+                ),
+              ),
+              const SizedBox(height: 14),
 
-                      // 3. M3 High-Impact KPI Metric Cards Grid
-                      _buildKpiMetricsGrid(
-                        context: context,
-                        colorScheme: colorScheme,
-                        strings: strings,
-                        isAr: isAr,
-                        isHi: isHi,
-                        activeCountry: activeCountry,
-                        totalScans: totalScans,
-                        acceptedInvoices: acceptedInvoices,
-                        rejectedInvoices: rejectedInvoices,
-                        totalSalesVolume: totalSalesVolume,
-                        totalUnitsSold: totalUnitsSold,
-                        topProductName: topProductName,
-                        isWide: isWide,
-                      ),
-                      const SizedBox(height: 24),
+              // 1.5 AI Discovered Products Notification Banner (if any detected)
+              _buildAiDiscoveredBanner(colorScheme, strings, isAr),
 
-                      // 4. M3 Navigation / Segmented Button Tabs
-                      _buildTabsSelector(
-                        colorScheme: colorScheme,
-                        strings: strings,
-                        isAr: isAr,
-                        isHi: isHi,
-                        productsCount: sortedProducts.length,
-                        receiptsCount: filteredTransactions.length,
-                        branchesCount: sortedBranches.length,
-                        isMobile: isMobile,
-                      ),
-                      const SizedBox(height: 16),
+              // 2. Active Campaign Information Card (if a specific campaign is selected)
+              if (_selectedEvent != null) ...[
+                _buildEventDetailsBadgeCard(
+                  event: _selectedEvent!,
+                  colorScheme: colorScheme,
+                  activeCountry: activeCountry,
+                  isAr: isAr,
+                  isHi: isHi,
+                  isMobile: isMobile,
+                ),
+                const SizedBox(height: 14),
+              ],
 
-                      // 5. Active Tab View Content
-                      if (_selectedTab == 0)
-                        _buildProductsBreakdownTab(
-                          sortedProducts: sortedProducts,
-                          colorScheme: colorScheme,
-                          strings: strings,
-                          isAr: isAr,
-                          isHi: isHi,
-                          activeCountry: activeCountry,
-                          isMobile: isMobile,
-                        )
-                      else if (_selectedTab == 1)
-                        _buildReceiptsLogTab(
-                          transactions: filteredTransactions,
-                          colorScheme: colorScheme,
-                          strings: strings,
-                          isAr: isAr,
-                          isHi: isHi,
-                          activeCountry: activeCountry,
-                          isMobile: isMobile,
-                        )
-                      else
-                        _buildBranchesBreakdownTab(
-                          sortedBranches: sortedBranches,
-                          totalSales: totalSalesVolume,
-                          colorScheme: colorScheme,
-                          strings: strings,
-                          isAr: isAr,
-                          isHi: isHi,
-                          activeCountry: activeCountry,
-                          isMobile: isMobile,
-                        ),
-                    ],
-                  ),
-                );
-              },
-            );
+              // 3. M3 High-Impact KPI Metric Cards Grid
+              _buildKpiMetricsGrid(
+                context: context,
+                colorScheme: colorScheme,
+                strings: strings,
+                isAr: isAr,
+                isHi: isHi,
+                activeCountry: activeCountry,
+                totalScans: totalScans,
+                acceptedInvoices: acceptedInvoices,
+                rejectedInvoices: rejectedInvoices,
+                totalSalesVolume: totalSalesVolume,
+                totalUnitsSold: totalUnitsSold,
+                topProductName: topProductName,
+                isWide: isWide,
+                effectiveFilterCompanyOnly: effectiveFilterCompanyOnly,
+              ),
+              const SizedBox(height: 20),
+
+              // 4. M3 Navigation / Segmented Button Tabs
+              _buildTabsSelector(
+                colorScheme: colorScheme,
+                strings: strings,
+                isAr: isAr,
+                isHi: isHi,
+                productsCount: sortedProducts.length,
+                receiptsCount: filteredTransactions.length,
+                branchesCount: sortedBranches.length,
+                isMobile: isMobile,
+              ),
+              const SizedBox(height: 14),
+
+              // 5. Active Tab View Content
+              if (_selectedTab == 0)
+                _buildProductsBreakdownTab(
+                  sortedProducts: sortedProducts,
+                  colorScheme: colorScheme,
+                  strings: strings,
+                  isAr: isAr,
+                  isHi: isHi,
+                  activeCountry: activeCountry,
+                  isMobile: isMobile,
+                  isLockedToCompany: isLockedToCompany,
+                )
+              else if (_selectedTab == 1)
+                _buildReceiptsLogTab(
+                  transactions: filteredTransactions,
+                  colorScheme: colorScheme,
+                  strings: strings,
+                  isAr: isAr,
+                  isHi: isHi,
+                  activeCountry: activeCountry,
+                  isMobile: isMobile,
+                )
+              else
+                _buildBranchesBreakdownTab(
+                  sortedBranches: sortedBranches,
+                  totalSales: totalSalesVolume,
+                  colorScheme: colorScheme,
+                  strings: strings,
+                  isAr: isAr,
+                  isHi: isHi,
+                  activeCountry: activeCountry,
+                  isMobile: isMobile,
+                ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
-  // ---------------------------------------------------------------------------
-  // 1. Header Card with Event Selector & Export CSV
+
+
+    // ---------------------------------------------------------------------------
+  // 1. Header Card with Event Selector & Export CSV & AI Discovery
   // ---------------------------------------------------------------------------
   Widget _buildHeaderCard({
     required BuildContext context,
@@ -462,6 +632,9 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
     required bool isAr,
     required bool isHi,
     required List<EventModel> allEvents,
+    required String effectiveSlug,
+    required String effectiveCompanyName,
+    required List<QueryDocumentSnapshot> filteredTransactions,
     required VoidCallback onExport,
     required bool isMobile,
   }) {
@@ -598,6 +771,40 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
       ),
     );
 
+    final aiDiscoveryBtn = effectiveSlug.isNotEmpty
+        ? Tooltip(
+            message: strings.aiProductDiscoverySubtitle,
+            child: FilledButton.tonalIcon(
+              onPressed: _isScanningAi
+                  ? null
+                  : () => _scanForNewAiProducts(
+                        filteredTransactions,
+                        effectiveSlug,
+                        effectiveCompanyName.isNotEmpty ? effectiveCompanyName : effectiveSlug,
+                      ),
+              icon: _isScanningAi
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.auto_awesome_rounded, size: 18, color: Colors.indigo),
+              label: Text(
+                _isScanningAi
+                    ? (isAr ? 'جاري الفحص بالـ AI...' : 'Scanning...')
+                    : strings.discoverFromInvoicesBtn,
+                style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.indigo.shade50,
+                foregroundColor: Colors.indigo.shade800,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+          )
+        : const SizedBox.shrink();
+
     final exportBtn = Tooltip(
       message: isAr ? 'تصدير بيانات المبيعات والفواتير إلى ملف CSV / Excel' : 'Export sales & invoices data to CSV / Excel',
       child: FilledButton.tonalIcon(
@@ -611,38 +818,54 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
       ),
     );
 
-    return Container(
-      padding: EdgeInsets.all(isMobile ? 14 : 18),
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
-      ),
-      child: isMobile
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                titleWidget,
-                const SizedBox(height: 12),
-                dropdownWidget,
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: exportBtn,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 950;
+        return Container(
+          padding: EdgeInsets.all(isMobile ? 14 : 18),
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+          ),
+          child: isNarrow
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    titleWidget,
+                    const SizedBox(height: 12),
+                    dropdownWidget,
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.start,
+                      children: [
+                        if (effectiveSlug.isNotEmpty) aiDiscoveryBtn,
+                        exportBtn,
+                      ],
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(child: titleWidget),
+                    const SizedBox(width: 16),
+                    SizedBox(width: 260, child: dropdownWidget),
+                    if (effectiveSlug.isNotEmpty) ...[
+                      const SizedBox(width: 10),
+                      aiDiscoveryBtn,
+                    ],
+                    const SizedBox(width: 10),
+                    exportBtn,
+                  ],
                 ),
-              ],
-            )
-          : Row(
-              children: [
-                Expanded(child: titleWidget),
-                const SizedBox(width: 16),
-                SizedBox(width: 260, child: dropdownWidget),
-                const SizedBox(width: 10),
-                exportBtn,
-              ],
-            ),
+        );
+      },
     );
   }
+
+
 
   // ---------------------------------------------------------------------------
   // 2. Active Event Details Badge Card
@@ -990,6 +1213,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
     required int totalUnitsSold,
     required String topProductName,
     required bool isWide,
+    required bool effectiveFilterCompanyOnly,
   }) {
     final acceptanceRate = totalScans > 0 ? ((acceptedInvoices / totalScans) * 100).toStringAsFixed(0) : '100';
 
@@ -997,21 +1221,21 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
       builder: (context, constraints) {
         final double width = constraints.maxWidth;
         int crossAxisCount = 4;
-        double childAspectRatio = 1.9;
+        double childAspectRatio = 1.95;
         if (width < 600) {
           crossAxisCount = 1;
           childAspectRatio = 2.4;
         } else if (width < 960) {
           crossAxisCount = 2;
-          childAspectRatio = 2.1;
+          childAspectRatio = 2.05;
         }
 
         return GridView.count(
           crossAxisCount: crossAxisCount,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 14,
-          mainAxisSpacing: 14,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
           childAspectRatio: childAspectRatio,
           children: [
             // Card 1: Accepted Invoices
@@ -1042,12 +1266,16 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
             _buildStatKpiCard(
               title: isAr ? 'عدد المنتجات المباعة' : (isHi ? 'बेचे गए कुल उत्पाद' : 'Total Units Sold'),
               value: '$totalUnitsSold',
-              subtitle: isAr ? 'إجمالي القطع المستخرجة بالفواتير' : 'Total items extracted from receipts',
+              subtitle: isAr
+                  ? (effectiveFilterCompanyOnly ? 'إجمالي قطع منتجات الشركة بالفواتير' : 'إجمالي القطع المستخرجة بالفواتير')
+                  : (isHi ? 'कुल उत्पाद इकाइयाँ' : 'Promotional items sold'),
               icon: Icons.inventory_2_rounded,
               accentColor: Colors.purple.shade700,
               badgeText: isAr ? 'قطع مباعة' : 'Units',
               colorScheme: colorScheme,
-              tooltip: isAr ? 'إجمالي كميات الأصناف المشتراة في كافة الفواتير' : 'Total quantity of items purchased',
+              tooltip: isAr
+                  ? (effectiveFilterCompanyOnly ? 'إجمالي كميات منتجات الشركة المعتمدة في كافة الفواتير' : 'إجمالي كميات الأصناف المشتراة في كافة الفواتير')
+                  : 'Total quantity of items purchased',
             ),
 
             // Card 4: Top Performing Product
@@ -1081,7 +1309,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
       message: tooltip,
       waitDuration: const Duration(milliseconds: 300),
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: colorScheme.surfaceContainerLow,
           borderRadius: BorderRadius.circular(20),
@@ -1095,23 +1323,23 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
                     color: accentColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(icon, color: accentColor, size: 22),
+                  child: Icon(icon, color: accentColor, size: 18),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
                     color: colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     badgeText,
                     style: GoogleFonts.cairo(
-                      fontSize: 11,
+                      fontSize: 10.5,
                       fontWeight: FontWeight.bold,
                       color: accentColor,
                     ),
@@ -1119,43 +1347,54 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
                 ),
               ],
             ),
-            const Spacer(),
-            Text(
-              value,
-              style: GoogleFonts.cairo(
-                fontSize: 19,
-                fontWeight: FontWeight.w900,
-                color: colorScheme.onSurface,
-                letterSpacing: -0.3,
+            const SizedBox(height: 6),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(
+                    value,
+                    style: GoogleFonts.cairo(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: colorScheme.onSurface,
+                      letterSpacing: -0.3,
+                      height: 1.15,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    title,
+                    style: GoogleFonts.cairo(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      color: colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              title,
-              style: GoogleFonts.cairo(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: colorScheme.onSurfaceVariant,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            Text(
-              subtitle,
-              style: GoogleFonts.cairo(
-                fontSize: 10,
-                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
       ),
     );
   }
+
+  
 
   // ---------------------------------------------------------------------------
   // 4. M3 Navigation / Segmented Button Tabs
@@ -1223,6 +1462,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
     required bool isHi,
     required CountryCurrency activeCountry,
     required bool isMobile,
+    bool isLockedToCompany = false,
   }) {
     final query = _productSearchController.text.toLowerCase().trim();
     final displayedList = sortedProducts.where((p) {
@@ -1297,6 +1537,51 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
       ),
     );
 
+    final companyFilterWidget = !isLockedToCompany
+        ? SegmentedButton<bool>(
+            segments: [
+              ButtonSegment<bool>(
+                value: true,
+                label: Text(strings.companyProductsOnlyFilter, style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold)),
+                icon: const Icon(Icons.verified_rounded, size: 14),
+              ),
+              ButtonSegment<bool>(
+                value: false,
+                label: Text(strings.allInvoiceProductsFilter, style: GoogleFonts.cairo(fontSize: 11)),
+                icon: const Icon(Icons.list_alt_rounded, size: 14),
+              ),
+            ],
+            selected: {_onlyCompanyProductsFilter},
+            onSelectionChanged: (set) => setState(() => _onlyCompanyProductsFilter = set.first),
+            style: ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          )
+        : Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.green.shade50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.green.shade200),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.verified_rounded, size: 14, color: Colors.green.shade700),
+                const SizedBox(width: 6),
+                Text(
+                  isAr ? 'عرض مخصص ومحصور لأصناف الشركة فقط' : 'Strictly Company Products Only',
+                  style: GoogleFonts.cairo(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green.shade800,
+                  ),
+                ),
+              ],
+            ),
+          );
+
     final sortSelectorWidget = Row(
       mainAxisSize: isMobile ? MainAxisSize.max : MainAxisSize.min,
       mainAxisAlignment: isMobile ? MainAxisAlignment.spaceBetween : MainAxisAlignment.start,
@@ -1351,6 +1636,8 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
               children: [
                 searchInputWidget,
                 const SizedBox(height: 10),
+                companyFilterWidget,
+                const SizedBox(height: 10),
                 sortSelectorWidget,
               ],
             )
@@ -1362,6 +1649,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 searchInputWidget,
+                companyFilterWidget,
                 sortSelectorWidget,
               ],
             ),
@@ -1378,17 +1666,22 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
               final double progress = maxQty > 0 ? (prod.totalQty / maxQty) : 0.0;
 
               // Color for medal ranks
-              Color rankColor = colorScheme.primary;
-              String medalEmoji = '';
+              Color rankBadgeColor = colorScheme.surfaceContainerHighest;
+              Color rankTextColor = colorScheme.onSurfaceVariant;
+              String rankPrefix = '#${index + 1}';
+
               if (index == 0) {
-                rankColor = const Color(0xFFD4AF37); // Gold
-                medalEmoji = '🥇 ';
+                rankBadgeColor = const Color(0xFFFFF8E1);
+                rankTextColor = const Color(0xFFB78103);
+                rankPrefix = '🥇 #1';
               } else if (index == 1) {
-                rankColor = const Color(0xFF9E9E9E); // Silver
-                medalEmoji = '🥈 ';
+                rankBadgeColor = const Color(0xFFF1F5F9);
+                rankTextColor = const Color(0xFF64748B);
+                rankPrefix = '🥈 #2';
               } else if (index == 2) {
-                rankColor = const Color(0xFFCD7F32); // Bronze
-                medalEmoji = '🥉 ';
+                rankBadgeColor = const Color(0xFFFDF2E9);
+                rankTextColor = const Color(0xFFC05621);
+                rankPrefix = '🥉 #3';
               }
 
               return Container(
@@ -1397,36 +1690,34 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
                   color: colorScheme.surface,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: index < 3 ? rankColor.withValues(alpha: 0.5) : colorScheme.outlineVariant.withValues(alpha: 0.4),
-                    width: index < 3 ? 1.5 : 1,
+                    color: index == 0
+                        ? const Color(0xFFD4AF37).withValues(alpha: 0.5)
+                        : colorScheme.outlineVariant.withValues(alpha: 0.4),
                   ),
                 ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // Top: Rank + Product Name + Target Tag
                     Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Rank Badge
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: rankColor.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: rankColor.withValues(alpha: 0.4)),
+                            color: rankBadgeColor,
+                            borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            '$medalEmoji#${index + 1}',
+                            rankPrefix,
                             style: GoogleFonts.cairo(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w900,
-                              color: rankColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: rankTextColor,
                             ),
                           ),
                         ),
                         const SizedBox(width: 10),
-
-                        // Product Name & Barcode
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1438,14 +1729,15 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
                                   fontWeight: FontWeight.bold,
                                   color: colorScheme.onSurface,
                                 ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
                               if (prod.barcode.isNotEmpty)
                                 Text(
                                   'Barcode: ${prod.barcode}',
-                                  style: const TextStyle(
+                                  style: GoogleFonts.cairo(
                                     fontSize: 10,
-                                    fontFamily: 'monospace',
-                                    color: Colors.grey,
+                                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
                                   ),
                                 ),
                             ],
@@ -1532,6 +1824,8 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
       ),
     );
   }
+
+  
 
   // ---------------------------------------------------------------------------
   // 6. Tab 2: Invoices & Receipts Log

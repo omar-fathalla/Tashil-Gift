@@ -132,6 +132,110 @@ void main() {
       expect(find.byIcon(Icons.file_download_rounded), findsWidgets);
     });
 
+    test('Voucher Intelligence Trilingual Localization strings are complete', () {
+      final stringsAr = AppStrings.fromLocale('ar');
+      expect(stringsAr.voucherIntelligenceTitle, contains('قسائم المشتريات'));
+      expect(stringsAr.totalVouchersAllocated, contains('قسائم المشتريات'));
+      expect(stringsAr.totalVouchersBudget, contains('الميزانية'));
+      expect(stringsAr.claimedVouchersValue, contains('المصروفة'));
+      expect(stringsAr.remainingVouchersValue, contains('المتبقي'));
+      expect(stringsAr.viewBranchVoucherMatrix, contains('الفروع'));
+      expect(stringsAr.voucherMatrixDialogTitle, contains('توزيع'));
+
+      final stringsEn = AppStrings.fromLocale('en');
+      expect(stringsEn.voucherIntelligenceTitle, contains('Voucher Intelligence'));
+      expect(stringsEn.totalVouchersAllocated, contains('Total Vouchers Allocated'));
+      expect(stringsEn.totalVouchersBudget, contains('Total Financial Budget'));
+      expect(stringsEn.claimedVouchersValue, contains('Disbursed Voucher Value'));
+      expect(stringsEn.remainingVouchersValue, contains('Remaining Balance Value'));
+      expect(stringsEn.viewBranchVoucherMatrix, contains('Branch Voucher Matrix'));
+
+      final stringsHi = AppStrings.fromLocale('hi');
+      expect(stringsHi.voucherIntelligenceTitle, isNotEmpty);
+      expect(stringsHi.totalVouchersAllocated, isNotEmpty);
+      expect(stringsHi.totalVouchersBudget, isNotEmpty);
+      expect(stringsHi.claimedVouchersValue, isNotEmpty);
+      expect(stringsHi.remainingVouchersValue, isNotEmpty);
+    });
+
+    test('VoucherDenominationStats and AggregatedVoucherMetrics calculate correctly', () {
+      final denom25 = VoucherDenominationStats(
+        denomination: 25.0,
+        label: '25 ج.م',
+        allocatedCount: 100,
+        claimedCount: 40,
+        remainingCount: 60,
+      );
+
+      final denom50 = VoucherDenominationStats(
+        denomination: 50.0,
+        label: '50 ج.م',
+        allocatedCount: 50,
+        claimedCount: 20,
+        remainingCount: 30,
+      );
+
+      expect(denom25.totalBudget, equals(2500.0));
+      expect(denom25.claimedValue, equals(1000.0));
+      expect(denom25.remainingValue, equals(1500.0));
+
+      final metrics = AggregatedVoucherMetrics(
+        totalUnitsAllocated: 150,
+        totalUnitsClaimed: 60,
+        totalUnitsRemaining: 90,
+        totalBudgetEgp: 5000.0,
+        totalClaimedEgp: 2000.0,
+        totalRemainingEgp: 3000.0,
+        denominations: [denom25, denom50],
+        branchDenominationsMap: {
+          'فرع سموحة': {25.0: denom25, 50.0: denom50},
+        },
+        branchTotalVoucherUnits: {'فرع سموحة': 150},
+        branchTotalVoucherBudget: {'فرع سموحة': 5000.0},
+        branchClaimedVoucherUnits: {'فرع سموحة': 60},
+        branchRemainingVoucherUnits: {'فرع سموحة': 90},
+      );
+
+      expect(metrics.totalUnitsAllocated, equals(150));
+      expect(metrics.totalUnitsClaimed, equals(60));
+      expect(metrics.totalUnitsRemaining, equals(90));
+      expect(metrics.totalBudgetEgp, equals(5000.0));
+      expect(metrics.totalClaimedEgp, equals(2000.0));
+      expect(metrics.totalRemainingEgp, equals(3000.0));
+      expect(metrics.depletionRate, closeTo(0.40, 0.001));
+      expect(metrics.denominations.length, equals(2));
+      expect(metrics.branchTotalVoucherBudget['فرع سموحة'], equals(5000.0));
+    });
+
+    testWidgets('CompanyPrizesStockReportScreen renders 4 Voucher KPI cards and matrix action', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: CompanyPrizesStockReportScreen(
+                lockedCompanySlug: 'unilever',
+                lockedCompanyName: 'يونيليفر مصر',
+                isEmbedded: true,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      // Verify Voucher Section Title and Icons
+      expect(find.byIcon(Icons.confirmation_number_rounded), findsWidgets);
+      expect(find.byIcon(Icons.account_balance_wallet_rounded), findsWidgets);
+      expect(find.byIcon(Icons.shopping_bag_rounded), findsWidgets);
+      expect(find.byIcon(Icons.savings_rounded), findsWidgets);
+      expect(find.byIcon(Icons.table_chart_rounded), findsWidgets);
+    });
+
     testWidgets('Switching view modes between SKU, Branch, and Campaign updates UI smoothly', (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
@@ -169,3 +273,4 @@ void main() {
     });
   });
 }
+

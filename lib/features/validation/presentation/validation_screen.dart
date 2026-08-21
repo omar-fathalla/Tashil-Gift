@@ -186,6 +186,11 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           isAllBranches: activeEvent.isAllBranches,
           receiptDate: result.receiptDate,
           hasTargetProducts: result.extractedProducts.any((p) => p.isTargetCompany),
+          isHandwritten: result.isHandwritten,
+          isThermalPosReceipt: result.isThermalPosReceipt,
+          isTampered: result.isTampered,
+          isScreenCapture: result.isScreenCapture,
+          fraudReasons: result.fraudReasons,
         );
 
         showReceiptValidationReportDialog(
@@ -211,10 +216,11 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         final activeCountry = ref.read(activeCountryProvider);
         final conditions = [
           ValidationConditionItem(
-            title: 'الحد الأدنى لمشتريات ${activeEvent.targetCompany}',
-            description: 'إجمالي منتجات الشركة بالفاتورة (${totalValue.toStringAsFixed(1)} ${activeCountry.currencySymbol}) أقل من الحد الأدنى المطلوب (${activeEvent.minimumSpend.toStringAsFixed(1)} ${activeCountry.currencySymbol}).',
-            icon: Icons.payments_outlined,
+            title: 'الحد الأدنى لقيمة المشتريات',
+            description: 'إجمالي مشتريات منتجات ${activeEvent.targetCompany} في الفاتورة ($totalValue ${activeCountry.currencySymbol}) أقل من الحد الأدنى المطلوب لدخول السحب (${activeEvent.minimumSpend} ${activeCountry.currencySymbol}).',
+            icon: Icons.price_check_rounded,
             isMet: false,
+            value: '$totalValue / ${activeEvent.minimumSpend} ${activeCountry.currencySymbol}',
           ),
         ];
 
@@ -240,21 +246,22 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       // Check for existing receipt to update/upsert
       DocumentSnapshot<Map<String, dynamic>>? existingDoc;
       if (receiptNumber.isNotEmpty) {
-        final existingReceipt = await firestore
+        final existing = await firestore
             .collection('receipts_transactions')
             .where('receipt_number', isEqualTo: receiptNumber)
             .limit(1)
             .get();
 
-        if (existingReceipt.docs.isNotEmpty) {
-          existingDoc = existingReceipt.docs.first;
+        if (existing.docs.isNotEmpty) {
+          existingDoc = existing.docs.first;
         }
       }
 
-      // Upload Image (Resilient with timeout & base64 fallback)
+      // 2. Upload image to Firebase Storage named by Receipt Number
       String imageUrl = '';
       final cleanReceiptNumber = (receiptNumber.isNotEmpty ? receiptNumber : "INV_${DateTime.now().millisecondsSinceEpoch}")
           .replaceAll(RegExp(r'[/\\?%*:|"<>]'), '_');
+      
       final storagePath = 'receipts/${activeEvent.companySlug}/$cleanReceiptNumber.jpg';
 
       try {
@@ -264,9 +271,6 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           contentType: 'image/jpeg',
           customMetadata: {
             'receiptNumber': receiptNumber,
-            'receiptDate': result.receiptDate,
-            'storeChain': result.storeChainDetected.isNotEmpty ? result.storeChainDetected : activeEvent.retailChainName,
-            'branch': result.branchDetected,
             'companySlug': activeEvent.companySlug,
             'targetCompany': activeEvent.targetCompany,
             'totalValue': totalValue.toString(),
@@ -302,6 +306,12 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         'store_chain_detected': result.storeChainDetected,
         'branch_detected': result.branchDetected,
         'is_branch_matched': result.isBranchMatched,
+        'is_handwritten': result.isHandwritten,
+        'is_thermal_pos_receipt': result.isThermalPosReceipt,
+        'is_tampered': result.isTampered,
+        'is_screen_capture': result.isScreenCapture,
+        'fraud_risk_score': result.fraudRiskScore,
+        'fraud_reasons': result.fraudReasons,
         'retail_chain_name': activeEvent.retailChainName,
         if (imageUrl.isNotEmpty) 'image_url': imageUrl,
         if (imageUrl.isNotEmpty) 'storage_path': storagePath,

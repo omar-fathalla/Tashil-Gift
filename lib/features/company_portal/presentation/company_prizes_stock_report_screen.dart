@@ -18,6 +18,67 @@ import '../../../core/widgets/m3_button_groups.dart';
 import '../../admin/domain/event_model.dart';
 import '../../admin/domain/company_gift_model.dart';
 
+/// Represents statistics for a specific voucher denomination (e.g. 25 EGP, 50 EGP, 100 EGP)
+class VoucherDenominationStats {
+  final double denomination; // e.g. 25.0, 50.0
+  final String label; // e.g. "25 ج.م"
+  int allocatedCount;
+  int claimedCount;
+  int remainingCount;
+
+  VoucherDenominationStats({
+    required this.denomination,
+    required this.label,
+    this.allocatedCount = 0,
+    this.claimedCount = 0,
+    this.remainingCount = 0,
+  });
+
+  double get totalBudget => allocatedCount * denomination;
+  double get claimedValue => claimedCount * denomination;
+  double get remainingValue => remainingCount * denomination;
+  double get depletionRate => allocatedCount > 0
+      ? (claimedCount / allocatedCount).clamp(0.0, 1.0)
+      : 0.0;
+}
+
+/// Aggregated Voucher Metrics across active filters (all branches or single branch, all events or single event)
+class AggregatedVoucherMetrics {
+  final int totalUnitsAllocated;
+  final int totalUnitsClaimed;
+  final int totalUnitsRemaining;
+  final double totalBudgetEgp;
+  final double totalClaimedEgp;
+  final double totalRemainingEgp;
+  final List<VoucherDenominationStats> denominations;
+  final Map<String, Map<double, VoucherDenominationStats>> branchDenominationsMap; // branchName -> {denom -> stats}
+  final Map<String, int> branchTotalVoucherUnits; // branchName -> total allocated vouchers
+  final Map<String, double> branchTotalVoucherBudget; // branchName -> total budget in EGP
+  final Map<String, int> branchClaimedVoucherUnits; // branchName -> total claimed vouchers
+  final Map<String, int> branchRemainingVoucherUnits; // branchName -> total remaining vouchers
+
+  AggregatedVoucherMetrics({
+    required this.totalUnitsAllocated,
+    required this.totalUnitsClaimed,
+    required this.totalUnitsRemaining,
+    required this.totalBudgetEgp,
+    required this.totalClaimedEgp,
+    required this.totalRemainingEgp,
+    required this.denominations,
+    required this.branchDenominationsMap,
+    required this.branchTotalVoucherUnits,
+    required this.branchTotalVoucherBudget,
+    required this.branchClaimedVoucherUnits,
+    required this.branchRemainingVoucherUnits,
+  });
+
+  double get depletionRate => totalBudgetEgp > 0
+      ? (totalClaimedEgp / totalBudgetEgp).clamp(0.0, 1.0)
+      : (totalUnitsAllocated > 0
+          ? (totalUnitsClaimed / totalUnitsAllocated).clamp(0.0, 1.0)
+          : 0.0);
+}
+
 /// Data structure representing aggregated prize stock metrics across events & branches
 class AggregatedGiftStock {
   final String giftId;
@@ -29,6 +90,8 @@ class AggregatedGiftStock {
   final Map<String, int> branchRemainingMap; // branchName -> remaining
   final Map<String, int> branchAllocatedMap; // branchName -> allocated
   final List<String> eventNames;
+  final String giftType;
+  final double unitValue;
 
   AggregatedGiftStock({
     required this.giftId,
@@ -40,7 +103,23 @@ class AggregatedGiftStock {
     required this.branchRemainingMap,
     required this.branchAllocatedMap,
     required this.eventNames,
+    this.giftType = 'product',
+    this.unitValue = 0.0,
   });
+
+  bool get isVoucher =>
+      giftType == 'voucher' ||
+      unitValue > 0 ||
+      giftName.contains('فواتشر') ||
+      giftName.contains('فوتشر') ||
+      giftName.contains('قسيمة') ||
+      giftName.contains('قسائم') ||
+      giftName.contains('كارت مشتريات') ||
+      giftName.toLowerCase().contains('voucher');
+
+  double get totalMonetaryBudget => isVoucher ? (totalAllocated * unitValue) : 0.0;
+  double get claimedMonetaryValue => isVoucher ? (totalClaimed * unitValue) : 0.0;
+  double get remainingMonetaryValue => isVoucher ? (totalRemaining * unitValue) : 0.0;
 
   double get depletionRate => totalAllocated > 0
       ? (totalClaimed / totalAllocated).clamp(0.0, 1.0)
@@ -2458,6 +2537,174 @@ class _CompanyPrizesStockReportScreenState
         .trim();
   }
 
+  static bool _isVoucherText(String text) {
+    final clean = text.toLowerCase();
+    return clean.contains('فواتشر') ||
+        clean.contains('فوتشر') ||
+        clean.contains('قسيمة') ||
+        clean.contains('قسائم') ||
+        clean.contains('كارت مشتريات') ||
+        clean.contains('كوبون') ||
+        clean.contains('voucher') ||
+        clean.contains('coupon');
+  }
+
+  static double _extractDenomination(String name, double rawUnitValue) {
+    if (rawUnitValue > 0) return rawUnitValue;
+    final normalized = name.toEnglishDigits();
+    final match = RegExp(r'(\d+(?:\.\d+)?)').firstMatch(normalized);
+    if (match != null) {
+      final parsed = double.tryParse(match.group(1)!);
+      if (parsed != null && parsed > 0 && parsed <= 50000) {
+        return parsed;
+      }
+    }
+    return 0.0;
+  }
+
+  static String _formatMoney(num amount, {bool isAr = true}) {
+    final isWhole = amount == amount.roundToDouble();
+    final formatted = isWhole
+        ? amount.toInt().toString().replaceAllMapped(
+              RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')
+        : amount.toStringAsFixed(2).replaceAllMapped(
+              RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
+    return isAr ? '$formatted ج.م' : 'EGP $formatted';
+  }
+
+  static String _formatCount(int count) {
+    return count.toString().replaceAllMapped(
+        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
+  }
+
+  static AggregatedVoucherMetrics _calculateVoucherMetrics({
+    required List<EventModel> events,
+    required List<EventModel> filteredEvents,
+    required List<CompanyGiftModel> masterGifts,
+    required String? selectedBranch,
+    required String? selectedEventId,
+    required int Function(String giftName, int rawClaimed, [String? branchName]) getReconciledClaimed,
+    required bool isAr,
+  }) {
+    final Map<double, VoucherDenominationStats> denominationMap = {};
+    final Map<String, Map<double, VoucherDenominationStats>> branchDenominationsMap = {};
+    final Map<String, int> branchTotalVoucherUnits = {};
+    final Map<String, double> branchTotalVoucherBudget = {};
+    final Map<String, int> branchClaimedVoucherUnits = {};
+    final Map<String, int> branchRemainingVoucherUnits = {};
+
+    int totalUnitsAllocated = 0;
+    int totalUnitsClaimed = 0;
+    int totalUnitsRemaining = 0;
+    double totalBudgetEgp = 0.0;
+    double totalClaimedEgp = 0.0;
+    double totalRemainingEgp = 0.0;
+
+    for (final event in filteredEvents) {
+      for (final prize in event.allocatedPrizes) {
+        CompanyGiftModel? matchingMasterGift;
+        if (masterGifts.isNotEmpty) {
+          matchingMasterGift = masterGifts.where((mg) {
+            final mgName = _normalizePrizeKey(mg.giftName);
+            final pName = _normalizePrizeKey(prize.name);
+            return mg.id == prize.giftId ||
+                mgName == pName ||
+                (mgName.isNotEmpty && pName.isNotEmpty && (mgName.contains(pName) || pName.contains(mgName)));
+          }).firstOrNull;
+
+          if (matchingMasterGift == null) {
+            continue;
+          }
+        }
+
+        final isVoucher = matchingMasterGift?.isVoucher == true ||
+            prize.isVoucher ||
+            _isVoucherText(prize.name) ||
+            (matchingMasterGift != null && _isVoucherText(matchingMasterGift.giftName));
+
+        if (!isVoucher) continue;
+
+        final denom = _extractDenomination(
+          matchingMasterGift?.giftName ?? prize.name,
+          matchingMasterGift?.unitValue ?? prize.unitValue,
+        );
+
+        final branchKey = prize.branchName.isNotEmpty
+            ? prize.branchName.trim()
+            : (prize.branchId.isNotEmpty ? prize.branchId : (isAr ? 'الفرع الرئيسي' : 'Main Branch'));
+
+        final rawClaimed = (prize.allocatedQuantity - prize.remainingQuantity).clamp(0, prize.allocatedQuantity);
+        final branchClaimed = prize.allocatedQuantity > 0
+            ? getReconciledClaimed(prize.name, rawClaimed, branchKey).clamp(0, prize.allocatedQuantity)
+            : 0;
+        final branchRemaining = (prize.allocatedQuantity - branchClaimed).clamp(0, prize.allocatedQuantity);
+        final branchAllocated = prize.allocatedQuantity;
+
+        if (branchKey.isNotEmpty) {
+          branchTotalVoucherUnits[branchKey] = (branchTotalVoucherUnits[branchKey] ?? 0) + branchAllocated;
+          branchTotalVoucherBudget[branchKey] = (branchTotalVoucherBudget[branchKey] ?? 0.0) + (branchAllocated * denom);
+          branchClaimedVoucherUnits[branchKey] = (branchClaimedVoucherUnits[branchKey] ?? 0) + branchClaimed;
+          branchRemainingVoucherUnits[branchKey] = (branchRemainingVoucherUnits[branchKey] ?? 0) + branchRemaining;
+
+          branchDenominationsMap.putIfAbsent(branchKey, () => {});
+          final branchDenomStats = branchDenominationsMap[branchKey]!.putIfAbsent(
+            denom,
+            () => VoucherDenominationStats(
+              denomination: denom,
+              label: denom == denom.roundToDouble() ? '${denom.toInt()} ج.م' : '$denom ج.م',
+            ),
+          );
+          branchDenomStats.allocatedCount += branchAllocated;
+          branchDenomStats.claimedCount += branchClaimed;
+          branchDenomStats.remainingCount += branchRemaining;
+        }
+
+        if (selectedBranch != null && selectedBranch.isNotEmpty) {
+          if (prize.branchName.trim() != selectedBranch && prize.branchId.trim() != selectedBranch) {
+            continue;
+          }
+        }
+
+        totalUnitsAllocated += branchAllocated;
+        totalUnitsClaimed += branchClaimed;
+        totalUnitsRemaining += branchRemaining;
+
+        totalBudgetEgp += (branchAllocated * denom);
+        totalClaimedEgp += (branchClaimed * denom);
+        totalRemainingEgp += (branchRemaining * denom);
+
+        final denomStats = denominationMap.putIfAbsent(
+          denom,
+          () => VoucherDenominationStats(
+            denomination: denom,
+            label: denom == denom.roundToDouble() ? '${denom.toInt()} ج.م' : '$denom ج.م',
+          ),
+        );
+        denomStats.allocatedCount += branchAllocated;
+        denomStats.claimedCount += branchClaimed;
+        denomStats.remainingCount += branchRemaining;
+      }
+    }
+
+    final sortedDenominations = denominationMap.values.toList()
+      ..sort((a, b) => a.denomination.compareTo(b.denomination));
+
+    return AggregatedVoucherMetrics(
+      totalUnitsAllocated: totalUnitsAllocated,
+      totalUnitsClaimed: totalUnitsClaimed,
+      totalUnitsRemaining: totalUnitsRemaining,
+      totalBudgetEgp: totalBudgetEgp,
+      totalClaimedEgp: totalClaimedEgp,
+      totalRemainingEgp: totalRemainingEgp,
+      denominations: sortedDenominations,
+      branchDenominationsMap: branchDenominationsMap,
+      branchTotalVoucherUnits: branchTotalVoucherUnits,
+      branchTotalVoucherBudget: branchTotalVoucherBudget,
+      branchClaimedVoucherUnits: branchClaimedVoucherUnits,
+      branchRemainingVoucherUnits: branchRemainingVoucherUnits,
+    );
+  }
+
   Widget _buildAnalyzedView({
     required BuildContext context,
     required ColorScheme colorScheme,
@@ -2583,6 +2830,8 @@ class _CompanyPrizesStockReportScreenState
         branchRemainingMap: {},
         branchAllocatedMap: {},
         eventNames: [],
+        giftType: mg.giftType,
+        unitValue: mg.unitValue,
       );
     }
 
@@ -2614,6 +2863,9 @@ class _CompanyPrizesStockReportScreenState
 
         final canonicalGiftName = matchingMasterGift?.giftName ?? prize.name.trim();
         final canonicalGiftId = matchingMasterGift?.id ?? (prize.giftId.isNotEmpty ? prize.giftId : canonicalGiftName);
+        final canonicalGiftType = matchingMasterGift?.giftType ?? prize.giftType;
+        final canonicalUnitValue = matchingMasterGift?.unitValue ??
+            (prize.unitValue > 0 ? prize.unitValue : _extractDenomination(prize.name, 0.0));
         final key = canonicalGiftName.toLowerCase();
         final branchKey = prize.branchName.isNotEmpty
             ? prize.branchName.trim()
@@ -2644,6 +2896,8 @@ class _CompanyPrizesStockReportScreenState
             branchRemainingMap: branchRem,
             branchAllocatedMap: branchAlloc,
             eventNames: prize.allocatedQuantity > 0 ? [event.eventName] : [],
+            giftType: canonicalGiftType,
+            unitValue: canonicalUnitValue,
           );
         } else {
           final newAllocated = existing.totalAllocated + prize.allocatedQuantity;
@@ -2673,6 +2927,8 @@ class _CompanyPrizesStockReportScreenState
             branchRemainingMap: existing.branchRemainingMap,
             branchAllocatedMap: existing.branchAllocatedMap,
             eventNames: existing.eventNames,
+            giftType: existing.giftType,
+            unitValue: existing.unitValue,
           );
         }
       }
@@ -2720,6 +2976,17 @@ class _CompanyPrizesStockReportScreenState
         ? distinctBranches.length
         : (companyEvents.isNotEmpty ? companyEvents.length : 1);
 
+    // Calculate Voucher Intelligence Metrics (Scoped to active branch & event filters)
+    final voucherMetrics = _calculateVoucherMetrics(
+      events: companyEvents,
+      filteredEvents: filteredEvents,
+      masterGifts: masterGifts,
+      selectedBranch: _selectedBranch,
+      selectedEventId: _selectedEventId,
+      getReconciledClaimed: getReconciledClaimed,
+      isAr: isAr,
+    );
+
     return Directionality(
       textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
       child: SingleChildScrollView(
@@ -2733,7 +3000,30 @@ class _CompanyPrizesStockReportScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 1. Hero KPI Stat Cards
+                // 1. Voucher Intelligence Section (4 Dedicated Voucher KPI Cards + Denominations + Matrix Dialog)
+                _buildVoucherIntelligenceSection(
+                  context: context,
+                  colorScheme: colorScheme,
+                  strings: strings,
+                  isAr: isAr,
+                  isHi: isHi,
+                  isMobile: isMobile,
+                  voucherMetrics: voucherMetrics,
+                  distinctBranches: distinctBranches.toList(),
+                ),
+
+                const SizedBox(height: 20),
+
+                // 2. General Gifts & Physical Inventory Section Header
+                _buildGeneralStockHeader(
+                  colorScheme: colorScheme,
+                  strings: strings,
+                  isAr: isAr,
+                ),
+
+                const SizedBox(height: 10),
+
+                // 3. Hero KPI Stat Cards for General Stock
                 _buildHeroKpiGrid(
                   colorScheme: colorScheme,
                   strings: strings,
@@ -2834,6 +3124,642 @@ class _CompanyPrizesStockReportScreenState
           ),
         ),
       ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Voucher Intelligence Section (منظومة قسائم المشتريات والفواتشر والميزانيات)
+  // ---------------------------------------------------------------------------
+  Widget _buildVoucherIntelligenceSection({
+    required BuildContext context,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+    required bool isHi,
+    required bool isMobile,
+    required AggregatedVoucherMetrics voucherMetrics,
+    required List<String> distinctBranches,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: const Color(0xFFD97706).withValues(alpha: 0.35),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFD97706).withValues(alpha: 0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: EdgeInsets.all(isMobile ? 12 : 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Section Header: Title + Scope Badge + Matrix Button
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD97706).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.confirmation_number_rounded,
+                  color: Color(0xFFD97706),
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          strings.voucherIntelligenceTitle,
+                          style: GoogleFonts.cairo(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _selectedBranch != null
+                                ? colorScheme.primaryContainer
+                                : const Color(0xFFD97706).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: _selectedBranch != null
+                                  ? colorScheme.primary
+                                  : const Color(0xFFD97706).withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _selectedBranch != null ? Icons.place_rounded : Icons.hub_rounded,
+                                size: 12,
+                                color: _selectedBranch != null ? colorScheme.primary : const Color(0xFFD97706),
+                              ),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  _selectedBranch != null
+                                      ? '${strings.scopedToBranchNotice} $_selectedBranch'
+                                      : '${strings.allBranchesScopeNotice} (${distinctBranches.length} ${isAr ? 'فرع' : 'branches'})',
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: _selectedBranch != null
+                                        ? colorScheme.onPrimaryContainer
+                                        : const Color(0xFFB45309),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      strings.voucherIntelligenceSubtitle,
+                      style: GoogleFonts.cairo(
+                        fontSize: 11,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.tonalIcon(
+                onPressed: () => _showBranchVoucherMatrixDialog(
+                  context: context,
+                  colorScheme: colorScheme,
+                  strings: strings,
+                  isAr: isAr,
+                  isHi: isHi,
+                  isMobile: isMobile,
+                  voucherMetrics: voucherMetrics,
+                  distinctBranches: distinctBranches,
+                ),
+                icon: const Icon(Icons.table_chart_rounded, size: 16),
+                label: isMobile
+                    ? const SizedBox.shrink()
+                    : Text(
+                        strings.viewBranchVoucherMatrix,
+                        style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFD97706).withValues(alpha: 0.12),
+                  foregroundColor: const Color(0xFFB45309),
+                  padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 14, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          // The 4 Dedicated Voucher KPI Cards
+          _buildVoucherKpiGrid(
+            colorScheme: colorScheme,
+            strings: strings,
+            isAr: isAr,
+            isHi: isHi,
+            isMobile: isMobile,
+            voucherMetrics: voucherMetrics,
+          ),
+
+          // Denomination Quick Breakdown Chips (if any denominations present)
+          if (voucherMetrics.denominations.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _buildDenominationQuickBar(
+              colorScheme: colorScheme,
+              strings: strings,
+              isAr: isAr,
+              voucherMetrics: voucherMetrics,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVoucherKpiGrid({
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+    required bool isHi,
+    required bool isMobile,
+    required AggregatedVoucherMetrics voucherMetrics,
+  }) {
+    final denomsText = voucherMetrics.denominations.isEmpty
+        ? (isAr ? 'لا توجد فئات' : 'No denominations')
+        : voucherMetrics.denominations
+            .map((d) => '${d.label} (${_formatCount(d.allocatedCount)})')
+            .join(' • ');
+
+    final cards = [
+      _buildStatCard(
+        colorScheme: colorScheme,
+        icon: Icons.confirmation_number_rounded,
+        iconColor: const Color(0xFFD97706),
+        title: strings.totalVouchersAllocated,
+        value: _formatCount(voucherMetrics.totalUnitsAllocated),
+        badgeText: voucherMetrics.denominations.length > 1
+            ? '${voucherMetrics.denominations.length} ${strings.activeDenominationsCount}'
+            : (voucherMetrics.denominations.isNotEmpty
+                ? 'فئة ${voucherMetrics.denominations.first.label}'
+                : (isAr ? 'قسائم مشتريات' : 'Vouchers')),
+        badgeColor: const Color(0xFFD97706).withValues(alpha: 0.12),
+        badgeTextColor: const Color(0xFFB45309),
+        subtitle: denomsText,
+      ),
+      _buildStatCard(
+        colorScheme: colorScheme,
+        icon: Icons.account_balance_wallet_rounded,
+        iconColor: const Color(0xFF006C50),
+        title: strings.totalVouchersBudget,
+        value: _formatMoney(voucherMetrics.totalBudgetEgp, isAr: isAr),
+        badgeText: isAr ? 'الميزانية المرصودة' : 'Allocated Budget',
+        badgeColor: const Color(0xFF006C50).withValues(alpha: 0.12),
+        badgeTextColor: const Color(0xFF006C50),
+        subtitle: isAr ? 'التكلفة الإجمالية لكافة القسائم المعتمدة' : 'Total voucher financial backing',
+      ),
+      _buildStatCard(
+        colorScheme: colorScheme,
+        icon: Icons.shopping_bag_rounded,
+        iconColor: const Color(0xFF00639B),
+        title: strings.claimedVouchersValue,
+        value: _formatMoney(voucherMetrics.totalClaimedEgp, isAr: isAr),
+        badgeText: '${(voucherMetrics.depletionRate * 100).toStringAsFixed(0)}% ${strings.depletionRateLabel}',
+        badgeColor: const Color(0xFF00639B).withValues(alpha: 0.12),
+        badgeTextColor: const Color(0xFF00639B),
+        subtitle: '${_formatCount(voucherMetrics.totalUnitsClaimed)} ${isAr ? 'قسيمة تم تسليمها للفائزين' : 'claimed vouchers'}',
+      ),
+      _buildStatCard(
+        colorScheme: colorScheme,
+        icon: Icons.savings_rounded,
+        iconColor: voucherMetrics.totalUnitsRemaining <= 0
+            ? const Color(0xFFB3261E)
+            : (voucherMetrics.totalUnitsRemaining < 50 ? const Color(0xFFD97706) : const Color(0xFF006874)),
+        title: strings.remainingVouchersValue,
+        value: _formatMoney(voucherMetrics.totalRemainingEgp, isAr: isAr),
+        badgeText: voucherMetrics.totalUnitsRemaining <= 0
+            ? strings.stockDepletedBadge
+            : (voucherMetrics.totalUnitsRemaining < 50 ? strings.stockLowBadge : strings.stockHealthyBadge),
+        badgeColor: (voucherMetrics.totalUnitsRemaining <= 0
+                ? const Color(0xFFB3261E)
+                : (voucherMetrics.totalUnitsRemaining < 50 ? const Color(0xFFD97706) : const Color(0xFF006874)))
+            .withValues(alpha: 0.12),
+        badgeTextColor: voucherMetrics.totalUnitsRemaining <= 0
+            ? const Color(0xFFB3261E)
+            : (voucherMetrics.totalUnitsRemaining < 50 ? const Color(0xFFD97706) : const Color(0xFF006874)),
+        subtitle: '${_formatCount(voucherMetrics.totalUnitsRemaining)} ${isAr ? 'قسيمة جاهزة ومتاحة للصرف' : 'ready for redemption'}',
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 640) {
+          return Column(
+            children: cards
+                .map((c) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: c,
+                    ))
+                .toList(),
+          );
+        } else if (constraints.maxWidth < 1000) {
+          return Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: cards
+                .map((c) => SizedBox(
+                      width: (constraints.maxWidth - 12) / 2,
+                      child: c,
+                    ))
+                .toList(),
+          );
+        } else {
+          return Row(
+            children: cards
+                .map((c) => Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: c,
+                      ),
+                    ))
+                .toList(),
+          );
+        }
+      },
+    );
+  }
+
+  Widget _buildDenominationQuickBar({
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+    required AggregatedVoucherMetrics voucherMetrics,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+        ),
+      ),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.style_rounded, size: 15, color: Color(0xFFD97706)),
+              const SizedBox(width: 6),
+              Text(
+                '${strings.voucherDenominationsLabel}:',
+                style: GoogleFonts.cairo(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+          for (final denom in voucherMetrics.denominations)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFD97706).withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: const Color(0xFFD97706).withValues(alpha: 0.3),
+                ),
+              ),
+              child: Wrap(
+                spacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    '🏷️ ${denom.label}:',
+                    style: GoogleFonts.cairo(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      color: const Color(0xFFB45309),
+                    ),
+                  ),
+                  Text(
+                    '${_formatCount(denom.allocatedCount)} ${isAr ? 'قسيمة' : 'cards'} (${_formatMoney(denom.totalBudget, isAr: isAr)})',
+                    style: GoogleFonts.cairo(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                  Text(
+                    '• ${isAr ? 'صرف:' : 'claimed:'} ${_formatCount(denom.claimedCount)}',
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      color: const Color(0xFF00639B),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    '• ${isAr ? 'متبقي:' : 'left:'} ${_formatCount(denom.remainingCount)}',
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      color: denom.remainingCount <= 0
+                          ? const Color(0xFFB3261E)
+                          : const Color(0xFF006C50),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showBranchVoucherMatrixDialog({
+    required BuildContext context,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+    required bool isHi,
+    required bool isMobile,
+    required AggregatedVoucherMetrics voucherMetrics,
+    required List<String> distinctBranches,
+  }) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        final sortedBranches = distinctBranches.where((b) => b.trim().isNotEmpty).toList()..sort();
+        final denoms = voucherMetrics.denominations;
+
+        return AlertDialog(
+          backgroundColor: colorScheme.surfaceContainerHigh,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD97706).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.table_chart_rounded,
+                  color: Color(0xFFD97706),
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      strings.voucherMatrixDialogTitle,
+                      style: GoogleFonts.cairo(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    Text(
+                      strings.voucherMatrixDialogSubtitle,
+                      style: GoogleFonts.cairo(
+                        fontSize: 11,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close_rounded),
+                onPressed: () => Navigator.of(dialogContext).pop(),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 1000,
+            child: SingleChildScrollView(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  columnSpacing: isMobile ? 12 : 20,
+                  headingRowColor: WidgetStateProperty.all(colorScheme.surfaceContainerHighest.withValues(alpha: 0.6)),
+                  headingTextStyle: GoogleFonts.cairo(fontWeight: FontWeight.w900, fontSize: 12, color: colorScheme.onSurface),
+                  dataTextStyle: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurface),
+                  columns: [
+                    DataColumn(label: Text(isAr ? 'الفرع / المنفذ' : 'Branch Outlet')),
+                    for (final d in denoms)
+                      DataColumn(label: Text('فئة ${d.label}\n(مخصص / صرف / متبقي)')),
+                    DataColumn(label: Text(isAr ? 'إجمالي الفواتشر' : 'Total Vouchers')),
+                    DataColumn(label: Text(isAr ? 'ميزانية الفرع' : 'Branch Budget')),
+                    DataColumn(label: Text(isAr ? 'المنصرف' : 'Disbursed')),
+                    DataColumn(label: Text(isAr ? 'المتبقي' : 'Remaining')),
+                    DataColumn(label: Text(isAr ? 'إجراء' : 'Action')),
+                  ],
+                  rows: [
+                    for (final bName in sortedBranches)
+                      () {
+                        final bDenoms = voucherMetrics.branchDenominationsMap[bName] ?? {};
+                        final totalUnits = voucherMetrics.branchTotalVoucherUnits[bName] ?? 0;
+                        final totalBudget = voucherMetrics.branchTotalVoucherBudget[bName] ?? 0.0;
+                        final totalRemaining = voucherMetrics.branchRemainingVoucherUnits[bName] ?? 0;
+
+                        double bClaimedMoney = 0.0;
+                        double bRemainingMoney = 0.0;
+                        for (final entry in bDenoms.entries) {
+                          bClaimedMoney += (entry.value.claimedCount * entry.key);
+                          bRemainingMoney += (entry.value.remainingCount * entry.key);
+                        }
+
+                        final isCurrentSelected = _selectedBranch == bName;
+
+                        return DataRow(
+                          color: isCurrentSelected
+                              ? WidgetStateProperty.all(colorScheme.primaryContainer.withValues(alpha: 0.3))
+                              : null,
+                          cells: [
+                            // Branch Name
+                            DataCell(
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.storefront_rounded, size: 16, color: colorScheme.primary),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    bName,
+                                    style: GoogleFonts.cairo(
+                                      fontWeight: FontWeight.bold,
+                                      color: isCurrentSelected ? colorScheme.primary : colorScheme.onSurface,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Denomination columns
+                            for (final d in denoms)
+                              DataCell(
+                                () {
+                                  final stat = bDenoms[d.denomination];
+                                  if (stat == null || stat.allocatedCount == 0) {
+                                    return Text('—', style: GoogleFonts.cairo(color: colorScheme.outline));
+                                  }
+                                  return Text(
+                                    '${stat.allocatedCount} / ${stat.claimedCount} / ${stat.remainingCount}',
+                                    style: GoogleFonts.cairo(
+                                      fontWeight: FontWeight.w600,
+                                      color: stat.remainingCount <= 0 ? const Color(0xFFB3261E) : colorScheme.onSurface,
+                                    ),
+                                  );
+                                }(),
+                              ),
+                            // Total Units
+                            DataCell(Text('${_formatCount(totalUnits)} ${isAr ? 'قسيمة' : 'cards'}', style: GoogleFonts.cairo(fontWeight: FontWeight.bold))),
+                            // Total Budget
+                            DataCell(Text(_formatMoney(totalBudget, isAr: isAr), style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: const Color(0xFF006C50)))),
+                            // Claimed Money
+                            DataCell(Text(_formatMoney(bClaimedMoney, isAr: isAr), style: GoogleFonts.cairo(color: const Color(0xFF00639B)))),
+                            // Remaining Money
+                            DataCell(
+                              Text(
+                                _formatMoney(bRemainingMoney, isAr: isAr),
+                                style: GoogleFonts.cairo(
+                                  fontWeight: FontWeight.w900,
+                                  color: totalRemaining <= 0 ? const Color(0xFFB3261E) : const Color(0xFF006874),
+                                ),
+                              ),
+                            ),
+                            // Filter Button Action
+                            DataCell(
+                              isCurrentSelected
+                                  ? Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.primaryContainer,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        isAr ? 'محدد حالياً' : 'Selected',
+                                        style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.bold, color: colorScheme.primary),
+                                      ),
+                                    )
+                                  : FilledButton.tonal(
+                                      onPressed: () {
+                                        Navigator.of(dialogContext).pop();
+                                        setState(() {
+                                          _selectedBranch = bName;
+                                        });
+                                      },
+                                      style: FilledButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                        visualDensity: VisualDensity.compact,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                      child: Text(
+                                        strings.filterToBranchBtn,
+                                        style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                            ),
+                          ],
+                        );
+                      }(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            if (_selectedBranch != null)
+              TextButton.icon(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                  setState(() {
+                    _selectedBranch = null;
+                  });
+                },
+                icon: const Icon(Icons.clear_all_rounded, size: 16),
+                label: Text(isAr ? 'إلغاء فلترة الفرع (عرض الكل)' : 'Clear branch filter (Show all)', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+              ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(isAr ? 'إغلاق' : 'Close', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildGeneralStockHeader({
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+  }) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: colorScheme.primary.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(
+            Icons.inventory_2_rounded,
+            color: colorScheme.primary,
+            size: 18,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            strings.generalGiftsStockTitle,
+            style: GoogleFonts.cairo(
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+              color: colorScheme.onSurface,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 
@@ -3926,6 +4852,12 @@ class _CompanyPrizesStockReportScreenState
           _normalizePrizeKey(mg.giftName) == _normalizePrizeKey(gift.giftName);
     }).firstOrNull;
 
+    final denom = _extractDenomination(
+      masterGift?.giftName ?? gift.giftName,
+      masterGift?.unitValue ?? gift.unitValue,
+    );
+    final isVoucher = masterGift?.isVoucher == true || gift.isVoucher || denom > 0;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: EdgeInsets.all(isMobile ? 14 : 18),
@@ -3933,7 +4865,9 @@ class _CompanyPrizesStockReportScreenState
         color: colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+          color: isVoucher
+              ? const Color(0xFFD97706).withValues(alpha: 0.35)
+              : colorScheme.outlineVariant.withValues(alpha: 0.5),
         ),
       ),
       child: Column(
@@ -3947,13 +4881,15 @@ class _CompanyPrizesStockReportScreenState
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: colorScheme.primaryContainer,
+                  color: isVoucher
+                      ? const Color(0xFFD97706).withValues(alpha: 0.12)
+                      : colorScheme.primaryContainer,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Center(
                   child: Icon(
-                    masterGift?.isVoucher == true ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
-                    color: colorScheme.primary,
+                    isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
+                    color: isVoucher ? const Color(0xFFD97706) : colorScheme.primary,
                     size: 24,
                   ),
                 ),
@@ -3975,6 +4911,25 @@ class _CompanyPrizesStockReportScreenState
                             ),
                           ),
                         ),
+                        if (isVoucher && denom > 0) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFD97706).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.35)),
+                            ),
+                            child: Text(
+                              'فئة ${denom.toInt()} ج.م',
+                              style: GoogleFonts.cairo(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                                color: const Color(0xFFB45309),
+                              ),
+                            ),
+                          ),
+                        ],
                         const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -4030,7 +4985,9 @@ class _CompanyPrizesStockReportScreenState
                     ),
                     if (gift.eventNames.isNotEmpty)
                       Text(
-                        gift.eventNames.join(' • '),
+                        isVoucher && denom > 0
+                            ? '${gift.eventNames.join(' • ')} • ميزانية الصنف: ${_formatMoney(gift.totalAllocated * denom, isAr: isAr)}'
+                            : gift.eventNames.join(' • '),
                         style: GoogleFonts.cairo(
                           fontSize: 11,
                           color: colorScheme.onSurfaceVariant,
@@ -4071,6 +5028,15 @@ class _CompanyPrizesStockReportScreenState
                         color: statusColor,
                       ),
                     ),
+                    if (isVoucher && denom > 0)
+                      Text(
+                        _formatMoney(gift.totalRemaining * denom, isAr: isAr),
+                        style: GoogleFonts.cairo(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          color: statusColor,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -4096,12 +5062,16 @@ class _CompanyPrizesStockReportScreenState
                   children: [
                     _buildMetricSnippet(
                       label: isAr ? 'المخصص' : 'Allocated',
-                      value: '${gift.totalAllocated}',
+                      value: isVoucher && denom > 0
+                          ? '${gift.totalAllocated} (${_formatMoney(gift.totalAllocated * denom, isAr: isAr)})'
+                          : '${gift.totalAllocated}',
                       colorScheme: colorScheme,
                     ),
                     _buildMetricSnippet(
                       label: isAr ? 'المصروف' : 'Claimed',
-                      value: '${gift.totalClaimed}',
+                      value: isVoucher && denom > 0
+                          ? '${gift.totalClaimed} (${_formatMoney(gift.totalClaimed * denom, isAr: isAr)})'
+                          : '${gift.totalClaimed}',
                       colorScheme: colorScheme,
                     ),
                     _buildMetricSnippet(
@@ -4535,10 +5505,30 @@ class _CompanyPrizesStockReportScreenState
     int branchClaimed = 0;
     int branchRemaining = 0;
 
+    int branchVoucherAllocated = 0;
+    int branchVoucherClaimed = 0;
+    int branchVoucherRemaining = 0;
+    double branchVoucherBudget = 0.0;
+
     for (final p in prizesList) {
-      branchAllocated += (p['allocated'] as int? ?? 0);
-      branchClaimed += (p['claimed'] as int? ?? 0);
-      branchRemaining += (p['remaining'] as int? ?? 0);
+      final alloc = (p['allocated'] as int? ?? 0);
+      final clm = (p['claimed'] as int? ?? 0);
+      final rem = (p['remaining'] as int? ?? 0);
+      branchAllocated += alloc;
+      branchClaimed += clm;
+      branchRemaining += rem;
+
+      final gName = (p['giftName'] as String? ?? '');
+      final gType = (p['giftType'] as String? ?? 'product');
+      final rawUnitVal = (p['unitValue'] as num?)?.toDouble() ?? 0.0;
+      final isVoucher = gType == 'voucher' || rawUnitVal > 0 || _isVoucherText(gName);
+      if (isVoucher) {
+        final denom = _extractDenomination(gName, rawUnitVal);
+        branchVoucherAllocated += alloc;
+        branchVoucherClaimed += clm;
+        branchVoucherRemaining += rem;
+        branchVoucherBudget += (alloc * denom);
+      }
     }
 
     final effectiveCompanySlug = widget.lockedCompanySlug.isNotEmpty
@@ -4640,80 +5630,151 @@ class _CompanyPrizesStockReportScreenState
             ),
           ),
 
+          // Dedicated Branch Voucher Sub-Header Banner
+          if (branchVoucherAllocated > 0)
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFD97706).withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFFD97706).withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.confirmation_number_rounded,
+                    size: 16,
+                    color: Color(0xFFD97706),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${isAr ? 'قسائم المشتريات بالفرع:' : 'Branch Vouchers:'} $branchVoucherAllocated ${isAr ? 'قسيمة' : 'cards'} (${_formatMoney(branchVoucherBudget, isAr: isAr)}) • ${isAr ? 'منصرف:' : 'Claimed:'} $branchVoucherClaimed • ${isAr ? 'متبقي:' : 'Left:'} $branchVoucherRemaining',
+                      style: GoogleFonts.cairo(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFFB45309),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           // Branch Items Table
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
                 for (final p in prizesList)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colorScheme.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+                  () {
+                    final gName = (p['giftName'] as String? ?? '');
+                    final gType = (p['giftType'] as String? ?? 'product');
+                    final rawUnitVal = (p['unitValue'] as num?)?.toDouble() ?? 0.0;
+                    final isVoucher = gType == 'voucher' || rawUnitVal > 0 || _isVoucherText(gName);
+                    final denom = _extractDenomination(gName, rawUnitVal);
+                    final rem = p['remaining'] as int? ?? 0;
+                    final alloc = p['allocated'] as int? ?? 0;
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
                       ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.card_giftcard_rounded,
-                          size: 18,
-                          color: (p['remaining'] as int? ?? 0) <= 0
-                              ? const Color(0xFFB3261E)
-                              : colorScheme.primary,
+                      decoration: BoxDecoration(
+                        color: colorScheme.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isVoucher
+                              ? const Color(0xFFD97706).withValues(alpha: 0.3)
+                              : colorScheme.outlineVariant.withValues(alpha: 0.4),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                p['giftName'] as String? ?? '',
-                                style: GoogleFonts.cairo(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  color: colorScheme.onSurface,
-                                ),
-                              ),
-                              Text(
-                                p['eventName'] as String? ?? '',
-                                style: GoogleFonts.cairo(
-                                  fontSize: 10,
-                                  color: colorScheme.outline,
-                                ),
-                              ),
-                            ],
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
+                            size: 18,
+                            color: isVoucher
+                                ? const Color(0xFFD97706)
+                                : (rem <= 0 ? const Color(0xFFB3261E) : colorScheme.primary),
                           ),
-                        ),
-                        _buildBranchQtyPill(
-                          label: isAr ? 'المخصص' : 'Allocated',
-                          value: '${p['allocated']}',
-                          color: colorScheme.onSurfaceVariant,
-                          colorScheme: colorScheme,
-                        ),
-                        const SizedBox(width: 6),
-                        _buildBranchQtyPill(
-                          label: isAr ? 'المصروف' : 'Claimed',
-                          value: '${p['claimed']}',
-                          color: colorScheme.secondary,
-                          colorScheme: colorScheme,
-                        ),
-                        const SizedBox(width: 6),
-                        _buildBranchQtyPill(
-                          label: isAr ? 'المتبقي' : 'Left',
-                          value: '${p['remaining']}',
-                          color: (p['remaining'] as int? ?? 0) <= 0
-                              ? const Color(0xFFB3261E)
-                              : const Color(0xFF006C50),
-                          isHighlight: true,
-                          colorScheme: colorScheme,
-                        ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        gName,
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: colorScheme.onSurface,
+                                        ),
+                                      ),
+                                    ),
+                                    if (isVoucher && denom > 0) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFD97706).withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          'فئة ${denom.toInt()} ج.م',
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w900,
+                                            color: const Color(0xFFB45309),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                Text(
+                                  isVoucher && denom > 0
+                                      ? '${p['eventName']} • ${_formatMoney(alloc * denom, isAr: isAr)}'
+                                      : (p['eventName'] as String? ?? ''),
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 10,
+                                    color: colorScheme.outline,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          _buildBranchQtyPill(
+                            label: isAr ? 'المخصص' : 'Allocated',
+                            value: '${p['allocated']}',
+                            color: colorScheme.onSurfaceVariant,
+                            colorScheme: colorScheme,
+                          ),
+                          const SizedBox(width: 6),
+                          _buildBranchQtyPill(
+                            label: isAr ? 'المصروف' : 'Claimed',
+                            value: '${p['claimed']}',
+                            color: colorScheme.secondary,
+                            colorScheme: colorScheme,
+                          ),
+                          const SizedBox(width: 6),
+                          _buildBranchQtyPill(
+                            label: isAr ? 'المتبقي' : 'Left',
+                            value: '${p['remaining']}',
+                            color: rem <= 0
+                                ? const Color(0xFFB3261E)
+                                : const Color(0xFF006C50),
+                            isHighlight: true,
+                            colorScheme: colorScheme,
+                          ),
                         const SizedBox(width: 8),
                         // Quick Supply / Adjust Action Button
                         isMobile
@@ -4819,7 +5880,8 @@ class _CompanyPrizesStockReportScreenState
                               ),
                       ],
                     ),
-                  ),
+                  );
+                }(),
               ],
             ),
           ),

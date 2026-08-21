@@ -109,5 +109,38 @@ void main() {
       final copy = result.copyWith(chancesEarned: 5);
       expect(copy.chancesEarned, 5);
     });
+
+    test('Should parse anti-fraud fields (isHandwritten, isThermalPosReceipt, isTampered, fraudReasons)', () {
+      final jsonMap = {
+        'isValid': false,
+        'receiptNumber': '198/7/224/210826',
+        'targetCompanyTotal': 230.0,
+        'receiptDate': '21/08/2026',
+        'storeChainDetected': 'أسواق فتح الله',
+        'branchDetected': 'فرع عجمي ستار',
+        'isBranchMatched': true,
+        'isHandwritten': true,
+        'isThermalPosReceipt': false,
+        'isTampered': false,
+        'isScreenCapture': false,
+        'fraudRiskScore': 100,
+        'fraudReasons': ['فاتورة محررة يدوياً وغير مطبوعة إلكترونياً من الكاشير'],
+        'extractedProducts': [],
+        'message': 'عذراً، تم رفض الفاتورة لأنها محررة بخط اليد.',
+      };
+
+      final result = AiReceiptAnalysisResult.fromJson(jsonMap);
+      expect(result.isValid, false);
+      expect(result.isHandwritten, true);
+      expect(result.isThermalPosReceipt, false);
+      expect(result.isTampered, false);
+      expect(result.fraudRiskScore, 100);
+      expect(result.fraudReasons.first, contains('محررة يدوياً'));
+
+      final outJson = result.toJson();
+      expect(outJson['isHandwritten'], true);
+      expect(outJson['isThermalPosReceipt'], false);
+      expect(outJson['fraudRiskScore'], 100);
+    });
   });
 }

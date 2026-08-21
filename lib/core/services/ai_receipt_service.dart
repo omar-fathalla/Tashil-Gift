@@ -18,6 +18,9 @@ class ExtractedProductItem {
   final int quantity;
   final bool isTargetCompany;
   final String barcode;
+  final double? originalPrice;
+  final double discountAmount;
+  final double discountPercent;
 
   ExtractedProductItem({
     required this.name,
@@ -25,17 +28,61 @@ class ExtractedProductItem {
     required this.quantity,
     required this.isTargetCompany,
     this.barcode = '',
+    this.originalPrice,
+    this.discountAmount = 0.0,
+    this.discountPercent = 0.0,
   });
 
   double get totalPrice => price * quantity;
+  bool get hasDiscount => discountAmount > 0 || discountPercent > 0 || (originalPrice != null && originalPrice! > price);
 
   factory ExtractedProductItem.fromJson(Map<String, dynamic> json) {
+    final name = json['name']?.toString().trim() ?? '';
+    int quantity = (json['quantity'] as num?)?.toInt() ?? 1;
+    if (quantity <= 0) quantity = 1;
+
+    double rawPrice = (json['price'] as num?)?.toDouble() ?? 0.0;
+    double? rawOriginalPrice = (json['originalPrice'] as num?)?.toDouble();
+    double rawDiscount = (json['discountAmount'] as num?)?.toDouble() ?? 0.0;
+    double rawDiscountPercent = (json['discountPercent'] as num?)?.toDouble() ?? 0.0;
+    final double? rawTotalLine = (json['totalPrice'] as num?)?.toDouble() ?? (json['totalLinePrice'] as num?)?.toDouble();
+
+    // Auto-heal / enforce per-unit price:
+    if (quantity > 1) {
+      // 1. If rawPrice & rawOriginalPrice were both returned as total line amounts (e.g. 198 and 230 for 2 units)
+      if (rawOriginalPrice != null && rawOriginalPrice > 0) {
+        if ((rawPrice + rawDiscount - rawOriginalPrice).abs() < 1.5 && rawPrice > 50) {
+          rawPrice = rawPrice / quantity;
+          rawOriginalPrice = rawOriginalPrice / quantity;
+          if (rawDiscount > 0) rawDiscount = rawDiscount / quantity;
+        } else if (rawPrice >= rawOriginalPrice * 1.5) {
+          rawPrice = rawPrice / quantity;
+        } else if (rawOriginalPrice >= 1.8 * rawPrice && rawOriginalPrice > 50) {
+          rawOriginalPrice = rawOriginalPrice / quantity;
+        }
+      } else if (rawTotalLine != null && rawTotalLine > 0 && (rawPrice == rawTotalLine || rawPrice >= rawTotalLine * 0.95)) {
+        rawPrice = rawPrice / quantity;
+      }
+
+      // 2. If discountAmount was returned as total line discount (e.g. 32 EGP for 2 items)
+      if (rawDiscount >= rawPrice && rawDiscount > 0) {
+        rawDiscount = rawDiscount / quantity;
+      }
+    }
+
+    if (rawOriginalPrice != null && rawOriginalPrice <= 0) {
+      rawOriginalPrice = null;
+    }
+
     return ExtractedProductItem(
-      name: json['name']?.toString() ?? '',
-      price: (json['price'] as num?)?.toDouble() ?? 0.0,
-      quantity: (json['quantity'] as num?)?.toInt() ?? 1,
+      name: name,
+      price: rawPrice,
+      quantity: quantity,
       isTargetCompany: json['isTargetCompany'] ?? false,
-      barcode: json['barcode']?.toString() ?? '',
+      barcode: json['barcode']?.toString().trim() ?? '',
+      originalPrice: rawOriginalPrice,
+      discountAmount: rawDiscount,
+      discountPercent: rawDiscountPercent,
     );
   }
 
@@ -46,6 +93,9 @@ class ExtractedProductItem {
       'quantity': quantity,
       'isTargetCompany': isTargetCompany,
       'barcode': barcode,
+      if (originalPrice != null) 'originalPrice': originalPrice,
+      'discountAmount': discountAmount,
+      'discountPercent': discountPercent,
       'totalPrice': totalPrice,
     };
   }
@@ -56,6 +106,9 @@ class ExtractedProductItem {
     int? quantity,
     bool? isTargetCompany,
     String? barcode,
+    double? originalPrice,
+    double? discountAmount,
+    double? discountPercent,
   }) {
     return ExtractedProductItem(
       name: name ?? this.name,
@@ -63,6 +116,9 @@ class ExtractedProductItem {
       quantity: quantity ?? this.quantity,
       isTargetCompany: isTargetCompany ?? this.isTargetCompany,
       barcode: barcode ?? this.barcode,
+      originalPrice: originalPrice ?? this.originalPrice,
+      discountAmount: discountAmount ?? this.discountAmount,
+      discountPercent: discountPercent ?? this.discountPercent,
     );
   }
 }
@@ -88,6 +144,12 @@ class AiReceiptAnalysisResult {
   final String matchedRewardValue;
   final double matchedRewardAmount;
   final String matchedRewardType;
+  final bool isHandwritten;
+  final bool isThermalPosReceipt;
+  final bool isTampered;
+  final bool isScreenCapture;
+  final int fraudRiskScore;
+  final List<String> fraudReasons;
 
   AiReceiptAnalysisResult({
     required this.isValid,
@@ -110,6 +172,12 @@ class AiReceiptAnalysisResult {
     this.matchedRewardValue = '',
     this.matchedRewardAmount = 0.0,
     this.matchedRewardType = '',
+    this.isHandwritten = false,
+    this.isThermalPosReceipt = true,
+    this.isTampered = false,
+    this.isScreenCapture = false,
+    this.fraudRiskScore = 0,
+    this.fraudReasons = const [],
   })  : kpiRating = kpiRating ?? calculateKpiRating(durationSeconds > 0 ? durationSeconds : (durationMs / 1000.0)),
         kpiColorHex = kpiColorHex ?? calculateKpiColor(durationSeconds > 0 ? durationSeconds : (durationMs / 1000.0));
 
@@ -144,6 +212,21 @@ class AiReceiptAnalysisResult {
       unfulfilledList = unfulfilledRaw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
     }
 
+    final bool isHandwritten = json['isHandwritten'] == true;
+    final bool isThermalPosReceipt = json['isThermalPosReceipt'] ?? (!isHandwritten);
+    final bool isTampered = json['isTampered'] == true;
+    final bool isScreenCapture = json['isScreenCapture'] == true;
+    final int fraudRiskScore = (json['fraudRiskScore'] as num?)?.toInt() ?? (isHandwritten ? 100 : 0);
+    
+    final fraudReasonsRaw = json['fraudReasons'];
+    List<String> fraudReasonsList = [];
+    if (fraudReasonsRaw is List) {
+      fraudReasonsList = fraudReasonsRaw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+    }
+    if (isHandwritten && !fraudReasonsList.any((r) => r.contains('يدوياً') || r.contains('خط اليد'))) {
+      fraudReasonsList.add('فاتورة محررة يدوياً وغير مطبوعة إلكترونياً من الكاشير');
+    }
+
     final int rawDurationMs = json['durationMs'] is num ? (json['durationMs'] as num).toInt() : durationMs;
     final double rawDurationSec = json['durationSeconds'] is num
         ? (json['durationSeconds'] as num).toDouble()
@@ -170,6 +253,12 @@ class AiReceiptAnalysisResult {
       matchedRewardValue: json['matchedRewardValue']?.toString() ?? '',
       matchedRewardAmount: (json['matchedRewardAmount'] as num?)?.toDouble() ?? 0.0,
       matchedRewardType: json['matchedRewardType']?.toString() ?? '',
+      isHandwritten: isHandwritten,
+      isThermalPosReceipt: isThermalPosReceipt,
+      isTampered: isTampered,
+      isScreenCapture: isScreenCapture,
+      fraudRiskScore: fraudRiskScore,
+      fraudReasons: fraudReasonsList,
     );
   }
 
@@ -195,6 +284,12 @@ class AiReceiptAnalysisResult {
       'matchedRewardValue': matchedRewardValue,
       'matchedRewardAmount': matchedRewardAmount,
       'matchedRewardType': matchedRewardType,
+      'isHandwritten': isHandwritten,
+      'isThermalPosReceipt': isThermalPosReceipt,
+      'isTampered': isTampered,
+      'isScreenCapture': isScreenCapture,
+      'fraudRiskScore': fraudRiskScore,
+      'fraudReasons': fraudReasons,
     };
   }
 
@@ -219,6 +314,12 @@ class AiReceiptAnalysisResult {
     String? matchedRewardValue,
     double? matchedRewardAmount,
     String? matchedRewardType,
+    bool? isHandwritten,
+    bool? isThermalPosReceipt,
+    bool? isTampered,
+    bool? isScreenCapture,
+    int? fraudRiskScore,
+    List<String>? fraudReasons,
   }) {
     final double effectiveDurationSec = durationSeconds ?? this.durationSeconds;
     return AiReceiptAnalysisResult(
@@ -242,6 +343,12 @@ class AiReceiptAnalysisResult {
       matchedRewardValue: matchedRewardValue ?? this.matchedRewardValue,
       matchedRewardAmount: matchedRewardAmount ?? this.matchedRewardAmount,
       matchedRewardType: matchedRewardType ?? this.matchedRewardType,
+      isHandwritten: isHandwritten ?? this.isHandwritten,
+      isThermalPosReceipt: isThermalPosReceipt ?? this.isThermalPosReceipt,
+      isTampered: isTampered ?? this.isTampered,
+      isScreenCapture: isScreenCapture ?? this.isScreenCapture,
+      fraudRiskScore: fraudRiskScore ?? this.fraudRiskScore,
+      fraudReasons: fraudReasons ?? this.fraudReasons,
     );
   }
 }
@@ -263,9 +370,15 @@ class AiReceiptService {
       model: name,
       apiKey: AiConfig.geminiApiKey,
       systemInstruction: Content.system(
-        'أنت مدقق مالي فائق السرعة والدقة في قراءة وتحليل فواتير السوبر ماركت وتدقيق عروض الشركات الاستهلاكية (FMCG). '
+        'أنت مدقق مالي وأمني فائق السرعة والدقة والصرامة في فحص وتدقيق فواتير السوبر ماركت وكشف التزوير لعروض الشركات الاستهلاكية (FMCG). '
         'مهمتك فحص صور الفواتير فورياً واستخراج البيانات الأساسية: اسم السلسلة، الفرع، رقم الفاتورة، تاريخ الشراء، '
-        'وحساب إجمالي المشتريات لمنتجات الشركة الراعية فقط بأعلى سرعة ممكنة، وسرد أي شروط غير محققة بدقة وبصيغة JSON.',
+        'وحساب إجمالي المشتريات لمنتجات الشركة الراعية فقط، وكشف أي محاولة تزوير أو كتابة يدوية أو شطب أو تصوير شاشات بدقة وبصيغة JSON.\n\n'
+        '🛑 قواعد مكافحة التزوير والرفض الأمني القاطع (Zero-Tolerance Anti-Fraud Policy):\n'
+        '1. يُمنع منعاً باتاً قبول أي فاتورة أو ورقة محررة أو مكتوبة بخط اليد (Handwritten Receipt / Paper Draft / Manual Note) بقلم جاف أو حبر أو رصاص.\n'
+        '2. الفواتير المقبولة حصراً هي بونات الكاشير الإلكترونية المطبوعة آلياً عبر طابعات نقاط البيع الرسمية (Printed Thermal / Electronic POS Receipts).\n'
+        '3. إذا كانت الفاتورة مكتوبة باليد، يجب تعيين: isHandwritten = true، isThermalPosReceipt = false، isValid = false، وإضافة "الفاتورة محررة يدوياً وغير مطبوعة إلكترونياً من الكاشير" إلى fraudReasons وقائمة unfulfilledConditions.\n'
+        '4. إذا وجد أي شطب أو تعديل يدوي في أرقام الفاتورة، عيّن: isTampered = true، isValid = false.\n'
+        '5. إذا كانت الصورة ملتقطة لشاشة هاتف أو حاسوب، عيّن: isScreenCapture = true، isValid = false.',
       ),
       generationConfig: GenerationConfig(
         responseMimeType: 'application/json',
@@ -275,7 +388,7 @@ class AiReceiptService {
           properties: {
             'isValid': Schema.boolean(
               description:
-                  'True if this is a valid supermarket receipt containing target company products and meeting all rules.',
+                  'True if this is a genuine printed supermarket POS receipt containing target company products and meeting all rules. False if invalid, fraudulent, or handwritten.',
             ),
             'receiptNumber': Schema.string(
               description: 'The unique receipt number or transaction ID (e.g., 295/8/211/220726). Return empty string if not found.',
@@ -300,18 +413,49 @@ class AiReceiptService {
               description:
                   'True if the detected store chain and branch match the required chain and allowed branches for this campaign. False if from an unapproved store or branch.',
             ),
+            'isHandwritten': Schema.boolean(
+              description: 'True if the receipt or any part of it is handwritten with pen/pencil, manual notebook, or paper draft. Must be false for printed thermal/POS receipts.',
+            ),
+            'isThermalPosReceipt': Schema.boolean(
+              description: 'True ONLY if this is a genuine printed electronic POS / thermal cash register receipt.',
+            ),
+            'isTampered': Schema.boolean(
+              description: 'True if there are manual modifications, handwritten additions, or crossed-out numbers on the receipt.',
+            ),
+            'isScreenCapture': Schema.boolean(
+              description: 'True if this is a photo of a computer or phone display screen rather than a physical paper receipt.',
+            ),
+            'fraudRiskScore': Schema.integer(
+              description: 'Fraud probability score from 0 (genuine printed receipt) to 100 (blatantly forged/handwritten).',
+            ),
+            'fraudReasons': Schema.array(
+              description: 'List of fraud or suspicious triggers detected (e.g. فاتورة مكتوبة بخط اليد, تلاعب وشطب بالأرقام, تصوير شاشة إلكترونية). Empty if clean.',
+              items: Schema.string(),
+            ),
             'extractedProducts': Schema.array(
-              description: 'List of all individual items/products found on the receipt with names, prices, quantities, and matched barcodes.',
+              description: 'List of all individual items/products found on the receipt with names, strictly single unit prices, quantities, and matched barcodes.',
               items: Schema.object(
                 properties: {
                   'name': Schema.string(description: 'Product name as printed on receipt.'),
-                  'price': Schema.number(description: 'Unit or line price in EGP/AED.'),
-                  'quantity': Schema.integer(description: 'Quantity purchased.'),
+                  'price': Schema.number(description: 'Net selling unit price per single piece in EGP/AED (MUST be divided by quantity if line total is shown).'),
+                  'quantity': Schema.integer(description: 'Quantity purchased (e.g. 1, 2, 3).'),
                   'isTargetCompany': Schema.boolean(
                     description: 'True if this product belongs to the target company being promoted.',
                   ),
                   'barcode': Schema.string(
                     description: 'The product barcode or item code if detected or matched from company catalog. Return empty string if not found.',
+                  ),
+                  'originalPrice': Schema.number(
+                    description: 'Original gross unit price per single piece before discount (e.g. 115.0). Null or 0 if not discounted.',
+                  ),
+                  'discountAmount': Schema.number(
+                    description: 'Monetary discount amount per single piece (e.g. 16.0 for 32 EGP discount on 2 pieces). 0 if no discount.',
+                  ),
+                  'discountPercent': Schema.number(
+                    description: 'Percentage discount if printed on line item (e.g. 15 for 15%). 0 if no discount.',
+                  ),
+                  'totalLinePrice': Schema.number(
+                    description: 'Total line amount paid for this item in receipt (e.g. 198.0 for 2 pieces).',
                   ),
                 },
                 requiredProperties: ['name', 'price', 'quantity', 'isTargetCompany'],
@@ -359,6 +503,8 @@ class AiReceiptService {
             'storeChainDetected',
             'branchDetected',
             'isBranchMatched',
+            'isHandwritten',
+            'isThermalPosReceipt',
             'extractedProducts',
             'message',
           ],
@@ -526,12 +672,28 @@ $productsCondition
 $promotionalRulesCondition
 $chancesCondition
 
+🛑 تعليمات مكافحة التزوير والفواتير اليدوية (Mandatory Anti-Fraud & Physical Medium Verification):
+- [كشف خط اليد]: افحص الصورة بدقة؛ إذا كانت الفاتورة أو أي جزء منها مكتوباً بخط اليد (Handwritten بقلم حبر أو جاف أو رصاص)، أو ورقة مسودة، أو ورقة دفتر يدوية، فيجب فوراً:
+  * تعيين isHandwritten = true
+  * تعيين isThermalPosReceipt = false
+  * تعيين isValid = false
+  * إضافة "الفاتورة محررة يدوياً وغير مطبوعة إلكترونياً من الكاشير" إلى fraudReasons وقائمة unfulfilledConditions.
+  * كتابة رسالة رفض واضحة في (message): "عذراً، تم رفض الفاتورة لأنها محررة بخط اليد. العرض يشترط بون كاشير مطبوع إلكترونياً من ماكينة السوبرماركت."
+- [بون الكاشير الإلكتروني]: الفواتير المقبولة فقط (isValid = true) هي بونات الكاشير الحرارية أو الإلكترونية المطبوعة آلياً من أنظمة ونقاط البيع المعتمدة (Thermal POS Receipts).
+- [كشف الشطب والتلاعب]: إذا وجد شطب أو تعديل يدوي في أرقام الفاتورة، عيّن isTampered = true و isValid = false.
+- [كشف تصوير الشاشات]: إذا كانت الصورة ملتقطة لشاشة هاتف أو حاسوب، عيّن isScreenCapture = true و isValid = false.
+
+⚠️ تعليمات استخراج أسعار الأصناف والكميات والخصومات بدقة (Strict Unit Price & Discount Rules):
+- يجب أن يحتوي حقل (price) دائماً على سعر بيع القطعة الواحدة فقط (Unit Price).
+- إذا اشترى العميل كمية (quantity = 2 أو أكثر)، وكان المطبوع في الفاتورة هو إجمالي السطر (مثل 2 × 115 = 230 أو 198 بعد الخصم)، فيجب وضع سعر القطعة الصافي في (price) = 99.0 ج.م، وسعر القطعة الأصلي في (originalPrice) = 115.0 ج.م، وقيمة الخصم للقطعة الواحدة في (discountAmount) = 16.0 ج.م، وإجمالي السطر في (totalLinePrice) = 198.0 ج.م.
+- إياك أن تضع إجمالي السطر كسعر للقطعة في حقل price عند وجود كمية أكبر من 1!
+
 تأكد من إرجاع النتيجة بصيغة JSON المحتوي على الحقول المفروضة:
-isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptDate (string), storeChainDetected (string), branchDetected (string), isBranchMatched (boolean), chancesEarned (integer), message (string).
+isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptDate (string), storeChainDetected (string), branchDetected (string), isBranchMatched (boolean), isHandwritten (boolean), isThermalPosReceipt (boolean), isTampered (boolean), isScreenCapture (boolean), chancesEarned (integer), message (string).
 ''';
       } else {
         finalPromptText = '''
-        أنت مساعد ذكي فائق الدقة متخصص في فحص وتدقيق فواتير السوبر ماركت الخاصة بعروض "$targetCompany".
+        أنت مساعد ذكي ومدقق مالي وأمني فائق الدقة متخصص في فحص وتدقيق فواتير السوبر ماركت وكشف التزوير لعروض "$targetCompany".
         قم بتحليل صورة الفاتورة المرفقة فورياً وبأقصى سرعة واستخرج البيانات التالية:
         
         1. "رأس الفاتورة والفرع": استخرج اسم سلسلة السوبرماركت في (storeChainDetected)، واسم أو رقم أو عنوان الفرع في (branchDetected).
@@ -544,8 +706,28 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         7. احسب الإجمالي المؤهل للحملة في حقل (targetCompanyTotal).
         8. $chancesCondition
         
+        🛑 تعليمات مكافحة التزوير والرفض الأمني القاطع (Zero-Tolerance Anti-Fraud Policy):
+        - [كشف خط اليد]: افحص الصورة بدقة؛ إذا كانت الفاتورة أو أي جزء منها مكتوباً بخط اليد (Handwritten بقلم حبر أو جاف أو رصاص)، أو ورقة مسودة، أو ورقة دفتر يدوية، فيجب فوراً:
+          * تعيين isHandwritten = true
+          * تعيين isThermalPosReceipt = false
+          * تعيين isValid = false
+          * إضافة "الفاتورة محررة يدوياً وغير مطبوعة إلكترونياً من الكاشير" إلى fraudReasons وقائمة unfulfilledConditions.
+          * كتابة رسالة رفض واضحة في (message): "عذراً، تم رفض الفاتورة لأنها محررة بخط اليد. العرض يشترط بون كاشير مطبوع إلكترونياً من ماكينة السوبرماركت."
+        - [بون الكاشير الإلكتروني]: الفواتير المقبولة فقط (isValid = true) هي بونات الكاشير الحرارية أو الإلكترونية المطبوعة آلياً من أنظمة ونقاط البيع المعتمدة (Thermal POS Receipts).
+        - [كشف الشطب والتلاعب]: إذا وجد شطب أو تعديل يدوي في أرقام الفاتورة، عيّن isTampered = true و isValid = false.
+        - [كشف تصوير الشاشات]: إذا كانت الصورة ملتقطة لشاشة هاتف أو حاسوب، عيّن isScreenCapture = true و isValid = false.
+        
+        ⚠️ تعليمات استخراج أسعار الأصناف والكميات والخصومات بدقة (Strict Unit Price & Discount Rules):
+        - يجب أن يحتوي حقل (price) دائماً على سعر بيع القطعة الواحدة فقط (Unit Price).
+        - إذا اشترى العميل كمية (quantity = 2 أو أكثر)، وكان المطبوع في الفاتورة هو إجمالي السطر (مثل 2 × 115 = 230 أو 198 بعد الخصم)، فيجب:
+          * وضع سعر القطعة الواحدة الصافي في (price) = 99.0 ج.م (وليس 198).
+          * وضع سعر القطعة الأصلي قبل الخصم في (originalPrice) = 115.0 ج.م (وليس 230).
+          * وضع قيمة الخصم للقطعة الواحدة في (discountAmount) = 16.0 ج.م (وليس 32).
+          * وضع إجمالي السطر المدفوع في (totalLinePrice) = 198.0 ج.م.
+        - إياك أن تضع إجمالي السطر كسعر للقطعة في حقل price عند وجود كمية أكبر من 1!
+        
         شروط الموافقة (isValid = true):
-        - يجب أن تكون الصورة لفاتورة حقيقية ومقروءة وواضحة الرأس.
+        - يجب أن تكون الصورة لبون كاشير إلكتروني مطبوع أصلي وحقيقي ومقروء وغير مكتوب باليد (isThermalPosReceipt = true و isHandwritten = false).
         - يجب أن يكون "رقم الفاتورة" واضحاً وموجوداً.
         - يجب أن تكون الفاتورة سارية وتحتوي على تاريخ شراء واضح.
         - يجب أن تشتمل الفاتورة على منتجات مؤهلة للعرض من "$targetCompany" وفق الشروط المحددة أعلاه.
@@ -581,6 +763,40 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
       if (response.text != null && response.text!.trim().isNotEmpty) {
         final Map<String, dynamic> jsonMap = _cleanAndParseJson(response.text!);
         var result = AiReceiptAnalysisResult.fromJson(jsonMap, durationMs: durationMs);
+
+        // 🛑 Strict Dart Anti-Fraud Gatekeeper
+        if (result.isHandwritten || !result.isThermalPosReceipt || result.isTampered || result.isScreenCapture) {
+          final List<String> reasons = List<String>.from(result.unfulfilledConditions);
+          String fraudMsg = '';
+          if (result.isHandwritten) {
+            fraudMsg = 'عذراً، تم رفض الفاتورة لأنها محررة بخط اليد. العرض يشترط حصراً بون كاشير مطبوع إلكترونياً من ماكينة السوبرماركت.';
+            if (!reasons.contains('فاتورة محررة يدوياً وغير مطبوعة إلكترونياً من الكاشير')) {
+              reasons.insert(0, 'فاتورة محررة يدوياً وغير مطبوعة إلكترونياً من الكاشير');
+            }
+          } else if (result.isTampered) {
+            fraudMsg = 'عذراً، تم رفض الفاتورة لوجود اشتباه في تلاعب أو شطب وتعديل يدوي في الأرقام والأسعار.';
+            if (!reasons.contains('اشتباه في تلاعب أو تعديل يدوي للأرقام')) {
+              reasons.insert(0, 'اشتباه في تلاعب أو تعديل يدوي للأرقام');
+            }
+          } else if (result.isScreenCapture) {
+            fraudMsg = 'عذراً، تم رفض الصورة لأنها ملتقطة من شاشة إلكترونية. يرجى تصوير أصل الفاتورة الورقية المطبوعة مباشرة.';
+            if (!reasons.contains('صورة ملتقطة من شاشة إلكترونية')) {
+              reasons.insert(0, 'صورة ملتقطة من شاشة إلكترونية');
+            }
+          } else if (!result.isThermalPosReceipt) {
+            fraudMsg = 'عذراً، المستند المرفق ليس بون كاشير إلكتروني مطبوع معتمد.';
+            if (!reasons.contains('المستند المرفق ليس بون كاشير إلكتروني معتمد')) {
+              reasons.insert(0, 'المستند المرفق ليس بون كاشير إلكتروني معتمد');
+            }
+          }
+
+          result = result.copyWith(
+            isValid: false,
+            chancesEarned: 0,
+            message: fraudMsg.isNotEmpty ? fraudMsg : result.message,
+            unfulfilledConditions: reasons,
+          );
+        }
 
         // Calculate / enforce chances & rewards earned based on quantity and spend multipliers
         int calculatedChances = result.chancesEarned;

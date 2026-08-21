@@ -34,6 +34,47 @@ void main() {
       expect(items.any((i) => i.title.contains('الحد الأدنى')), isFalse);
     });
 
+    test('buildValidationConditionItems builds handwritten fraud condition', () {
+      final items = buildValidationConditionItems(
+        isValid: false,
+        message: 'عذراً، تم رفض الفاتورة لأنها محررة بخط اليد.',
+        targetCompanyTotal: 200.0,
+        minimumSpend: 150.0,
+        targetCompany: 'يونيليفر',
+        currencySymbol: 'ج.م',
+        isHandwritten: true,
+        isThermalPosReceipt: false,
+      );
+
+      expect(items.any((i) => i.title.contains('محررة يدوياً')), isTrue);
+      expect(items.first.description, contains('بون كاشير إلكتروني'));
+      expect(items.first.isMet, isFalse);
+    });
+
+    test('buildValidationConditionItems builds tampering and screen capture fraud conditions', () {
+      final itemsTampered = buildValidationConditionItems(
+        isValid: false,
+        message: 'اشتباه في تلاعب بالأرقام',
+        targetCompanyTotal: 200.0,
+        minimumSpend: 150.0,
+        targetCompany: 'يونيليفر',
+        currencySymbol: 'ج.م',
+        isTampered: true,
+      );
+      expect(itemsTampered.any((i) => i.title.contains('تلاعب')), isTrue);
+
+      final itemsScreen = buildValidationConditionItems(
+        isValid: false,
+        message: 'صورة من شاشة',
+        targetCompanyTotal: 200.0,
+        minimumSpend: 150.0,
+        targetCompany: 'يونيليفر',
+        currencySymbol: 'ج.م',
+        isScreenCapture: true,
+      );
+      expect(itemsScreen.any((i) => i.title.contains('شاشة إلكترونية')), isTrue);
+    });
+
     test('buildValidationConditionItems builds branch mismatch condition', () {
       final items = buildValidationConditionItems(
         isValid: false,

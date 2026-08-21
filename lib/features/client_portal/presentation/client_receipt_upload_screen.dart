@@ -376,6 +376,11 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           isAllBranches: _activeEvent!.isAllBranches,
           receiptDate: result.receiptDate,
           hasTargetProducts: result.extractedProducts.any((p) => p.isTargetCompany),
+          isHandwritten: result.isHandwritten,
+          isThermalPosReceipt: result.isThermalPosReceipt,
+          isTampered: result.isTampered,
+          isScreenCapture: result.isScreenCapture,
+          fraudReasons: result.fraudReasons,
         );
 
         showReceiptValidationReportDialog(
@@ -504,6 +509,12 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         'store_chain_detected': result.storeChainDetected,
         'branch_detected': result.branchDetected,
         'is_branch_matched': result.isBranchMatched,
+        'is_handwritten': result.isHandwritten,
+        'is_thermal_pos_receipt': result.isThermalPosReceipt,
+        'is_tampered': result.isTampered,
+        'is_screen_capture': result.isScreenCapture,
+        'fraud_risk_score': result.fraudRiskScore,
+        'fraud_reasons': result.fraudReasons,
         'retail_chain_name': _activeEvent!.retailChainName,
         if (imageUrl.isNotEmpty) 'image_url': imageUrl,
         if (imageUrl.isNotEmpty) 'storage_path': storagePath,
