@@ -7,7 +7,7 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import '../utils/arabic_numbers_utils.dart';
 
 const String _geminiApiKey =
-    'REMOVED_SECRET';
+    'AIzaSyBiuLXCswnl2_xCQT9M3YCnaSc0nGZ94Nw';
 
 final aiProductCatalogServiceProvider = Provider<AiProductCatalogService>((ref) {
   return AiProductCatalogService();
@@ -69,7 +69,7 @@ class AiProductCatalogService {
 
   AiProductCatalogService()
       : _model = GenerativeModel(
-          model: 'gemini-1.5-flash',
+          model: 'gemini-3.7-flash',
           apiKey: _geminiApiKey,
           generationConfig: GenerationConfig(
             responseMimeType: 'application/json',

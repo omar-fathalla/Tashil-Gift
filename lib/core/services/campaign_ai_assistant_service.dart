@@ -5,7 +5,7 @@ import 'package:al_mraay/features/admin/domain/event_model.dart';
 import 'package:al_mraay/features/admin/domain/company_gift_model.dart';
 
 const String _geminiApiKey =
-    'REMOVED_SECRET';
+    'AIzaSyBiuLXCswnl2_xCQT9M3YCnaSc0nGZ94Nw';
 
 final campaignAiAssistantServiceProvider = Provider<CampaignAiAssistantService>((ref) {
   return CampaignAiAssistantService();
@@ -54,8 +54,8 @@ class CampaignAiAssistantService {
   late final GenerativeModel _fallbackModel;
 
   CampaignAiAssistantService() {
-    _model = _createModel('gemini-flash-latest');
-    _fallbackModel = _createModel('gemini-3.5-flash');
+    _model = _createModel('gemini-3.7-flash');
+    _fallbackModel = _createModel('gemini-3.6-flash');
   }
 
   static GenerativeModel _createModel(String modelName) {

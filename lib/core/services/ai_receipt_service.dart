@@ -9,7 +9,7 @@ import '../utils/arabic_numbers_utils.dart';
 
 /// Provide your actual Gemini API Key here or load from environment variables
 const String _geminiApiKey =
-    'REMOVED_SECRET';
+    'AIzaSyBiuLXCswnl2_xCQT9M3YCnaSc0nGZ94Nw';
 
 final aiReceiptServiceProvider = Provider<AiReceiptService>((ref) {
   return AiReceiptService();
@@ -255,10 +255,10 @@ class AiReceiptService {
   late final GenerativeModel _fallbackModel2;
   final String modelName;
 
-  AiReceiptService({this.modelName = 'gemini-2.5-flash'}) {
+  AiReceiptService({this.modelName = 'gemini-3.7-flash'}) {
     _model = _createModel(modelName);
-    _fallbackModel1 = _createModel('gemini-2.0-flash');
-    _fallbackModel2 = _createModel('gemini-1.5-flash');
+    _fallbackModel1 = _createModel('gemini-3.6-flash');
+    _fallbackModel2 = _createModel('gemini-3.5-flash');
   }
 
   static GenerativeModel _createModel(String name) {

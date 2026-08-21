@@ -6,7 +6,7 @@ import '../../features/admin/domain/retail_chain_model.dart';
 import '../utils/arabic_numbers_utils.dart';
 
 const String _geminiApiKey =
-    'REMOVED_SECRET';
+    'AIzaSyBiuLXCswnl2_xCQT9M3YCnaSc0nGZ94Nw';
 
 final branchSignatureAiServiceProvider = Provider<BranchSignatureAiService>((ref) {
   return BranchSignatureAiService();
@@ -152,8 +152,8 @@ class BranchSignatureAiService {
   late final GenerativeModel _fallbackModel;
 
   BranchSignatureAiService() {
-    _model = _createModel('gemini-flash-latest');
-    _fallbackModel = _createModel('gemini-3.5-flash');
+    _model = _createModel('gemini-3.7-flash');
+    _fallbackModel = _createModel('gemini-3.6-flash');
   }
 
   static GenerativeModel _createModel(String modelName) {
