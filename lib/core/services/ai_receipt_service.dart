@@ -414,13 +414,15 @@ class AiReceiptService {
                   'True if the detected store chain and branch match the required chain and allowed branches for this campaign. False if from an unapproved store or branch.',
             ),
             'isHandwritten': Schema.boolean(
-              description: 'True if the receipt or any part of it is handwritten with pen/pencil, manual notebook, or paper draft. Must be false for printed thermal/POS receipts.',
+              description:
+                  'True ONLY if the receipt items/prices themselves are manually handwritten on a notebook/paper draft. Must be false for printed electronic thermal/POS cash register receipts even if there are promoter notes, endorsements (e.g. تم تسليم الهدية), or signatures on the margins.',
             ),
             'isThermalPosReceipt': Schema.boolean(
               description: 'True ONLY if this is a genuine printed electronic POS / thermal cash register receipt.',
             ),
             'isTampered': Schema.boolean(
-              description: 'True if there are manual modifications, handwritten additions, or crossed-out numbers on the receipt.',
+              description:
+                  'True ONLY if there is fraudulent alteration, forged/scratched-out printed numbers or prices to alter purchase values. Normal promoter notes, signatures, or endorsement checkmarks in margins do NOT count as tampering.',
             ),
             'isScreenCapture': Schema.boolean(
               description: 'True if this is a photo of a computer or phone display screen rather than a physical paper receipt.',
@@ -429,7 +431,7 @@ class AiReceiptService {
               description: 'Fraud probability score from 0 (genuine printed receipt) to 100 (blatantly forged/handwritten).',
             ),
             'fraudReasons': Schema.array(
-              description: 'List of fraud or suspicious triggers detected (e.g. فاتورة مكتوبة بخط اليد, تلاعب وشطب بالأرقام, تصوير شاشة إلكترونية). Empty if clean.',
+              description: 'List of fraud or suspicious triggers detected (e.g. فاتورة مكتوبة بخط اليد, تلاعب وشطب وتعديل بأرقام الأصناف, تصوير شاشة إلكترونية). Empty if clean.',
               items: Schema.string(),
             ),
             'extractedProducts': Schema.array(
@@ -672,15 +674,11 @@ $productsCondition
 $promotionalRulesCondition
 $chancesCondition
 
-🛑 تعليمات مكافحة التزوير والفواتير اليدوية (Mandatory Anti-Fraud & Physical Medium Verification):
-- [كشف خط اليد]: افحص الصورة بدقة؛ إذا كانت الفاتورة أو أي جزء منها مكتوباً بخط اليد (Handwritten بقلم حبر أو جاف أو رصاص)، أو ورقة مسودة، أو ورقة دفتر يدوية، فيجب فوراً:
-  * تعيين isHandwritten = true
-  * تعيين isThermalPosReceipt = false
-  * تعيين isValid = false
-  * إضافة "الفاتورة محررة يدوياً وغير مطبوعة إلكترونياً من الكاشير" إلى fraudReasons وقائمة unfulfilledConditions.
-  * كتابة رسالة رفض واضحة في (message): "عذراً، تم رفض الفاتورة لأنها محررة بخط اليد. العرض يشترط بون كاشير مطبوع إلكترونياً من ماكينة السوبرماركت."
+🛑 تعليمات مكافحة التزوير والرفض الأمني (Anti-Fraud & Genuine Receipt Policy):
 - [بون الكاشير الإلكتروني]: الفواتير المقبولة فقط (isValid = true) هي بونات الكاشير الحرارية أو الإلكترونية المطبوعة آلياً من أنظمة ونقاط البيع المعتمدة (Thermal POS Receipts).
-- [كشف الشطب والتلاعب]: إذا وجد شطب أو تعديل يدوي في أرقام الفاتورة، عيّن isTampered = true و isValid = false.
+- [ملاحظات وهوامش البروموتر/الكاشير]: إذا كان أصل الفاتورة بون كاشير مطبوع إلكترونياً، وتوجد عليه كتابة يدوية في الهوامش أو الرأس مثل "تم تسليم الهدية" أو توقيع أو علامة استلام أو رقم تليفون أو علامات صح، فهذا بون كاشير أصلي معتمد وسليم (isThermalPosReceipt = true و isHandwritten = false و isTampered = false) ويجب قبوله.
+- [كشف الفواتير المحررة يدوياً]: إذا كانت الفاتورة نفسها مسودة أو محررة بالكامل في دفتر يدوي وبنودها وأسعارها مكتوبة باليد، عيّن isHandwritten = true و isThermalPosReceipt = false و isValid = false واكتب رسالة رفض واضحة: "عذراً، تم رفض الفاتورة لأنها محررة بخط اليد. العرض يشترط بون كاشير مطبوع إلكترونياً من ماكينة السوبرماركت."
+- [كشف الشطب والتلاعب في الأرقام]: إذا وجد شطب أو تلاعب وتعديل يدوي في أرقام وأسعار الأصناف المطبوعة لتغيير قيمتها، عيّن isTampered = true و isValid = false.
 - [كشف تصوير الشاشات]: إذا كانت الصورة ملتقطة لشاشة هاتف أو حاسوب، عيّن isScreenCapture = true و isValid = false.
 
 ⚠️ تعليمات استخراج أسعار الأصناف والكميات والخصومات بدقة (Strict Unit Price & Discount Rules):
@@ -706,15 +704,11 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         7. احسب الإجمالي المؤهل للحملة في حقل (targetCompanyTotal).
         8. $chancesCondition
         
-        🛑 تعليمات مكافحة التزوير والرفض الأمني القاطع (Zero-Tolerance Anti-Fraud Policy):
-        - [كشف خط اليد]: افحص الصورة بدقة؛ إذا كانت الفاتورة أو أي جزء منها مكتوباً بخط اليد (Handwritten بقلم حبر أو جاف أو رصاص)، أو ورقة مسودة، أو ورقة دفتر يدوية، فيجب فوراً:
-          * تعيين isHandwritten = true
-          * تعيين isThermalPosReceipt = false
-          * تعيين isValid = false
-          * إضافة "الفاتورة محررة يدوياً وغير مطبوعة إلكترونياً من الكاشير" إلى fraudReasons وقائمة unfulfilledConditions.
-          * كتابة رسالة رفض واضحة في (message): "عذراً، تم رفض الفاتورة لأنها محررة بخط اليد. العرض يشترط بون كاشير مطبوع إلكترونياً من ماكينة السوبرماركت."
+        🛑 تعليمات مكافحة التزوير والرفض الأمني (Anti-Fraud & Genuine Receipt Policy):
         - [بون الكاشير الإلكتروني]: الفواتير المقبولة فقط (isValid = true) هي بونات الكاشير الحرارية أو الإلكترونية المطبوعة آلياً من أنظمة ونقاط البيع المعتمدة (Thermal POS Receipts).
-        - [كشف الشطب والتلاعب]: إذا وجد شطب أو تعديل يدوي في أرقام الفاتورة، عيّن isTampered = true و isValid = false.
+        - [ملاحظات وهوامش البروموتر/الكاشير]: إذا كان أصل الفاتورة بون كاشير مطبوع إلكترونياً، وتوجد عليه كتابة يدوية في الهوامش أو الرأس مثل "تم تسليم الهدية" أو توقيع أو علامة استلام أو رقم تليفون أو علامات صح، فهذا بون كاشير أصلي معتمد وسليم (isThermalPosReceipt = true و isHandwritten = false و isTampered = false) ويجب قبوله.
+        - [كشف الفواتير المحررة يدوياً]: إذا كانت الفاتورة نفسها مسودة أو محررة بالكامل في دفتر يدوي وبنودها وأسعارها مكتوبة باليد، عيّن isHandwritten = true و isThermalPosReceipt = false و isValid = false واكتب رسالة رفض واضحة: "عذراً، تم رفض الفاتورة لأنها محررة بخط اليد. العرض يشترط بون كاشير مطبوع إلكترونياً من ماكينة السوبرماركت."
+        - [كشف الشطب والتلاعب في الأرقام]: إذا وجد شطب أو تلاعب وتعديل يدوي في أرقام وأسعار الأصناف المطبوعة لتغيير قيمتها، عيّن isTampered = true و isValid = false.
         - [كشف تصوير الشاشات]: إذا كانت الصورة ملتقطة لشاشة هاتف أو حاسوب، عيّن isScreenCapture = true و isValid = false.
         
         ⚠️ تعليمات استخراج أسعار الأصناف والكميات والخصومات بدقة (Strict Unit Price & Discount Rules):

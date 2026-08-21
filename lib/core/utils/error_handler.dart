@@ -61,6 +61,14 @@ class AppErrorHandler {
       return 'تعذر قراءة بيانات الفاتورة بالذكاء الاصطناعي بشكل دقيق. يرجى التأكد من وضوح تصوير الفاتورة وإضاءتها وإعادة المحاولة.';
     }
 
+    // AI Billing & Prepayment Credits
+    if (str.contains('prepayment') ||
+        str.contains('credits are depleted') ||
+        str.contains('billing') ||
+        str.contains('depleted')) {
+      return 'رصيد حساب Google AI Studio (Gemini API) قد نفد. يرجى تجديد أو شحن رصيد الـ API Key من لوحة تحكم Google AI Studio لمتابعة فحص الفواتير.';
+    }
+
     // AI Quota / Rate limit errors
     if (str.contains('quota') ||
         str.contains('resource_exhausted') ||
