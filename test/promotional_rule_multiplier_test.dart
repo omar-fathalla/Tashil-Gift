@@ -1,8 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:al_mraay/core/config/ai_config.dart';
 import 'package:al_mraay/core/services/ai_receipt_service.dart';
 import 'package:al_mraay/features/admin/domain/event_model.dart';
 
 void main() {
+  test('AiConfig resolves valid Tier 1 paid API key', () {
+    expect(AiConfig.geminiApiKey, 'REMOVED_SECRET');
+    expect(AiConfig.geminiApiKey.length, greaterThan(20));
+  });
+
   group('Promotional Rule Multiplier & Multi-Voucher Award Tests', () {
     final rules = [
       PromotionalRuleItem(

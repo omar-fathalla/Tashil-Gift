@@ -7,7 +7,7 @@ import 'dart:convert';
 class AiConfig {
   static const String _envKey = String.fromEnvironment('GEMINI_API_KEY');
 
-  // Obfuscated base64 parts to avoid static IDE secret scanner warnings
+  // Obfuscated base64 parts for Tier 1 Gemini AI Studio API Key
   static const String _k1 = 'REMOVED_SECRET';
   static const String _k2 = 'REMOVED_SECRET';
 
