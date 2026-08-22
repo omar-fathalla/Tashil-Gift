@@ -45,6 +45,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _selectedCampaignId = 'all';
   String _selectedCompanySlug = 'all';
+  String _statusFilter = 'all'; // 'all', 'accepted', 'rejected'
   DateFilterType _dateFilter = DateFilterType.all;
   DateTimeRange? _customDateRange;
   final Set<String> _expandedDocIds = <String>{};
@@ -176,6 +177,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       _searchController.clear();
       _selectedCampaignId = 'all';
       _selectedCompanySlug = widget.lockedCompanySlug ?? 'all';
+      _statusFilter = 'all';
       _dateFilter = DateFilterType.all;
       _customDateRange = null;
     });
@@ -1092,7 +1094,15 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                   return false;
                 }
 
-                // 4. Search Query (Receipt Number, Branch, Store, Customer)
+                // 4. Status Filter (all / accepted / rejected)
+                final bool isExplicitlyValid = inv['is_valid'] == true || inv['status'] == 'accepted' || inv['isValid'] == true;
+                final bool isExplicitlyRejected = inv['is_valid'] == false || inv['status'] == 'rejected' || inv['isValid'] == false || ((inv['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
+                final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((inv['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
+
+                if (_statusFilter == 'accepted' && !isValid) return false;
+                if (_statusFilter == 'rejected' && isValid) return false;
+
+                // 5. Search Query (Receipt Number, Branch, Store, Customer)
                 if (query.isNotEmpty) {
                   final receiptNum = (inv['receipt_number'] ?? '').toString().toLowerCase();
                   final store = (inv['store_chain_detected'] ?? inv['retail_chain_name'] ?? '').toString().toLowerCase();
@@ -1134,14 +1144,20 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
               }
 
               for (final inv in filteredInvoices) {
-                final promoTotal = (inv['target_company_total'] ?? inv['total_value'] ?? 0);
-                if (promoTotal is num) totalPromoSales += promoTotal.toDouble();
+                final bool isExplicitlyValid = inv['is_valid'] == true || inv['status'] == 'accepted' || inv['isValid'] == true;
+                final bool isExplicitlyRejected = inv['is_valid'] == false || inv['status'] == 'rejected' || inv['isValid'] == false || ((inv['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
+                final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((inv['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
 
-                final products = (inv['extracted_products'] as List?) ?? [];
-                for (final p in products) {
-                  if (p is Map) {
-                    final qty = p['quantity'];
-                    totalExtractedItems += (qty is num ? qty.toInt() : 1);
+                if (isValid) {
+                  final promoTotal = (inv['target_company_total'] ?? inv['total_value'] ?? 0);
+                  if (promoTotal is num) totalPromoSales += promoTotal.toDouble();
+
+                  final products = (inv['extracted_products'] as List?) ?? [];
+                  for (final p in products) {
+                    if (p is Map) {
+                      final qty = p['quantity'];
+                      totalExtractedItems += (qty is num ? qty.toInt() : 1);
+                    }
                   }
                 }
 
@@ -1530,6 +1546,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     final hasActiveFilters = _searchController.text.isNotEmpty ||
         _selectedCampaignId != 'all' ||
         _selectedCompanySlug != 'all' ||
+        _statusFilter != 'all' ||
         _dateFilter != DateFilterType.all;
 
     final scopedEventsMap = (widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty)
@@ -1541,7 +1558,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
           }))
         : eventsMap;
 
-    final isMobile = MediaQuery.of(context).size.width < 680;
+    final isMobile = MediaQuery.of(context).size.width < 960;
 
     final searchFieldWidget = TextField(
       controller: _searchController,
@@ -1558,6 +1575,31 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+
+    final statusFilterWidget = SegmentedButton<String>(
+      segments: [
+        ButtonSegment<String>(
+          value: 'all',
+          label: Text(isAr ? 'الكل' : 'All', style: GoogleFonts.cairo(fontSize: 11)),
+        ),
+        ButtonSegment<String>(
+          value: 'accepted',
+          label: Text(isAr ? 'المقبولة' : 'Accepted', style: GoogleFonts.cairo(fontSize: 11)),
+          icon: const Icon(Icons.check_circle_outline_rounded, size: 14, color: Colors.green),
+        ),
+        ButtonSegment<String>(
+          value: 'rejected',
+          label: Text(isAr ? 'المرفوضة' : 'Rejected', style: GoogleFonts.cairo(fontSize: 11)),
+          icon: const Icon(Icons.cancel_outlined, size: 14, color: Colors.red),
+        ),
+      ],
+      selected: {_statusFilter},
+      onSelectionChanged: (set) => setState(() => _statusFilter = set.first),
+      style: ButtonStyle(
+        visualDensity: VisualDensity.compact,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
     );
 
@@ -1642,7 +1684,11 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
             searchFieldWidget,
             const SizedBox(height: 8),
 
-            // Mobile Row 2: Action Buttons
+            // Mobile Row 2: Status Filter
+            statusFilterWidget,
+            const SizedBox(height: 8),
+
+            // Mobile Row 3: Action Buttons
             Row(
               children: [
                 Expanded(child: datePickerWidget),
@@ -1663,6 +1709,8 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
             Row(
               children: [
                 Expanded(child: searchFieldWidget),
+                const SizedBox(width: 8),
+                statusFilterWidget,
                 const SizedBox(width: 8),
                 datePickerWidget,
                 const SizedBox(width: 8),
@@ -2692,11 +2740,45 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
 
                           const SizedBox(height: 6),
 
-                          // Event & Company Chips Row
+                          // Event & Company & Status Chips Row
                           Wrap(
                             spacing: 6,
                             runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
+                              () {
+                                final bool isExplicitlyValid = inv['is_valid'] == true || inv['status'] == 'accepted' || inv['isValid'] == true;
+                                final bool isExplicitlyRejected = inv['is_valid'] == false || inv['status'] == 'rejected' || inv['isValid'] == false || ((inv['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
+                                final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((inv['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
+
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isValid ? Colors.green.shade100 : Colors.red.shade100,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: isValid ? Colors.green.shade400 : Colors.red.shade400),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        isValid ? Icons.check_circle_rounded : Icons.cancel_rounded,
+                                        size: 12,
+                                        color: isValid ? Colors.green.shade800 : Colors.red.shade800,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        isValid ? (isAr ? 'مقبولة' : 'Accepted') : (isAr ? 'مرفوضة' : 'Rejected'),
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: isValid ? Colors.green.shade900 : Colors.red.shade900,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }(),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
@@ -2727,6 +2809,34 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                                   ),
                                 ),
                               ),
+                              if (inv['rejection_reason'] != null && inv['rejection_reason'].toString().isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.shade50,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.red.shade200),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.info_outline_rounded, size: 12, color: Colors.red.shade800),
+                                      const SizedBox(width: 4),
+                                      Flexible(
+                                        child: Text(
+                                          inv['rejection_reason'].toString(),
+                                          style: TextStyle(
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.red.shade900,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               if (inv['is_handwritten'] == true)
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),

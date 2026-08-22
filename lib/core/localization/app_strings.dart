@@ -705,6 +705,36 @@ class AppStrings {
     en: 'Voucher Cards',
     hi: 'वाउचर कार्ड',
   );
+  String get allVoucherDenominations => _t(
+    ar: 'كافة الفئات (إجمالي عام)',
+    en: 'All Denominations (Combined)',
+    hi: 'सभी श्रेणियां (संयुक्त)',
+  );
+  String get denominationBreakdownSection => _t(
+    ar: 'بطاقات التحليل التفصيلي لفئات القسائم',
+    en: 'Voucher Denominations Detailed Breakdown',
+    hi: 'वाउचर श्रेणियों का विस्तृत विवरण',
+  );
+  String get denominationMasterStock => _t(
+    ar: 'رصيد المخزون الكلي',
+    en: 'Total Inventory Stock',
+    hi: 'कुल इन्वेंटरी स्टॉक',
+  );
+  String get denominationCardsAllocated => _t(
+    ar: 'الكروت المخصصة',
+    en: 'Allocated Cards',
+    hi: 'आवंटित कार्ड',
+  );
+  String get denominationCardsClaimed => _t(
+    ar: 'الكروت المصروفة',
+    en: 'Claimed Cards',
+    hi: 'वितरित कार्ड',
+  );
+  String get denominationCardsRemaining => _t(
+    ar: 'الكروت المتبقية',
+    en: 'Remaining Cards',
+    hi: 'शेष कार्ड',
+  );
 
 
   // ---------------------------------------------------------------------------

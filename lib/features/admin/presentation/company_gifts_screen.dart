@@ -1077,12 +1077,24 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
   void _showEditGiftDialog(Map<String, dynamic> gift) {
     final TextEditingController editQtyController = TextEditingController(text: gift['availableQuantity'].toString());
     final rawUnitVal = (gift['unitValue'] as num?)?.toDouble() ?? 0.0;
-    final isVoucher = (gift['giftType'] == 'voucher') || rawUnitVal > 0;
+    final giftTitle = gift['giftName'] ?? gift['name'] ?? 'الهدية';
+    final gNameLower = giftTitle.toString().toLowerCase();
+    final isExplicitVoucher = (gift['giftType'] == 'voucher') ||
+        gNameLower.contains('فواتشر') ||
+        gNameLower.contains('فوتشر') ||
+        gNameLower.contains('قسيمة') ||
+        gNameLower.contains('قسائم') ||
+        gNameLower.contains('كارت مشتريات') ||
+        gNameLower.contains('كوبون') ||
+        gNameLower.contains('voucher') ||
+        gNameLower.contains('coupon');
+    final isVoucher = isExplicitVoucher && (gift['giftType'] != 'product');
     final TextEditingController editUnitValController = TextEditingController(
-      text: rawUnitVal > 0 ? (rawUnitVal == rawUnitVal.roundToDouble() ? rawUnitVal.toInt().toString() : rawUnitVal.toString()) : '',
+      text: (isVoucher && rawUnitVal > 0)
+          ? (rawUnitVal == rawUnitVal.roundToDouble() ? rawUnitVal.toInt().toString() : rawUnitVal.toString())
+          : '',
     );
     final colorScheme = Theme.of(context).colorScheme;
-    final giftTitle = gift['giftName'] ?? gift['name'] ?? 'الهدية';
 
     showDialog(
       context: context,

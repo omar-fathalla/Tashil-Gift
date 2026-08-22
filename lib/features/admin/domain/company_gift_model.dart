@@ -234,7 +234,20 @@ class CompanyGiftModel {
     this.createdAt,
   });
 
-  bool get isVoucher => giftType == 'voucher' || unitValue > 0;
+  bool get isVoucher {
+    if (giftType == 'voucher') return true;
+    if (giftType == 'product') return false;
+    final clean = giftName.toLowerCase();
+    return unitValue > 0 &&
+        (clean.contains('فواتشر') ||
+            clean.contains('فوتشر') ||
+            clean.contains('قسيمة') ||
+            clean.contains('قسائم') ||
+            clean.contains('كارت مشتريات') ||
+            clean.contains('كوبون') ||
+            clean.contains('voucher') ||
+            clean.contains('coupon'));
+  }
 
   /// Total monetary value of all cards in inventory (e.g. 200 cards * 50 EGP = 10,000 EGP)
   double get totalMonetaryValue => isVoucher ? (totalQuantity * unitValue) : 0.0;
@@ -287,8 +300,29 @@ class CompanyGiftModel {
   }
 
   factory CompanyGiftModel.fromMap(Map<String, dynamic> data, String id) {
-    final rawUnitVal = (data['unitValue'] as num?)?.toDouble() ?? 0.0;
-    final rawType = data['giftType'] as String? ?? (rawUnitVal > 0 ? 'voucher' : 'product');
+    final rawName = ((data['giftName'] as String?)?.isNotEmpty == true
+            ? data['giftName']
+            : (data['name'] ?? ''))
+        .toString()
+        .trim();
+    final cleanName = rawName.toLowerCase();
+    final isExplicitVoucherName = cleanName.contains('فواتشر') ||
+        cleanName.contains('فوتشر') ||
+        cleanName.contains('قسيمة') ||
+        cleanName.contains('قسائم') ||
+        cleanName.contains('كارت مشتريات') ||
+        cleanName.contains('كوبون') ||
+        cleanName.contains('voucher') ||
+        cleanName.contains('coupon');
+
+    final declaredType = data['giftType'] as String?;
+    final rawType = declaredType != null && declaredType.isNotEmpty
+        ? declaredType
+        : (isExplicitVoucherName ? 'voucher' : 'product');
+
+    final rawUnitVal = (rawType == 'voucher' || isExplicitVoucherName)
+        ? ((data['unitValue'] as num?)?.toDouble() ?? 0.0)
+        : 0.0;
     final rawOrder = (data['orderIndex'] as num?)?.toInt() ?? (data['order'] as num?)?.toInt() ?? 0;
     final totalQty = (data['totalQuantity'] as num?)?.toInt() ?? 0;
     final availQty = (data['availableQuantity'] as num?)?.toInt() ?? 0;
@@ -333,9 +367,7 @@ class CompanyGiftModel {
       id: id,
       companySlug: data['companySlug'] ?? '',
       companyName: data['companyName'] ?? '',
-      giftName: (data['giftName'] as String?)?.isNotEmpty == true
-          ? data['giftName']
-          : (data['name'] ?? ''),
+      giftName: rawName,
       totalQuantity: totalQty,
       availableQuantity: availQty,
       allocatedInOtherCampaigns: (data['allocatedInOtherCampaigns'] as num?)?.toInt() ?? 0,

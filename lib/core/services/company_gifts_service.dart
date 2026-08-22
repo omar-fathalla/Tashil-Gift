@@ -366,10 +366,18 @@ class CompanyGiftsService {
         .map((p) => AllocatedPrize.fromMap(Map<String, dynamic>.from(p as Map)))
         .toList();
 
-    // Match the target allocated prize for this branch & gift
     final targetBranchNorm = branchName.trim().toLowerCase();
     final targetBranchIdNorm = branchId.trim().toLowerCase();
     final targetGiftKeyNorm = giftKey.trim().toLowerCase();
+
+    // Also find master gift record for audit/details if available
+    CompanyGiftModel? masterGift;
+    try {
+      final gifts = await getGiftsForCompany(slug);
+      masterGift = gifts.where(
+        (g) => g.id.toLowerCase() == targetGiftKeyNorm || g.giftName.trim().toLowerCase() == targetGiftKeyNorm,
+      ).firstOrNull;
+    } catch (_) {}
 
     int matchedIndex = -1;
     for (int i = 0; i < prizes.length; i++) {
@@ -381,22 +389,15 @@ class CompanyGiftsService {
 
       final branchMatches = (targetBranchIdNorm.isNotEmpty && pBranchIdNorm == targetBranchIdNorm) ||
           (pBranchNorm == targetBranchNorm);
-      final giftMatches = pGiftIdNorm == targetGiftKeyNorm || pNameNorm == targetGiftKeyNorm;
+      final giftMatches = pGiftIdNorm == targetGiftKeyNorm ||
+          pNameNorm == targetGiftKeyNorm ||
+          (masterGift != null && (pGiftIdNorm == masterGift.id.toLowerCase() || pNameNorm == masterGift.giftName.trim().toLowerCase()));
 
       if (branchMatches && giftMatches) {
         matchedIndex = i;
         break;
       }
     }
-
-    // Also find master gift record for audit/details if available
-    CompanyGiftModel? masterGift;
-    try {
-      final gifts = await getGiftsForCompany(slug);
-      masterGift = gifts.firstWhere(
-        (g) => g.id.toLowerCase() == targetGiftKeyNorm || g.giftName.trim().toLowerCase() == targetGiftKeyNorm,
-      );
-    } catch (_) {}
 
     int oldAllocated = 0;
     int oldRemaining = 0;
@@ -818,7 +819,18 @@ class CompanyGiftsService {
       final pBranchId = (p['branchId'] ?? '').toString().trim();
       final pUnitVal = (p['unitValue'] as num?)?.toDouble() ?? 0.0;
       final pType = (p['giftType'] ?? '').toString();
-      final pIsVoucher = pType == 'voucher' || pUnitVal > 0;
+      final cleanPNameForCheck = pName.toLowerCase();
+      final pIsVoucher = pType == 'voucher' ||
+          (pType != 'product' &&
+              pUnitVal > 0 &&
+              (cleanPNameForCheck.contains('فواتشر') ||
+                  cleanPNameForCheck.contains('فوتشر') ||
+                  cleanPNameForCheck.contains('قسيمة') ||
+                  cleanPNameForCheck.contains('قسائم') ||
+                  cleanPNameForCheck.contains('كارت مشتريات') ||
+                  cleanPNameForCheck.contains('كوبون') ||
+                  cleanPNameForCheck.contains('voucher') ||
+                  cleanPNameForCheck.contains('coupon')));
       final pRemaining = (p['remainingQuantity'] as num?)?.toInt() ?? 0;
 
       int score = 0;

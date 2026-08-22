@@ -140,6 +140,7 @@ class AiReceiptAnalysisResult {
   final String kpiColorHex;
   final int chancesEarned;
   final String matchedRuleId;
+  final List<String> matchedRuleIds;
   final String matchedRuleTitle;
   final String matchedRewardValue;
   final double matchedRewardAmount;
@@ -168,6 +169,7 @@ class AiReceiptAnalysisResult {
     String? kpiColorHex,
     this.chancesEarned = 1,
     this.matchedRuleId = '',
+    this.matchedRuleIds = const [],
     this.matchedRuleTitle = '',
     this.matchedRewardValue = '',
     this.matchedRewardAmount = 0.0,
@@ -232,6 +234,16 @@ class AiReceiptAnalysisResult {
         ? (json['durationSeconds'] as num).toDouble()
         : (rawDurationMs / 1000.0);
 
+    final matchedIdsRaw = json['matchedRuleIds'];
+    List<String> parsedRuleIds = [];
+    if (matchedIdsRaw is List) {
+      parsedRuleIds = matchedIdsRaw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+    }
+    final primaryRuleId = json['matchedRuleId']?.toString().trim() ?? '';
+    if (primaryRuleId.isNotEmpty && !parsedRuleIds.contains(primaryRuleId)) {
+      parsedRuleIds.insert(0, primaryRuleId);
+    }
+
     return AiReceiptAnalysisResult(
       isValid: json['isValid'] ?? false,
       receiptNumber: json['receiptNumber']?.toString() ?? '',
@@ -248,7 +260,8 @@ class AiReceiptAnalysisResult {
       kpiRating: json['kpiRating']?.toString(),
       kpiColorHex: json['kpiColorHex']?.toString(),
       chancesEarned: (json['chancesEarned'] as num?)?.toInt() ?? 1,
-      matchedRuleId: json['matchedRuleId']?.toString() ?? '',
+      matchedRuleId: primaryRuleId,
+      matchedRuleIds: parsedRuleIds,
       matchedRuleTitle: json['matchedRuleTitle']?.toString() ?? '',
       matchedRewardValue: json['matchedRewardValue']?.toString() ?? '',
       matchedRewardAmount: (json['matchedRewardAmount'] as num?)?.toDouble() ?? 0.0,
@@ -280,6 +293,7 @@ class AiReceiptAnalysisResult {
       'kpiColorHex': kpiColorHex,
       'chancesEarned': chancesEarned,
       'matchedRuleId': matchedRuleId,
+      'matchedRuleIds': matchedRuleIds,
       'matchedRuleTitle': matchedRuleTitle,
       'matchedRewardValue': matchedRewardValue,
       'matchedRewardAmount': matchedRewardAmount,
@@ -473,7 +487,12 @@ class AiReceiptService {
             ),
             'matchedRuleId': Schema.string(
               description:
-                  'The exact ID of the matched promotional rule (e.g. rule_1, rule_2, rule_3, rule_4, rule_5), or empty string if no specific rule matched.',
+                  'The exact ID of the primary matched promotional rule (e.g. rule_1, rule_2, rule_3, rule_4, rule_5), or empty string if no specific rule matched.',
+            ),
+            'matchedRuleIds': Schema.array(
+              description:
+                  'List of ALL matched promotional rule IDs if multiple distinct products/offers matched in this receipt (e.g. ["rule_3", "rule_5"]). Return empty array if none.',
+              items: Schema.string(),
             ),
             'matchedRuleTitle': Schema.string(
               description:
@@ -567,18 +586,20 @@ class AiReceiptService {
 - محرك القواعد والعروض الترويجية والجوائز المعتمدة (Promotional Rules Engine):
 $rulesListFormatted
 
-⚠️ تعليمات مطابقة القواعد الترويجية وحساب المضاعفات (Promotional Rules & Multiplier Instructions):
-1. افحص بدقة أسماء الأصناف في الفاتورة واجمع إجمالي الكميات المشتراة من المنتج المشروط (Trigger Product Total Quantity).
-2. في حال وجود أكثر من قاعدة لنفس المنتج بمستويات كميات مختلفة (مثل: شراء 1 اسبراي ريكسونا -> 50 ج.م، وشراء 2 اسبراي ريكسونا -> 125 ج.م)، يجب عليك اختيار القاعدة ذات الكمية المشروطة الأعلى التي حققها العميل (مثال: إذا اشترى 2 أو أكثر، اختر قاعدة الـ 125 ج.م).
-3. [مضاعفة الجوائز والفرص]: إذا كانت القاعدة تتيح المضاعفة (تتضاعف الهدايا مع زيادة الكمية) أو كان العرض يتيح المضاعفة، وكان العميل قد اشترى مضاعفات الكمية المشروطة (مثال: اشترى 4 قطع أكس اسبراي والشرط شراء 2 قطعة للحصول على فواتشر 125 ج.م):
-   - احسب عدد مرات تكرار العرض (4 ÷ 2 = 2 مرات).
-   - قم بتعيين حقل (chancesEarned) بعدد مرات العرض المستحقة (مثلاً 2).
-   - قم بحساب إجمالي قيمة الفواتشر/المكافأة بضرب القيمة في عدد المرات في حقل (matchedRewardAmount) (مثلاً 125 × 2 = 250.0).
-   - قم بكتابة الجائزة المستحقة موضحة بالمضاعف في حقل (matchedRewardValue) (مثلاً "2 × فواتشر بقيمة 125 جنيه (إجمالي 250 جنيه)").
-4. قم بتعبئة حقل (matchedRuleId) بمعرف القاعدة المطابقة (مثل "rule_4" أو "rule_1").
-5. قم بتعبئة حقل (matchedRuleTitle) بعنوان القاعدة المطابقة.
-6. قم بتعبئة حقل (matchedRewardType) بنوع المكافأة ("voucher" أو "free_product").
-7. إذا لم تنطبق أي من هذه القواعد الخاصة، اترك حقل (matchedRuleId) فارغاً "".
+⚠️ تعليمات مطابقة القواعد الترويجية وحساب المضاعفات والحزم المتعددة (Promotional Rules & Multi-Offer Instructions):
+1. افحص بدقة أسماء الأصناف في الفاتورة مع مراعاة كافة الاختلافات الإملائية والطباعية في بونات الكاشير (مثال: "روول اون" = "رول اون", "اسبراى" = "اسبراي", "صنسلك" = "صنسيلك", "تريزمي" = "تريزيمي").
+2. [تجميع العروض المتزامنة (Multi-Offer Bundling)]: إذا اشترى العميل أصنافاً تحقق أكثر من عرض ترويجي مختلف في نفس الفاتورة (مثال: اشترى 1 اسبراي يستحق فواتشر 50 ج.م واشترى أيضاً 2 رول أون يستحق فواتشر 50 ج.م):
+   - قم بتضمين كافة معرفات القواعد المطابقة في حقل (matchedRuleIds) كقائمة (مثل: ["rule_3", "rule_5"]).
+   - قم بجمع إجمالي قيمة المكافآت المستحقة في (matchedRewardAmount) (مثال: 50 + 50 = 100.0).
+   - قم بكتابة ملخص الجوائز المجمعة في (matchedRewardValue) (مثال: "فواتشر 50 جنيه + فواتشر 50 جنيه").
+   - قم بتعيين (matchedRuleId) بمعرف القاعدة الأولى المطابقة.
+3. في حال وجود أكثر من قاعدة لنفس المنتج بمستويات كميات مختلفة (مثل: شراء 1 اسبراي ريكسونا -> 50 ج.م، وشراء 2 اسبراي ريكسونا -> 125 ج.م)، يجب عليك اختيار القاعدة ذات الكمية المشروطة الأعلى التي حققها العميل (مثال: إذا اشترى 2 أو أكثر، اختر قاعدة الـ 125 ج.م).
+4. [مضاعفة الجوائز والفرص]: إذا كانت القاعدة تتيح المضاعفة، وكان العميل قد اشترى مضاعفات الكمية المشروطة:
+   - احسب عدد مرات تكرار العرض واضرب قيمة المكافأة بعدد المرات.
+5. قم بتعبئة حقل (matchedRuleId) بمعرف القاعدة المطابقة (مثل "rule_4" أو "rule_3").
+6. قم بتعبئة حقل (matchedRuleTitle) بعنوان القاعدة المطابقة.
+7. قم بتعبئة حقل (matchedRewardType) بنوع المكافأة ("voucher" أو "free_product").
+8. إذا لم تنطبق أي من هذه القواعد الخاصة، اترك حقل (matchedRuleId) فارغاً "" وحقل (matchedRuleIds) كقائمة فارغة [].
 ''';
       }
 
@@ -1329,6 +1350,144 @@ class PromotionalRuleMatcher {
     );
   }
 
+  /// Evaluates ALL promotional rules against the receipt products,
+  /// grouping by unique trigger product family so higher tiers beat lower tiers,
+  /// and different products purchased together in the same receipt ALL produce rewards!
+  static List<MatchedPromotionalRuleResult> matchAllWithMultipliers({
+    AiReceiptAnalysisResult? result,
+    List<ExtractedProductItem> extractedProducts = const [],
+    required List<PromotionalRuleItem> promotionalRules,
+    bool allowCampaignMultipliers = true,
+  }) {
+    if (promotionalRules.isEmpty) return [];
+
+    final effectiveProducts = (result != null && result.extractedProducts.isNotEmpty)
+        ? result.extractedProducts
+        : extractedProducts;
+
+    // 1. Gather all rule IDs identified explicitly by AI
+    final Set<String> aiMatchedRuleIds = {};
+    if (result != null) {
+      if (result.matchedRuleIds.isNotEmpty) {
+        aiMatchedRuleIds.addAll(result.matchedRuleIds);
+      }
+      if (result.matchedRuleId.trim().isNotEmpty) {
+        aiMatchedRuleIds.add(result.matchedRuleId.trim());
+      }
+    }
+
+    if (effectiveProducts.isEmpty) {
+      final single = matchWithMultiplier(
+        result: result,
+        promotionalRules: promotionalRules,
+        allowCampaignMultipliers: allowCampaignMultipliers,
+      );
+      return single != null ? [single] : [];
+    }
+
+    // Group rules by canonical trigger product tokens (to resolve tiers of the same product)
+    final Map<String, List<PromotionalRuleItem>> rulesByProductGroup = {};
+    for (final rule in promotionalRules) {
+      final key = _normalize(rule.triggerProduct.isNotEmpty ? rule.triggerProduct : rule.ruleTitle);
+      rulesByProductGroup.putIfAbsent(key, () => []).add(rule);
+    }
+
+    final List<MatchedPromotionalRuleResult> allMatchedResults = [];
+    final Set<String> matchedRuleIds = {};
+
+    for (final group in rulesByProductGroup.values) {
+      // Find matching rules within this product family
+      PromotionalRuleItem? bestMatchingRule;
+      int maxMatchedTriggerQty = 0;
+
+      for (final rule in group) {
+        int triggerQty = 0;
+        int matchedCount = 0;
+        for (final p in effectiveProducts) {
+          if (_matchesProduct(p, rule.triggerProduct)) {
+            triggerQty += p.quantity > 0 ? p.quantity : 1;
+            matchedCount++;
+          }
+        }
+
+        final bool isAiExplicitMatch = aiMatchedRuleIds.contains(rule.id);
+
+        if ((matchedCount > 0 && triggerQty >= rule.minQuantity) || isAiExplicitMatch) {
+          if (bestMatchingRule == null || rule.minQuantity > bestMatchingRule.minQuantity || isAiExplicitMatch) {
+            bestMatchingRule = rule;
+            maxMatchedTriggerQty = math.max(triggerQty, rule.minQuantity);
+          }
+        }
+      }
+
+      if (bestMatchingRule != null) {
+        int multiplier = 1;
+        if (bestMatchingRule.minQuantity > 0 && maxMatchedTriggerQty >= bestMatchingRule.minQuantity) {
+          if (bestMatchingRule.allowMultipliers || allowCampaignMultipliers) {
+            multiplier = maxMatchedTriggerQty ~/ bestMatchingRule.minQuantity;
+            if (multiplier < 1) multiplier = 1;
+          }
+        }
+
+        final double baseAmount = bestMatchingRule.totalVoucherValue > 0
+            ? bestMatchingRule.totalVoucherValue
+            : (bestMatchingRule.rewardAmount > 0 ? bestMatchingRule.rewardAmount : 0.0);
+        final double totalAmount = baseAmount * multiplier;
+
+        final multipliedLinkedGifts = bestMatchingRule.linkedGifts.map((g) {
+          return g.copyWith(quantity: g.quantity * multiplier);
+        }).toList();
+
+        String prizeSummary;
+        if (multiplier > 1) {
+          if (bestMatchingRule.rewardType == 'voucher' || baseAmount > 0) {
+            final totalInt = totalAmount == totalAmount.roundToDouble() ? totalAmount.toInt() : totalAmount;
+            prizeSummary = '$multiplier × ${bestMatchingRule.rewardValue} (إجمالي $totalInt جنيه)';
+          } else {
+            prizeSummary = '$multiplier × ${bestMatchingRule.rewardValue}';
+          }
+        } else {
+          prizeSummary = bestMatchingRule.rewardValue;
+        }
+
+        matchedRuleIds.add(bestMatchingRule.id);
+        allMatchedResults.add(
+          MatchedPromotionalRuleResult(
+            rule: bestMatchingRule,
+            multiplier: multiplier,
+            totalTriggerQuantity: maxMatchedTriggerQty,
+            totalRewardAmount: totalAmount,
+            formattedPrizeSummary: prizeSummary,
+            multipliedLinkedGifts: multipliedLinkedGifts,
+          ),
+        );
+      }
+    }
+
+    // 2. Include any remaining AI matched rules that weren't captured by the product group loop
+    for (final aiRuleId in aiMatchedRuleIds) {
+      if (!matchedRuleIds.contains(aiRuleId)) {
+        final rule = promotionalRules.where((r) => r.id == aiRuleId).firstOrNull;
+        if (rule != null) {
+          final baseAmount = rule.totalVoucherValue > 0 ? rule.totalVoucherValue : rule.rewardAmount;
+          matchedRuleIds.add(rule.id);
+          allMatchedResults.add(
+            MatchedPromotionalRuleResult(
+              rule: rule,
+              multiplier: 1,
+              totalTriggerQuantity: rule.minQuantity,
+              totalRewardAmount: baseAmount,
+              formattedPrizeSummary: rule.rewardValue,
+              multipliedLinkedGifts: rule.linkedGifts,
+            ),
+          );
+        }
+      }
+    }
+
+    return allMatchedResults;
+  }
+
   static const Set<String> _noiseWords = {
     'شراء', 'عرض', 'من', 'قطعة', 'قطع', 'علبة', 'عبوة', 'عدد', 'مع', 'على', 'في', 'او', 'or', 'and',
     'مل', 'ml', 'جرام', 'جم', 'g', 'gm', 'كيلو', 'كجم', 'kg'
@@ -1345,26 +1504,97 @@ class PromotionalRuleMatcher {
       if (partNorm.isEmpty) continue;
 
       // 1. Direct substring match of whole phrase
-      if (pNorm.contains(partNorm)) return true;
+      if (pNorm.contains(partNorm) || partNorm.contains(pNorm)) return true;
 
-      // 2. Phrase matching (all non-noise words in phrase must be present)
+      // 2. Phrase matching (all non-noise words in phrase must be present or fuzzy matched)
       final phraseWords = partNorm.split(' ').where((w) => w.length >= 2 && !_noiseWords.contains(w)).toList();
 
       if (phraseWords.isNotEmpty) {
-        if (phraseWords.every((w) => pNorm.contains(w))) return true;
+        final pWords = pNorm.split(' ').where((w) => w.length >= 2 && !_noiseWords.contains(w)).toList();
+        final bool allWordsMatched = phraseWords.every((targetWord) {
+          if (pWords.contains(targetWord) || pNorm.contains(targetWord)) return true;
+          return pWords.any((pw) => _isFuzzyWordMatch(pw, targetWord));
+        });
+        if (allWordsMatched) return true;
       }
     }
 
     return false;
   }
 
+  static bool _isFuzzyWordMatch(String w1, String w2) {
+    if (w1 == w2) return true;
+    if (w1.isEmpty || w2.isEmpty) return false;
+
+    // Substring contains for prefix/suffix
+    if (w1.length >= 3 && w2.length >= 3) {
+      if (w1.startsWith(w2) || w2.startsWith(w1)) return true;
+      if (w1.endsWith(w2) || w2.endsWith(w1)) return true;
+    }
+
+    // Levenshtein edit distance check (allow 1 edit for <= 5 chars, 2 edits for > 5 chars)
+    final distance = _levenshtein(w1, w2);
+    final maxLen = math.max(w1.length, w2.length);
+    if (maxLen <= 5 && distance <= 1) return true;
+    if (maxLen > 5 && distance <= 2) return true;
+
+    return false;
+  }
+
+  static int _levenshtein(String s, String t) {
+    if (s == t) return 0;
+    if (s.isEmpty) return t.length;
+    if (t.isEmpty) return s.length;
+
+    final v0 = List<int>.filled(t.length + 1, 0);
+    final v1 = List<int>.filled(t.length + 1, 0);
+
+    for (int i = 0; i <= t.length; i++) {
+      v0[i] = i;
+    }
+
+    for (int i = 0; i < s.length; i++) {
+      v1[0] = i + 1;
+      for (int j = 0; j < t.length; j++) {
+        final cost = (s[i] == t[j]) ? 0 : 1;
+        v1[j + 1] = math.min(v1[j] + 1, math.min(v0[j + 1] + 1, v0[j] + cost));
+      }
+      for (int j = 0; j <= t.length; j++) {
+        v0[j] = v1[j];
+      }
+    }
+
+    return v1[t.length];
+  }
+
   static String _normalize(String s) {
     var str = s.toLowerCase().trim();
+    // Normalize Arabic diacritics / tatweel
+    str = str.replaceAll(RegExp(r'[\u064B-\u0652\u0640]'), '');
     str = str.replaceAll(RegExp(r'[أإآ]'), 'ا');
     str = str.replaceAll('ى', 'ي');
     str = str.replaceAll('ة', 'ه');
+    str = str.replaceAll('ؤ', 'و');
+    str = str.replaceAll('ئ', 'ي');
+
+    // POS & transliteration dictionary normalization
+    str = str.replaceAll(RegExp(r'\b(روول|رووول|roll\s*on|roll-on|rollon)\b'), 'رول اون');
+    str = str.replaceAll(RegExp(r'\b(اسبرى|اسبري|اسبراى|سبراي|سبراى|بخاخ|body\s*spray)\b'), 'اسبراي');
+    str = str.replaceAll(RegExp(r'\b(شمبو|شامبوا|shampoo)\b'), 'شامبو');
+    str = str.replaceAll(RegExp(r'\b(صنسلك|sunsilk)\b'), 'صنسيلك');
+    str = str.replaceAll(RegExp(r'\b(تريزمي|تريزميه|تريسمي|tresemme|treseme)\b'), 'تريزيمي');
+    str = str.replaceAll(RegExp(r'\b(ركسونا|rexona)\b'), 'ريكسونا');
+    str = str.replaceAll(RegExp(r'\b(axe)\b'), 'اكس');
+    str = str.replaceAll(RegExp(r'\b(clear)\b'), 'كلير');
+    str = str.replaceAll(RegExp(r'\b(dove)\b'), 'دوف');
+
+    // Compress repeated Arabic long vowels (e.g. روول -> رول, شوكلييت -> شوكليت)
+    str = str.replaceAll(RegExp(r'([و])\1+'), 'و');
+    str = str.replaceAll(RegExp(r'([ي])\1+'), 'ي');
+    str = str.replaceAll(RegExp(r'([ا])\1+'), 'ا');
+
     str = str.replaceAll(RegExp(r'[^\w\s\u0600-\u06FF]'), ' ');
-    return str.replaceAll(RegExp(r'\s+'), ' ');
+    return str.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   static List<String> _extractTokens(String trigger) {
@@ -1398,6 +1628,73 @@ class MatchedPromotionalRuleResult {
     required this.formattedPrizeSummary,
     this.multipliedLinkedGifts = const [],
   });
+}
+
+/// Represents a composite multi-offer prize bundle synthesized from all matched rules in a single receipt
+class CompositePromotionalBundle {
+  final List<MatchedPromotionalRuleResult> matchedRules;
+  final List<LinkedGiftAllocation> combinedLinkedGifts;
+  final String compositePrizeTitle;
+  final double totalVoucherValue;
+  final int totalChances;
+
+  CompositePromotionalBundle({
+    required this.matchedRules,
+    required this.combinedLinkedGifts,
+    required this.compositePrizeTitle,
+    this.totalVoucherValue = 0.0,
+    this.totalChances = 1,
+  });
+
+  static CompositePromotionalBundle fromMatchedRules(
+    List<MatchedPromotionalRuleResult> rules, {
+    String fallbackTitle = 'هدية ترويجية مميزة',
+  }) {
+    if (rules.isEmpty) {
+      return CompositePromotionalBundle(
+        matchedRules: [],
+        combinedLinkedGifts: [],
+        compositePrizeTitle: fallbackTitle,
+        totalVoucherValue: 0.0,
+        totalChances: 1,
+      );
+    }
+
+    final List<LinkedGiftAllocation> gifts = [];
+    double totalVoucher = 0.0;
+    int chances = 0;
+
+    for (final r in rules) {
+      totalVoucher += r.totalRewardAmount;
+      chances += r.multiplier;
+      if (r.multipliedLinkedGifts.isNotEmpty) {
+        gifts.addAll(r.multipliedLinkedGifts);
+      } else {
+        final isVoucher = r.rule.rewardType == 'voucher' || r.totalRewardAmount > 0;
+        gifts.add(
+          LinkedGiftAllocation(
+            giftId: r.rule.id,
+            giftName: r.rule.rewardValue,
+            quantity: r.multiplier,
+            unitValue: r.rule.rewardAmount > 0
+                ? r.rule.rewardAmount
+                : (r.rule.totalVoucherValue > 0 ? r.rule.totalVoucherValue : 0.0),
+            giftType: isVoucher ? 'voucher' : 'product',
+          ),
+        );
+      }
+    }
+
+    final title = rules.map((r) => r.formattedPrizeSummary).join(' + ');
+
+    return CompositePromotionalBundle(
+      matchedRules: rules,
+      combinedLinkedGifts: gifts,
+      compositePrizeTitle: title,
+      totalVoucherValue: totalVoucher,
+      totalChances: chances > 0 ? chances : 1,
+    );
+  }
 }
 
 

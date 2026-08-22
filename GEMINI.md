@@ -29,3 +29,10 @@
 - **Primary Model**: All AI services across the project (`AiReceiptService`, `CampaignAiAssistantService`, `BranchSignatureAiService`, `AiProductCatalogService`, `AiProductDiscoveryService`) MUST strictly use **`gemini-3.7-flash`** as the standard primary model.
 - **Fallbacks**: Secondary fallback models must follow `gemini-3.6-flash` and `gemini-2.5-flash`.
 - **API Key**: Gemini API calls must strictly use the authorized Tier 1 Google AI Studio API key provided in `AiConfig.geminiApiKey`.
+
+### 6. Promotional Rules & Single-Resolution Architecture Rule (معيار حوكمة احتساب هدايا العروض ومنع المضاعفة المكررة)
+- **Absolute Multiplied Allocations**: `PromotionalRuleMatcher.matchAllWithMultipliers` calculates exact, final, multiplied item quantities based on the qualifying items in the customer's receipt.
+- **Zero Double-Multiplication Invariant**: All screens (`DirectGiftClaimScreen`, `WinnerCelebrationDialog`, `CompanyGiftsService.decrementCampaignPrize`) MUST treat `linkedGifts` item counts as absolute values. Never re-multiply `giftAlloc.quantity` by basket chances or `effectiveQuantity` when `linkedGifts.isNotEmpty`.
+- **Automatic AI Campaign Configuration**: When creating or suggesting new campaigns with `CampaignAiAssistantService`, promotional rules MUST automatically decompose voucher values into stock denominations (`LinkedGiftAllocation`) and configure single-resolution gift structures so every newly created campaign executes flawlessly without manual re-explanation.
+- Full details documented in [.agents/skills/promotional-rules-single-resolution-standard/SKILL.md](file:///Users/fathalla/Development/Tashil%20Gift/.agents/skills/promotional-rules-single-resolution-standard/SKILL.md).
+

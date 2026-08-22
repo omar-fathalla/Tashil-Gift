@@ -16,7 +16,20 @@ class LinkedGiftAllocation {
     this.giftType = 'product',
   });
 
-  bool get isVoucher => giftType == 'voucher' || unitValue > 0;
+  bool get isVoucher {
+    if (giftType == 'voucher') return true;
+    if (giftType == 'product') return false;
+    final clean = giftName.toLowerCase();
+    return unitValue > 0 &&
+        (clean.contains('فواتشر') ||
+            clean.contains('فوتشر') ||
+            clean.contains('قسيمة') ||
+            clean.contains('قسائم') ||
+            clean.contains('كارت مشتريات') ||
+            clean.contains('كوبون') ||
+            clean.contains('voucher') ||
+            clean.contains('coupon'));
+  }
   double get totalMonetaryValue => isVoucher ? (unitValue * quantity) : 0.0;
 
   LinkedGiftAllocation copyWith({
@@ -210,7 +223,20 @@ class AllocatedPrize {
     this.unitValue = 0.0,
   });
 
-  bool get isVoucher => giftType == 'voucher' || unitValue > 0;
+  bool get isVoucher {
+    if (giftType == 'voucher') return true;
+    if (giftType == 'product') return false;
+    final clean = name.toLowerCase();
+    return unitValue > 0 &&
+        (clean.contains('فواتشر') ||
+            clean.contains('فوتشر') ||
+            clean.contains('قسيمة') ||
+            clean.contains('قسائم') ||
+            clean.contains('كارت مشتريات') ||
+            clean.contains('كوبون') ||
+            clean.contains('voucher') ||
+            clean.contains('coupon'));
+  }
 
   /// Calculates how many physical voucher cards should be deducted/handed over for a given winning cash amount.
   /// Example: Winning 100 EGP with 50 EGP vouchers -> 2 cards.
@@ -245,9 +271,25 @@ class AllocatedPrize {
   }
 
   factory AllocatedPrize.fromMap(Map<String, dynamic> data) {
-    final rawUnitVal = (data['unitValue'] as num?)?.toDouble() ?? 0.0;
-    final rawType = data['giftType'] as String? ?? (rawUnitVal > 0 ? 'voucher' : 'product');
     String rawName = (data['name'] as String? ?? '').trim();
+    final cleanName = rawName.toLowerCase();
+    final isExplicitVoucherName = cleanName.contains('فواتشر') ||
+        cleanName.contains('فوتشر') ||
+        cleanName.contains('قسيمة') ||
+        cleanName.contains('قسائم') ||
+        cleanName.contains('كارت مشتريات') ||
+        cleanName.contains('كوبون') ||
+        cleanName.contains('voucher') ||
+        cleanName.contains('coupon');
+
+    final declaredType = data['giftType'] as String?;
+    final rawType = declaredType != null && declaredType.isNotEmpty
+        ? declaredType
+        : (isExplicitVoucherName ? 'voucher' : 'product');
+
+    final rawUnitVal = (rawType == 'voucher' || isExplicitVoucherName)
+        ? ((data['unitValue'] as num?)?.toDouble() ?? 0.0)
+        : 0.0;
     final giftId = (data['giftId'] as String? ?? '').trim();
 
     // Self-healing: if name is empty, or is a raw Firestore ID (e.g. 20-character alphanumeric ID)

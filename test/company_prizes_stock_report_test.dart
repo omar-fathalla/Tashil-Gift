@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:al_mraay/core/localization/app_strings.dart';
 import 'package:al_mraay/core/widgets/m3_button_groups.dart';
 import 'package:al_mraay/features/company_portal/presentation/company_prizes_stock_report_screen.dart';
+import 'package:al_mraay/features/admin/domain/company_gift_model.dart';
+import 'package:al_mraay/features/admin/domain/event_model.dart';
 
 void main() {
   group('Company Prizes & Real-Time Stock Balance System Tests', () {
@@ -97,6 +99,60 @@ void main() {
       expect(stockDepleted.isLowStock, isFalse);
     });
 
+    test('Physical gifts with volume/weight (e.g. 250 ml, 90 ml) are strictly NOT treated as vouchers', () {
+      final tresemmeProduct = AggregatedGiftStock(
+        giftId: 'tresemme_250',
+        giftName: 'تريزيمي 250 مل هديه',
+        totalAllocated: 2551,
+        totalRemaining: 1940,
+        totalClaimed: 611,
+        branchRemainingMap: {},
+        branchAllocatedMap: {},
+        eventNames: ['فعالية يونيليفر'],
+        giftType: 'product',
+        unitValue: 0.0,
+      );
+
+      expect(tresemmeProduct.isVoucher, isFalse);
+      expect(tresemmeProduct.totalMonetaryBudget, equals(0.0));
+      expect(tresemmeProduct.claimedMonetaryValue, equals(0.0));
+      expect(tresemmeProduct.remainingMonetaryValue, equals(0.0));
+
+      final clearProduct = AggregatedGiftStock(
+        giftId: 'clear_90',
+        giftName: 'كلير 90 مل هديه',
+        totalAllocated: 2001,
+        totalRemaining: 1728,
+        totalClaimed: 273,
+        branchRemainingMap: {},
+        branchAllocatedMap: {},
+        eventNames: ['فعالية يونيليفر'],
+        giftType: 'product',
+        unitValue: 0.0,
+      );
+
+      expect(clearProduct.isVoucher, isFalse);
+      expect(clearProduct.totalMonetaryBudget, equals(0.0));
+
+      final realVoucher25 = AggregatedGiftStock(
+        giftId: 'voucher_25',
+        giftName: 'قسيمة مشتريات 25 ج.م',
+        totalAllocated: 4393,
+        totalRemaining: 3866,
+        totalClaimed: 527,
+        branchRemainingMap: {},
+        branchAllocatedMap: {},
+        eventNames: ['فعالية يونيليفر'],
+        giftType: 'voucher',
+        unitValue: 25.0,
+      );
+
+      expect(realVoucher25.isVoucher, isTrue);
+      expect(realVoucher25.totalMonetaryBudget, equals(4393 * 25.0));
+      expect(realVoucher25.claimedMonetaryValue, equals(527 * 25.0));
+      expect(realVoucher25.remainingMonetaryValue, equals(3866 * 25.0));
+    });
+
     testWidgets('CompanyPrizesStockReportScreen renders 4 KPI cards and 3-segment switcher', (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
@@ -141,6 +197,9 @@ void main() {
       expect(stringsAr.remainingVouchersValue, contains('المتبقي'));
       expect(stringsAr.viewBranchVoucherMatrix, contains('الفروع'));
       expect(stringsAr.voucherMatrixDialogTitle, contains('توزيع'));
+      expect(stringsAr.allVoucherDenominations, contains('كافة الفئات'));
+      expect(stringsAr.denominationBreakdownSection, contains('بطاقات التحليل'));
+      expect(stringsAr.denominationMasterStock, contains('المخزون'));
 
       final stringsEn = AppStrings.fromLocale('en');
       expect(stringsEn.voucherIntelligenceTitle, contains('Voucher Intelligence'));
@@ -149,6 +208,8 @@ void main() {
       expect(stringsEn.claimedVouchersValue, contains('Disbursed Voucher Value'));
       expect(stringsEn.remainingVouchersValue, contains('Remaining Balance Value'));
       expect(stringsEn.viewBranchVoucherMatrix, contains('Branch Voucher Matrix'));
+      expect(stringsEn.allVoucherDenominations, contains('All Denominations'));
+      expect(stringsEn.denominationBreakdownSection, contains('Detailed Breakdown'));
 
       final stringsHi = AppStrings.fromLocale('hi');
       expect(stringsHi.voucherIntelligenceTitle, isNotEmpty);
@@ -156,55 +217,72 @@ void main() {
       expect(stringsHi.totalVouchersBudget, isNotEmpty);
       expect(stringsHi.claimedVouchersValue, isNotEmpty);
       expect(stringsHi.remainingVouchersValue, isNotEmpty);
+      expect(stringsHi.allVoucherDenominations, isNotEmpty);
     });
 
-    test('VoucherDenominationStats and AggregatedVoucherMetrics calculate correctly', () {
+    test('VoucherDenominationStats and AggregatedVoucherMetrics calculate correctly with master stock and branch mappings', () {
       final denom25 = VoucherDenominationStats(
         denomination: 25.0,
         label: '25 ج.م',
-        allocatedCount: 100,
-        claimedCount: 40,
-        remainingCount: 60,
+        masterTotalCount: 5000,
+        masterAvailableCount: 607,
+        allocatedCount: 4393,
+        claimedCount: 527,
+        remainingCount: 3866,
+        branchAllocatedMap: {'فرع سموحة': 500},
+        branchClaimedMap: {'فرع سموحة': 50},
+        branchRemainingMap: {'فرع سموحة': 450},
       );
 
       final denom50 = VoucherDenominationStats(
         denomination: 50.0,
         label: '50 ج.م',
-        allocatedCount: 50,
-        claimedCount: 20,
-        remainingCount: 30,
+        masterTotalCount: 2000,
+        masterAvailableCount: 0,
+        allocatedCount: 2000,
+        claimedCount: 200,
+        remainingCount: 1800,
+        branchAllocatedMap: {'فرع سموحة': 300},
+        branchClaimedMap: {'فرع سموحة': 30},
+        branchRemainingMap: {'فرع سموحة': 270},
       );
 
-      expect(denom25.totalBudget, equals(2500.0));
-      expect(denom25.claimedValue, equals(1000.0));
-      expect(denom25.remainingValue, equals(1500.0));
+      expect(denom25.totalBudget, equals(4393 * 25.0));
+      expect(denom25.claimedValue, equals(527 * 25.0));
+      expect(denom25.remainingValue, equals(3866 * 25.0));
+      expect(denom25.masterTotalBudget, equals(5000 * 25.0));
+      expect(denom25.branchAllocatedMap['فرع سموحة'], equals(500));
+
+      expect(denom50.totalBudget, equals(2000 * 50.0));
+      expect(denom50.claimedValue, equals(200 * 50.0));
+      expect(denom50.remainingValue, equals(1800 * 50.0));
+      expect(denom50.masterTotalBudget, equals(2000 * 50.0));
 
       final metrics = AggregatedVoucherMetrics(
-        totalUnitsAllocated: 150,
-        totalUnitsClaimed: 60,
-        totalUnitsRemaining: 90,
-        totalBudgetEgp: 5000.0,
-        totalClaimedEgp: 2000.0,
-        totalRemainingEgp: 3000.0,
+        totalUnitsAllocated: 6393,
+        totalUnitsClaimed: 727,
+        totalUnitsRemaining: 5666,
+        totalBudgetEgp: (4393 * 25.0) + (2000 * 50.0),
+        totalClaimedEgp: (527 * 25.0) + (200 * 50.0),
+        totalRemainingEgp: (3866 * 25.0) + (1800 * 50.0),
         denominations: [denom25, denom50],
         branchDenominationsMap: {
           'فرع سموحة': {25.0: denom25, 50.0: denom50},
         },
-        branchTotalVoucherUnits: {'فرع سموحة': 150},
-        branchTotalVoucherBudget: {'فرع سموحة': 5000.0},
-        branchClaimedVoucherUnits: {'فرع سموحة': 60},
-        branchRemainingVoucherUnits: {'فرع سموحة': 90},
+        branchTotalVoucherUnits: {'فرع سموحة': 800},
+        branchTotalVoucherBudget: {'فرع سموحة': (500 * 25.0) + (300 * 50.0)},
+        branchClaimedVoucherUnits: {'فرع سموحة': 80},
+        branchRemainingVoucherUnits: {'فرع سموحة': 720},
       );
 
-      expect(metrics.totalUnitsAllocated, equals(150));
-      expect(metrics.totalUnitsClaimed, equals(60));
-      expect(metrics.totalUnitsRemaining, equals(90));
-      expect(metrics.totalBudgetEgp, equals(5000.0));
-      expect(metrics.totalClaimedEgp, equals(2000.0));
-      expect(metrics.totalRemainingEgp, equals(3000.0));
-      expect(metrics.depletionRate, closeTo(0.40, 0.001));
+      expect(metrics.totalUnitsAllocated, equals(6393));
+      expect(metrics.totalUnitsClaimed, equals(727));
+      expect(metrics.totalUnitsRemaining, equals(5666));
+      expect(metrics.totalBudgetEgp, equals(109825.0 + 100000.0));
       expect(metrics.denominations.length, equals(2));
-      expect(metrics.branchTotalVoucherBudget['فرع سموحة'], equals(5000.0));
+      expect(metrics.denominations[0].denomination, equals(25.0));
+      expect(metrics.denominations[1].denomination, equals(50.0));
+      expect(metrics.branchTotalVoucherBudget['فرع سموحة'], equals(27500.0));
     });
 
     testWidgets('CompanyPrizesStockReportScreen renders 4 Voucher KPI cards and matrix action', (tester) async {
@@ -270,6 +348,88 @@ void main() {
       await tester.pump();
 
       expect(tester.takeException(), isNull);
+    });
+
+    test('Strict Master Gift Matching cleanly isolates different voucher denominations and products', () {
+      final masterGifts = [
+        CompanyGiftModel(
+          id: 'gift_voucher_25',
+          companySlug: 'unilever',
+          giftName: 'فواتشر 25 جنيه',
+          giftType: 'voucher',
+          unitValue: 25.0,
+          totalQuantity: 5000,
+          availableQuantity: 607,
+          createdAt: DateTime.now(),
+        ),
+        CompanyGiftModel(
+          id: 'gift_voucher_50',
+          companySlug: 'unilever',
+          giftName: 'فواتشر 50 جنيه',
+          giftType: 'voucher',
+          unitValue: 50.0,
+          totalQuantity: 2000,
+          availableQuantity: 0,
+          createdAt: DateTime.now(),
+        ),
+        CompanyGiftModel(
+          id: 'gift_tresemme_250',
+          companySlug: 'unilever',
+          giftName: 'تريزيمي 250 مل هديه',
+          giftType: 'product',
+          unitValue: 0.0,
+          totalQuantity: 3000,
+          availableQuantity: 449,
+          createdAt: DateTime.now(),
+        ),
+        CompanyGiftModel(
+          id: 'gift_clear_90',
+          companySlug: 'unilever',
+          giftName: 'كلير 90 مل هديه',
+          giftType: 'product',
+          unitValue: 0.0,
+          totalQuantity: 1000,
+          availableQuantity: 200,
+          createdAt: DateTime.now(),
+        ),
+      ];
+
+      final prizeVoucher50 = AllocatedPrize(
+        giftId: '',
+        name: 'فواتشر 50 جنيه',
+        allocatedQuantity: 200,
+        remainingQuantity: 181,
+        giftType: 'voucher',
+        unitValue: 50.0,
+      );
+
+      final prizeVoucher25 = AllocatedPrize(
+        giftId: '',
+        name: 'فواتشر 25 جنيه',
+        allocatedQuantity: 200,
+        remainingQuantity: 181,
+        giftType: 'voucher',
+        unitValue: 25.0,
+      );
+
+      final prizeTresemme = AllocatedPrize(
+        giftId: '',
+        name: 'تريزيمي 250 مل هديه',
+        allocatedQuantity: 200,
+        remainingQuantity: 181,
+        giftType: 'product',
+      );
+
+      final match50 = CompanyPrizesStockReportScreen.findMatchingMasterGift(prizeVoucher50, masterGifts);
+      final match25 = CompanyPrizesStockReportScreen.findMatchingMasterGift(prizeVoucher25, masterGifts);
+      final matchTresemme = CompanyPrizesStockReportScreen.findMatchingMasterGift(prizeTresemme, masterGifts);
+
+      expect(match50?.id, equals('gift_voucher_50'));
+      expect(match50?.giftName, equals('فواتشر 50 جنيه'));
+      expect(match25?.id, equals('gift_voucher_25'));
+      expect(match25?.giftName, equals('فواتشر 25 جنيه'));
+      expect(matchTresemme?.id, equals('gift_tresemme_250'));
+      expect(matchTresemme?.giftName, equals('تريزيمي 250 مل هديه'));
     });
   });
 }

@@ -6,6 +6,7 @@ import '../../../core/localization/app_strings.dart';
 import '../../../core/services/game_audio_service.dart';
 import '../../../core/widgets/game_sound_controls.dart';
 import '../../../core/animations/m3_motion.dart';
+import '../../admin/domain/event_model.dart';
 import 'spin_the_wheel_screen.dart';
 import 'scratch_card_screen.dart';
 import 'mystery_box_screen.dart';
@@ -275,17 +276,7 @@ class GameTypesScreen extends ConsumerWidget {
                   title: strings.gameDirectGiftTitle,
                   subtitle: strings.gameDirectGiftSubtitle,
                   description: strings.gameDirectGiftDesc,
-                  onPlayDemo: () {
-                    Navigator.of(context).push(
-                      M3PageRoute(
-                        page: const DirectGiftClaimScreen(
-                          prizeName: 'طقم هدايا ترويجية VIP فاخر ✨',
-                          quantity: 2,
-                          isDemo: true,
-                        ),
-                      ),
-                    );
-                  },
+                  onPlayDemo: () => _showDirectGiftDemoModal(context, isAr),
                   onPlaySound: () => audioService.playGiftUnlock(),
                   steps: isAr
                       ? [
@@ -314,6 +305,206 @@ class GameTypesScreen extends ConsumerWidget {
     );
   }
 
+  static void _showDirectGiftDemoModal(BuildContext context, bool isAr) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return Directionality(
+          textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
+          child: Container(
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+            ),
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Handle bar
+                Center(
+                  child: Container(
+                    width: 48,
+                    height: 5,
+                    margin: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(
+                      color: colorScheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+
+                // Title Header
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: colorScheme.secondaryContainer,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(Icons.redeem_rounded, color: colorScheme.secondary, size: 24),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isAr ? 'اختر سيناريو الديمو للهدية الفورية' : 'Select Direct Gift Demo Scenario',
+                            style: GoogleFonts.cairo(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          Text(
+                            isAr ? 'معاينة تجربة العميل لحالات الفوز الفردي والمضاعف والسلة المجمعة' : 'Preview Single Win, Multipliers & Multi-Offer Bundles',
+                            style: GoogleFonts.cairo(
+                              fontSize: 12,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                // Scenario 1: Single Win (فوز فردي بسيط)
+                _DemoScenarioTile(
+                  icon: Icons.confirmation_number_rounded,
+                  iconColor: const Color(0xFFFF8F00),
+                  iconBg: const Color(0xFFFFF8E1),
+                  title: isAr ? '1. فوز فردي بسيط (Single Win)' : '1. Single Win (1 Gift)',
+                  subtitle: isAr ? 'فوز بـ 1 × فواتشر مشتريات 50 ج.م' : 'Customer won 1 × 50 EGP Voucher',
+                  badgeText: isAr ? 'عرض مفرد' : 'Single Offer',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.of(context).push(
+                      M3PageRoute(
+                        page: const DirectGiftClaimScreen(
+                          prizeName: 'فواتشر مشتريات بقيمة 50 جنيه',
+                          unitValue: 50.0,
+                          isVoucher: true,
+                          quantity: 1,
+                          isDemo: true,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+
+                // Scenario 2: Multi-Quantity Win (مضاعفة كمية العرض)
+                _DemoScenarioTile(
+                  icon: Icons.auto_awesome_rounded,
+                  iconColor: const Color(0xFF1E88E5),
+                  iconBg: const Color(0xFFE3F2FD),
+                  title: isAr ? '2. مضاعفة كمية العرض (Multi-Quantity 2×)' : '2. Multi-Quantity (2× Offer)',
+                  subtitle: isAr ? 'شراء 4 قطع ➔ 2 × فواتشر 125 ج.م (إجمالي 250 ج.م)' : 'Customer won 2 × 125 EGP Voucher (Total 250 EGP)',
+                  badgeText: isAr ? 'مضاعفة ×2' : 'Multiplier 2×',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.of(context).push(
+                      M3PageRoute(
+                        page: const DirectGiftClaimScreen(
+                          prizeName: 'فواتشر بقيمة 125 جنيه',
+                          unitValue: 125.0,
+                          isVoucher: true,
+                          quantity: 2,
+                          isDemo: true,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+
+                // Scenario 3: Multi-Offer Bundle Win (سلة هدايا مجمعة - متعدد الشروط)
+                _DemoScenarioTile(
+                  icon: Icons.inventory_2_rounded,
+                  iconColor: const Color(0xFF7B1FA2),
+                  iconBg: const Color(0xFFF3E5F5),
+                  title: isAr ? '3. سلة هدايا مجمعة (Multi-Offer Bundle)' : '3. Multi-Offer Gift Bundle',
+                  subtitle: isAr ? 'استيفاء 3 شروط: فواتشر 50 ج.م + كلير 90 مل + تريزيمي 250 مل' : 'Met 3 conditions: 50 EGP Voucher + Clear 90ml + Tresemme 250ml',
+                  badgeText: isAr ? '3 هدايا مجمعة' : '3 Gifts Bundle',
+                  isHighlighted: true,
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.of(context).push(
+                      M3PageRoute(
+                        page: DirectGiftClaimScreen(
+                          prizeName: 'فواتشر 50 جنيه + كلير 90 مل هدية + تريزيمي 250 مل هدية',
+                          isVoucher: true,
+                          quantity: 1,
+                          isDemo: true,
+                          linkedGifts: [
+                            LinkedGiftAllocation(
+                              giftId: 'voucher_50',
+                              giftName: 'فواتشر مشتريات 50 ج.م',
+                              quantity: 1,
+                              unitValue: 50.0,
+                              giftType: 'voucher',
+                            ),
+                            LinkedGiftAllocation(
+                              giftId: 'clear_90',
+                              giftName: 'شامبو كلير 90 مل هدية',
+                              quantity: 1,
+                              unitValue: 0.0,
+                              giftType: 'product',
+                            ),
+                            LinkedGiftAllocation(
+                              giftId: 'tresemme_250',
+                              giftName: 'تريزيمي 250 مل هدية',
+                              quantity: 1,
+                              unitValue: 0.0,
+                              giftType: 'product',
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+
+                // Scenario 4: Single Physical Product (هدية عينية فردية)
+                _DemoScenarioTile(
+                  icon: Icons.card_giftcard_rounded,
+                  iconColor: const Color(0xFF2E7D32),
+                  iconBg: const Color(0xFFE8F5E9),
+                  title: isAr ? '4. هدية عينية ترويجية (Physical Product)' : '4. Certified Physical Gift',
+                  subtitle: isAr ? 'فوز بـ 1 × تريزيمي 250 مل هدية' : 'Customer won 1 × Tresemme 250ml Gift',
+                  badgeText: isAr ? 'هدية عينية' : 'Physical Gift',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.of(context).push(
+                      M3PageRoute(
+                        page: const DirectGiftClaimScreen(
+                          prizeName: 'تريزيمي 250 مل هدية',
+                          isVoucher: false,
+                          quantity: 1,
+                          isDemo: true,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildGameCard({
     required BuildContext context,
     required bool isAr,
@@ -327,6 +518,7 @@ class GameTypesScreen extends ConsumerWidget {
     required String badgeText,
     required Color badgeColor,
     required Color badgeTextColor,
+    String? demoButtonLabel,
     VoidCallback? onPlayDemo,
     VoidCallback? onPlaySound,
   }) {
@@ -480,6 +672,7 @@ class GameTypesScreen extends ConsumerWidget {
                       isAr: isAr,
                       onPressed: onPlayDemo,
                       gameTitle: title,
+                      customLabel: demoButtonLabel,
                     ),
                   if (onPlaySound != null)
                     _GameSoundPreviewButton(
@@ -501,11 +694,13 @@ class _GameDemoLaunchButton extends StatelessWidget {
   final bool isAr;
   final VoidCallback onPressed;
   final String gameTitle;
+  final String? customLabel;
 
   const _GameDemoLaunchButton({
     required this.isAr,
     required this.onPressed,
     required this.gameTitle,
+    this.customLabel,
   });
 
   @override
@@ -515,7 +710,7 @@ class _GameDemoLaunchButton extends StatelessWidget {
     return FilledButton.icon(
       icon: const Icon(Icons.sports_esports_rounded, size: 18),
       label: Text(
-        isAr ? 'تجربة اللعبة (ديمو تفاعلي)' : 'Play Game Demo (Live)',
+        customLabel ?? (isAr ? 'تجربة اللعبة (ديمو تفاعلي)' : 'Play Game Demo (Live)'),
         style: GoogleFonts.cairo(
           fontWeight: FontWeight.bold,
           fontSize: 13,
@@ -589,6 +784,110 @@ class _GameSoundPreviewButtonState extends State<_GameSoundPreviewButton> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       ),
       onPressed: _triggerPlay,
+    );
+  }
+}
+
+class _DemoScenarioTile extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final Color iconBg;
+  final String title;
+  final String subtitle;
+  final String badgeText;
+  final VoidCallback onTap;
+  final bool isHighlighted;
+
+  const _DemoScenarioTile({
+    required this.icon,
+    required this.iconColor,
+    required this.iconBg,
+    required this.title,
+    required this.subtitle,
+    required this.badgeText,
+    required this.onTap,
+    this.isHighlighted = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isHighlighted
+                ? colorScheme.primaryContainer.withValues(alpha: 0.35)
+                : colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isHighlighted
+                  ? colorScheme.primary
+                  : colorScheme.outlineVariant.withValues(alpha: 0.5),
+              width: isHighlighted ? 1.5 : 1.0,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: iconColor, size: 24),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.cairo(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.cairo(
+                        fontSize: 12,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isHighlighted ? colorScheme.primary : colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  badgeText,
+                  style: GoogleFonts.cairo(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: isHighlighted ? Colors.white : colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(Icons.chevron_left_rounded, color: colorScheme.onSurfaceVariant, size: 20),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

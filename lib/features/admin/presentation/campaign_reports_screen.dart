@@ -417,67 +417,66 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
 
     for (final doc in filteredTransactions) {
       final data = doc.data() as Map<String, dynamic>;
-      final bool isValid = data['isValid'] == true ||
-          (data['is_valid'] == true) ||
-          ((data['unfulfilled_conditions'] as List?)?.isEmpty ?? true);
+      final bool isExplicitlyValid = data['is_valid'] == true || data['status'] == 'accepted' || data['isValid'] == true;
+      final bool isExplicitlyRejected = data['is_valid'] == false || data['status'] == 'rejected' || data['isValid'] == false || ((data['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
+      final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((data['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
 
       if (isValid) {
         acceptedInvoices++;
-      } else {
-        rejectedInvoices++;
-      }
+        final spendVal = (data['target_company_total'] ?? data['total_value'] as num?)?.toDouble() ?? 0.0;
+        totalSalesVolume += spendVal;
 
-      final spendVal = (data['target_company_total'] ?? data['total_value'] as num?)?.toDouble() ?? 0.0;
-      totalSalesVolume += spendVal;
+        // Smart Branch aggregation with canonical matching & deduplication
+        final rawBranch = (data['branch_detected'] ?? data['branchName'] ?? data['store_chain_detected'] ?? '').toString().trim();
+        final allKnownBranches = _selectedEvent != null
+            ? _selectedEvent!.branchNames
+            : scopedEvents.expand((e) => e.branchNames).toSet().toList();
+        final effectiveBranch = _normalizeBranchName(rawBranch, allKnownBranches, isAr);
+        if (!branchStatsMap.containsKey(effectiveBranch)) {
+          branchStatsMap[effectiveBranch] = _BranchStat(branchName: effectiveBranch);
+        }
+        branchStatsMap[effectiveBranch]!.receiptCount++;
+        branchStatsMap[effectiveBranch]!.totalRevenue += spendVal;
 
-      // Smart Branch aggregation with canonical matching & deduplication
-      final rawBranch = (data['branch_detected'] ?? data['branchName'] ?? data['store_chain_detected'] ?? '').toString().trim();
-      final allKnownBranches = _selectedEvent != null
-          ? _selectedEvent!.branchNames
-          : scopedEvents.expand((e) => e.branchNames).toSet().toList();
-      final effectiveBranch = _normalizeBranchName(rawBranch, allKnownBranches, isAr);
-      if (!branchStatsMap.containsKey(effectiveBranch)) {
-        branchStatsMap[effectiveBranch] = _BranchStat(branchName: effectiveBranch);
-      }
-      branchStatsMap[effectiveBranch]!.receiptCount++;
-      branchStatsMap[effectiveBranch]!.totalRevenue += spendVal;
+        // Product aggregation
+        final rawProducts = data['extracted_products'];
+        if (rawProducts is List) {
+          for (final p in rawProducts) {
+            if (p is Map) {
+              final name = p['name']?.toString().trim() ?? (isAr ? 'منتج غير معروف' : 'Unknown Item');
+              if (name.isEmpty) continue;
 
-      // Product aggregation
-      final rawProducts = data['extracted_products'];
-      if (rawProducts is List) {
-        for (final p in rawProducts) {
-          if (p is Map) {
-            final name = p['name']?.toString().trim() ?? (isAr ? 'منتج غير معروف' : 'Unknown Item');
-            if (name.isEmpty) continue;
+              final qty = (p['quantity'] as num?)?.toInt() ?? 1;
+              final price = (p['price'] as num?)?.toDouble() ?? 0.0;
+              final isTarget = p['isTargetCompany'] == true;
+              final barcode = p['barcode']?.toString().trim() ?? '';
 
-            final qty = (p['quantity'] as num?)?.toInt() ?? 1;
-            final price = (p['price'] as num?)?.toDouble() ?? 0.0;
-            final isTarget = p['isTargetCompany'] == true;
-            final barcode = p['barcode']?.toString().trim() ?? '';
+              // Strict company product filtering when scoped
+              if (effectiveFilterCompanyOnly && !isTarget) {
+                continue;
+              }
 
-            // Strict company product filtering when scoped
-            if (effectiveFilterCompanyOnly && !isTarget) {
-              continue;
-            }
+              totalUnitsSold += qty;
 
-            totalUnitsSold += qty;
-
-            if (!productStatsMap.containsKey(name)) {
-              productStatsMap[name] = _ProductStat(
-                name: name,
-                totalQty: 0,
-                totalRevenue: 0.0,
-                isTargetCompany: isTarget,
-                barcode: barcode,
-              );
-            }
-            productStatsMap[name]!.totalQty += qty;
-            productStatsMap[name]!.totalRevenue += (price * qty);
-            if (barcode.isNotEmpty && productStatsMap[name]!.barcode.isEmpty) {
-              productStatsMap[name]!.barcode = barcode;
+              if (!productStatsMap.containsKey(name)) {
+                productStatsMap[name] = _ProductStat(
+                  name: name,
+                  totalQty: 0,
+                  totalRevenue: 0.0,
+                  isTargetCompany: isTarget,
+                  barcode: barcode,
+                );
+              }
+              productStatsMap[name]!.totalQty += qty;
+              productStatsMap[name]!.totalRevenue += (price * qty);
+              if (barcode.isNotEmpty && productStatsMap[name]!.barcode.isEmpty) {
+                productStatsMap[name]!.barcode = barcode;
+              }
             }
           }
         }
+      } else {
+        rejectedInvoices++;
       }
     }
 
@@ -1847,9 +1846,9 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
       final name = data['customerName']?.toString().toLowerCase() ?? '';
       final branch = (data['branch_detected'] ?? data['store_chain_detected'] ?? '').toString().toLowerCase();
 
-      final bool isValid = data['isValid'] == true ||
-          (data['is_valid'] == true) ||
-          ((data['unfulfilled_conditions'] as List?)?.isEmpty ?? true);
+      final bool isExplicitlyValid = data['is_valid'] == true || data['status'] == 'accepted' || data['isValid'] == true;
+      final bool isExplicitlyRejected = data['is_valid'] == false || data['status'] == 'rejected' || data['isValid'] == false || ((data['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
+      final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((data['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
 
       if (_receiptStatusFilter == 'VALID' && !isValid) return false;
       if (_receiptStatusFilter == 'INVALID' && isValid) return false;
@@ -1980,22 +1979,27 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
                 final data = doc.data() as Map<String, dynamic>;
                 final recNum = data['receipt_number']?.toString() ?? (isAr ? 'بدون رقم' : 'No Number');
                 final total = (data['target_company_total'] ?? data['total_value'] as num?)?.toDouble() ?? 0.0;
-                final bool isValid = data['isValid'] == true ||
-                    (data['is_valid'] == true) ||
-                    ((data['unfulfilled_conditions'] as List?)?.isEmpty ?? true);
+                final bool isExplicitlyValid = data['is_valid'] == true || data['status'] == 'accepted' || data['isValid'] == true;
+                final bool isExplicitlyRejected = data['is_valid'] == false || data['status'] == 'rejected' || data['isValid'] == false || ((data['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
+                final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((data['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
                 final custName = data['customerName']?.toString() ?? '';
                 final custPhone = data['customerPhone']?.toString() ?? '';
                 final storeChain = data['store_chain_detected']?.toString() ?? '';
                 final branch = data['branch_detected']?.toString() ?? '';
                 final recDate = data['receipt_date']?.toString() ?? '';
                 final extractedProds = (data['extracted_products'] as List?) ?? [];
+                final rejectionReason = data['rejection_reason']?.toString() ?? '';
 
                 return Container(
                   padding: EdgeInsets.all(isMobile ? 12 : 14),
                   decoration: BoxDecoration(
                     color: colorScheme.surface,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                    border: Border.all(
+                      color: isValid
+                          ? colorScheme.outlineVariant.withValues(alpha: 0.5)
+                          : Colors.red.shade200,
+                    ),
                   ),
                   child: Row(
                     children: [
@@ -2058,6 +2062,36 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
+                            if (!isValid && rejectionReason.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.shade50,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: Colors.red.shade200),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.info_outline_rounded, size: 12, color: Colors.red.shade800),
+                                    const SizedBox(width: 4),
+                                    Flexible(
+                                      child: Text(
+                                        rejectionReason,
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.red.shade900,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -2272,6 +2306,11 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
     final storeChain = data['store_chain_detected']?.toString() ?? '';
     final branch = data['branch_detected']?.toString() ?? '';
     final extractedProds = (data['extracted_products'] as List?) ?? [];
+    final bool isExplicitlyValid = data['is_valid'] == true || data['status'] == 'accepted' || data['isValid'] == true;
+    final bool isExplicitlyRejected = data['is_valid'] == false || data['status'] == 'rejected' || data['isValid'] == false || ((data['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
+    final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((data['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
+    final String? rejectionReason = data['rejection_reason']?.toString();
+    final List unfulfilledConditions = (data['unfulfilled_conditions'] as List?) ?? [];
 
     showDialog(
       context: context,
@@ -2337,6 +2376,68 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
                         ],
                       ),
                       const SizedBox(height: 18),
+
+                      // Status & Diagnostic Banner if Rejected
+                      if (!isValid) ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: Colors.red.shade300),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.cancel_rounded, color: Colors.red.shade700, size: 20),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    isAr ? 'الفاتورة غير مستوفية للشروط الترويجية (مرفوضة)' : 'Receipt Rejected (Conditions Not Met)',
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.red.shade900,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (rejectionReason != null && rejectionReason.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  rejectionReason,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.red.shade800,
+                                  ),
+                                ),
+                              ],
+                              if (unfulfilledConditions.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                ...unfulfilledConditions.map((cond) => Padding(
+                                  padding: const EdgeInsets.only(top: 3.0),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('• ', style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.bold)),
+                                      Expanded(
+                                        child: Text(
+                                          cond.toString(),
+                                          style: GoogleFonts.cairo(fontSize: 11.5, color: Colors.red.shade900),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
 
                       // Image preview if available
                       if (imageUrl.isNotEmpty) ...[

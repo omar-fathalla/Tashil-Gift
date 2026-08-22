@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -193,6 +194,22 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           fraudReasons: result.fraudReasons,
         );
 
+        final unfulfilledList = result.unfulfilledConditions.isNotEmpty
+            ? result.unfulfilledConditions
+            : [result.message.trim().isNotEmpty ? result.message.trim() : 'الفاتورة غير مطابقة لشروط الحملة'];
+        final rejectionReasonText = unfulfilledList.join(' • ');
+
+        // Asynchronously persist rejected transaction to Firestore & Storage for audit
+        _recordRejectedReceipt(
+          result: result,
+          bytes: bytes,
+          mimeType: mimeType,
+          activeEvent: activeEvent,
+          rejectionReason: rejectionReasonText,
+          unfulfilledConditions: unfulfilledList,
+          totalValue: result.targetCompanyTotal,
+        );
+
         showReceiptValidationReportDialog(
           context: context,
           title: 'عفواً، الفاتورة غير مطابقة للشروط',
@@ -214,15 +231,29 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       if (activeEvent.minimumSpend > 0 && totalValue < activeEvent.minimumSpend) {
         if (!mounted) return;
         final activeCountry = ref.read(activeCountryProvider);
+        final unfulfilledList = [
+          'إجمالي مشتريات منتجات ${activeEvent.targetCompany} في الفاتورة ($totalValue ${activeCountry.currencySymbol}) أقل من الحد الأدنى المطلوب (${activeEvent.minimumSpend} ${activeCountry.currencySymbol}).'
+        ];
         final conditions = [
           ValidationConditionItem(
             title: 'الحد الأدنى لقيمة المشتريات',
-            description: 'إجمالي مشتريات منتجات ${activeEvent.targetCompany} في الفاتورة ($totalValue ${activeCountry.currencySymbol}) أقل من الحد الأدنى المطلوب لدخول السحب (${activeEvent.minimumSpend} ${activeCountry.currencySymbol}).',
+            description: unfulfilledList.first,
             icon: Icons.price_check_rounded,
             isMet: false,
             value: '$totalValue / ${activeEvent.minimumSpend} ${activeCountry.currencySymbol}',
           ),
         ];
+
+        // Asynchronously persist rejected transaction to Firestore & Storage for audit
+        _recordRejectedReceipt(
+          result: result,
+          bytes: bytes,
+          mimeType: mimeType,
+          activeEvent: activeEvent,
+          rejectionReason: 'الحد الأدنى لقيمة المشتريات غير مستوفى ($totalValue / ${activeEvent.minimumSpend} ${activeCountry.currencySymbol})',
+          unfulfilledConditions: unfulfilledList,
+          totalValue: totalValue,
+        );
 
         showReceiptValidationReportDialog(
           context: context,
@@ -289,8 +320,24 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         imageUrl = 'data:$mimeType;base64,${base64Encode(bytes)}';
       }
 
+      // Evaluate promotional rules using our robust multi-offer AI & NLP PromotionalRuleMatcher
+      final matchedRulesList = PromotionalRuleMatcher.matchAllWithMultipliers(
+        result: result,
+        promotionalRules: activeEvent.promotionalRules,
+        allowCampaignMultipliers: activeEvent.allowMultipleChances,
+      );
+      final compositeBundle = CompositePromotionalBundle.fromMatchedRules(
+        matchedRulesList,
+        fallbackTitle: result.matchedRewardValue.trim().isNotEmpty
+            ? result.matchedRewardValue.trim()
+            : (activeEvent.availablePrizeNames.isNotEmpty ? activeEvent.availablePrizeNames.first : 'هدية ترويجية مميزة'),
+      );
+
       // Save or Update in Firestore (Upsert)
-      final int totalChances = result.chancesEarned > 0 ? result.chancesEarned : 1;
+      final int totalChances = math.max(
+        result.chancesEarned > 0 ? result.chancesEarned : 1,
+        compositeBundle.totalChances,
+      );
       final DocumentReference<Map<String, dynamic>> transactionRef =
           existingDoc != null ? existingDoc.reference : firestore.collection('receipts_transactions').doc();
       final bool isExistingRecord = existingDoc != null;
@@ -299,6 +346,10 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
 
       final Map<String, dynamic> transactionData = {
         'receipt_number': receiptNumber,
+        'is_valid': true,
+        'status': 'accepted',
+        'rejection_reason': null,
+        'unfulfilled_conditions': const [],
         'total_value': totalValue,
         'target_company_total': totalValue,
         'receipt_date': result.receiptDate,
@@ -402,14 +453,6 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       final gameType = activeEvent.gameType;
 
       if (gameType == 'directGift' || gameType == 'direct_gift') {
-        // Check promotional rules using our robust multi-tiered AI & NLP PromotionalRuleMatcher with Multipliers
-        final matchedResult = PromotionalRuleMatcher.matchWithMultiplier(
-          result: result,
-          promotionalRules: activeEvent.promotionalRules,
-          allowCampaignMultipliers: activeEvent.allowMultipleChances,
-        );
-        final matchedRule = matchedResult?.rule;
-
         final designatedPrizeObj = activeEvent.availablePrizes.isNotEmpty
             ? activeEvent.availablePrizes.first
             : (activeEvent.allocatedPrizes.isNotEmpty ? activeEvent.allocatedPrizes.first : null);
@@ -419,19 +462,19 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         double? resolvedUnitValue;
         bool resolvedIsVoucher = false;
 
-        if (matchedResult != null) {
-          resolvedLinkedGifts = matchedResult.multipliedLinkedGifts;
-          designatedPrize = matchedResult.formattedPrizeSummary;
+        if (matchedRulesList.isNotEmpty) {
+          resolvedLinkedGifts = compositeBundle.combinedLinkedGifts;
+          designatedPrize = compositeBundle.compositePrizeTitle;
 
-          resolvedIsVoucher = matchedRule?.rewardType == 'voucher' ||
-              matchedResult.totalRewardAmount > 0 ||
+          resolvedIsVoucher = compositeBundle.totalVoucherValue > 0 ||
+              resolvedLinkedGifts.any((g) => g.isVoucher) ||
               designatedPrize.contains('فواتشر') ||
               designatedPrize.toLowerCase().contains('voucher') ||
               designatedPrize.contains('قسيمة');
 
           resolvedUnitValue = resolvedIsVoucher
-              ? (matchedResult.totalRewardAmount > 0
-                  ? matchedResult.totalRewardAmount
+              ? (compositeBundle.totalVoucherValue > 0
+                  ? compositeBundle.totalVoucherValue
                   : designatedPrizeObj?.unitValue)
               : 0.0;
         } else if (result.matchedRewardValue.trim().isNotEmpty) {
@@ -502,7 +545,9 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           resolvedBranchId ??= activeEvent.branchIds.first;
         }
 
-        final promoQuantity = activeEvent.allowMultipleChances ? totalChances : 1;
+        final promoQuantity = resolvedLinkedGifts.isNotEmpty
+            ? 1
+            : (activeEvent.allowMultipleChances ? totalChances : 1);
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => DirectGiftClaimScreen(
@@ -806,5 +851,108 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _recordRejectedReceipt({
+    required AiReceiptAnalysisResult result,
+    required Uint8List bytes,
+    required String mimeType,
+    required EventModel activeEvent,
+    required String rejectionReason,
+    required List<String> unfulfilledConditions,
+    required double totalValue,
+  }) async {
+    try {
+      final firestore = ref.read(firestoreProvider);
+      final receiptNumber = result.receiptNumber.trim();
+      final cleanReceiptNumber = (receiptNumber.isNotEmpty ? receiptNumber : "REJ_${DateTime.now().millisecondsSinceEpoch}")
+          .replaceAll(RegExp(r'[/\\?%*:|"<>]'), '_');
+      final storagePath = 'receipts/${activeEvent.companySlug}/$cleanReceiptNumber.jpg';
+
+      String imageUrl = '';
+      try {
+        final storage = ref.read(firebaseStorageProvider);
+        final storageRef = storage.ref().child(storagePath);
+        final metadata = SettableMetadata(
+          contentType: 'image/jpeg',
+          customMetadata: {
+            'receiptNumber': receiptNumber,
+            'companySlug': activeEvent.companySlug,
+            'targetCompany': activeEvent.targetCompany,
+            'totalValue': totalValue.toString(),
+            'status': 'rejected',
+            'uploadedAt': DateTime.now().toIso8601String(),
+          },
+        );
+
+        if (kIsWeb) {
+          await storageRef.putData(bytes, metadata).timeout(const Duration(seconds: 10));
+        } else if (_receiptImage != null) {
+          await storageRef.putFile(File(_receiptImage!.path), metadata).timeout(const Duration(seconds: 10));
+        }
+        imageUrl = await storageRef.getDownloadURL().timeout(const Duration(seconds: 8));
+      } catch (e) {
+        debugPrint('Storage upload for rejected receipt skipped or timed out: $e');
+        imageUrl = 'data:$mimeType;base64,${base64Encode(bytes)}';
+      }
+
+      DocumentSnapshot<Map<String, dynamic>>? existingDoc;
+      if (receiptNumber.isNotEmpty) {
+        final existing = await firestore
+            .collection('receipts_transactions')
+            .where('receipt_number', isEqualTo: receiptNumber)
+            .limit(1)
+            .get();
+        if (existing.docs.isNotEmpty) {
+          existingDoc = existing.docs.first;
+        }
+      }
+
+      final docRef = existingDoc != null ? existingDoc.reference : firestore.collection('receipts_transactions').doc();
+      final Map<String, dynamic> transactionData = {
+        'receipt_number': receiptNumber.isNotEmpty ? receiptNumber : cleanReceiptNumber,
+        'is_valid': false,
+        'status': 'rejected',
+        'rejection_reason': rejectionReason,
+        'unfulfilled_conditions': unfulfilledConditions,
+        'total_value': totalValue,
+        'target_company_total': totalValue,
+        'receipt_date': result.receiptDate,
+        'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
+        'store_chain_detected': result.storeChainDetected,
+        'branch_detected': result.branchDetected,
+        'is_branch_matched': result.isBranchMatched,
+        'is_handwritten': result.isHandwritten,
+        'is_thermal_pos_receipt': result.isThermalPosReceipt,
+        'is_tampered': result.isTampered,
+        'is_screen_capture': result.isScreenCapture,
+        'fraud_risk_score': result.fraudRiskScore,
+        'fraud_reasons': result.fraudReasons,
+        'retail_chain_name': activeEvent.retailChainName,
+        if (imageUrl.isNotEmpty) 'image_url': imageUrl,
+        if (imageUrl.isNotEmpty) 'storage_path': storagePath,
+        'promoter_id': ref.read(firebaseAuthProvider).currentUser?.uid,
+        'campaignId': activeEvent.id,
+        'companySlug': activeEvent.companySlug,
+        'targetCompany': activeEvent.targetCompany,
+        'analysis_duration_seconds': result.durationSeconds,
+        'analysis_duration_ms': result.durationMs,
+        'ai_kpi_rating': result.kpiRating,
+        'chances_earned': 0,
+        'game_played': false,
+        'prize_won': null,
+      };
+
+      if (existingDoc != null) {
+        transactionData['updated_at'] = FieldValue.serverTimestamp();
+        transactionData['is_updated_via_ai'] = true;
+        await docRef.set(transactionData, SetOptions(merge: true));
+      } else {
+        transactionData['timestamp'] = FieldValue.serverTimestamp();
+        await docRef.set(transactionData);
+      }
+    } catch (e) {
+      debugPrint('Error recording rejected receipt transaction to Firestore: $e');
+    }
   }
 }

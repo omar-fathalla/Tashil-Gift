@@ -109,4 +109,101 @@ void main() {
       expect(matchResult.multipliedLinkedGifts.first.quantity, 1);
     });
   });
+
+  group('Multi-Offer Basket & Cross-Condition Bundling Engine Tests', () {
+    final unileverCampaignRules = [
+      PromotionalRuleItem(
+        id: 'rule_axe',
+        ruleTitle: 'شراء 2 اسبراي أكس -> فواتشر 50 ج.م',
+        triggerProduct: 'اسبراي أكس، axe',
+        minQuantity: 2,
+        rewardType: 'voucher',
+        rewardValue: 'فواتشر بقيمة 50 جنيه',
+        rewardAmount: 50.0,
+        allowMultipliers: true,
+        linkedGifts: [
+          LinkedGiftAllocation(giftId: 'v_50', giftName: 'فواتشر مشتريات 50 ج.م', quantity: 1, unitValue: 50.0, giftType: 'voucher'),
+        ],
+      ),
+      PromotionalRuleItem(
+        id: 'rule_clear',
+        ruleTitle: 'شراء 1 شامبو كلير -> كلير 90 مل هدية',
+        triggerProduct: 'شامبو كلير، clear',
+        minQuantity: 1,
+        rewardType: 'free_product',
+        rewardValue: 'كلير 90 مل هدية',
+        rewardAmount: 0.0,
+        allowMultipliers: true,
+        linkedGifts: [
+          LinkedGiftAllocation(giftId: 'p_clear', giftName: 'شامبو كلير 90 مل هدية', quantity: 1, unitValue: 0.0, giftType: 'product'),
+        ],
+      ),
+      PromotionalRuleItem(
+        id: 'rule_tresemme',
+        ruleTitle: 'شراء 1 شامبو أو بلسم تريزيمي -> تريزيمي 250 مل هدية',
+        triggerProduct: 'تريزيمي، tresemme',
+        minQuantity: 1,
+        rewardType: 'free_product',
+        rewardValue: 'تريزيمي 250 مل هدية',
+        rewardAmount: 0.0,
+        allowMultipliers: true,
+        linkedGifts: [
+          LinkedGiftAllocation(giftId: 'p_tresemme', giftName: 'تريزيمي 250 مل هدية', quantity: 1, unitValue: 0.0, giftType: 'product'),
+        ],
+      ),
+    ];
+
+    test('Single receipt qualifying for both Axe and Clear offers produces a 2-gift Multi-Offer Bundle', () {
+      final basketProducts = [
+        ExtractedProductItem(name: 'اكس اسبراى بلاك 150 مل', price: 140.0, quantity: 1, isTargetCompany: true),
+        ExtractedProductItem(name: 'اكس اسبراى ايس شيل 150 مل', price: 140.0, quantity: 1, isTargetCompany: true),
+        ExtractedProductItem(name: 'شامبو كلير للرجال ضد القشرة 400 مل', price: 110.0, quantity: 1, isTargetCompany: true),
+      ];
+
+      final matchedRulesList = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: basketProducts,
+        promotionalRules: unileverCampaignRules,
+        allowCampaignMultipliers: true,
+      );
+
+      expect(matchedRulesList.length, 2);
+      expect(matchedRulesList.any((r) => r.rule.id == 'rule_axe'), isTrue);
+      expect(matchedRulesList.any((r) => r.rule.id == 'rule_clear'), isTrue);
+
+      final bundle = CompositePromotionalBundle.fromMatchedRules(matchedRulesList);
+      expect(bundle.matchedRules.length, 2);
+      expect(bundle.combinedLinkedGifts.length, 2);
+      expect(bundle.totalVoucherValue, 50.0);
+      expect(bundle.compositePrizeTitle, contains('فواتشر بقيمة 50 جنيه + كلير 90 مل هدية'));
+    });
+
+    test('Single receipt qualifying for 4 Axe (2x) + 1 Clear (1x) + 1 Tresemme (1x) generates 3-offer composite bundle with multipliers', () {
+      final basketProducts = [
+        ExtractedProductItem(name: 'اكس اسبراى بلاك 150 مل', price: 140.0, quantity: 2, isTargetCompany: true),
+        ExtractedProductItem(name: 'اكس اسبراى دارك شوكليت 150 مل', price: 140.0, quantity: 2, isTargetCompany: true),
+        ExtractedProductItem(name: 'شامبو كلير ضد القشرة 400 مل', price: 110.0, quantity: 1, isTargetCompany: true),
+        ExtractedProductItem(name: 'بلسم تريزيمي نعومة الكيراتين 400 مل', price: 135.0, quantity: 1, isTargetCompany: true),
+      ];
+
+      final matchedRulesList = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: basketProducts,
+        promotionalRules: unileverCampaignRules,
+        allowCampaignMultipliers: true,
+      );
+
+      expect(matchedRulesList.length, 3);
+      final axeMatch = matchedRulesList.firstWhere((r) => r.rule.id == 'rule_axe');
+      expect(axeMatch.multiplier, 2); // 4 / 2 = 2
+      expect(axeMatch.totalRewardAmount, 100.0); // 50 * 2 = 100
+
+      final bundle = CompositePromotionalBundle.fromMatchedRules(matchedRulesList);
+      expect(bundle.totalVoucherValue, 100.0);
+      expect(bundle.totalChances, 4); // 2 + 1 + 1 = 4
+      expect(bundle.combinedLinkedGifts.length, 3);
+
+      final axeGifts = bundle.combinedLinkedGifts.firstWhere((g) => g.giftId == 'v_50');
+      expect(axeGifts.quantity, 2);
+    });
+  });
 }
+

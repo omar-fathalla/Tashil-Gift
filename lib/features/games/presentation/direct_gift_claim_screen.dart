@@ -347,7 +347,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                 widget.eventId,
                 giftAlloc.giftId.isNotEmpty ? giftAlloc.giftId : giftAlloc.giftName,
                 branchId: widget.branchId,
-                count: giftAlloc.quantity * effectiveQuantity,
+                count: giftAlloc.quantity,
                 unitValue: giftAlloc.unitValue,
                 isVoucher: giftAlloc.isVoucher,
               );
@@ -530,7 +530,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                       ),
                                       const SizedBox(height: 8),
 
-                                      // Designated Prize Name
+                                      // Designated Prize Name / Multi-Offer Bundle List
                                        Builder(
                                          builder: (context) {
                                            final cleanPrizeName = _effectivePrizeName;
@@ -544,6 +544,196 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                    : resolvedUnitValue.toString())
                                                : '';
 
+                                           final isMultiBundle = cleanPrizeName.contains('+') ||
+                                               (linkedGifts.length > 1 && linkedGifts.any((g) => !g.isVoucher) && linkedGifts.any((g) => g.isVoucher));
+
+                                           if (isMultiBundle) {
+                                             final totalGiftsCount = linkedGifts.fold<int>(0, (sum, g) => sum + g.quantity);
+                                             final totalVoucherAmount = linkedGifts.where((g) => g.isVoucher).fold<double>(0.0, (sum, g) => sum + (g.unitValue * g.quantity));
+
+                                             return Column(
+                                               children: [
+                                                 // Multi-Bundle Header Badge
+                                                 Container(
+                                                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                                                   decoration: BoxDecoration(
+                                                     color: colorScheme.primaryContainer,
+                                                     borderRadius: BorderRadius.circular(20),
+                                                   ),
+                                                   child: Row(
+                                                     mainAxisSize: MainAxisSize.min,
+                                                     children: [
+                                                       Icon(Icons.inventory_2_rounded, size: 16, color: colorScheme.onPrimaryContainer),
+                                                       const SizedBox(width: 6),
+                                                       Text(
+                                                         isAr
+                                                             ? 'سلة هدايا مجمعة ($totalGiftsCount هدايا مستحقة)'
+                                                             : 'Multi-Gift Bundle ($totalGiftsCount Items)',
+                                                         style: GoogleFonts.cairo(
+                                                           fontSize: 13,
+                                                           fontWeight: FontWeight.bold,
+                                                           color: colorScheme.onPrimaryContainer,
+                                                         ),
+                                                       ),
+                                                     ],
+                                                   ),
+                                                 ),
+                                                 const SizedBox(height: 10),
+
+                                                 Text(
+                                                   isAr ? 'ألف مبروك! استوفيت شروط العرض' : 'Congratulations! Multiple Offers Unlocked',
+                                                   textAlign: TextAlign.center,
+                                                   style: GoogleFonts.cairo(
+                                                     fontSize: 22,
+                                                     fontWeight: FontWeight.bold,
+                                                     color: colorScheme.onSurface,
+                                                   ),
+                                                 ),
+                                                 const SizedBox(height: 12),
+
+                                                 if (totalVoucherAmount > 0) ...[
+                                                   Container(
+                                                     padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                                                     margin: const EdgeInsets.only(bottom: 14),
+                                                     decoration: BoxDecoration(
+                                                       gradient: const LinearGradient(
+                                                         colors: [Color(0xFFFFB300), Color(0xFFFF6D00)],
+                                                         begin: Alignment.topLeft,
+                                                         end: Alignment.bottomRight,
+                                                       ),
+                                                       borderRadius: BorderRadius.circular(14),
+                                                       boxShadow: [
+                                                         BoxShadow(
+                                                           color: const Color(0xFFFF8F00).withValues(alpha: 0.35),
+                                                           blurRadius: 10,
+                                                           offset: const Offset(0, 3),
+                                                         ),
+                                                       ],
+                                                     ),
+                                                     child: Row(
+                                                       mainAxisSize: MainAxisSize.min,
+                                                       children: [
+                                                         const Icon(Icons.payments_rounded, color: Colors.white, size: 20),
+                                                         const SizedBox(width: 8),
+                                                         Text(
+                                                           isAr
+                                                               ? 'إجمالي قيمة الفواتشرات: ${totalVoucherAmount == totalVoucherAmount.roundToDouble() ? totalVoucherAmount.toInt() : totalVoucherAmount} ج.م'
+                                                               : 'Total Vouchers: ${totalVoucherAmount.toInt()} EGP',
+                                                           style: GoogleFonts.cairo(
+                                                             fontSize: 15,
+                                                             fontWeight: FontWeight.bold,
+                                                             color: Colors.white,
+                                                           ),
+                                                         ),
+                                                       ],
+                                                     ),
+                                                   ),
+                                                 ],
+
+                                                 // Itemized Gift Cards
+                                                 ListView.separated(
+                                                   shrinkWrap: true,
+                                                   physics: const NeverScrollableScrollPhysics(),
+                                                   itemCount: linkedGifts.length,
+                                                   separatorBuilder: (context, index) => const SizedBox(height: 10),
+                                                   itemBuilder: (context, idx) {
+                                                     final gift = linkedGifts[idx];
+                                                     final totalCount = gift.quantity;
+                                                     final isGiftVoucher = gift.isVoucher;
+
+                                                     return Container(
+                                                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                                       decoration: BoxDecoration(
+                                                         color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
+                                                         borderRadius: BorderRadius.circular(16),
+                                                         border: Border.all(
+                                                           color: isGiftVoucher
+                                                               ? Colors.amber.shade400
+                                                               : colorScheme.outlineVariant.withValues(alpha: 0.6),
+                                                           width: isGiftVoucher ? 1.5 : 1.0,
+                                                         ),
+                                                       ),
+                                                       child: Row(
+                                                         children: [
+                                                           Container(
+                                                             width: 44,
+                                                             height: 44,
+                                                             decoration: BoxDecoration(
+                                                               color: isGiftVoucher
+                                                                   ? Colors.amber.shade100
+                                                                   : colorScheme.primary.withValues(alpha: 0.12),
+                                                               shape: BoxShape.circle,
+                                                             ),
+                                                             child: Icon(
+                                                               isGiftVoucher
+                                                                   ? Icons.confirmation_number_rounded
+                                                                   : Icons.card_giftcard_rounded,
+                                                               color: isGiftVoucher
+                                                                   ? Colors.amber.shade900
+                                                                   : colorScheme.primary,
+                                                               size: 24,
+                                                             ),
+                                                           ),
+                                                           const SizedBox(width: 14),
+                                                           Expanded(
+                                                             child: Column(
+                                                               crossAxisAlignment: CrossAxisAlignment.start,
+                                                               children: [
+                                                                 Text(
+                                                                   gift.giftName,
+                                                                   style: GoogleFonts.cairo(
+                                                                     fontSize: 16,
+                                                                     fontWeight: FontWeight.bold,
+                                                                     color: colorScheme.onSurface,
+                                                                   ),
+                                                                 ),
+                                                                 if (isGiftVoucher && gift.unitValue > 0)
+                                                                   Text(
+                                                                     'فواتشر معتمد بقيمة ${gift.unitValue.toInt()} ج.م للقطعة',
+                                                                     style: GoogleFonts.cairo(
+                                                                       fontSize: 12,
+                                                                       fontWeight: FontWeight.w600,
+                                                                       color: Colors.amber.shade900,
+                                                                     ),
+                                                                   )
+                                                                 else
+                                                                   Text(
+                                                                     isAr ? 'هدية عينية فورية معتمدة' : 'Certified Physical Gift',
+                                                                     style: GoogleFonts.cairo(
+                                                                       fontSize: 12,
+                                                                       color: colorScheme.onSurfaceVariant,
+                                                                     ),
+                                                                   ),
+                                                               ],
+                                                             ),
+                                                           ),
+                                                           Container(
+                                                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                                             decoration: BoxDecoration(
+                                                               color: isGiftVoucher
+                                                                   ? Colors.amber.shade600
+                                                                   : colorScheme.primary,
+                                                               borderRadius: BorderRadius.circular(12),
+                                                             ),
+                                                             child: Text(
+                                                               '$totalCount ×',
+                                                               style: GoogleFonts.cairo(
+                                                                 fontSize: 14,
+                                                                 fontWeight: FontWeight.w900,
+                                                                 color: Colors.white,
+                                                               ),
+                                                             ),
+                                                           ),
+                                                         ],
+                                                       ),
+                                                     );
+                                                   },
+                                                 ),
+                                               ],
+                                             );
+                                           }
+
+                                           // Single Gift / Uniform Multi-Quantity Display
                                            return Column(
                                              children: [
                                                Text(
@@ -624,7 +814,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                          runSpacing: 4,
                                                          alignment: WrapAlignment.center,
                                                          children: linkedGifts.map((g) {
-                                                           final totalCount = g.quantity * effectiveQuantity;
+                                                           final totalCount = g.quantity;
                                                            return Container(
                                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                                              decoration: BoxDecoration(
@@ -666,8 +856,8 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                        ),
                                       const SizedBox(height: 16),
 
-                                      // Multiplier Badge (Only shown if customer earned >1 gifts)
-                                      if (effectiveQuantity > 1)
+                                      // Multiplier Badge (Only shown if customer earned >1 gifts and no linked gifts)
+                                      if (effectiveQuantity > 1 && _effectiveLinkedGifts.isEmpty)
                                         Padding(
                                           padding: const EdgeInsets.only(bottom: 16),
                                           child: Container(

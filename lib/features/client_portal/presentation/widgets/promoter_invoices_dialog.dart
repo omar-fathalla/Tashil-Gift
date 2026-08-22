@@ -350,12 +350,18 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                 return dtB.compareTo(dtA);
               });
 
-              // Compute Summary Stats
+              // Compute Summary Stats (Accepted Only)
               double totalSales = 0.0;
               for (final doc in filteredInvoices) {
                 final data = doc.data();
-                final val = (data['target_company_total'] ?? data['total_value'] as num?)?.toDouble() ?? 0.0;
-                totalSales += val;
+                final bool isExplicitlyValid = data['is_valid'] == true || data['status'] == 'accepted' || data['isValid'] == true;
+                final bool isExplicitlyRejected = data['is_valid'] == false || data['status'] == 'rejected' || data['isValid'] == false || ((data['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
+                final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((data['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
+
+                if (isValid) {
+                  final val = (data['target_company_total'] ?? data['total_value'] as num?)?.toDouble() ?? 0.0;
+                  totalSales += val;
+                }
               }
 
               return Column(
@@ -902,6 +908,11 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     final dt = _parseDateTime(data['timestamp'], receiptDate);
     final formattedTime = dt != null ? DateFormat('yyyy/MM/dd - hh:mm a', 'ar').format(dt) : receiptDate;
 
+    final bool isExplicitlyValid = data['is_valid'] == true || data['status'] == 'accepted' || data['isValid'] == true;
+    final bool isExplicitlyRejected = data['is_valid'] == false || data['status'] == 'rejected' || data['isValid'] == false || ((data['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
+    final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((data['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
+    final rejectionReason = (data['rejection_reason'] ?? '').toString().trim();
+
     final extractedProducts = (data['extracted_products'] as List<dynamic>?) ?? [];
     final aiMessage = (data['aiMessage'] ?? '').toString().trim();
     final chances = (data['chances_earned'] as num?)?.toInt() ?? 1;
@@ -913,7 +924,9 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+          color: isValid
+              ? colorScheme.outlineVariant.withValues(alpha: 0.6)
+              : Colors.red.shade200,
           width: 1,
         ),
       ),
@@ -933,10 +946,16 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: colorScheme.primaryContainer.withValues(alpha: 0.6),
+                      color: isValid
+                          ? colorScheme.primaryContainer.withValues(alpha: 0.6)
+                          : Colors.red.shade100,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(Icons.receipt_rounded, size: 20, color: colorScheme.primary),
+                    child: Icon(
+                      isValid ? Icons.receipt_rounded : Icons.receipt_long_rounded,
+                      size: 20,
+                      color: isValid ? colorScheme.primary : Colors.red.shade800,
+                    ),
                   ),
                   const SizedBox(width: 10),
 
@@ -990,16 +1009,16 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.green.shade50,
+                      color: isValid ? Colors.green.shade50 : Colors.red.shade50,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.green.shade300),
+                      border: Border.all(color: isValid ? Colors.green.shade300 : Colors.red.shade300),
                     ),
                     child: Text(
                       '${totalVal.toStringAsFixed(totalVal == totalVal.roundToDouble() ? 0 : 2)} $currencySymbol',
                       style: GoogleFonts.cairo(
                         fontWeight: FontWeight.bold,
                         fontSize: isMobile ? 12.5 : 14,
-                        color: Colors.green.shade900,
+                        color: isValid ? Colors.green.shade900 : Colors.red.shade900,
                       ),
                     ),
                   ),
@@ -1042,30 +1061,65 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                     ),
                   ],
 
-                  // AI Verified Chip
+                  // AI Acceptance/Rejection Chip
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: Colors.teal.shade50,
+                      color: isValid ? Colors.teal.shade50 : Colors.red.shade50,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.teal.shade200),
+                      border: Border.all(color: isValid ? Colors.teal.shade200 : Colors.red.shade300),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.verified_rounded, size: 13, color: Colors.teal.shade700),
+                        Icon(
+                          isValid ? Icons.verified_rounded : Icons.cancel_rounded,
+                          size: 13,
+                          color: isValid ? Colors.teal.shade700 : Colors.red.shade700,
+                        ),
                         const SizedBox(width: 4),
                         Text(
-                          'معتمدة بالذكاء الاصطناعي',
+                          isValid ? 'معتمدة ومقبولة' : 'مرفوضة وغير مقبولة',
                           style: GoogleFonts.cairo(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
-                            color: Colors.teal.shade800,
+                            color: isValid ? Colors.teal.shade800 : Colors.red.shade800,
                           ),
                         ),
                       ],
                     ),
                   ),
+
+                  // Rejection Reason Chip if rejected
+                  if (!isValid && rejectionReason.isNotEmpty) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.shade200),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.info_outline_rounded, size: 13, color: Colors.red.shade700),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              rejectionReason,
+                              style: GoogleFonts.cairo(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.red.shade900,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
 
                   // Customer Phone & Name
                   if (customerPhone.isNotEmpty) ...[
