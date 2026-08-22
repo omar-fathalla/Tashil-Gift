@@ -22,6 +22,7 @@ import '../../games/presentation/game_types_screen.dart';
 import 'retail_chains_screen.dart';
 import 'chain_products_intelligence_screen.dart';
 import 'ai_speed_benchmark_screen.dart';
+import 'widgets/voucher_serials_management_dialog.dart';
 import '../../../core/services/company_gifts_service.dart';
 import '../../../core/utils/url_builder.dart';
 
@@ -1608,6 +1609,32 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     icon: const Icon(Icons.edit_note_rounded, size: 18),
                     label: Text(isAr ? 'تعديل الحملة' : 'Edit Campaign', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13)),
                     style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+
+                // 7. Voucher Cards & Reset Action
+                Tooltip(
+                  message: isAr
+                      ? 'استعلام أرقام كروت الفواتشرات المسلمة، والبحث برقم الكارت، وإعادة التعيين'
+                      : 'Audit claimed voucher serials & reset registry for reuse',
+                  waitDuration: const Duration(milliseconds: 400),
+                  child: OutlinedButton.icon(
+                    onPressed: () => VoucherSerialsManagementDialog.show(context, event),
+                    icon: Icon(Icons.confirmation_number_rounded, size: 18, color: Colors.amber.shade900),
+                    label: Text(
+                      isAr ? 'سجل وإعادة تعيين الفواتشرات' : 'Vouchers & Reset',
+                      style: GoogleFonts.cairo(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: Colors.amber.shade900,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: Colors.amber.shade50,
+                      side: BorderSide(color: Colors.amber.shade300),
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),

@@ -2914,6 +2914,30 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                                   '👤 $customerName ${customerPhone != null ? "($customerPhone)" : ""}',
                                   style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
                                 ),
+                              if ((inv['voucher_serials'] as List?)?.isNotEmpty ?? false)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.shade100,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.amber.shade400),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.confirmation_number_rounded, size: 12, color: Colors.amber.shade900),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '💳 فواتشر: ${(inv['voucher_serials'] as List).join(" | ")}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.amber.shade900,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                             ],
                           ),
 

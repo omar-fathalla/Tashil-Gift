@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/services/firebase_service.dart';
@@ -8,6 +9,7 @@ import '../../../core/services/company_gifts_service.dart';
 import '../../../core/services/game_audio_service.dart';
 import '../../../core/widgets/game_sound_controls.dart';
 import '../../../core/utils/error_handler.dart';
+import '../../../core/utils/arabic_numbers_utils.dart';
 import '../../../core/animations/m3_motion.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
@@ -15,6 +17,25 @@ import '../../../core/widgets/switch_point_branding.dart';
 import '../../admin/domain/event_model.dart';
 import 'winner_celebration_dialog.dart';
 import 'game_demo_banner.dart';
+
+/// Helper model for individual physical voucher card serial slot
+class VoucherSerialSlot {
+  final String giftId;
+  final String giftName;
+  final double unitValue;
+  final int indexInBundle;
+  final TextEditingController controller;
+  final FocusNode focusNode;
+
+  VoucherSerialSlot({
+    required this.giftId,
+    required this.giftName,
+    required this.unitValue,
+    required this.indexInBundle,
+    required this.controller,
+    required this.focusNode,
+  });
+}
 
 /// Screen displayed when an event uses the "Direct Instant Gift" (الهدية الفورية المباشرة) game type.
 /// The customer is presented with an elegant, celebratory gift screen showing only customer-relevant
@@ -62,6 +83,8 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
   bool? _resolvedIsVoucher;
   List<LinkedGiftAllocation>? _resolvedLinkedGifts;
 
+  final List<VoucherSerialSlot> _voucherSlots = [];
+
   List<LinkedGiftAllocation> get _effectiveLinkedGifts =>
       (_resolvedLinkedGifts != null && _resolvedLinkedGifts!.isNotEmpty)
           ? _resolvedLinkedGifts!
@@ -99,7 +122,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
       return widget.unitValue;
     }
     if (_effectiveLinkedGifts.isNotEmpty) {
-      final total = _effectiveLinkedGifts.fold<double>(0.0, (sum, g) => sum + g.totalMonetaryValue);
+      final total = _effectiveLinkedGifts.fold<double>(0.0, (acc, g) => acc + g.totalMonetaryValue);
       if (total > 0) return total;
     }
     final match = RegExp(r'(\d+)').firstMatch(widget.prizeName);
@@ -153,13 +176,64 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
       ),
     );
     _animController.forward();
+    _syncVoucherSlots();
     _fetchRemainingStock();
   }
 
   @override
   void dispose() {
     _animController.dispose();
+    for (final slot in _voucherSlots) {
+      slot.controller.dispose();
+      slot.focusNode.dispose();
+    }
+    _voucherSlots.clear();
     super.dispose();
+  }
+
+  void _syncVoucherSlots() {
+    final List<({String giftId, String giftName, double unitValue})> requiredCards = [];
+
+    if (_effectiveLinkedGifts.isNotEmpty) {
+      for (final gift in _effectiveLinkedGifts) {
+        if (gift.isVoucher) {
+          for (int i = 0; i < gift.quantity; i++) {
+            requiredCards.add((
+              giftId: gift.giftId,
+              giftName: gift.giftName,
+              unitValue: gift.unitValue,
+            ));
+          }
+        }
+      }
+    } else if (_effectiveIsVoucher) {
+      final effectiveQty = widget.quantity > 0 ? widget.quantity : 1;
+      for (int i = 0; i < effectiveQty; i++) {
+        requiredCards.add((
+          giftId: '',
+          giftName: _effectivePrizeName,
+          unitValue: _effectiveUnitValue ?? 0.0,
+        ));
+      }
+    }
+
+    while (_voucherSlots.length < requiredCards.length) {
+      final idx = _voucherSlots.length;
+      final card = requiredCards[idx];
+      _voucherSlots.add(VoucherSerialSlot(
+        giftId: card.giftId,
+        giftName: card.giftName,
+        unitValue: card.unitValue,
+        indexInBundle: idx + 1,
+        controller: TextEditingController(),
+        focusNode: FocusNode(),
+      ));
+    }
+    while (_voucherSlots.length > requiredCards.length) {
+      final last = _voucherSlots.removeLast();
+      last.controller.dispose();
+      last.focusNode.dispose();
+    }
   }
 
   Future<void> _fetchRemainingStock() async {
@@ -261,6 +335,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                 _resolvedIsVoucher = discoveredIsVoucher;
               }
             }
+            _syncVoucherSlots();
           });
         }
       }
@@ -293,6 +368,102 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
       return;
     }
 
+    _syncVoucherSlots();
+
+    // 1. Validate mandatory physical voucher serial numbers
+    if (_voucherSlots.isNotEmpty) {
+      final strings = AppStrings.of(ref);
+      final List<String> enteredSerials = [];
+
+      for (int i = 0; i < _voucherSlots.length; i++) {
+        final slot = _voucherSlots[i];
+        final text = slot.controller.text.toEnglishDigits(convertDecimal: false).trim();
+        if (text.isEmpty) {
+          slot.focusNode.requestFocus();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${strings.voucherSerialRequiredError} (${slot.giftName} #${i + 1})'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+
+        if (enteredSerials.contains(text)) {
+          slot.focusNode.requestFocus();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${strings.voucherSerialDuplicateInTxError}: $text'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+        enteredSerials.add(text);
+      }
+
+      // 2. Check Firestore for duplicate serials in active campaign
+      if (!widget.isDemo && widget.eventId.isNotEmpty) {
+        setState(() => _isClaiming = true);
+        try {
+          final firestore = ref.read(firestoreProvider);
+          final eventDoc = await firestore.collection('events').doc(widget.eventId).get();
+          final eventData = eventDoc.data() ?? {};
+          final resetAtRaw = eventData['voucher_serials_reset_at'];
+          DateTime? resetAt;
+          if (resetAtRaw is Timestamp) {
+            resetAt = resetAtRaw.toDate();
+          } else if (resetAtRaw is String && resetAtRaw.isNotEmpty) {
+            resetAt = DateTime.tryParse(resetAtRaw);
+          }
+
+          final conflictQuery = await firestore
+              .collection('receipts_transactions')
+              .where('event_id', isEqualTo: widget.eventId)
+              .where('voucher_serials', arrayContainsAny: enteredSerials)
+              .get();
+
+          for (final doc in conflictQuery.docs) {
+            if (doc.id == widget.transactionId) continue;
+            final docData = doc.data();
+            if (docData['status'] == 'rejected' || docData['is_valid'] == false) continue;
+
+            if (resetAt != null) {
+              final claimedAtRaw = docData['claimed_at'] ?? docData['created_at'];
+              DateTime? docDate;
+              if (claimedAtRaw is Timestamp) {
+                docDate = claimedAtRaw.toDate();
+              } else if (claimedAtRaw is String) {
+                docDate = DateTime.tryParse(claimedAtRaw);
+              }
+              if (docDate != null && docDate.isBefore(resetAt)) continue;
+            }
+
+            final existingSerials = List<String>.from(docData['voucher_serials'] ?? []);
+            for (final s in enteredSerials) {
+              if (existingSerials.contains(s)) {
+                if (!mounted) return;
+                setState(() => _isClaiming = false);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('${strings.voucherSerialAlreadyClaimedError}: $s'),
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(seconds: 4),
+                  ),
+                );
+                return;
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('Duplicate serial check error: $e');
+        }
+      }
+    }
+
     setState(() => _isClaiming = true);
 
     try {
@@ -309,12 +480,23 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
       if (!widget.isDemo && widget.transactionId.isNotEmpty) {
         final firestore = ref.read(firestoreProvider);
         final claimedGiftsList = finalLinkedGifts.isNotEmpty
-            ? finalLinkedGifts.map((g) => {
-                'giftId': g.giftId,
-                'giftName': g.giftName,
-                'quantity': g.quantity * effectiveQuantity,
-                'unitValue': g.unitValue,
-                'isVoucher': g.isVoucher,
+            ? finalLinkedGifts.map((g) {
+                final gSerials = g.isVoucher
+                    ? _voucherSlots
+                        .where((s) => (s.giftId.isNotEmpty && s.giftId == g.giftId) || s.giftName == g.giftName)
+                        .map((s) => s.controller.text.toEnglishDigits(convertDecimal: false).trim())
+                        .where((t) => t.isNotEmpty)
+                        .toList()
+                    : <String>[];
+
+                return {
+                  'giftId': g.giftId,
+                  'giftName': g.giftName,
+                  'quantity': g.quantity,
+                  'unitValue': g.unitValue,
+                  'isVoucher': g.isVoucher,
+                  if (gSerials.isNotEmpty) 'serials': gSerials,
+                };
               }).toList()
             : [{
                 'giftId': '',
@@ -322,7 +504,17 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                 'quantity': effectiveQuantity,
                 'unitValue': finalUnitValue ?? 0.0,
                 'isVoucher': finalIsVoucher,
+                if (_voucherSlots.isNotEmpty)
+                  'serials': _voucherSlots
+                      .map((s) => s.controller.text.toEnglishDigits(convertDecimal: false).trim())
+                      .where((t) => t.isNotEmpty)
+                      .toList(),
               }];
+
+        final allVoucherSerials = _voucherSlots
+            .map((s) => s.controller.text.toEnglishDigits(convertDecimal: false).trim())
+            .where((t) => t.isNotEmpty)
+            .toList();
 
         // 1. Update receipts_transactions record
         await firestore.collection('receipts_transactions').doc(widget.transactionId).update({
@@ -331,6 +523,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
           'prize_won': displayPrize,
           'prizes_won': List.filled(effectiveQuantity, finalPrizeName),
           'claimed_gifts': claimedGiftsList,
+          if (allVoucherSerials.isNotEmpty) 'voucher_serials': allVoucherSerials,
           'event_id': widget.eventId,
           'branch_id': widget.branchId ?? '',
           'remaining_chances': 0,
@@ -412,6 +605,8 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
     final strings = AppStrings.of(ref);
     final effectiveQuantity = widget.quantity > 0 ? widget.quantity : 1;
     final isOutOfStock = _remainingStock != null && _remainingStock! <= 0 && !widget.isDemo;
+
+    _syncVoucherSlots();
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
@@ -548,8 +743,8 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                (linkedGifts.length > 1 && linkedGifts.any((g) => !g.isVoucher) && linkedGifts.any((g) => g.isVoucher));
 
                                            if (isMultiBundle) {
-                                             final totalGiftsCount = linkedGifts.fold<int>(0, (sum, g) => sum + g.quantity);
-                                             final totalVoucherAmount = linkedGifts.where((g) => g.isVoucher).fold<double>(0.0, (sum, g) => sum + (g.unitValue * g.quantity));
+                                             final totalGiftsCount = linkedGifts.fold<int>(0, (acc, g) => acc + g.quantity);
+                                             final totalVoucherAmount = linkedGifts.where((g) => g.isVoucher).fold<double>(0.0, (acc, g) => acc + (g.unitValue * g.quantity));
 
                                              return Column(
                                                children: [
@@ -935,6 +1130,9 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                               ),
                             ),
 
+                            // Mandatory Physical Voucher Serial Numbers Input Card
+                            _buildVoucherSerialsCard(context, colorScheme, strings, isAr),
+
                             // Promoter Smart Low Stock Alert (Only visible when stock is 1 or 2 units)
                             if (_remainingStock != null && _remainingStock! > 0 && _remainingStock! <= 2 && !widget.isDemo)
                               Padding(
@@ -1039,4 +1237,163 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
       ),
     );
   }
+
+  /// Builds the M3 Physical Voucher Serial Numbers Card
+  Widget _buildVoucherSerialsCard(
+    BuildContext context,
+    ColorScheme colorScheme,
+    AppStrings strings,
+    bool isAr,
+  ) {
+    if (_voucherSlots.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.amber.shade50.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.amber.shade400, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.amber.shade200.withValues(alpha: 0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header Badge & Title
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade700,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.confirmation_number_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      strings.voucherSerialsSectionTitle,
+                      style: GoogleFonts.cairo(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.amber.shade900,
+                      ),
+                    ),
+                    Text(
+                      strings.voucherSerialsSectionSubtitle,
+                      style: GoogleFonts.cairo(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.amber.shade900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Dynamic Voucher Card Input Slots
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _voucherSlots.length,
+            separatorBuilder: (context, index) => const SizedBox(height: 10),
+            itemBuilder: (context, index) {
+              final slot = _voucherSlots[index];
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.amber.shade300),
+                ),
+                child: Row(
+                  children: [
+                    // Badge Number
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '#${index + 1}',
+                        style: GoogleFonts.cairo(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12,
+                          color: Colors.amber.shade900,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+
+                    // Input Field
+                    Expanded(
+                      child: TextFormField(
+                        controller: slot.controller,
+                        focusNode: slot.focusNode,
+                        keyboardType: TextInputType.text,
+                        inputFormatters: const [
+                          ArabicToEnglishDigitsFormatter(),
+                        ],
+                        onChanged: (val) {
+                          setState(() {});
+                        },
+                        style: GoogleFonts.cairo(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.onSurface,
+                          letterSpacing: 0.5,
+                        ),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          labelText: '${strings.voucherSerialInputLabel} (${slot.giftName})',
+                          labelStyle: GoogleFonts.cairo(
+                            fontSize: 12,
+                            color: Colors.amber.shade900,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          hintText: strings.voucherSerialInputHint,
+                          hintStyle: GoogleFonts.cairo(fontSize: 12, color: Colors.grey.shade400),
+                          border: InputBorder.none,
+                          prefixIcon: Icon(Icons.credit_card_rounded, size: 18, color: Colors.amber.shade800),
+                          suffixIcon: slot.controller.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear_rounded, size: 16),
+                                  onPressed: () {
+                                    slot.controller.clear();
+                                    setState(() {});
+                                  },
+                                )
+                              : null,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
 }
+

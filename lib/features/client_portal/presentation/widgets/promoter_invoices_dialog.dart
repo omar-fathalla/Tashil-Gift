@@ -1198,6 +1198,31 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                       ),
                     ),
                   ],
+                  if ((data['voucher_serials'] as List?)?.isNotEmpty ?? false) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.amber.shade400),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.confirmation_number_rounded, size: 12, color: Colors.amber.shade900),
+                          const SizedBox(width: 4),
+                          Text(
+                            '💳 كروت الفواتشر: ${(data['voucher_serials'] as List).join(" | ")}',
+                            style: GoogleFonts.cairo(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.amber.shade900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
 

@@ -1390,6 +1390,165 @@ class AppStrings {
     en: 'Gift Types',
     hi: 'उपहार प्रकार',
   );
+  String get promoterDailyDisbursalTab => _t(
+    ar: 'حركة السحب والتوزيع اليومي',
+    en: 'Daily Handover & Disbursals',
+    hi: 'दैनिक वितरण और हैंडओवर',
+  );
+  String get promoterStockBalanceTab => _t(
+    ar: 'رصيد ومخزون الهدايا',
+    en: 'Gifts & Stock Balance',
+    hi: 'उपहार और स्टॉक बैलेंस',
+  );
+  String get promoterDailyDisbursalTitle => _t(
+    ar: 'سجل السحب والتوزيع اليومي للهدايا',
+    en: 'Daily Gifts Handover & Disbursal Log',
+    hi: 'दैनिक उपहार वितरण लॉग',
+  );
+  String get disbursedOnDateLabel => _t(
+    ar: 'المنصرف في هذا اليوم',
+    en: 'Disbursed on this date',
+    hi: 'इस तिथि पर वितरित',
+  );
+  String get totalDisbursedCountLabel => _t(
+    ar: 'إجمالي الهدايا المنصرفة',
+    en: 'Total Disbursed Gifts',
+    hi: 'कुल वितरित उपहार',
+  );
+  String get totalDisbursedVouchersLabel => _t(
+    ar: 'إجمالي الفواتشرات المنصرفة',
+    en: 'Total Disbursed Vouchers',
+    hi: 'कुल वितरित वाउचर',
+  );
+  String get disbursedInvoicesCountLabel => _t(
+    ar: 'عدد الفواتير المنفذة',
+    en: 'Processed Invoices',
+    hi: 'संसाधित बिल',
+  );
+  String get todayShortcut => _t(
+    ar: 'اليوم',
+    en: 'Today',
+    hi: 'आज',
+  );
+  String get allTimeShortcut => _t(
+    ar: 'إجمالي الحملة',
+    en: 'All-Time Total',
+    hi: 'कुल अभियान',
+  );
+  String get previousDayTooltip => _t(
+    ar: 'اليوم السابق',
+    en: 'Previous Day',
+    hi: 'पिछला दिन',
+  );
+  String get nextDayTooltip => _t(
+    ar: 'اليوم التالي',
+    en: 'Next Day',
+    hi: 'अगला दिन',
+  );
+  String get selectDateTooltip => _t(
+    ar: 'اختيار تاريخ محدد',
+    en: 'Select Specific Date',
+    hi: 'विशिष्ट तिथि चुनें',
+  );
+  String get noDisbursalsOnDate => _t(
+    ar: 'لم يتم تسجيل أي عمليات صرف هدايا في هذا التاريخ',
+    en: 'No gift disbursements recorded on this date',
+    hi: 'इस तिथि पर कोई उपहार वितरण दर्ज नहीं किया गया',
+  );
+  String get branchRemainingStockLabel => _t(
+    ar: 'الرصيد المتبقي بالفرع',
+    en: 'Branch Remaining Stock',
+    hi: 'शाखा में शेष स्टॉक',
+  );
+  String get disbursedVoucherAmountLabel => _t(
+    ar: 'إجمالي قيمة الفواتشر المنصرفة',
+    en: 'Disbursed Vouchers Value',
+    hi: 'वितरित वाउचर मूल्य',
+  );
+
+  // ---------------------------------------------------------------------------
+  // 30.5 Voucher Serial Numbers Tracking & Admin Reset System
+  // ---------------------------------------------------------------------------
+  String get voucherSerialsSectionTitle => _t(
+    ar: 'أرقام بطاقات الفواتشرات المستحقة (إلزامي)',
+    en: 'Voucher Card Serial Numbers (Mandatory)',
+    hi: 'वाउचर कार्ड सीरियल नंबर (अनिवार्य)',
+  );
+  String get voucherSerialsSectionSubtitle => _t(
+    ar: 'يرجى تسجيل الأرقام التسلسلية المطبوعة على بطاقات الفواتشرات لتأكيد الصرف والمطابقة مع العهدة',
+    en: 'Please enter the serial numbers printed on physical voucher cards for inventory audit',
+    hi: 'ऑडिट के लिए भौतिक वाउचर कार्ड पर मुद्रित सीरियल नंबर दर्ज करें',
+  );
+  String get voucherSerialInputLabel => _t(
+    ar: 'رقم كارت الفواتشر',
+    en: 'Voucher Serial Number',
+    hi: 'वाउचर सीरियल नंबर',
+  );
+  String get voucherSerialInputHint => _t(
+    ar: 'مثال: 2789241/1',
+    en: 'e.g. 2789241/1',
+    hi: 'उदा. 2789241/1',
+  );
+  String get voucherSerialRequiredError => _t(
+    ar: 'يرجى إدخال رقم كارت الفواتشر',
+    en: 'Please enter the voucher serial number',
+    hi: 'कृपया वाउचर सीरियल नंबर दर्ज करें',
+  );
+  String get voucherSerialDuplicateInTxError => _t(
+    ar: 'تم إدخال هذا الرقم لكارت آخر في نفس المعاملة',
+    en: 'This serial number was entered for another card in this transaction',
+    hi: 'यह सीरियल नंबर इस लेनदेन में दूसरे कार्ड के लिए दर्ज किया गया है',
+  );
+  String get voucherSerialAlreadyClaimedError => _t(
+    ar: 'هذا الكارت مسجل كمنصرف مسبقاً في الحملة',
+    en: 'This voucher card is already recorded as claimed in this campaign',
+    hi: 'यह वाउचर कार्ड इस अभियान में पहले से दावा किया गया है',
+  );
+  String get voucherSerialsManagementTitle => _t(
+    ar: 'إدارة وسجل أرقام بطاقات الفواتشرات',
+    en: 'Voucher Cards Registry & Reset',
+    hi: 'वाउचर कार्ड रजिस्ट्री और रीसेट',
+  );
+  String get voucherSerialsManagementSubtitle => _t(
+    ar: 'استعلام وبحث أرقام كروت الفواتشرات المسلمة وإعادة تعيينها لإعادة الاستخدام في حملات جديدة',
+    en: 'Search claimed voucher card serials and reset them for future campaign cycles',
+    hi: 'दावा किए गए वाउचर सीरियल खोजें और नए अभियान के लिए रीसेट करें',
+  );
+  String get resetVoucherSerialsBtn => _t(
+    ar: 'إعادة تعيين أرقام الفواتشرات لإعادة الاستخدام',
+    en: 'Reset Voucher Serials for Reuse',
+    hi: 'पुनः उपयोग के लिए वाउचर रीसेट करें',
+  );
+  String get resetVoucherSerialsConfirmTitle => _t(
+    ar: 'تأكيد إعادة تعيين أرقام الفواتشرات',
+    en: 'Confirm Voucher Serials Reset',
+    hi: 'वाउचर सीरियल रीसेट की पुष्टि करें',
+  );
+  String get resetVoucherSerialsConfirmMsg => _t(
+    ar: 'سيتم فك حظر الأرقام التسلسلية السابقة والسماح بإعادة استخدام نفس البطاقات البلاستيكية في دورات وحملات جديدة، مع بقاء كافة سجلات الفواتير التاريخية محفوظة بالكامل.',
+    en: 'Previous serial numbers will be released for reuse in new campaigns while all historical transaction records remain completely intact.',
+    hi: 'पिछले सीरियल नंबर नए अभियानों में पुनः उपयोग के लिए अनलॉक हो जाएंगे जबकि सभी पिछले रिकॉर्ड सुरक्षित रहेंगे।',
+  );
+  String get voucherSerialsResetSuccess => _t(
+    ar: 'تمت إعادة تعيين سجل أرقام الفواتشرات بنجاح وإتاحة استخدامها مجدداً',
+    en: 'Voucher serial numbers registry reset successfully for reuse',
+    hi: 'वाउचर सीरियल रजिस्ट्री सफलतापूर्वक रीसेट हो गई',
+  );
+  String get totalClaimedVoucherCards => _t(
+    ar: 'إجمالي كروت الفواتشرات المسجلة',
+    en: 'Total Registered Voucher Cards',
+    hi: 'कुल पंजीकृत वाउचर कार्ड',
+  );
+  String get searchVoucherSerialPlaceholder => _t(
+    ar: 'بحث برقم كارت الفواتشر (مثال: 2789241/1)...',
+    en: 'Search by voucher serial (e.g. 2789241/1)...',
+    hi: 'वाउचर नंबर से खोजें (उदा. 2789241/1)...',
+  );
+  String get noVouchersClaimedYet => _t(
+    ar: 'لم يتم تسجيل أي كروت فواتشرات مسلمة حتى الآن',
+    en: 'No claimed voucher cards recorded yet',
+    hi: 'अभी तक कोई वाउचर कार्ड रिकॉर्ड नहीं हुआ है',
+  );
 
   // ---------------------------------------------------------------------------
   // 31. Promoter & Client Portal: Campaign Brief & Offer Rules Dialog

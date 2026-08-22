@@ -8,7 +8,8 @@ import '../../../../core/services/firebase_service.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../admin/domain/event_model.dart';
 
-/// Interactive Material Design 3 Dialog displaying real-time Campaign Gifts & Branch Stock Balance
+/// Interactive Material Design 3 Dialog displaying real-time Campaign Gifts,
+/// Daily Handover/Disbursals Log with Date Navigation, and Branch Stock Balance.
 class CampaignGiftBalanceDialog extends ConsumerStatefulWidget {
   final EventModel event;
 
@@ -51,9 +52,18 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
   String? _selectedBranchKey;
   String? _pinnedBranchKey;
 
+  // View Tabs: 0 = Daily Disbursals / Handover, 1 = Remaining Stock Balance
+  int _selectedTab = 0;
+
+  // Date Filter for Daily Handover View
+  late DateTime _selectedDate;
+  bool _isAllTime = false;
+
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _selectedDate = DateTime(now.year, now.month, now.day);
     _loadSavedBranch();
   }
 
@@ -101,6 +111,153 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
     } catch (_) {}
   }
 
+  static String _normalizeKey(String text) {
+    return text
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\u064B-\u065F\u0670]'), '')
+        .replaceAll('أ', 'ا')
+        .replaceAll('إ', 'ا')
+        .replaceAll('آ', 'ا')
+        .replaceAll('ة', 'ه')
+        .replaceAll('ى', 'ي')
+        .replaceAll('٠', '0')
+        .replaceAll('١', '1')
+        .replaceAll('٢', '2')
+        .replaceAll('٣', '3')
+        .replaceAll('٤', '4')
+        .replaceAll('٥', '5')
+        .replaceAll('٦', '6')
+        .replaceAll('٧', '7')
+        .replaceAll('٨', '8')
+        .replaceAll('٩', '9')
+        .replaceAll(RegExp(r'[^\u0600-\u06FFa-zA-Z0-9\s]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  static bool _matchesPrize(AllocatedPrize prize, Map<String, dynamic> cg) {
+    final gId = (cg['giftId'] ?? cg['gift_id'] ?? '').toString().trim();
+    if (gId.isNotEmpty && prize.giftId.isNotEmpty && gId == prize.giftId) {
+      return true;
+    }
+
+    final gName = (cg['giftName'] ?? cg['gift_name'] ?? '').toString().trim();
+    final normG = _normalizeKey(gName);
+    final normP = _normalizeKey(prize.name);
+
+    if (normG.isNotEmpty && normG == normP) {
+      return true;
+    }
+
+    final cgVal = (cg['unitValue'] ?? cg['unit_value'] as num?)?.toDouble() ?? 0.0;
+    final cgIsVoucher = cg['isVoucher'] == true || cg['is_voucher'] == true;
+
+    // Strict voucher denomination matching
+    if (prize.isVoucher && cgIsVoucher && prize.unitValue > 0 && cgVal > 0) {
+      if (prize.unitValue.toInt() == cgVal.toInt()) {
+        return true;
+      }
+    }
+
+    // Brand specific match
+    final isClearP = normP.contains('كلير') || normP.contains('clear');
+    final isClearG = normG.contains('كلير') || normG.contains('clear');
+    if (isClearP && isClearG) return true;
+
+    final isTresemmeP = normP.contains('تريزيمي') || normP.contains('تريزمي') || normP.contains('tresemme');
+    final isTresemmeG = normG.contains('تريزيمي') || normG.contains('تريزمي') || normG.contains('tresemme');
+    if (isTresemmeP && isTresemmeG) return true;
+
+    return false;
+  }
+
+  static bool _matchesBranch(String selectedBranchKey, String selectedBranchName, Map<String, dynamic> data) {
+    if (selectedBranchKey == 'all' || selectedBranchKey == 'general') {
+      return true;
+    }
+
+    final docBranchId = (data['branch_id'] ?? data['branchId'] ?? '').toString().trim();
+    if (docBranchId.isNotEmpty && docBranchId == selectedBranchKey) {
+      return true;
+    }
+
+    final docBranchName = (data['branch_detected'] ?? data['branch'] ?? data['branchName'] ?? '').toString().trim();
+    final normDoc = _normalizeKey(docBranchName);
+    final normSelected = _normalizeKey(selectedBranchName);
+
+    if (normDoc.isNotEmpty && normSelected.isNotEmpty) {
+      if (normDoc.contains(normSelected) || normSelected.contains(normDoc)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  String _formatDateArabic(DateTime dt, bool isAr) {
+    if (!isAr) {
+      return '${dt.day}/${dt.month}/${dt.year}';
+    }
+
+    const weekdays = [
+      'الإثنين',
+      'الثلاثاء',
+      'الأربعاء',
+      'الخميس',
+      'الجمعة',
+      'السبت',
+      'الأحد',
+    ];
+    const months = [
+      'يناير',
+      'فبراير',
+      'مارس',
+      'أبريل',
+      'مايو',
+      'يونيو',
+      'يوليو',
+      'أغسطس',
+      'سبتمبر',
+      'أكتوبر',
+      'نوفمبر',
+      'ديسمبر',
+    ];
+
+    final weekdayName = weekdays[(dt.weekday - 1) % 7];
+    final monthName = months[(dt.month - 1) % 12];
+    return '$weekdayName، ${dt.day} $monthName ${dt.year}';
+  }
+
+  bool _isToday(DateTime dt) {
+    final now = DateTime.now();
+    return dt.year == now.year && dt.month == now.month && dt.day == now.day;
+  }
+
+  Future<void> _pickDate(BuildContext context) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(now.year - 1, 1, 1),
+      lastDate: DateTime(now.year, now.month, now.day),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme,
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _selectedDate = DateTime(picked.year, picked.month, picked.day);
+        _isAllTime = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -111,11 +268,15 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
     final screenWidth = mediaQuery.size.width;
     final isMobile = screenWidth < 600;
 
-    // Stream live data from Firestore for real-time prize balance updates
-    final firestore = ref.watch(firestoreProvider);
-    final eventDocStream = widget.event.id.isNotEmpty
-        ? firestore.collection('events').doc(widget.event.id).snapshots()
-        : null;
+    Stream<DocumentSnapshot<Map<String, dynamic>>>? eventDocStream;
+    Stream<QuerySnapshot<Map<String, dynamic>>>? transactionsStream;
+    try {
+      final firestore = ref.watch(firestoreProvider);
+      if (widget.event.id.isNotEmpty) {
+        eventDocStream = firestore.collection('events').doc(widget.event.id).snapshots();
+        transactionsStream = firestore.collection('receipts_transactions').snapshots();
+      }
+    } catch (_) {}
 
     return Directionality(
       textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
@@ -136,229 +297,382 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
         child: Container(
           constraints: BoxConstraints(
             maxWidth: 680,
-            maxHeight: mediaQuery.size.height * 0.86,
+            maxHeight: mediaQuery.size.height * 0.88,
           ),
           child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
             stream: eventDocStream,
-            builder: (context, snapshot) {
+            builder: (context, eventSnap) {
               EventModel liveEvent = widget.event;
-              if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
+              if (eventSnap.hasData && eventSnap.data != null && eventSnap.data!.exists) {
                 try {
-                  liveEvent = EventModel.fromFirestore(snapshot.data!);
+                  liveEvent = EventModel.fromFirestore(eventSnap.data!);
                 } catch (_) {}
               }
 
-              final allPrizes = liveEvent.allocatedPrizes;
+              return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: transactionsStream,
+                builder: (context, txSnap) {
+                  final txDocs = txSnap.data?.docs ?? [];
 
-              // Group prizes by branch
-              final Map<String, List<AllocatedPrize>> branchPrizesMap = {};
-              final Map<String, String> branchDisplayNames = {};
+                  // Group prizes by branch & build canonical branch list
+                  final allPrizes = liveEvent.allocatedPrizes;
+                  final Map<String, List<AllocatedPrize>> branchPrizesMap = {};
+                  final Map<String, String> branchDisplayNames = {};
 
-              for (final prize in allPrizes) {
-                final key = prize.branchId.isNotEmpty ? prize.branchId : (prize.branchName.isNotEmpty ? prize.branchName : 'general');
-                final name = prize.branchName.isNotEmpty ? prize.branchName : (prize.branchId.isNotEmpty ? prize.branchId : strings.allBranchesScope);
+                  // 1. Add "All Branches" Option
+                  branchDisplayNames['all'] = strings.allBranchesScope;
+                  branchPrizesMap['all'] = allPrizes;
 
-                branchPrizesMap.putIfAbsent(key, () => []).add(prize);
-                branchDisplayNames[key] = name;
-              }
+                  // 2. Add individual campaign branches
+                  if (liveEvent.branchIds.isNotEmpty) {
+                    for (int i = 0; i < liveEvent.branchIds.length; i++) {
+                      final bId = liveEvent.branchIds[i];
+                      final bName = i < liveEvent.branchNames.length ? liveEvent.branchNames[i] : bId;
+                      branchPrizesMap.putIfAbsent(bId, () => []);
+                      branchDisplayNames[bId] = bName;
+                    }
+                  }
 
-              // Also ensure configured branches from event are included even if zero prizes allocated
-              if (liveEvent.branchIds.isNotEmpty) {
-                for (int i = 0; i < liveEvent.branchIds.length; i++) {
-                  final bId = liveEvent.branchIds[i];
-                  final bName = i < liveEvent.branchNames.length ? liveEvent.branchNames[i] : bId;
-                  branchPrizesMap.putIfAbsent(bId, () => []);
-                  branchDisplayNames.putIfAbsent(bId, () => bName);
-                }
-              }
+                  // 3. Add allocated prize specific branches
+                  for (final prize in allPrizes) {
+                    if (prize.branchId.isNotEmpty) {
+                      branchPrizesMap.putIfAbsent(prize.branchId, () => []).add(prize);
+                      if (!branchDisplayNames.containsKey(prize.branchId)) {
+                        branchDisplayNames[prize.branchId] = prize.branchName.isNotEmpty ? prize.branchName : prize.branchId;
+                      }
+                    } else if (prize.branchName.isNotEmpty) {
+                      branchPrizesMap.putIfAbsent(prize.branchName, () => []).add(prize);
+                      branchDisplayNames[prize.branchName] = prize.branchName;
+                    }
+                  }
 
-              final branchKeys = branchPrizesMap.keys.toList();
+                  // 4. Auto-detect branches from transaction logs if any
+                  for (final doc in txDocs) {
+                    final data = doc.data();
+                    final bDetected = (data['branch_detected'] ?? '').toString().trim();
+                    final bId = (data['branch_id'] ?? data['branchId'] ?? '').toString().trim();
+                    if (bDetected.isNotEmpty) {
+                      final key = bId.isNotEmpty ? bId : bDetected;
+                      if (!branchDisplayNames.containsKey(key)) {
+                        branchDisplayNames[key] = bDetected;
+                        branchPrizesMap.putIfAbsent(key, () => []);
+                      }
+                    }
+                  }
 
-              // Fallback / auto-select pinned branch or first branch if no specific branch is selected yet
-              if (_selectedBranchKey == null || !branchPrizesMap.containsKey(_selectedBranchKey)) {
-                if (_pinnedBranchKey != null && branchPrizesMap.containsKey(_pinnedBranchKey)) {
-                  _selectedBranchKey = _pinnedBranchKey;
-                } else if (branchKeys.isNotEmpty) {
-                  _selectedBranchKey = branchKeys.first;
-                }
-              }
+                  final branchKeys = branchDisplayNames.keys.toList();
 
-              final activeBranchPrizes = _selectedBranchKey != null ? (branchPrizesMap[_selectedBranchKey] ?? []) : allPrizes;
+                  // Auto-select pinned branch or fallback
+                  if (_selectedBranchKey == null || !branchDisplayNames.containsKey(_selectedBranchKey)) {
+                    if (_pinnedBranchKey != null && branchDisplayNames.containsKey(_pinnedBranchKey)) {
+                      _selectedBranchKey = _pinnedBranchKey;
+                    } else if (branchKeys.length > 1) {
+                      // Prefer the first actual branch over 'all' if available
+                      _selectedBranchKey = branchKeys.firstWhere((k) => k != 'all', orElse: () => 'all');
+                    } else {
+                      _selectedBranchKey = 'all';
+                    }
+                  }
 
-              // Total branch stock stats
-              int totalAllocatedInBranch = 0;
-              int totalRemainingInBranch = 0;
-              for (final p in activeBranchPrizes) {
-                totalAllocatedInBranch += p.allocatedQuantity;
-                totalRemainingInBranch += p.remainingQuantity;
-              }
+                  final currentBranchKey = _selectedBranchKey ?? 'all';
+                  final currentBranchName = branchDisplayNames[currentBranchKey] ?? '';
 
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // 1. Dialog Header (M3 Title, Company Subtitle & Close Action)
-                  _buildHeader(
-                    context: context,
-                    colorScheme: colorScheme,
-                    strings: strings,
-                    event: liveEvent,
-                    isMobile: isMobile,
-                  ),
+                  final activeBranchPrizes = (currentBranchKey != 'all' && (branchPrizesMap[currentBranchKey]?.isNotEmpty ?? false))
+                      ? branchPrizesMap[currentBranchKey]!
+                      : allPrizes;
 
-                  const Divider(height: 1),
+                  // Stock calculations
+                  int totalAllocatedInBranch = 0;
+                  int totalRemainingInBranch = 0;
+                  for (final p in activeBranchPrizes) {
+                    totalAllocatedInBranch += p.allocatedQuantity;
+                    totalRemainingInBranch += p.remainingQuantity;
+                  }
 
-                  // 2. Scrollable Body
-                  Flexible(
-                    child: SingleChildScrollView(
-                      padding: EdgeInsets.all(isMobile ? 14 : 20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // Branch Selection Dropdown (if campaign has multiple branches)
-                          if (branchKeys.length > 1) ...[
-                            Text(
-                              strings.selectBranchToViewStock,
-                              style: GoogleFonts.cairo(
-                                fontSize: isMobile ? 12.5 : 13.5,
-                                fontWeight: FontWeight.bold,
-                                color: colorScheme.onSurface,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            _buildBranchSelector(
-                              context: context,
-                              colorScheme: colorScheme,
-                              strings: strings,
-                              branchKeys: branchKeys,
-                              branchNames: branchDisplayNames,
-                              branchPrizesMap: branchPrizesMap,
-                              isMobile: isMobile,
-                            ),
-                            const SizedBox(height: 18),
-                          ] else if (branchKeys.length == 1) ...[
-                            // Single branch badge
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+                  // -----------------------------------------------------------
+                  // Daily / Date-Filtered Disbursal & Handover Aggregation
+                  // -----------------------------------------------------------
+                  final Map<String, int> disbursedPerPrizeId = {};
+                  final Map<String, double> disbursedValuePerPrizeId = {};
+                  int totalGiftsDisbursedOnDate = 0;
+                  double totalVouchersValueOnDate = 0.0;
+                  int totalInvoicesOnDate = 0;
+
+                  for (final doc in txDocs) {
+                    final data = doc.data();
+                    final eventId = (data['event_id'] ?? data['campaignId'] ?? data['campaign_id'] ?? '').toString();
+                    if (eventId.isNotEmpty && eventId != liveEvent.id) {
+                      continue;
+                    }
+
+                    final status = data['status']?.toString();
+                    final isValid = data['is_valid'];
+                    if (status == 'rejected' || isValid == false) {
+                      continue;
+                    }
+
+                    // Date parsing
+                    final rawDate = data['claimed_at'] ??
+                        data['created_at'] ??
+                        data['timestamp'] ??
+                        data['date'];
+                    DateTime? docDate;
+                    if (rawDate is Timestamp) {
+                      docDate = rawDate.toDate();
+                    } else if (rawDate is String && rawDate.isNotEmpty) {
+                      docDate = DateTime.tryParse(rawDate);
+                    }
+
+                    if (!_isAllTime) {
+                      if (docDate == null) continue;
+                      final isSameDay = docDate.year == _selectedDate.year &&
+                          docDate.month == _selectedDate.month &&
+                          docDate.day == _selectedDate.day;
+                      if (!isSameDay) continue;
+                    }
+
+                    // Strict Branch Filtering
+                    if (!_matchesBranch(currentBranchKey, currentBranchName, data)) {
+                      continue;
+                    }
+
+                    totalInvoicesOnDate++;
+
+                    // Extract claimed gifts
+                    final claimedGifts = (data['claimed_gifts'] as List?) ?? [];
+                    if (claimedGifts.isNotEmpty) {
+                      for (final cg in claimedGifts) {
+                        if (cg is Map) {
+                          final cgMap = Map<String, dynamic>.from(cg);
+                          final qty = (cgMap['quantity'] as num?)?.toInt() ?? 1;
+                          final uVal = (cgMap['unitValue'] ?? cgMap['unit_value'] as num?)?.toDouble() ?? 0.0;
+                          final isVoucher = cgMap['isVoucher'] == true || cgMap['is_voucher'] == true;
+
+                          totalGiftsDisbursedOnDate += qty;
+                          if (isVoucher && uVal > 0) {
+                            totalVouchersValueOnDate += (uVal * qty);
+                          }
+
+                          // Match with configured prizes
+                          for (final prize in activeBranchPrizes) {
+                            if (_matchesPrize(prize, cgMap)) {
+                              final pKey = prize.giftId.isNotEmpty ? prize.giftId : prize.name;
+                              disbursedPerPrizeId[pKey] = (disbursedPerPrizeId[pKey] ?? 0) + qty;
+                              if (isVoucher && uVal > 0) {
+                                disbursedValuePerPrizeId[pKey] = (disbursedValuePerPrizeId[pKey] ?? 0.0) + (uVal * qty);
+                              }
+                            }
+                          }
+                        }
+                      }
+                    } else {
+                      final prizesWon = (data['prizes_won'] as List?)?.map((p) => p.toString()).toList() ??
+                          [(data['prize_won'] ?? '').toString()];
+                      for (final p in prizesWon) {
+                        if (p.trim().isNotEmpty) {
+                          totalGiftsDisbursedOnDate += 1;
+                          for (final prize in activeBranchPrizes) {
+                            if (_matchesPrize(prize, {'giftName': p})) {
+                              final pKey = prize.giftId.isNotEmpty ? prize.giftId : prize.name;
+                              disbursedPerPrizeId[pKey] = (disbursedPerPrizeId[pKey] ?? 0) + 1;
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // 1. Dialog Header (M3 Title, Company Subtitle & Close Action)
+                      _buildHeader(
+                        context: context,
+                        colorScheme: colorScheme,
+                        strings: strings,
+                        event: liveEvent,
+                        isMobile: isMobile,
+                      ),
+
+                      // 2. Mode Switcher (Daily Handover vs Stock Balance)
+                      Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isMobile ? 14 : 20,
+                          vertical: 6,
+                        ),
+                        child: _buildModeSegmentedControl(
+                          context: context,
+                          colorScheme: colorScheme,
+                          strings: strings,
+                          isMobile: isMobile,
+                        ),
+                      ),
+
+                      const Divider(height: 1),
+
+                      // 3. Scrollable Body
+                      Flexible(
+                        child: SingleChildScrollView(
+                          padding: EdgeInsets.all(isMobile ? 14 : 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Branch Selection Dropdown
+                              if (branchKeys.length > 1) ...[
+                                Text(
+                                  strings.selectBranchToViewStock,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: isMobile ? 12.5 : 13.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: colorScheme.onSurface,
+                                  ),
                                 ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.store_rounded,
-                                    color: colorScheme.primary,
-                                    size: 20,
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      branchDisplayNames[branchKeys.first] ?? strings.allBranchesScope,
-                                      style: GoogleFonts.cairo(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                        color: colorScheme.onSurface,
-                                      ),
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: colorScheme.primaryContainer,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      '${activeBranchPrizes.length} ${strings.branchGiftsCountLabel}',
-                                      style: GoogleFonts.cairo(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: colorScheme.onPrimaryContainer,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                          ],
-
-                          // Summary Stat Pill for the selected branch
-                          _buildBranchSummaryCard(
-                            context: context,
-                            colorScheme: colorScheme,
-                            strings: strings,
-                            remaining: totalRemainingInBranch,
-                            total: totalAllocatedInBranch,
-                            giftTypesCount: activeBranchPrizes.length,
-                            isMobile: isMobile,
-                          ),
-
-                          const SizedBox(height: 16),
-
-                          // List of Gifts for the Selected Branch
-                          if (activeBranchPrizes.isEmpty)
-                            _buildEmptyState(context, colorScheme, strings)
-                          else
-                            ListView.separated(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: activeBranchPrizes.length,
-                              separatorBuilder: (context, index) => const SizedBox(height: 10),
-                              itemBuilder: (context, index) {
-                                final prize = activeBranchPrizes[index];
-                                return _buildPrizeInventoryCard(
+                                const SizedBox(height: 10),
+                                _buildBranchSelector(
                                   context: context,
                                   colorScheme: colorScheme,
                                   strings: strings,
-                                  prize: prize,
+                                  branchKeys: branchKeys,
+                                  branchNames: branchDisplayNames,
+                                  branchPrizesMap: branchPrizesMap,
                                   isMobile: isMobile,
-                                );
-                              },
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
+                                ),
+                                const SizedBox(height: 16),
+                              ],
 
-                  const Divider(height: 1),
+                              if (_selectedTab == 0) ...[
+                                // ---------------------------------------------
+                                // TAB 0: Daily Disbursals / Handover Log
+                                // ---------------------------------------------
+                                _buildDateFilterBar(
+                                  context: context,
+                                  colorScheme: colorScheme,
+                                  strings: strings,
+                                  isAr: isAr,
+                                  isMobile: isMobile,
+                                ),
 
-                  // 3. Dialog Footer (M3 Close Action)
-                  Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: isMobile ? 14 : 20,
-                      vertical: isMobile ? 12 : 14,
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: FilledButton.tonalIcon(
-                            onPressed: () => Navigator.of(context).pop(),
-                            icon: const Icon(Icons.check_rounded, size: 18),
-                            label: Text(
-                              strings.closeInventoryDialog,
-                              style: GoogleFonts.cairo(
-                                fontWeight: FontWeight.bold,
-                                fontSize: isMobile ? 13 : 14,
-                              ),
-                            ),
-                            style: FilledButton.styleFrom(
-                              padding: EdgeInsets.symmetric(
-                                vertical: isMobile ? 12 : 14,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                            ),
+                                const SizedBox(height: 14),
+
+                                // KPI Summary Metrics
+                                _buildDailyKpis(
+                                  context: context,
+                                  colorScheme: colorScheme,
+                                  strings: strings,
+                                  totalGifts: totalGiftsDisbursedOnDate,
+                                  totalVouchers: totalVouchersValueOnDate,
+                                  totalInvoices: totalInvoicesOnDate,
+                                  isMobile: isMobile,
+                                ),
+
+                                const SizedBox(height: 16),
+
+                                // Disbursed Items Breakdown List
+                                if (activeBranchPrizes.isEmpty)
+                                  _buildEmptyState(context, colorScheme, strings)
+                                else
+                                  ListView.separated(
+                                    shrinkWrap: true,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    itemCount: activeBranchPrizes.length,
+                                    separatorBuilder: (context, index) => const SizedBox(height: 10),
+                                    itemBuilder: (context, index) {
+                                      final prize = activeBranchPrizes[index];
+                                      final pKey = prize.giftId.isNotEmpty ? prize.giftId : prize.name;
+
+                                      final disbursedCount = disbursedPerPrizeId[pKey] ?? 0;
+                                      final disbursedVal = disbursedValuePerPrizeId[pKey] ?? 0.0;
+
+                                      return _buildDailyDisbursedCard(
+                                        context: context,
+                                        colorScheme: colorScheme,
+                                        strings: strings,
+                                        prize: prize,
+                                        disbursedCount: disbursedCount,
+                                        disbursedValue: disbursedVal,
+                                        isMobile: isMobile,
+                                      );
+                                    },
+                                  ),
+                              ] else ...[
+                                // ---------------------------------------------
+                                // TAB 1: Remaining Stock Balance
+                                // ---------------------------------------------
+                                _buildBranchSummaryCard(
+                                  context: context,
+                                  colorScheme: colorScheme,
+                                  strings: strings,
+                                  remaining: totalRemainingInBranch,
+                                  total: totalAllocatedInBranch,
+                                  giftTypesCount: activeBranchPrizes.length,
+                                  isMobile: isMobile,
+                                ),
+
+                                const SizedBox(height: 16),
+
+                                if (activeBranchPrizes.isEmpty)
+                                  _buildEmptyState(context, colorScheme, strings)
+                                else
+                                  ListView.separated(
+                                    shrinkWrap: true,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    itemCount: activeBranchPrizes.length,
+                                    separatorBuilder: (context, index) => const SizedBox(height: 10),
+                                    itemBuilder: (context, index) {
+                                      final prize = activeBranchPrizes[index];
+                                      return _buildPrizeInventoryCard(
+                                        context: context,
+                                        colorScheme: colorScheme,
+                                        strings: strings,
+                                        prize: prize,
+                                        isMobile: isMobile,
+                                      );
+                                    },
+                                  ),
+                              ],
+                            ],
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                ],
+                      ),
+
+                      const Divider(height: 1),
+
+                      // 4. Dialog Footer (M3 Close Action)
+                      Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isMobile ? 14 : 20,
+                          vertical: isMobile ? 12 : 14,
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: FilledButton.tonalIcon(
+                                onPressed: () => Navigator.of(context).pop(),
+                                icon: const Icon(Icons.check_rounded, size: 18),
+                                label: Text(
+                                  strings.closeInventoryDialog,
+                                  style: GoogleFonts.cairo(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: isMobile ? 13 : 14,
+                                  ),
+                                ),
+                                style: FilledButton.styleFrom(
+                                  padding: EdgeInsets.symmetric(
+                                    vertical: isMobile ? 12 : 14,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
               );
             },
           ),
@@ -379,7 +693,7 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
         isMobile ? 14 : 20,
         isMobile ? 14 : 18,
         isMobile ? 8 : 12,
-        isMobile ? 12 : 16,
+        isMobile ? 8 : 12,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -417,9 +731,11 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  strings.promoterGiftsBalanceTitle,
+                  _selectedTab == 0
+                      ? strings.promoterDailyDisbursalTitle
+                      : strings.promoterGiftsBalanceTitle,
                   style: GoogleFonts.cairo(
-                    fontSize: isMobile ? 16 : 18,
+                    fontSize: isMobile ? 15.5 : 17.5,
                     fontWeight: FontWeight.bold,
                     color: colorScheme.onSurface,
                     height: 1.2,
@@ -454,6 +770,623 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
     );
   }
 
+  Widget _buildModeSegmentedControl({
+    required BuildContext context,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isMobile,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+      ),
+      padding: const EdgeInsets.all(4),
+      child: Row(
+        children: [
+          // Tab 0: Daily Disbursals / Handover
+          Expanded(
+            child: InkWell(
+              onTap: () => setState(() => _selectedTab = 0),
+              borderRadius: BorderRadius.circular(10),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: EdgeInsets.symmetric(vertical: isMobile ? 8 : 10),
+                decoration: BoxDecoration(
+                  color: _selectedTab == 0 ? colorScheme.primary : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: _selectedTab == 0
+                      ? [
+                          BoxShadow(
+                            color: colorScheme.primary.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.query_builder_rounded,
+                      size: 16,
+                      color: _selectedTab == 0 ? Colors.white : colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        strings.promoterDailyDisbursalTab,
+                        style: GoogleFonts.cairo(
+                          fontSize: isMobile ? 12 : 13,
+                          fontWeight: FontWeight.bold,
+                          color: _selectedTab == 0 ? Colors.white : colorScheme.onSurfaceVariant,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+
+          // Tab 1: Remaining Stock Balance
+          Expanded(
+            child: InkWell(
+              onTap: () => setState(() => _selectedTab = 1),
+              borderRadius: BorderRadius.circular(10),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: EdgeInsets.symmetric(vertical: isMobile ? 8 : 10),
+                decoration: BoxDecoration(
+                  color: _selectedTab == 1 ? colorScheme.primary : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: _selectedTab == 1
+                      ? [
+                          BoxShadow(
+                            color: colorScheme.primary.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.inventory_rounded,
+                      size: 16,
+                      color: _selectedTab == 1 ? Colors.white : colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        strings.promoterStockBalanceTab,
+                        style: GoogleFonts.cairo(
+                          fontSize: isMobile ? 12 : 13,
+                          fontWeight: FontWeight.bold,
+                          color: _selectedTab == 1 ? Colors.white : colorScheme.onSurfaceVariant,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDateFilterBar({
+    required BuildContext context,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+    required bool isMobile,
+  }) {
+    final isCurrentDayToday = _isToday(_selectedDate) && !_isAllTime;
+
+    return Container(
+      padding: EdgeInsets.all(isMobile ? 10 : 12),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              // Previous Day Button
+              IconButton(
+                icon: const Icon(Icons.chevron_right_rounded, size: 22),
+                tooltip: strings.previousDayTooltip,
+                onPressed: () {
+                  setState(() {
+                    _selectedDate = _selectedDate.subtract(const Duration(days: 1));
+                    _isAllTime = false;
+                  });
+                },
+                style: IconButton.styleFrom(
+                  padding: EdgeInsets.all(isMobile ? 6 : 8),
+                  backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(width: 6),
+
+              // Date Display & Picker Button
+              Expanded(
+                child: InkWell(
+                  onTap: () => _pickDate(context),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 10 : 14,
+                      vertical: isMobile ? 8 : 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isCurrentDayToday
+                          ? colorScheme.primaryContainer.withValues(alpha: 0.6)
+                          : colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isCurrentDayToday
+                            ? colorScheme.primary.withValues(alpha: 0.4)
+                            : colorScheme.outlineVariant.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.calendar_month_rounded,
+                          size: 18,
+                          color: colorScheme.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            _isAllTime
+                                ? strings.allTimeShortcut
+                                : _formatDateArabic(_selectedDate, isAr),
+                            style: GoogleFonts.cairo(
+                              fontSize: isMobile ? 12.5 : 13.5,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurface,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (isCurrentDayToday) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primary,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              strings.todayShortcut,
+                              style: GoogleFonts.cairo(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+
+              // Next Day Button (Disabled if already today)
+              IconButton(
+                icon: const Icon(Icons.chevron_left_rounded, size: 22),
+                tooltip: strings.nextDayTooltip,
+                onPressed: _isToday(_selectedDate)
+                    ? null
+                    : () {
+                        setState(() {
+                          _selectedDate = _selectedDate.add(const Duration(days: 1));
+                          _isAllTime = false;
+                        });
+                      },
+                style: IconButton.styleFrom(
+                  padding: EdgeInsets.all(isMobile ? 6 : 8),
+                  backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ),
+
+          // Shortcut chips (Today, All-time)
+          if (!_isToday(_selectedDate) || _isAllTime) ...[
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ActionChip(
+                  avatar: const Icon(Icons.today_rounded, size: 14),
+                  label: Text(
+                    'الرجوع لليوم الحالي',
+                    style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: () {
+                    final now = DateTime.now();
+                    setState(() {
+                      _selectedDate = DateTime(now.year, now.month, now.day);
+                      _isAllTime = false;
+                    });
+                  },
+                  backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.5),
+                  side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.4)),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                ),
+                const SizedBox(width: 8),
+                ActionChip(
+                  avatar: const Icon(Icons.all_inclusive_rounded, size: 14),
+                  label: Text(
+                    strings.allTimeShortcut,
+                    style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _isAllTime = true;
+                    });
+                  },
+                  backgroundColor: _isAllTime
+                      ? colorScheme.primary
+                      : colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  labelStyle: TextStyle(
+                    color: _isAllTime ? Colors.white : colorScheme.onSurface,
+                  ),
+                  side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDailyKpis({
+    required BuildContext context,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required int totalGifts,
+    required double totalVouchers,
+    required int totalInvoices,
+    required bool isMobile,
+  }) {
+    return Row(
+      children: [
+        // KPI 1: Total Disbursed Gifts
+        Expanded(
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 10 : 12,
+              vertical: isMobile ? 10 : 12,
+            ),
+            decoration: BoxDecoration(
+              color: colorScheme.primaryContainer.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.card_giftcard_rounded, size: 16, color: colorScheme.primary),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        strings.totalDisbursedCountLabel,
+                        style: GoogleFonts.cairo(
+                          fontSize: isMobile ? 10.5 : 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$totalGifts قطعة',
+                  style: GoogleFonts.cairo(
+                    fontSize: isMobile ? 15 : 17,
+                    fontWeight: FontWeight.w900,
+                    color: colorScheme.primary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+
+        // KPI 2: Total Vouchers Amount
+        if (totalVouchers > 0) ...[
+          Expanded(
+            child: Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 10 : 12,
+                vertical: isMobile ? 10 : 12,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.amber.shade300),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.confirmation_number_rounded, size: 16, color: Colors.amber.shade900),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          strings.totalDisbursedVouchersLabel,
+                          style: GoogleFonts.cairo(
+                            fontSize: isMobile ? 10.5 : 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.amber.shade900,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${totalVouchers.toInt()} ج.م',
+                    style: GoogleFonts.cairo(
+                      fontSize: isMobile ? 15 : 17,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.amber.shade900,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+
+        // KPI 3: Processed Invoices Count
+        Expanded(
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 10 : 12,
+              vertical: isMobile ? 10 : 12,
+            ),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.receipt_long_rounded, size: 16, color: colorScheme.secondary),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        strings.disbursedInvoicesCountLabel,
+                        style: GoogleFonts.cairo(
+                          fontSize: isMobile ? 10.5 : 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$totalInvoices فاتورة',
+                  style: GoogleFonts.cairo(
+                    fontSize: isMobile ? 15 : 17,
+                    fontWeight: FontWeight.w900,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDailyDisbursedCard({
+    required BuildContext context,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required AllocatedPrize prize,
+    required int disbursedCount,
+    required double disbursedValue,
+    required bool isMobile,
+  }) {
+    final isVoucher = prize.isVoucher;
+    final hasDisbursed = disbursedCount > 0;
+
+    return Container(
+      padding: EdgeInsets.all(isMobile ? 12 : 16),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: hasDisbursed
+              ? (isVoucher ? Colors.amber.shade400 : colorScheme.primary.withValues(alpha: 0.4))
+              : colorScheme.outlineVariant.withValues(alpha: 0.4),
+          width: hasDisbursed ? 1.5 : 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: isVoucher
+                      ? Colors.amber.shade100
+                      : colorScheme.primaryContainer.withValues(alpha: 0.7),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
+                  color: isVoucher ? Colors.amber.shade900 : colorScheme.primary,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      prize.name,
+                      style: GoogleFonts.cairo(
+                        fontSize: isMobile ? 14 : 15,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${strings.branchRemainingStockLabel}: ${prize.remainingQuantity} ${strings.outOfLabel} ${prize.allocatedQuantity}',
+                      style: GoogleFonts.cairo(
+                        fontSize: isMobile ? 11 : 12,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // Disbursed Badge on Date
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: hasDisbursed
+                      ? (isVoucher ? Colors.amber.shade600 : colorScheme.primary)
+                      : colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: hasDisbursed
+                      ? [
+                          BoxShadow(
+                            color: (isVoucher ? Colors.amber.shade700 : colorScheme.primary)
+                                .withValues(alpha: 0.3),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'منصرف اليوم',
+                      style: GoogleFonts.cairo(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.bold,
+                        color: hasDisbursed ? Colors.white.withValues(alpha: 0.9) : colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    Text(
+                      '$disbursedCount قطعة',
+                      style: GoogleFonts.cairo(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w900,
+                        color: hasDisbursed ? Colors.white : colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          if (isVoucher && disbursedValue > 0) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.shade200),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.payments_rounded, size: 14, color: Colors.amber.shade900),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${strings.disbursedVoucherAmountLabel}: ${disbursedValue.toInt()} ج.م',
+                    style: GoogleFonts.cairo(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.amber.shade900,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildBranchSelector({
     required BuildContext context,
     required ColorScheme colorScheme,
@@ -467,7 +1400,7 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
         ? _selectedBranchKey
         : (branchKeys.isNotEmpty ? branchKeys.first : null);
 
-    final isPinned = _pinnedBranchKey != null && _pinnedBranchKey == effectiveValue;
+    final isPinned = _pinnedBranchKey != null && _pinnedBranchKey == effectiveValue && effectiveValue != 'all';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -509,6 +1442,7 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
                 remainingInBranch += p.remainingQuantity;
               }
               final isItemPinned = _pinnedBranchKey == key;
+              final isAll = key == 'all';
 
               return DropdownMenuItem<String>(
                 value: key,
@@ -520,13 +1454,13 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
                         style: GoogleFonts.cairo(
                           fontWeight: FontWeight.bold,
                           fontSize: isMobile ? 13 : 14,
-                          color: colorScheme.onSurface,
+                          color: isAll ? colorScheme.primary : colorScheme.onSurface,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     const SizedBox(width: 8),
-                    if (isItemPinned) ...[
+                    if (isItemPinned && !isAll) ...[
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         margin: const EdgeInsets.only(left: 6),
@@ -552,25 +1486,22 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
                         ),
                       ),
                     ],
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: remainingInBranch > 0
-                            ? colorScheme.primaryContainer.withValues(alpha: 0.7)
-                            : colorScheme.errorContainer.withValues(alpha: 0.7),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '$remainingInBranch متبقي',
-                        style: GoogleFonts.cairo(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: remainingInBranch > 0
-                              ? colorScheme.onPrimaryContainer
-                              : colorScheme.onErrorContainer,
+                    if (remainingInBranch > 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primaryContainer.withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '$remainingInBranch متبقي',
+                          style: GoogleFonts.cairo(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.onPrimaryContainer,
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               );
@@ -580,8 +1511,9 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
                 setState(() {
                   _selectedBranchKey = newKey;
                 });
-                // Automatically save branch to local storage so next time it opens immediately on it
-                _savePinnedBranch(newKey);
+                if (newKey != 'all') {
+                  _savePinnedBranch(newKey);
+                }
               }
             },
           ),
@@ -589,53 +1521,53 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
 
         const SizedBox(height: 8),
 
-        // Pin / Save branch toggle bar
-        InkWell(
-          onTap: () {
-            if (effectiveValue == null) return;
-            if (isPinned) {
-              _clearPinnedBranch();
-            } else {
-              _savePinnedBranch(effectiveValue);
-            }
-          },
-          borderRadius: BorderRadius.circular(10),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-            child: Row(
-              children: [
-                Icon(
-                  isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
-                  size: 16,
-                  color: isPinned ? Colors.amber.shade800 : colorScheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    isPinned
-                        ? 'تم تثبيت هذا الفرع كافتراضي (يفتح تلقائياً عند فتح النافذة)'
-                        : 'انقر لتثبيت هذا الفرع كفرعك الافتراضي الدائم',
-                    style: GoogleFonts.cairo(
-                      fontSize: 11.5,
-                      fontWeight: isPinned ? FontWeight.bold : FontWeight.normal,
-                      color: isPinned ? Colors.amber.shade900 : colorScheme.onSurfaceVariant,
+        // Pin / Save branch toggle bar (if not 'all')
+        if (effectiveValue != null && effectiveValue != 'all')
+          InkWell(
+            onTap: () {
+              if (isPinned) {
+                _clearPinnedBranch();
+              } else {
+                _savePinnedBranch(effectiveValue);
+              }
+            },
+            borderRadius: BorderRadius.circular(10),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              child: Row(
+                children: [
+                  Icon(
+                    isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+                    size: 16,
+                    color: isPinned ? Colors.amber.shade800 : colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      isPinned
+                          ? 'تم تثبيت هذا الفرع كافتراضي (يفتح تلقائياً عند فتح النافذة)'
+                          : 'انقر لتثبيت هذا الفرع كفرعك الافتراضي الدائم',
+                      style: GoogleFonts.cairo(
+                        fontSize: 11.5,
+                        fontWeight: isPinned ? FontWeight.bold : FontWeight.normal,
+                        color: isPinned ? Colors.amber.shade900 : colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
-                ),
-                if (isPinned)
-                  Text(
-                    'إلغاء التثبيت',
-                    style: GoogleFonts.cairo(
-                      fontSize: 11,
-                      color: colorScheme.error,
-                      fontWeight: FontWeight.w600,
-                      decoration: TextDecoration.underline,
+                  if (isPinned)
+                    Text(
+                      'إلغاء التثبيت',
+                      style: GoogleFonts.cairo(
+                        fontSize: 11,
+                        color: colorScheme.error,
+                        fontWeight: FontWeight.w600,
+                        decoration: TextDecoration.underline,
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
       ],
     );
   }
