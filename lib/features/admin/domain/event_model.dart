@@ -387,6 +387,9 @@ class EventModel {
   /// Maximum draw chances / gifts allowed per single receipt (0 = unlimited / no cap).
   final int maxChancesPerReceipt;
 
+  /// Whether entering voucher card serial numbers is strictly mandatory for promoters upon gift claim (false = optional by default).
+  final bool requireVoucherSerials;
+
   EventModel({
     required this.id,
     required this.eventName,
@@ -418,6 +421,7 @@ class EventModel {
     this.allowMultipleChances = false,
     this.multiplierBasis = 'both',
     this.maxChancesPerReceipt = 0,
+    this.requireVoucherSerials = false,
   });
 
   bool get isExpired {
@@ -560,6 +564,7 @@ class EventModel {
       allowMultipleChances: data['allowMultipleChances'] == true,
       multiplierBasis: (data['multiplierBasis'] ?? 'both').toString(),
       maxChancesPerReceipt: (data['maxChancesPerReceipt'] as num?)?.toInt() ?? 0,
+      requireVoucherSerials: data['requireVoucherSerials'] == true || data['require_voucher_serials'] == true,
     );
   }
 
@@ -618,6 +623,7 @@ class EventModel {
       'allowMultipleChances': allowMultipleChances,
       'multiplierBasis': multiplierBasis,
       'maxChancesPerReceipt': maxChancesPerReceipt,
+      'requireVoucherSerials': requireVoucherSerials,
     };
   }
 
@@ -652,6 +658,7 @@ class EventModel {
     bool? allowMultipleChances,
     String? multiplierBasis,
     int? maxChancesPerReceipt,
+    bool? requireVoucherSerials,
   }) {
     return EventModel(
       id: id ?? this.id,
@@ -684,6 +691,7 @@ class EventModel {
       allowMultipleChances: allowMultipleChances ?? this.allowMultipleChances,
       multiplierBasis: multiplierBasis ?? this.multiplierBasis,
       maxChancesPerReceipt: maxChancesPerReceipt ?? this.maxChancesPerReceipt,
+      requireVoucherSerials: requireVoucherSerials ?? this.requireVoucherSerials,
     );
   }
 }

@@ -50,6 +50,7 @@ class DirectGiftClaimScreen extends ConsumerStatefulWidget {
   final double? unitValue;
   final bool? isVoucher;
   final List<LinkedGiftAllocation> linkedGifts;
+  final bool? requireVoucherSerials;
 
   const DirectGiftClaimScreen({
     super.key,
@@ -62,6 +63,7 @@ class DirectGiftClaimScreen extends ConsumerStatefulWidget {
     this.unitValue,
     this.isVoucher,
     this.linkedGifts = const [],
+    this.requireVoucherSerials,
   });
 
   @override
@@ -82,6 +84,9 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
   double? _resolvedUnitValue;
   bool? _resolvedIsVoucher;
   List<LinkedGiftAllocation>? _resolvedLinkedGifts;
+  bool? _requireVoucherSerials;
+
+  bool get _isVoucherSerialsRequired => _requireVoucherSerials ?? widget.requireVoucherSerials ?? false;
 
   final List<VoucherSerialSlot> _voucherSlots = [];
 
@@ -315,6 +320,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
 
         if (mounted) {
           setState(() {
+            _requireVoucherSerials = data['requireVoucherSerials'] == true || data['require_voucher_serials'] == true;
             _remainingStock = foundRemaining >= 0 ? foundRemaining : null;
             final isPlaceholder = widget.prizeName.isEmpty ||
                 widget.prizeName == 'هدية ترويجية مميزة' ||
@@ -370,7 +376,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
 
     _syncVoucherSlots();
 
-    // 1. Validate mandatory physical voucher serial numbers
+    // 1. Validate physical voucher serial numbers (mandatory if _isVoucherSerialsRequired, or optional)
     if (_voucherSlots.isNotEmpty) {
       final strings = AppStrings.of(ref);
       final List<String> enteredSerials = [];
@@ -379,15 +385,18 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
         final slot = _voucherSlots[i];
         final text = slot.controller.text.toEnglishDigits(convertDecimal: false).trim();
         if (text.isEmpty) {
-          slot.focusNode.requestFocus();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('${strings.voucherSerialRequiredError} (${slot.giftName} #${i + 1})'),
-              backgroundColor: Theme.of(context).colorScheme.error,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-          return;
+          if (_isVoucherSerialsRequired) {
+            slot.focusNode.requestFocus();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('${strings.voucherSerialRequiredError} (${slot.giftName} #${i + 1})'),
+                backgroundColor: Theme.of(context).colorScheme.error,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            return;
+          }
+          continue;
         }
 
         if (enteredSerials.contains(text)) {
@@ -404,8 +413,8 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
         enteredSerials.add(text);
       }
 
-      // 2. Check Firestore for duplicate serials in active campaign
-      if (!widget.isDemo && widget.eventId.isNotEmpty) {
+      // 2. Check Firestore for duplicate serials in active campaign (for any entered non-empty serials)
+      if (!widget.isDemo && widget.eventId.isNotEmpty && enteredSerials.isNotEmpty) {
         setState(() => _isClaiming = true);
         try {
           final firestore = ref.read(firestoreProvider);
@@ -1247,6 +1256,14 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
   ) {
     if (_voucherSlots.isEmpty) return const SizedBox.shrink();
 
+    final isMandatory = _isVoucherSerialsRequired;
+    final sectionTitle = isMandatory
+        ? strings.voucherSerialsSectionTitle
+        : strings.voucherSerialsSectionTitleOptional;
+    final sectionSubtitle = isMandatory
+        ? strings.voucherSerialsSectionSubtitle
+        : strings.voucherSerialsSectionSubtitleOptional;
+
     return Container(
       margin: const EdgeInsets.only(top: 16),
       padding: const EdgeInsets.all(16),
@@ -1286,7 +1303,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      strings.voucherSerialsSectionTitle,
+                      sectionTitle,
                       style: GoogleFonts.cairo(
                         fontSize: 14,
                         fontWeight: FontWeight.w900,
@@ -1294,7 +1311,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                       ),
                     ),
                     Text(
-                      strings.voucherSerialsSectionSubtitle,
+                      sectionSubtitle,
                       style: GoogleFonts.cairo(
                         fontSize: 11,
                         fontWeight: FontWeight.w500,

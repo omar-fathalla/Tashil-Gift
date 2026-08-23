@@ -551,6 +551,36 @@ class AppStrings {
     en: 'Campaign Stock Breakdown',
     hi: 'अभियान वार स्टॉक',
   );
+  String get dailyTargetRateLabel => _t(
+    ar: 'المعدل اليومي',
+    en: 'Daily Rate',
+    hi: 'दैनिक दर',
+  );
+  String get todayDisbursedLabel => _t(
+    ar: 'صرف اليوم',
+    en: 'Today Disbursed',
+    hi: 'आज का वितरण',
+  );
+  String get dailyBranchTargetLabel => _t(
+    ar: 'المستهدف اليومي للفرع',
+    en: 'Branch Daily Target',
+    hi: 'शाखा का दैनिक लक्ष्य',
+  );
+  String get dailyCampaignTargetLabel => _t(
+    ar: 'المستهدف اليومي للحملة',
+    en: 'Campaign Daily Target',
+    hi: 'अभियान का दैनिक लक्ष्य',
+  );
+  String get campaignDurationLabel => _t(
+    ar: 'مدة الفعالية',
+    en: 'Campaign Duration',
+    hi: 'अभियान की अवधि',
+  );
+  String get perDayUnit => _t(
+    ar: 'يومياً',
+    en: '/ day',
+    hi: '/ दिन',
+  );
   String get filterAllStock => _t(ar: 'كافة الحالات', en: 'All Statuses', hi: 'सभी स्थितियां');
   String get filterAvailableStock => _t(ar: 'متوفر 🟢', en: 'In Stock 🟢', hi: 'उपलब्ध 🟢');
   String get filterLowStock => _t(ar: 'رصيد منخفض 🟡', en: 'Low Stock 🟡', hi: 'कम स्टॉक 🟡');
@@ -1474,10 +1504,40 @@ class AppStrings {
     en: 'Voucher Card Serial Numbers (Mandatory)',
     hi: 'वाउचर कार्ड सीरियल नंबर (अनिवार्य)',
   );
+  String get voucherSerialsSectionTitleOptional => _t(
+    ar: 'أرقام بطاقات الفواتشرات المستحقة (اختياري)',
+    en: 'Voucher Card Serial Numbers (Optional)',
+    hi: 'वाउचर कार्ड सीरियल नंबर (वैकल्पिक)',
+  );
   String get voucherSerialsSectionSubtitle => _t(
     ar: 'يرجى تسجيل الأرقام التسلسلية المطبوعة على بطاقات الفواتشرات لتأكيد الصرف والمطابقة مع العهدة',
     en: 'Please enter the serial numbers printed on physical voucher cards for inventory audit',
     hi: 'ऑडिट के लिए भौतिक वाउचर कार्ड पर मुद्रित सीरियल नंबर दर्ज करें',
+  );
+  String get voucherSerialsSectionSubtitleOptional => _t(
+    ar: 'يمكنك تسجيل الأرقام التسلسلية المطبوعة على بطاقات الفواتشرات لمطابقة العهدة (اختياري)',
+    en: 'You can record physical voucher card serial numbers for stock verification (optional)',
+    hi: 'स्टॉक सत्यापन के लिए भौतिक वाउचर कार्ड सीरियल नंबर दर्ज कर सकते हैं (वैकल्पिक)',
+  );
+  String get campaignVoucherSerialsSettingTitle => _t(
+    ar: 'تسجيل أرقام كروت الفواتشرات',
+    en: 'Voucher Card Serial Numbers',
+    hi: 'वाउचर कार्ड सीरियल नंबर',
+  );
+  String get campaignVoucherSerialsSettingSubtitle => _t(
+    ar: 'تحديد ما إذا كان إدخال الأرقام التسلسلية لكروت الفواتشرات إلزامياً للبروموتر عند تسليم الهدية أو اختيارياً (الافتراضي: اختياري)',
+    en: 'Determine whether entering voucher serial numbers is mandatory or optional for promoters upon gift handover (Default: Optional)',
+    hi: 'निर्धारित करें कि उपहार सौंपते समय प्रमोटरों के लिए वाउचर सीरियल दर्ज करना अनिवार्य है या वैकल्पिक (डिफ़ॉल्ट: वैकल्पिक)',
+  );
+  String get voucherSerialsMandatoryBadge => _t(
+    ar: 'إلزامي للبروموتر',
+    en: 'Mandatory for Promoter',
+    hi: 'प्रमोटर के लिए अनिवार्य',
+  );
+  String get voucherSerialsOptionalBadge => _t(
+    ar: 'اختياري (الافتراضي)',
+    en: 'Optional (Default)',
+    hi: 'वैकल्पिक (डिफ़ॉल्ट)',
   );
   String get voucherSerialInputLabel => _t(
     ar: 'رقم كارت الفواتشر',

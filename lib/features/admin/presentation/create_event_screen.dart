@@ -60,6 +60,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   late final TextEditingController _maxChancesController;
   bool _allowMultipleChances = false;
   String _multiplierBasis = 'both';
+  bool _requireVoucherSerials = false;
   
   DateTime? _startDate;
   DateTime? _endDate;
@@ -150,6 +151,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     _requiredProductsController = TextEditingController(text: e?.requiredProducts.join(', ') ?? '');
     _allowMultipleChances = e?.allowMultipleChances ?? false;
     _multiplierBasis = e?.multiplierBasis ?? 'both';
+    _requireVoucherSerials = e?.requireVoucherSerials ?? false;
     _maxChancesController = TextEditingController(
       text: (e?.maxChancesPerReceipt != null && e!.maxChancesPerReceipt > 0)
           ? e.maxChancesPerReceipt.toString()
@@ -1842,6 +1844,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         promotionalIdea: _promotionalIdeaController.text.trim(),
         aiValidationSummary: _aiValidationSummary.trim(),
         promotionalRules: _promotionalRules,
+        requireVoucherSerials: _requireVoucherSerials,
       );
 
       String createdEventId = widget.eventToEdit?.id ?? '';
@@ -2604,6 +2607,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     ),
                     _buildProductSelectorSection(context, colorScheme, isMobile),
                     _buildMultipleChancesSection(context, colorScheme, isMobile, activeCountry),
+                    _buildVoucherSerialsSettingSection(context, colorScheme, isMobile),
                   ],
                 ),
 
@@ -3646,6 +3650,113 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVoucherSerialsSettingSection(
+    BuildContext context,
+    ColorScheme colorScheme,
+    bool isMobile,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _requireVoucherSerials
+            ? Colors.amber.shade50.withValues(alpha: 0.55)
+            : colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _requireVoucherSerials
+              ? Colors.amber.shade400
+              : colorScheme.outlineVariant.withValues(alpha: 0.4),
+          width: _requireVoucherSerials ? 1.5 : 1,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: _requireVoucherSerials
+                  ? Colors.amber.shade700
+                  : colorScheme.surfaceContainerHighest,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.confirmation_number_rounded,
+              size: 20,
+              color: _requireVoucherSerials
+                  ? Colors.white
+                  : colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    Text(
+                      'تسجيل أرقام كروت الفواتشرات',
+                      style: GoogleFonts.cairo(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _requireVoucherSerials
+                            ? Colors.red.shade100
+                            : Colors.green.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _requireVoucherSerials ? 'إلزامي للبروموتر' : 'اختياري (الافتراضي)',
+                        style: GoogleFonts.cairo(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: _requireVoucherSerials
+                              ? Colors.red.shade900
+                              : Colors.green.shade900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _requireVoucherSerials
+                      ? 'يلزم البروموتر بإدخال الأرقام التسلسلية لكروت الفواتشرات المسلمة للعميل قبل تأكيد تسليم الهدية.'
+                      : 'إدخال أرقام الفواتشرات اختياري للبروموتر، ويمكنه تأكيد تسليم الهدية مباشرة دون إدخالها.',
+                  style: GoogleFonts.cairo(
+                    fontSize: 12,
+                    color: colorScheme.onSurfaceVariant,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Switch.adaptive(
+            value: _requireVoucherSerials,
+            activeTrackColor: Colors.amber.shade700,
+            onChanged: (val) {
+              setState(() {
+                _requireVoucherSerials = val;
+              });
+            },
+          ),
         ],
       ),
     );

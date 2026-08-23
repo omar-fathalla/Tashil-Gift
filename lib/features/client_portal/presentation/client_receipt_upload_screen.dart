@@ -748,6 +748,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
               unitValue: resolvedUnitValue,
               isVoucher: resolvedIsVoucher,
               linkedGifts: resolvedLinkedGifts,
+              requireVoucherSerials: currentEvent?.requireVoucherSerials ?? false,
             ),
           ),
         );

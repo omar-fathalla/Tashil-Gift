@@ -189,6 +189,33 @@ class _CompanyPrizesStockReportScreenState
   String _movementTypeFilter = 'ALL'; // 'ALL', 'supply_batch', 'adjustment', 'campaign'
   String? _movementGiftFilter; // null = all gifts
   double? _selectedVoucherDenomFilter; // null = all voucher denominations
+  DateTime _selectedDate = DateTime.now();
+  bool _isAllTime = false;
+
+  Future<void> _pickDate(BuildContext context) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(now.year - 2, 1, 1),
+      lastDate: DateTime(now.year + 1, 12, 31),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme,
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _selectedDate = DateTime(picked.year, picked.month, picked.day);
+        _isAllTime = false;
+      });
+    }
+  }
 
   @override
   void initState() {
@@ -2516,10 +2543,28 @@ class _CompanyPrizesStockReportScreenState
             return StreamBuilder<QuerySnapshot>(
               stream: firestore
                   .collection('receipts_transactions')
-                  .where('companySlug', isEqualTo: slug)
                   .snapshots(),
               builder: (context, receiptsSnapshot) {
-                final transactionDocs = receiptsSnapshot.data?.docs ?? [];
+                final allDocs = receiptsSnapshot.data?.docs ?? [];
+                final companyEventIds = companyEvents.map((e) => e.id).toSet();
+                final targetCompAr = companyEvents.isNotEmpty ? companyEvents.first.targetCompany.trim() : '';
+                final transactionDocs = allDocs.where((doc) {
+                  final data = doc.data() as Map<String, dynamic>? ?? {};
+                  final tSlug = (data['companySlug'] ?? data['company_slug'] ?? '').toString().trim();
+                  if (slug.isNotEmpty && tSlug.isNotEmpty && tSlug.toLowerCase() == slug.toLowerCase()) {
+                    return true;
+                  }
+                  final tComp = (data['targetCompany'] ?? data['target_company'] ?? '').toString().trim();
+                  if (targetCompAr.isNotEmpty && tComp.isNotEmpty && tComp == targetCompAr) {
+                    return true;
+                  }
+                  final tEventId = (data['campaignId'] ?? data['event_id'] ?? data['campaign_id'] ?? '').toString().trim();
+                  if (tEventId.isNotEmpty && companyEventIds.contains(tEventId)) {
+                    return true;
+                  }
+                  return false;
+                }).toList();
+
                 return _buildAnalyzedView(
                   context: context,
                   colorScheme: colorScheme,
@@ -2718,7 +2763,15 @@ class _CompanyPrizesStockReportScreenState
     required List<CompanyGiftModel> masterGifts,
     required String? selectedBranch,
     required String? selectedEventId,
-    required int Function(String giftName, int rawClaimed, [String? branchName]) getReconciledClaimed,
+    required int Function(
+      String giftName,
+      int rawClaimed, [
+      String? branchName,
+      String? branchId,
+      String? eventId,
+      double? unitValue,
+      bool? isVoucher,
+    ]) getReconciledClaimed,
     required bool isAr,
   }) {
     final Map<double, VoucherDenominationStats> denominationMap = {};
@@ -2786,8 +2839,19 @@ class _CompanyPrizesStockReportScreenState
             : (prize.branchId.isNotEmpty ? prize.branchId : (isAr ? 'الفرع الرئيسي' : 'Main Branch'));
 
         final branchAllocated = prize.allocatedQuantity;
-        final branchRemaining = prize.remainingQuantity.clamp(0, prize.allocatedQuantity);
-        final branchClaimed = (prize.allocatedQuantity - branchRemaining).clamp(0, prize.allocatedQuantity);
+        final rawBranchRemaining = prize.remainingQuantity.clamp(0, prize.allocatedQuantity);
+        final rawBranchClaimed = (prize.allocatedQuantity - rawBranchRemaining).clamp(0, prize.allocatedQuantity);
+        final txBranchClaimed = getReconciledClaimed(
+          matchingMasterGift?.giftName ?? prize.name,
+          rawBranchClaimed,
+          branchKey,
+          prize.branchId,
+          event.id,
+          denom,
+          true,
+        );
+        final branchClaimed = prize.allocatedQuantity > 0 ? (txBranchClaimed > rawBranchClaimed ? txBranchClaimed : rawBranchClaimed) : 0;
+        final branchRemaining = (prize.allocatedQuantity - branchClaimed).clamp(0, prize.allocatedQuantity);
 
         if (branchKey.isNotEmpty) {
           branchTotalVoucherUnits[branchKey] = (branchTotalVoucherUnits[branchKey] ?? 0) + branchAllocated;
@@ -2877,81 +2941,77 @@ class _CompanyPrizesStockReportScreenState
           companyEvents.where((e) => e.id == _selectedEventId).toList();
     }
 
-    // 2. Build verified transactions claimed maps (Per gift & per gift+branch)
-    final Map<String, int> transactionClaimedPerGift = {};
-    final Map<String, int> transactionClaimedPerGiftBranch = {};
+    // 2. Build verified live claimed reconciliation function
+    int getReconciledClaimed(
+      String giftName,
+      int rawClaimed, [
+      String? branchName,
+      String? branchId,
+      String? eventId,
+      double? unitValue,
+      bool? isVoucher,
+    ]) {
+      int txClaimed = 0;
+      final targetEventId = eventId ?? _selectedEventId;
 
-    for (final doc in transactionDocs) {
-      final data = doc.data() as Map<String, dynamic>? ?? {};
-      final tCampId = (data['campaignId'] ?? data['event_id'] ?? '').toString();
-      if (_selectedEventId != null &&
-          _selectedEventId!.isNotEmpty &&
-          tCampId.isNotEmpty &&
-          tCampId != _selectedEventId) {
-        continue;
-      }
-      if (data['game_played'] != true) continue;
+      for (final doc in transactionDocs) {
+        final data = doc.data() as Map<String, dynamic>? ?? {};
+        final tCampId = (data['campaignId'] ?? data['event_id'] ?? data['campaign_id'] ?? '').toString().trim();
+        if (targetEventId != null && targetEventId.isNotEmpty && tCampId.isNotEmpty && tCampId != targetEventId) {
+          continue;
+        }
 
-      final tBranch = (data['branch_detected'] ?? data['branch_id'] ?? '').toString().trim();
-      final claimedGifts = (data['claimed_gifts'] as List?) ?? [];
+        final status = data['status']?.toString();
+        final isValid = data['is_valid'];
+        if (status == 'rejected' || isValid == false) continue;
+        if (data['game_played'] != true &&
+            status != 'accepted' &&
+            status != 'approved' &&
+            status != 'completed' &&
+            data['claim_status'] != 'handed_over') {
+          continue;
+        }
 
-      if (claimedGifts.isNotEmpty) {
-        for (final cg in claimedGifts) {
-          if (cg is Map) {
-            final gName = (cg['giftName'] ?? cg['giftId'] ?? '').toString().trim();
-            final qty = (cg['quantity'] as num?)?.toInt() ?? 1;
-            final key = _normalizePrizeKey(gName);
-            if (key.isNotEmpty) {
-              transactionClaimedPerGift[key] = (transactionClaimedPerGift[key] ?? 0) + qty;
-              if (tBranch.isNotEmpty) {
-                final bKey = _normalizePrizeKey(tBranch);
-                final fullKey = '${key}__$bKey';
-                transactionClaimedPerGiftBranch[fullKey] =
-                    (transactionClaimedPerGiftBranch[fullKey] ?? 0) + qty;
+        if (branchName != null && branchName.isNotEmpty) {
+          final branchMatches = _matchesBranchStrict(branchName, branchId ?? '', data);
+          if (!branchMatches) continue;
+        }
+
+        final dummyPrize = AllocatedPrize(
+          name: giftName,
+          giftId: '',
+          allocatedQuantity: 1,
+          remainingQuantity: 1,
+          unitValue: unitValue ?? 0.0,
+          giftType: (isVoucher == true || _isVoucherText(giftName)) ? 'voucher' : 'product',
+          branchName: branchName ?? '',
+          branchId: branchId ?? '',
+        );
+
+        final claimedGifts = (data['claimed_gifts'] as List?) ?? [];
+        if (claimedGifts.isNotEmpty) {
+          for (final cg in claimedGifts) {
+            if (cg is Map) {
+              final cgMap = Map<String, dynamic>.from(cg);
+              if (_matchesPrizeStrict(dummyPrize, cgMap)) {
+                final qty = (cgMap['quantity'] as num?)?.toInt() ?? 1;
+                txClaimed += qty;
+              }
+            }
+          }
+        } else {
+          final prizesWon = (data['prizes_won'] as List?)?.map((p) => p.toString()).toList() ??
+              [(data['prize_won'] ?? '').toString()];
+          for (final p in prizesWon) {
+            if (p.trim().isNotEmpty) {
+              if (_matchesPrizeStrict(dummyPrize, {'giftName': p})) {
+                txClaimed += 1;
               }
             }
           }
         }
-      } else {
-        final prizesWon = (data['prizes_won'] as List?)?.map((p) => p.toString()).toList() ??
-            [(data['prize_won'] ?? '').toString()];
-        for (final p in prizesWon) {
-          if (p.trim().isNotEmpty) {
-            final key = _normalizePrizeKey(p);
-            transactionClaimedPerGift[key] = (transactionClaimedPerGift[key] ?? 0) + 1;
-            if (tBranch.isNotEmpty) {
-              final bKey = _normalizePrizeKey(tBranch);
-              final fullKey = '${key}__$bKey';
-              transactionClaimedPerGiftBranch[fullKey] =
-                  (transactionClaimedPerGiftBranch[fullKey] ?? 0) + 1;
-            }
-          }
-        }
       }
-    }
 
-    int getReconciledClaimed(String giftName, int rawClaimed, [String? branchName]) {
-      final normG = _normalizePrizeKey(giftName);
-      int txClaimed = 0;
-      if (branchName != null && branchName.isNotEmpty) {
-        final normB = _normalizePrizeKey(branchName);
-        for (final entry in transactionClaimedPerGiftBranch.entries) {
-          final parts = entry.key.split('__');
-          final gPart = parts.first;
-          final bPart = parts.length > 1 ? parts[1] : '';
-          final gMatches = gPart == normG || gPart.contains(normG) || normG.contains(gPart);
-          final bMatches = bPart.isNotEmpty && (bPart == normB || bPart.contains(normB) || normB.contains(bPart));
-          if (gMatches && bMatches) {
-            txClaimed += entry.value;
-          }
-        }
-      } else {
-        for (final entry in transactionClaimedPerGift.entries) {
-          if (entry.key == normG || entry.key.contains(normG) || normG.contains(entry.key)) {
-            txClaimed += entry.value;
-          }
-        }
-      }
       return rawClaimed > txClaimed ? rawClaimed : txClaimed;
     }
 
@@ -3020,8 +3080,19 @@ class _CompanyPrizesStockReportScreenState
             : (prize.branchId.isNotEmpty ? prize.branchId : (isAr ? 'الفرع الرئيسي' : 'Main Branch'));
 
         final branchAllocated = prize.allocatedQuantity;
-        final branchRemaining = prize.remainingQuantity.clamp(0, prize.allocatedQuantity);
-        final branchClaimed = (prize.allocatedQuantity - branchRemaining).clamp(0, prize.allocatedQuantity);
+        final rawBranchRemaining = prize.remainingQuantity.clamp(0, prize.allocatedQuantity);
+        final rawBranchClaimed = (prize.allocatedQuantity - rawBranchRemaining).clamp(0, prize.allocatedQuantity);
+        final txBranchClaimed = getReconciledClaimed(
+          canonicalGiftName,
+          rawBranchClaimed,
+          branchKey,
+          prize.branchId,
+          event.id,
+          canonicalUnitValue,
+          canonicalGiftType == 'voucher',
+        );
+        final branchClaimed = prize.allocatedQuantity > 0 ? (txBranchClaimed > rawBranchClaimed ? txBranchClaimed : rawBranchClaimed) : 0;
+        final branchRemaining = (prize.allocatedQuantity - branchClaimed).clamp(0, prize.allocatedQuantity);
 
         final existing = aggregatedMap[key];
         if (existing == null) {
@@ -3246,6 +3317,8 @@ class _CompanyPrizesStockReportScreenState
                     filteredEvents: filteredEvents,
                     gifts: allGiftsList,
                     masterGifts: masterGifts,
+                    transactionDocs: transactionDocs,
+                    getReconciledClaimed: getReconciledClaimed,
                   )
                 else
                   _buildCampaignBreakdownView(
@@ -3256,6 +3329,7 @@ class _CompanyPrizesStockReportScreenState
                     isMobile: isMobile,
                     filteredEvents: filteredEvents,
                     masterGifts: masterGifts,
+                    transactionDocs: transactionDocs,
                   ),
 
                 const SizedBox(height: 32),
@@ -6200,6 +6274,16 @@ class _CompanyPrizesStockReportScreenState
     required List<EventModel> filteredEvents,
     required List<AggregatedGiftStock> gifts,
     required List<CompanyGiftModel> masterGifts,
+    required List<QueryDocumentSnapshot> transactionDocs,
+    required int Function(
+      String giftName,
+      int rawClaimed, [
+      String? branchName,
+      String? branchId,
+      String? eventId,
+      double? unitValue,
+      bool? isVoucher,
+    ]) getReconciledClaimed,
   }) {
     // 1. Collect all distinct branches from filteredEvents
     final List<Map<String, String>> targetBranches = [];
@@ -6253,7 +6337,18 @@ class _CompanyPrizesStockReportScreenState
 
             if (matchingPrize != null) {
               final rawClaimed = (matchingPrize.allocatedQuantity - matchingPrize.remainingQuantity).clamp(0, matchingPrize.allocatedQuantity);
-              final branchClaimed = matchingPrize.allocatedQuantity > 0 ? rawClaimed : 0;
+              final txClaimed = getReconciledClaimed(
+                mg.giftName,
+                rawClaimed,
+                bName,
+                bId,
+                event.id,
+                mg.unitValue,
+                mg.giftType == 'voucher' || mg.isVoucher,
+              );
+              final branchClaimed = matchingPrize.allocatedQuantity > 0
+                  ? (txClaimed > rawClaimed ? txClaimed : rawClaimed)
+                  : txClaimed;
               final branchRemaining = (matchingPrize.allocatedQuantity - branchClaimed).clamp(0, matchingPrize.allocatedQuantity);
 
               prizesForBranch.add({
@@ -6270,6 +6365,15 @@ class _CompanyPrizesStockReportScreenState
                 'claimed': branchClaimed,
               });
             } else {
+              final txClaimed = getReconciledClaimed(
+                mg.giftName,
+                0,
+                bName,
+                bId,
+                event.id,
+                mg.unitValue,
+                mg.giftType == 'voucher' || mg.isVoucher,
+              );
               prizesForBranch.add({
                 'eventId': event.id,
                 'eventName': event.eventName,
@@ -6281,7 +6385,7 @@ class _CompanyPrizesStockReportScreenState
                 'branchName': bName,
                 'allocated': 0,
                 'remaining': 0,
-                'claimed': 0,
+                'claimed': txClaimed,
               });
             }
           }
@@ -6290,7 +6394,18 @@ class _CompanyPrizesStockReportScreenState
             final pBranch = prize.branchName.trim();
             if (pBranch == bName || (bId.isNotEmpty && prize.branchId.trim() == bId)) {
               final rawClaimed = (prize.allocatedQuantity - prize.remainingQuantity).clamp(0, prize.allocatedQuantity);
-              final branchClaimed = prize.allocatedQuantity > 0 ? rawClaimed : 0;
+              final txClaimed = getReconciledClaimed(
+                prize.name,
+                rawClaimed,
+                bName,
+                bId,
+                event.id,
+                prize.unitValue,
+                prize.giftType == 'voucher' || prize.isVoucher,
+              );
+              final branchClaimed = prize.allocatedQuantity > 0
+                  ? (txClaimed > rawClaimed ? txClaimed : rawClaimed)
+                  : txClaimed;
               final branchRemaining = (prize.allocatedQuantity - branchClaimed).clamp(0, prize.allocatedQuantity);
 
               prizesForBranch.add({
@@ -6793,8 +6908,353 @@ class _CompanyPrizesStockReportScreenState
   }
 
   // ---------------------------------------------------------------------------
-  // Mode 2: Campaign-by-Campaign Breakdown
+  // Mode 2: Campaign-by-Campaign Breakdown (Daily-First Architecture)
   // ---------------------------------------------------------------------------
+  static String _formatDateArabic(DateTime dt, bool isAr) {
+    if (!isAr) {
+      return '${dt.day}/${dt.month}/${dt.year}';
+    }
+    const weekdays = [
+      'الإثنين',
+      'الثلاثاء',
+      'الأربعاء',
+      'الخميس',
+      'الجمعة',
+      'السبت',
+      'الأحد',
+    ];
+    const months = [
+      'يناير',
+      'فبراير',
+      'مارس',
+      'أبريل',
+      'مايو',
+      'يونيو',
+      'يوليو',
+      'أغسطس',
+      'سبتمبر',
+      'أكتوبر',
+      'نوفمبر',
+      'ديسمبر',
+    ];
+    final weekdayName = weekdays[(dt.weekday - 1) % 7];
+    final monthName = months[(dt.month - 1) % 12];
+    return '$weekdayName، ${dt.day} $monthName ${dt.year}';
+  }
+
+  static bool _isDateToday(DateTime dt) {
+    final now = DateTime.now();
+    return dt.year == now.year && dt.month == now.month && dt.day == now.day;
+  }
+
+  static bool _matchesBranchStrict(String prizeBranchName, String prizeBranchId, Map<String, dynamic> data) {
+    final normPBranch = _normalizePrizeKey(prizeBranchName);
+    final normPId = _normalizePrizeKey(prizeBranchId);
+
+    if (normPBranch.isEmpty && normPId.isEmpty) return true;
+    if (normPBranch == 'all' || normPBranch.contains('عام') || normPBranch.contains('كافة')) return true;
+
+    final docBranchId = (data['branch_id'] ?? data['branchId'] ?? '').toString().trim();
+    final normDocId = _normalizePrizeKey(docBranchId);
+    if (normPId.isNotEmpty && normDocId.isNotEmpty && (normPId == normDocId || normPId.contains(normDocId) || normDocId.contains(normPId))) {
+      return true;
+    }
+
+    final docBranchName = (data['branch_detected'] ?? data['branch'] ?? data['branchName'] ?? '').toString().trim();
+    final normDocName = _normalizePrizeKey(docBranchName);
+
+    if (normDocName.isEmpty) {
+      return normPBranch.isEmpty || normPBranch.contains('عام') || normPBranch.contains('كافة');
+    }
+
+    if (normDocName == normPBranch || normDocName.contains(normPBranch) || normPBranch.contains(normDocName)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  static bool _matchesPrizeStrict(AllocatedPrize prize, Map<String, dynamic> cg) {
+    final gId = (cg['giftId'] ?? cg['gift_id'] ?? '').toString().trim();
+    if (gId.isNotEmpty && prize.giftId.isNotEmpty && gId == prize.giftId) {
+      return true;
+    }
+
+    final gName = (cg['giftName'] ?? cg['gift_name'] ?? '').toString().trim();
+    final normG = _normalizePrizeKey(gName);
+    final normP = _normalizePrizeKey(prize.name);
+
+    if (normG.isNotEmpty && normG == normP) {
+      return true;
+    }
+
+    final cgVal = (cg['unitValue'] ?? cg['unit_value'] as num?)?.toDouble() ?? 0.0;
+    final cgIsVoucher = cg['isVoucher'] == true || cg['is_voucher'] == true || _isVoucherText(gName);
+
+    // Strict voucher denomination matching
+    if (prize.isVoucher && cgIsVoucher && prize.unitValue > 0 && cgVal > 0) {
+      if (prize.unitValue.toInt() == cgVal.toInt()) {
+        return true;
+      }
+    }
+
+    // Brand specific match
+    final isClearP = normP.contains('كلير') || normP.contains('clear');
+    final isClearG = normG.contains('كلير') || normG.contains('clear');
+    if (isClearP && isClearG) return true;
+
+    final isTresemmeP = normP.contains('تريزيمي') || normP.contains('تريزمي') || normP.contains('tresemme');
+    final isTresemmeG = normG.contains('تريزيمي') || normG.contains('تريزمي') || normG.contains('tresemme');
+    if (isTresemmeP && isTresemmeG) return true;
+
+    return false;
+  }
+
+  Widget _buildDateFilterBar({
+    required BuildContext context,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+    required bool isMobile,
+  }) {
+    final now = DateTime.now();
+    final isSelectedToday = _isDateToday(_selectedDate) && !_isAllTime;
+    final canGoForward = !_isAllTime &&
+        (_selectedDate.year < now.year ||
+            (_selectedDate.year == now.year &&
+                (_selectedDate.month < now.month ||
+                    (_selectedDate.month == now.month && _selectedDate.day < now.day))));
+
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+      ),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        alignment: WrapAlignment.spaceBetween,
+        children: [
+          // Navigation buttons with Date Selector
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Previous day button
+              IconButton.filledTonal(
+                icon: Icon(isAr ? Icons.chevron_right_rounded : Icons.chevron_left_rounded, size: 20),
+                tooltip: isAr ? 'اليوم السابق' : 'Previous Day',
+                padding: const EdgeInsets.all(8),
+                constraints: const BoxConstraints(),
+                onPressed: () {
+                  setState(() {
+                    _selectedDate = _selectedDate.subtract(const Duration(days: 1));
+                    _isAllTime = false;
+                  });
+                },
+              ),
+              const SizedBox(width: 6),
+
+              // Date Button
+              InkWell(
+                onTap: () => _pickDate(context),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: _isAllTime
+                        ? colorScheme.surface
+                        : (isSelectedToday ? colorScheme.primaryContainer : Colors.indigo.shade50),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _isAllTime
+                          ? colorScheme.outlineVariant
+                          : (isSelectedToday ? colorScheme.primary : Colors.indigo.shade300),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.calendar_today_rounded,
+                        size: 16,
+                        color: _isAllTime
+                            ? colorScheme.onSurfaceVariant
+                            : (isSelectedToday ? colorScheme.primary : Colors.indigo.shade900),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _isAllTime
+                            ? (isAr ? 'كافة التواريخ (تراكمي)' : 'All Time (Cumulative)')
+                            : _formatDateArabic(_selectedDate, isAr),
+                        style: GoogleFonts.cairo(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: _isAllTime
+                              ? colorScheme.onSurfaceVariant
+                              : (isSelectedToday ? colorScheme.onPrimaryContainer : Colors.indigo.shade900),
+                        ),
+                      ),
+                      if (isSelectedToday) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            isAr ? 'اليوم' : 'Today',
+                            style: GoogleFonts.cairo(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onPrimary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+
+              // Next day button
+              IconButton.filledTonal(
+                icon: Icon(isAr ? Icons.chevron_left_rounded : Icons.chevron_right_rounded, size: 20),
+                tooltip: isAr ? 'اليوم التالي' : 'Next Day',
+                padding: const EdgeInsets.all(8),
+                constraints: const BoxConstraints(),
+                onPressed: canGoForward
+                    ? () {
+                        setState(() {
+                          _selectedDate = _selectedDate.add(const Duration(days: 1));
+                          _isAllTime = false;
+                        });
+                      }
+                    : null,
+              ),
+            ],
+          ),
+
+          // Quick Toggle Buttons (اليوم vs كافة الأيام)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FilledButton.tonalIcon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: isSelectedToday ? colorScheme.primary : colorScheme.surfaceContainerHighest,
+                  foregroundColor: isSelectedToday ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.today_rounded, size: 16),
+                label: Text(
+                  isAr ? 'اليوم (الافتراضي)' : 'Today (Default)',
+                  style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                onPressed: () {
+                  setState(() {
+                    _selectedDate = DateTime(now.year, now.month, now.day);
+                    _isAllTime = false;
+                  });
+                },
+              ),
+              const SizedBox(width: 6),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: _isAllTime ? colorScheme.secondaryContainer : null,
+                  foregroundColor: _isAllTime ? colorScheme.onSecondaryContainer : colorScheme.onSurfaceVariant,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.all_inclusive_rounded, size: 16),
+                label: Text(
+                  isAr ? 'كافة الأيام' : 'All Time',
+                  style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                onPressed: () {
+                  setState(() {
+                    _isAllTime = !_isAllTime;
+                  });
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDailyKpisBar({
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+    required bool isMobile,
+    required int totalGifts,
+    required double totalVouchers,
+    required int totalInvoices,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final itemWidth = isMobile
+            ? constraints.maxWidth
+            : (constraints.maxWidth - 24) / 3;
+
+        return Wrap(
+          spacing: 12,
+          runSpacing: 10,
+          children: [
+            SizedBox(
+              width: itemWidth,
+              child: _buildMiniStatCard(
+                colorScheme: colorScheme,
+                icon: Icons.card_giftcard_rounded,
+                iconColor: colorScheme.primary,
+                title: _isAllTime
+                    ? (isAr ? 'إجمالي الهدايا المسحوبة' : 'Total Claimed Gifts')
+                    : (isAr ? 'إجمالي هدايا هذا اليوم' : 'Total Gifts On Date'),
+                value: '$totalGifts ${isAr ? 'قطعة' : 'items'}',
+                subtitle: _isAllTime
+                    ? (isAr ? 'تراكمي لكافة التواريخ' : 'Cumulative All Time')
+                    : (_isDateToday(_selectedDate) ? (isAr ? 'منصرف اليوم' : "Today's Outflow") : (isAr ? 'منصرف التاريخ' : 'Date Outflow')),
+              ),
+            ),
+            SizedBox(
+              width: itemWidth,
+              child: _buildMiniStatCard(
+                colorScheme: colorScheme,
+                icon: Icons.confirmation_number_rounded,
+                iconColor: Colors.amber.shade800,
+                title: _isAllTime
+                    ? (isAr ? 'إجمالي قيمة الفواتشرات' : 'Total Vouchers Value')
+                    : (isAr ? 'قيمة فواتشرات هذا اليوم' : 'Vouchers Value On Date'),
+                value: '${totalVouchers.toInt()} ${isAr ? 'ج.م' : 'EGP'}',
+                subtitle: isAr ? 'قسائم مشتريات منصرفة' : 'Disbursed shopping vouchers',
+              ),
+            ),
+            SizedBox(
+              width: itemWidth,
+              child: _buildMiniStatCard(
+                colorScheme: colorScheme,
+                icon: Icons.receipt_long_rounded,
+                iconColor: Colors.teal.shade700,
+                title: _isAllTime
+                    ? (isAr ? 'إجمالي الفواتير الفائزة' : 'Total Winning Invoices')
+                    : (isAr ? 'فواتير هذا اليوم' : 'Invoices On Date'),
+                value: '$totalInvoices ${isAr ? 'فاتورة' : 'invoices'}',
+                subtitle: isAr ? 'عمليات صرف وهدايا ناجحة' : 'Successful claims',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildCampaignBreakdownView({
     required ColorScheme colorScheme,
     required AppStrings strings,
@@ -6803,10 +7263,112 @@ class _CompanyPrizesStockReportScreenState
     required bool isMobile,
     required List<EventModel> filteredEvents,
     required List<CompanyGiftModel> masterGifts,
+    required List<QueryDocumentSnapshot> transactionDocs,
   }) {
+    final validEvents = filteredEvents.where((e) {
+      if (_searchQuery.isEmpty) return true;
+      final matchesName = e.eventName.toLowerCase().contains(_searchQuery);
+      final matchesComp = e.targetCompany.toLowerCase().contains(_searchQuery);
+      final matchesChain = e.retailChainName.toLowerCase().contains(_searchQuery);
+      final matchesPrize = e.allocatedPrizes.any((p) =>
+          p.name.toLowerCase().contains(_searchQuery) ||
+          p.branchName.toLowerCase().contains(_searchQuery));
+      return matchesName || matchesComp || matchesChain || matchesPrize;
+    }).toList();
+
+    if (validEvents.isEmpty) {
+      return _buildEmptyState(colorScheme: colorScheme, strings: strings);
+    }
+
+    // 1. Calculate overall metrics on selected date across all valid campaigns
+    int overallGiftsOnDate = 0;
+    double overallVouchersOnDate = 0.0;
+    int overallInvoicesOnDate = 0;
+
+    for (final doc in transactionDocs) {
+      final data = doc.data() as Map<String, dynamic>? ?? {};
+      final eventId = (data['event_id'] ?? data['campaignId'] ?? data['campaign_id'] ?? '').toString();
+      final matchesEv = validEvents.any((e) => e.id == eventId);
+      if (!matchesEv && eventId.isNotEmpty) continue;
+
+      final status = data['status']?.toString();
+      final isValid = data['is_valid'];
+      if (status == 'rejected' || isValid == false) continue;
+      if (data['game_played'] != true && status != 'approved' && status != 'completed') continue;
+
+      final rawDate = data['claimed_at'] ?? data['created_at'] ?? data['timestamp'] ?? data['date'];
+      DateTime? docDate;
+      if (rawDate is Timestamp) {
+        docDate = rawDate.toDate();
+      } else if (rawDate is String && rawDate.isNotEmpty) {
+        docDate = DateTime.tryParse(rawDate);
+      }
+
+      if (!_isAllTime) {
+        if (docDate == null) continue;
+        final isSameDay = docDate.year == _selectedDate.year &&
+            docDate.month == _selectedDate.month &&
+            docDate.day == _selectedDate.day;
+        if (!isSameDay) continue;
+      }
+
+      overallInvoicesOnDate++;
+
+      final claimedGifts = (data['claimed_gifts'] as List?) ?? [];
+      if (claimedGifts.isNotEmpty) {
+        for (final cg in claimedGifts) {
+          if (cg is Map) {
+            final cgMap = Map<String, dynamic>.from(cg);
+            final qty = (cgMap['quantity'] as num?)?.toInt() ?? 1;
+            final uVal = (cgMap['unitValue'] ?? cgMap['unit_value'] as num?)?.toDouble() ?? 0.0;
+            final isVoucher = cgMap['isVoucher'] == true || cgMap['is_voucher'] == true || _isVoucherText(cgMap['giftName'] ?? '');
+
+            overallGiftsOnDate += qty;
+            if (isVoucher && uVal > 0) {
+              overallVouchersOnDate += (uVal * qty);
+            }
+          }
+        }
+      } else {
+        final prizesWon = (data['prizes_won'] as List?)?.map((p) => p.toString()).toList() ??
+            [(data['prize_won'] ?? '').toString()];
+        for (final p in prizesWon) {
+          if (p.trim().isNotEmpty) {
+            overallGiftsOnDate += 1;
+          }
+        }
+      }
+    }
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final event in filteredEvents)
+        // 1. Date Filter & Navigation Toolbar
+        _buildDateFilterBar(
+          context: context,
+          colorScheme: colorScheme,
+          strings: strings,
+          isAr: isAr,
+          isMobile: isMobile,
+        ),
+
+        const SizedBox(height: 14),
+
+        // 2. Summary KPI Metrics for Selected Date
+        _buildDailyKpisBar(
+          colorScheme: colorScheme,
+          strings: strings,
+          isAr: isAr,
+          isMobile: isMobile,
+          totalGifts: overallGiftsOnDate,
+          totalVouchers: overallVouchersOnDate,
+          totalInvoices: overallInvoicesOnDate,
+        ),
+
+        const SizedBox(height: 18),
+
+        // 3. Campaign Breakdown Cards
+        for (final event in validEvents)
           _buildCampaignGroupCard(
             colorScheme: colorScheme,
             strings: strings,
@@ -6815,6 +7377,7 @@ class _CompanyPrizesStockReportScreenState
             isMobile: isMobile,
             event: event,
             masterGifts: masterGifts,
+            transactionDocs: transactionDocs,
           ),
       ],
     );
@@ -6828,10 +7391,137 @@ class _CompanyPrizesStockReportScreenState
     required bool isMobile,
     required EventModel event,
     required List<CompanyGiftModel> masterGifts,
+    required List<QueryDocumentSnapshot> transactionDocs,
   }) {
+    // 1. Calculate campaign duration in days
+    final startDate = event.startDate;
+    final endDate = event.endDate;
+    int campaignDays = 30; // sensible fallback
+    if (startDate != null && endDate != null) {
+      campaignDays = (endDate.difference(startDate).inDays + 1).clamp(1, 365);
+    } else if (startDate != null) {
+      campaignDays = (DateTime.now().difference(startDate).inDays + 1).clamp(1, 365);
+    }
+
+    // 2. Parse claims for this specific campaign on the selected date
+    final Map<String, int> disbursedPerPrizeBranch = {};
+    final Map<String, double> disbursedValuePerPrizeBranch = {};
+    final Map<String, int> disbursedPerBranch = {};
+    final Map<String, double> disbursedValuePerBranch = {};
+    int campaignGiftsOnDate = 0;
+    double campaignVouchersValueOnDate = 0.0;
+
+    for (final doc in transactionDocs) {
+      final data = doc.data() as Map<String, dynamic>? ?? {};
+      final tCampId = (data['campaignId'] ?? data['event_id'] ?? '').toString();
+      if (tCampId.isNotEmpty && tCampId != event.id) continue;
+      if (data['status'] == 'rejected' || data['is_valid'] == false) continue;
+      if (data['game_played'] != true && data['status'] != 'approved' && data['status'] != 'completed') continue;
+
+      // Date check
+      final rawDate = data['claimed_at'] ?? data['created_at'] ?? data['timestamp'] ?? data['date'];
+      DateTime? txDate;
+      if (rawDate is Timestamp) {
+        txDate = rawDate.toDate();
+      } else if (rawDate is String && rawDate.isNotEmpty) {
+        txDate = DateTime.tryParse(rawDate);
+      }
+
+      if (!_isAllTime) {
+        if (txDate == null) continue;
+        final isSameDay = txDate.year == _selectedDate.year &&
+            txDate.month == _selectedDate.month &&
+            txDate.day == _selectedDate.day;
+        if (!isSameDay) continue;
+      }
+
+      final claimedGifts = (data['claimed_gifts'] as List?) ?? [];
+      if (claimedGifts.isNotEmpty) {
+        for (final cg in claimedGifts) {
+          if (cg is Map) {
+            final cgMap = Map<String, dynamic>.from(cg);
+            final qty = (cgMap['quantity'] as num?)?.toInt() ?? 1;
+            final uVal = (cgMap['unitValue'] ?? cgMap['unit_value'] as num?)?.toDouble() ?? 0.0;
+            final isVoucher = cgMap['isVoucher'] == true || cgMap['is_voucher'] == true || _isVoucherText(cgMap['giftName'] ?? '');
+
+            campaignGiftsOnDate += qty;
+            if (isVoucher && uVal > 0) {
+              campaignVouchersValueOnDate += (uVal * qty);
+            }
+
+            for (final prize in event.allocatedPrizes) {
+              if (_matchesBranchStrict(prize.branchName, prize.branchId, data) &&
+                  _matchesPrizeStrict(prize, cgMap)) {
+                final pKey = '${prize.giftId.isNotEmpty ? prize.giftId : prize.name}__${prize.branchName}';
+                disbursedPerPrizeBranch[pKey] = (disbursedPerPrizeBranch[pKey] ?? 0) + qty;
+                if (isVoucher && uVal > 0) {
+                  disbursedValuePerPrizeBranch[pKey] = (disbursedValuePerPrizeBranch[pKey] ?? 0.0) + (uVal * qty);
+                }
+
+                final bKey = prize.branchName.trim();
+                disbursedPerBranch[bKey] = (disbursedPerBranch[bKey] ?? 0) + qty;
+                if (isVoucher && uVal > 0) {
+                  disbursedValuePerBranch[bKey] = (disbursedValuePerBranch[bKey] ?? 0.0) + (uVal * qty);
+                }
+              }
+            }
+          }
+        }
+      } else {
+        final prizesWon = (data['prizes_won'] as List?)?.map((p) => p.toString()).toList() ??
+            [(data['prize_won'] ?? '').toString()];
+        for (final p in prizesWon) {
+          if (p.trim().isNotEmpty) {
+            campaignGiftsOnDate += 1;
+            for (final prize in event.allocatedPrizes) {
+              if (_matchesBranchStrict(prize.branchName, prize.branchId, data) &&
+                  _matchesPrizeStrict(prize, {'giftName': p})) {
+                final pKey = '${prize.giftId.isNotEmpty ? prize.giftId : prize.name}__${prize.branchName}';
+                disbursedPerPrizeBranch[pKey] = (disbursedPerPrizeBranch[pKey] ?? 0) + 1;
+                final bKey = prize.branchName.trim();
+                disbursedPerBranch[bKey] = (disbursedPerBranch[bKey] ?? 0) + 1;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    int getDisbursedForPrizeOnDate(AllocatedPrize prize) {
+      final pKey = '${prize.giftId.isNotEmpty ? prize.giftId : prize.name}__${prize.branchName}';
+      return disbursedPerPrizeBranch[pKey] ?? 0;
+    }
+
+    double getDisbursedValueForPrizeOnDate(AllocatedPrize prize) {
+      final pKey = '${prize.giftId.isNotEmpty ? prize.giftId : prize.name}__${prize.branchName}';
+      return disbursedValuePerPrizeBranch[pKey] ?? 0.0;
+    }
+
+    int getDisbursedForBranchOnDate(String branchName) {
+      return disbursedPerBranch[branchName.trim()] ?? 0;
+    }
+
+    double getDisbursedValueForBranchOnDate(String branchName) {
+      return disbursedValuePerBranch[branchName.trim()] ?? 0.0;
+    }
+
+    // 3. Filter valid prizes according to search and branch filters
     final validPrizes = event.allocatedPrizes.where((prize) {
-      if (masterGifts.isEmpty) return true;
-      return _findMatchingMasterGift(prize, masterGifts) != null;
+      if (masterGifts.isNotEmpty && _findMatchingMasterGift(prize, masterGifts) == null) {
+        return false;
+      }
+      if (_selectedBranch != null && _selectedBranch!.isNotEmpty) {
+        final pBranch = prize.branchName.trim();
+        if (pBranch.isNotEmpty && pBranch != _selectedBranch) {
+          return false;
+        }
+      }
+      if (_searchQuery.isNotEmpty) {
+        final matchesName = prize.name.toLowerCase().contains(_searchQuery);
+        final matchesBranch = prize.branchName.toLowerCase().contains(_searchQuery);
+        if (!matchesName && !matchesBranch) return false;
+      }
+      return true;
     }).toList();
 
     int campaignAllocated = 0;
@@ -6846,176 +7536,523 @@ class _CompanyPrizesStockReportScreenState
         ? (campaignClaimed / campaignAllocated).clamp(0.0, 1.0)
         : 0.0;
 
+    // 4. Group valid prizes by branch
+    final Map<String, List<AllocatedPrize>> branchToPrizes = {};
+    for (final prize in validPrizes) {
+      final bName = prize.branchName.trim().isNotEmpty
+          ? prize.branchName.trim()
+          : (isAr ? 'كافة الفروع / عام' : 'All Branches / General');
+      branchToPrizes.putIfAbsent(bName, () => []).add(prize);
+    }
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: colorScheme.outlineVariant.withValues(alpha: 0.5),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Header
+          // Campaign Header
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
               color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    event.gameType == 'scratch'
-                        ? Icons.content_cut_rounded
-                        : (event.gameType == 'direct'
-                            ? Icons.card_giftcard_rounded
-                            : Icons.rotate_right_rounded),
-                    color: colorScheme.primary,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        event.eventName,
-                        style: GoogleFonts.cairo(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.onSurface,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        event.gameType == 'scratch'
+                            ? Icons.content_cut_rounded
+                            : (event.gameType == 'direct'
+                                ? Icons.card_giftcard_rounded
+                                : Icons.rotate_right_rounded),
+                        color: colorScheme.primary,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            event.eventName,
+                            style: GoogleFonts.cairo(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          Text(
+                            '${event.targetCompany} • ${event.retailChainName.isNotEmpty ? event.retailChainName : (isAr ? 'كافة السلاسل' : 'All Chains')}',
+                            style: GoogleFonts.cairo(
+                              fontSize: 11,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Depletion Badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: colorScheme.primary.withValues(alpha: 0.25),
                         ),
                       ),
-                      Text(
-                        '${event.targetCompany} • ${event.retailChainName.isNotEmpty ? event.retailChainName : (isAr ? 'كافة السلاسل' : 'All Chains')}',
+                      child: Text(
+                        '${(depletion * 100).toStringAsFixed(0)}% ${strings.depletionRateLabel}',
                         style: GoogleFonts.cairo(
                           fontSize: 11,
-                          color: colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.primary,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                // Depletion Badge
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '${(depletion * 100).toStringAsFixed(0)}% ${strings.depletionRateLabel}',
-                    style: GoogleFonts.cairo(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.primary,
                     ),
-                  ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+
+                // Campaign Daily Metrics Bar
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    // Duration Badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.calendar_today_rounded, size: 12, color: colorScheme.outline),
+                          const SizedBox(width: 5),
+                          Text(
+                            '${strings.campaignDurationLabel}: $campaignDays ${isAr ? 'يوم' : 'days'}',
+                            style: GoogleFonts.cairo(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Claims on Date Badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: campaignGiftsOnDate > 0 ? Colors.teal.shade50 : colorScheme.surface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: campaignGiftsOnDate > 0 ? Colors.teal.shade300 : colorScheme.outlineVariant.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.bolt_rounded,
+                            size: 13,
+                            color: campaignGiftsOnDate > 0 ? Colors.teal.shade800 : colorScheme.outline,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _isAllTime
+                                ? (isAr ? 'إجمالي المنصرف: $campaignGiftsOnDate قطعة' : 'Total Claimed: $campaignGiftsOnDate')
+                                : (_isDateToday(_selectedDate)
+                                    ? '${strings.todayDisbursedLabel}: $campaignGiftsOnDate ${isAr ? 'قطعة' : 'pcs'}'
+                                    : '${isAr ? 'منصرف التاريخ' : 'Date Claimed'}: $campaignGiftsOnDate ${isAr ? 'قطعة' : 'pcs'}'),
+                            style: GoogleFonts.cairo(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: campaignGiftsOnDate > 0 ? Colors.teal.shade900 : colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          if (campaignVouchersValueOnDate > 0) ...[
+                            Text(
+                              ' (${campaignVouchersValueOnDate.toInt()} ${isAr ? 'ج.م' : 'EGP'})',
+                              style: GoogleFonts.cairo(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.amber.shade900,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
 
-          // Items inside campaign
+          // Items inside campaign grouped by branch
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(14),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (validPrizes.isEmpty)
                   Padding(
                     padding: const EdgeInsets.all(16),
                     child: Text(
-                      isAr ? 'لم يتم تكويد هدايا مخصصة لهذه الحملة بعد.' : 'No prizes allocated yet.',
+                      isAr ? 'لا توجد هدايا مطابقة لمعايير البحث.' : 'No prizes match current filters.',
                       style: GoogleFonts.cairo(
                         color: colorScheme.outline,
                         fontSize: 12,
                       ),
+                      textAlign: TextAlign.center,
                     ),
                   )
                 else
-                  for (final prize in validPrizes)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colorScheme.surface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: colorScheme.outlineVariant.withValues(alpha: 0.4),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.card_giftcard_rounded,
-                            size: 18,
-                            color: prize.remainingQuantity <= 0
-                                ? const Color(0xFFB3261E)
-                                : colorScheme.primary,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  prize.name,
-                                  style: GoogleFonts.cairo(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: colorScheme.onSurface,
-                                  ),
-                                ),
-                                if (prize.branchName.isNotEmpty)
-                                  Text(
-                                    prize.branchName,
-                                    style: GoogleFonts.cairo(
-                                      fontSize: 10,
-                                      color: colorScheme.outline,
-                                    ),
-                                  ),
-                              ],
+                  for (final branchEntry in branchToPrizes.entries) ...[
+                    Builder(
+                      builder: (context) {
+                        final bName = branchEntry.key;
+                        final prizesInBranch = branchEntry.value;
+
+                        int bAllocated = 0;
+                        int bRemaining = 0;
+                        for (final p in prizesInBranch) {
+                          bAllocated += p.allocatedQuantity;
+                          bRemaining += p.remainingQuantity;
+                        }
+                        final int bClaimed = (bAllocated - bRemaining).clamp(0, bAllocated);
+                        final int bGiftsOnDate = getDisbursedForBranchOnDate(bName);
+                        final double bVouchersValueOnDate = getDisbursedValueForBranchOnDate(bName);
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 14),
+                          decoration: BoxDecoration(
+                            color: colorScheme.surface,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: colorScheme.outlineVariant.withValues(alpha: 0.5),
                             ),
                           ),
-                          _buildBranchQtyPill(
-                            label: isAr ? 'المخصص' : 'Allocated',
-                            value: '${prize.allocatedQuantity}',
-                            color: colorScheme.onSurfaceVariant,
-                            colorScheme: colorScheme,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Branch Header Banner
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.primary.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Icon(
+                                        Icons.storefront_rounded,
+                                        size: 16,
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            bName,
+                                            style: GoogleFonts.cairo(
+                                              fontSize: 13.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: colorScheme.onSurface,
+                                            ),
+                                          ),
+                                          Text(
+                                            '${strings.remainingInBranch}: $bRemaining • ${isAr ? 'المصروف' : 'Claimed'}: $bClaimed • ${strings.outOfLabel} $bAllocated',
+                                            style: GoogleFonts.cairo(
+                                              fontSize: 10.5,
+                                              color: colorScheme.outline,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    // Branch Claims on Date Badge
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                      decoration: BoxDecoration(
+                                        color: bGiftsOnDate > 0 ? Colors.teal.shade50 : colorScheme.surface,
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                          color: bGiftsOnDate > 0 ? Colors.teal.shade300 : colorScheme.outlineVariant.withValues(alpha: 0.4),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.bolt_rounded,
+                                            size: 14,
+                                            color: bGiftsOnDate > 0 ? Colors.teal.shade800 : colorScheme.outline,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            _isAllTime
+                                                ? (isAr ? 'المصروف: $bGiftsOnDate' : 'Claimed: $bGiftsOnDate')
+                                                : (_isDateToday(_selectedDate)
+                                                    ? '${strings.todayDisbursedLabel}: $bGiftsOnDate'
+                                                    : '${isAr ? 'منصرف التاريخ' : 'Date Claimed'}: $bGiftsOnDate'),
+                                            style: GoogleFonts.cairo(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: bGiftsOnDate > 0 ? Colors.teal.shade900 : colorScheme.onSurfaceVariant,
+                                            ),
+                                          ),
+                                          if (bVouchersValueOnDate > 0) ...[
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              '(${bVouchersValueOnDate.toInt()} ${isAr ? 'ج.م' : 'EGP'})',
+                                              style: GoogleFonts.cairo(
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.amber.shade900,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              // Prize Rows inside Branch (Exact Match with Screenshot 2 Style)
+                              Padding(
+                                padding: const EdgeInsets.all(10),
+                                child: Column(
+                                  children: [
+                                    for (final prize in prizesInBranch) ...[
+                                      Builder(
+                                        builder: (context) {
+                                          final int prizeGiftsOnDate = getDisbursedForPrizeOnDate(prize);
+                                          final double prizeVouchersValueOnDate = getDisbursedValueForPrizeOnDate(prize);
+                                          final int prizeClaimedTotal = (prize.allocatedQuantity - prize.remainingQuantity).clamp(0, prize.allocatedQuantity);
+                                          final isVoucher = prize.isVoucher;
+
+                                          return Container(
+                                            margin: const EdgeInsets.only(bottom: 10),
+                                            padding: EdgeInsets.all(isMobile ? 10 : 14),
+                                            decoration: BoxDecoration(
+                                              color: colorScheme.surface,
+                                              borderRadius: BorderRadius.circular(16),
+                                              border: Border.all(
+                                                color: prizeGiftsOnDate > 0
+                                                    ? (isVoucher ? Colors.amber.shade400 : colorScheme.primary.withValues(alpha: 0.5))
+                                                    : colorScheme.outlineVariant.withValues(alpha: 0.4),
+                                                width: prizeGiftsOnDate > 0 ? 1.5 : 1.0,
+                                              ),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.black.withValues(alpha: 0.02),
+                                                  blurRadius: 4,
+                                                  offset: const Offset(0, 2),
+                                                ),
+                                              ],
+                                            ),
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                                              children: [
+                                                Row(
+                                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                                  children: [
+                                                    // 1. Prominent Highlighted Disbursal Badge on Leading side
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                      decoration: BoxDecoration(
+                                                        color: isVoucher
+                                                            ? (prizeGiftsOnDate > 0 ? Colors.amber.shade600 : Colors.amber.shade100)
+                                                            : (prizeGiftsOnDate > 0 ? colorScheme.primary : colorScheme.surfaceContainerHighest),
+                                                        borderRadius: BorderRadius.circular(12),
+                                                      ),
+                                                      child: Column(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                          Text(
+                                                            _isAllTime
+                                                                ? (isAr ? 'إجمالي المنصرف' : 'Total Claimed')
+                                                                : (_isDateToday(_selectedDate)
+                                                                    ? (isAr ? 'منصرف اليوم' : 'Today Claimed')
+                                                                    : (isAr ? 'منصرف التاريخ' : 'Date Claimed')),
+                                                            style: GoogleFonts.cairo(
+                                                              fontSize: 9.5,
+                                                              fontWeight: FontWeight.bold,
+                                                              color: isVoucher
+                                                                  ? (prizeGiftsOnDate > 0 ? Colors.white : Colors.amber.shade900)
+                                                                  : (prizeGiftsOnDate > 0 ? colorScheme.onPrimary : colorScheme.onSurfaceVariant),
+                                                              height: 1.1,
+                                                            ),
+                                                          ),
+                                                          Text(
+                                                            '$prizeGiftsOnDate ${isAr ? 'قطعة' : 'pcs'}',
+                                                            style: GoogleFonts.cairo(
+                                                              fontSize: 13,
+                                                              fontWeight: FontWeight.w900,
+                                                              color: isVoucher
+                                                                  ? (prizeGiftsOnDate > 0 ? Colors.white : Colors.amber.shade900)
+                                                                  : (prizeGiftsOnDate > 0 ? colorScheme.onPrimary : colorScheme.onSurface),
+                                                              height: 1.2,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 12),
+
+                                                    // 2. Prize Title and Stock Information
+                                                    Expanded(
+                                                      child: Column(
+                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        children: [
+                                                          Row(
+                                                            children: [
+                                                              Icon(
+                                                                isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
+                                                                size: 18,
+                                                                color: isVoucher ? Colors.amber.shade800 : colorScheme.primary,
+                                                              ),
+                                                              const SizedBox(width: 6),
+                                                              Expanded(
+                                                                child: Text(
+                                                                  prize.name,
+                                                                  style: GoogleFonts.cairo(
+                                                                    fontSize: isMobile ? 13 : 14.5,
+                                                                    fontWeight: FontWeight.bold,
+                                                                    color: colorScheme.onSurface,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                          const SizedBox(height: 2),
+                                                          Text(
+                                                            '${strings.remainingInBranch}: ${prize.remainingQuantity} ${strings.outOfLabel} ${prize.allocatedQuantity}',
+                                                            style: GoogleFonts.cairo(
+                                                              fontSize: isMobile ? 11 : 12,
+                                                              color: colorScheme.onSurfaceVariant,
+                                                              fontWeight: FontWeight.w600,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+
+                                                    // 3. Trailing Quick Stat Pills
+                                                    _buildBranchQtyPill(
+                                                      label: isAr ? 'المتبقي' : 'Left',
+                                                      value: '${prize.remainingQuantity}',
+                                                      color: prize.remainingQuantity <= 0 ? const Color(0xFFB3261E) : const Color(0xFF006C50),
+                                                      isHighlight: true,
+                                                      colorScheme: colorScheme,
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    _buildBranchQtyPill(
+                                                      label: isAr ? 'المخصص' : 'Allocated',
+                                                      value: '${prize.allocatedQuantity}',
+                                                      color: colorScheme.onSurfaceVariant,
+                                                      colorScheme: colorScheme,
+                                                    ),
+                                                    if (!isMobile) ...[
+                                                      const SizedBox(width: 4),
+                                                      _buildBranchQtyPill(
+                                                        label: isAr ? 'المصروف الكلي' : 'Total Claimed',
+                                                        value: '$prizeClaimedTotal',
+                                                        color: colorScheme.secondary,
+                                                        colorScheme: colorScheme,
+                                                      ),
+                                                    ],
+                                                  ],
+                                                ),
+
+                                                // If voucher has total value on this date
+                                                if (isVoucher && (prizeVouchersValueOnDate > 0 || prize.unitValue > 0)) ...[
+                                                  const SizedBox(height: 8),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.amber.shade50,
+                                                      borderRadius: BorderRadius.circular(8),
+                                                      border: Border.all(color: Colors.amber.shade200),
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        Icon(Icons.payments_rounded, size: 14, color: Colors.amber.shade900),
+                                                        const SizedBox(width: 6),
+                                                        Text(
+                                                          prizeVouchersValueOnDate > 0
+                                                              ? '${isAr ? 'إجمالي قيمة الفواتشر المنصرفة' : 'Disbursed Vouchers Value'}: ${prizeVouchersValueOnDate.toInt()} ${isAr ? 'ج.م' : 'EGP'}'
+                                                              : strings.voucherValueText(prize.unitValue.toStringAsFixed(0)),
+                                                          style: GoogleFonts.cairo(
+                                                            fontSize: 11,
+                                                            fontWeight: FontWeight.bold,
+                                                            color: Colors.amber.shade900,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 6),
-                          _buildBranchQtyPill(
-                            label: isAr ? 'المصروف' : 'Claimed',
-                            value: '${(prize.allocatedQuantity - prize.remainingQuantity).clamp(0, prize.allocatedQuantity)}',
-                            color: colorScheme.secondary,
-                            colorScheme: colorScheme,
-                          ),
-                          const SizedBox(width: 6),
-                          _buildBranchQtyPill(
-                            label: isAr ? 'المتبقي' : 'Left',
-                            value: '${prize.remainingQuantity}',
-                            color: prize.remainingQuantity <= 0
-                                ? const Color(0xFFB3261E)
-                                : const Color(0xFF006C50),
-                            isHighlight: true,
-                            colorScheme: colorScheme,
-                          ),
-                        ],
-                      ),
+                        );
+                      },
                     ),
+                  ],
               ],
             ),
           ),

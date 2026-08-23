@@ -559,6 +559,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
               unitValue: resolvedUnitValue,
               isVoucher: resolvedIsVoucher,
               linkedGifts: resolvedLinkedGifts,
+              requireVoucherSerials: activeEvent.requireVoucherSerials,
             ),
           ),
         );
