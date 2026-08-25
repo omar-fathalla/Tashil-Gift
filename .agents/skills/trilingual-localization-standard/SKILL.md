@@ -81,19 +81,40 @@ TextFormField(
 )
 ```
 
-### Rule 4: Dynamic Directionality (RTL vs LTR)
-The app must automatically adjust layout flow based on the active language:
-- **Arabic (`ar`)**: `TextDirection.rtl`
-- **English (`en`)** & **Hindi (`hi`)**: `TextDirection.ltr`
+### Rule 4: Dynamic Directionality & Navigation Hierarchy (RTL vs LTR Natural Placement)
+The app must automatically adjust layout flow and navigation hierarchy based on the active language:
+- **Arabic (`ar`)**: `TextDirection.rtl` — Layout flows from Right to Left.
+- **English (`en`)** & **Hindi (`hi`)**: `TextDirection.ltr` — Layout flows from Left to Right.
+
+#### Directional Sidebar & Master-Detail Navigation Rule:
+1. **Natural Start Placement**:
+   - In desktop and tablet dashboard layouts (e.g. `CompanyManagerPortalScreen`), the primary navigation sidebar / rail MUST strictly be placed at the **START** of the layout:
+     - In **Arabic (RTL)**: The navigation sidebar is visually on the **RIGHT** side of the viewport.
+     - In **English/Hindi (LTR)**: The navigation sidebar is visually on the **LEFT** side of the viewport.
+   - In Flutter `Row(children: [ ... ])`, ALWAYS place the sidebar as the **FIRST child** so Flutter's ambient `Directionality` positions it at the natural start edge (Right in RTL, Left in LTR). The main content `Expanded(child: ...)` is the second child.
+2. **Directional Borders & Insets**:
+   - Use `BorderDirectional(end: BorderSide(...))` for dividers between the sidebar and content.
+   - Use `EdgeInsetsDirectional` and `AlignmentDirectional` instead of hardcoded `left`/`right`.
+   - Dynamic shadow offsets should respect `Offset(isAr ? -2 : 2, 0)`.
+3. **Collapse/Expand Directional Icons**:
+   - In Arabic (RTL): Expand points Left (`Icons.keyboard_double_arrow_left_rounded`), Collapse points Right (`Icons.keyboard_double_arrow_right_rounded`).
+   - In English/Hindi (LTR): Expand points Right (`Icons.keyboard_double_arrow_right_rounded`), Collapse points Left (`Icons.keyboard_double_arrow_left_rounded`).
 
 ```dart
-Directionality(
-  textDirection: strings.isAr ? TextDirection.rtl : TextDirection.ltr,
-  child: ...
+Row(
+  crossAxisAlignment: CrossAxisAlignment.stretch,
+  children: [
+    // 1. Primary Navigation Sidebar (Placed at START: Right in RTL, Left in LTR)
+    if (!isMobile)
+      _buildDesktopSidebar(...),
+
+    // 2. Main View Content Area (Fills the remaining width)
+    Expanded(
+      child: IndexedStack(...),
+    ),
+  ],
 )
 ```
-
-When building custom rows with icons and badges, use directional alignment or flex layouts that adapt naturally with the root `Directionality`.
 
 ### Rule 5: Trilingual Dialogs, Modals & Notifications
 All dialogs (Validation Report Dialogs, Winner Celebration Dialogs, Deletion Confirmations, Inactive Campaign Warnings) and SnackBars must be localized:

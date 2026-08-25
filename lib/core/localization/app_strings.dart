@@ -59,8 +59,8 @@ class AppStrings {
   String get linkCopied => _t(ar: 'تم نسخ الرابط بنجاح', en: 'Link copied successfully', hi: 'लिंक सफलतापूर्वक कॉपी किया गया');
   String get noData => _t(ar: 'لا توجد بيانات متاحة', en: 'No data available', hi: 'कोई डेटा उपलब्ध नहीं है');
   String get requiredField => _t(ar: 'هذا الحقل مطلوب', en: 'This field is required', hi: 'यह फ़ील्ड आवश्यक है');
-  String get viewAll => _t(ar: 'عرض الكل', en: 'View All', hi: 'सभी देखें');
-  String get exportExcelCsv => _t(ar: 'تصدير CSV / Excel', en: 'Export CSV / Excel', hi: 'CSV / Excel निर्यात करें');
+  String get exportExcelCsv => _t(ar: 'تصدير تقرير Excel', en: 'Export Excel Report', hi: 'Excel रिपोर्ट निर्यात करें');
+  String get exportExcelBtn => _t(ar: 'تصدير إلى Excel', en: 'Export to Excel', hi: 'Excel में निर्यात करें');
   String operationFailed(String details) => _t(
     ar: 'فشلت العملية: $details',
     en: 'Operation failed: $details',
@@ -77,7 +77,8 @@ class AppStrings {
   String get navProductsIntelligence => _t(ar: 'المنتجات والأسعار', en: 'Products & Prices', hi: 'उत्पाद और मूल्य');
   String get navInvoicesAudit => _t(ar: 'سجل الفواتير والتدقيق', en: 'Invoices Audit & Logs', hi: 'रसीद ऑडिट और लॉग');
   String get navCreateCampaign => _t(ar: 'إنشاء حملة جديدة', en: 'Create New Campaign', hi: 'नया अभियान बनाएं');
-  String get navCompanyGifts => _t(ar: 'هدايا الشركات', en: 'Company Gifts', hi: 'कंपनी उपहार');
+  String get createCampaignTitle => _t(ar: 'إنشاء حملة ترويجية جديدة', en: 'Create New Promotional Campaign', hi: 'नया प्रचार अभियान बनाएं');
+  String get navCompanyGifts => _t(ar: 'كتالوج هدايا الشركات', en: 'Company Gifts Catalog', hi: 'कंपनी उपहार सूची');
   String get navGameTypes => _t(ar: 'أنواع الألعاب', en: 'Game Types', hi: 'खेल के प्रकार');
   String get navAiSpeedBenchmark => _t(ar: 'اختبار سرعة الـ AI (KPI) ⚡', en: 'AI Latency & Speed KPI ⚡', hi: 'एआई स्पीड टेस्ट ⚡');
   String get previewClientApp => _t(ar: 'معاينة تطبيق العميل / البروموتر', en: 'Preview Client / Promoter App', hi: 'ग्राहक ऐप का पूर्वावलोकन');
@@ -253,21 +254,10 @@ class AppStrings {
   );
   String get deletingInvoiceProgress => _t(
     ar: 'جاري حذف الفاتورة وتفريغ بيانات البون...',
-    en: 'Deleting invoice and unlocking receipt...',
-    hi: 'रसीद हटाई जा रही है...',
+    en: 'Deleting invoice and clearing receipt data...',
+    hi: 'रसीद हटाई जा रही है और डेटा खाली किया जा रहा है...',
   );
-
-  // ---------------------------------------------------------------------------
-  // 9. Agent 6: Create & Edit Campaign (إنشاء حملة جديدة)
-  // ---------------------------------------------------------------------------
-  String get createCampaignTitle => _t(ar: 'إنشاء وتخصيص حملة ترويجية جديدة', en: 'Create & Configure Promotional Campaign', hi: 'नया प्रचार अभियान बनाएं और कॉन्फ़िगर करें');
-  String get editCampaignTitle => _t(ar: 'تعديل بيانات الحملة وتخصيص الـ AI', en: 'Edit Campaign & AI Configuration', hi: 'अभियान और एआई सेटिंग्स संपादित करें');
-  String get card1BasicInfoTitle => _t(ar: '١. البيانات الأساسية للحملة', en: '1. Basic Campaign Information', hi: '1. बुनियादी अभियान जानकारी');
-  String get card1BasicInfoSubtitle => _t(ar: 'حدد اسم الحملة، الشركة المستهدفة، وشروط الإنفاق', en: 'Set campaign title, target sponsor, and spend requirements', hi: 'अभियान का नाम, कंपनी और न्यूनतम खर्च निर्धारित करें');
-  String get card2ProductsScopeTitle => _t(ar: '٢. نطاق المنتجات المستهدفة', en: '2. Target Products & Scope', hi: '2. लक्षित उत्पाद और दायरा');
-  String get card3RetailChainsTitle => _t(ar: '٣. السلاسل والمنافذ المعتمدة', en: '3. Authorized Retail Chains & Branches', hi: '3. अधिकृत रिटेल चेन और स्टोर');
-  String get card4GiftsGameTitle => _t(ar: '٤. الهدايا ونوع اللعبة', en: '4. Prizes & Game Mechanics', hi: '4. उपहार और खेल का प्रकार');
-  String get card5AiCustomizationTitle => _t(ar: '٥. تخصيص الذكاء الاصطناعي (AI Prompt & OCR)', en: '5. AI Prompt & Verification Settings', hi: '5. एआई प्रॉम्ट और सत्यापन सेटिंग्स');
+  String get stepAiSettings => _t(ar: '5. إعدادات الذكاء الاصطناعي (AI Prompt & OCR)', en: '5. AI Prompt & Verification Settings', hi: '5. एआई प्रॉम्ट और सत्यापन सेटिंग्स');
   String get campaignNameField => _t(ar: 'اسم الحملة (مثال: مهرجان المراعي)', en: 'Campaign Name (e.g. Almarai Fest)', hi: 'अभियान का नाम (उदा. अलमराई फेस्ट)');
   String get targetCompanyField => _t(ar: 'الشركة الراعية المستهدفة', en: 'Target Sponsor Company', hi: 'लक्षित प्रायोजक कंपनी');
   String get minSpendField => _t(ar: 'الحد الأدنى للشراء المؤهل', en: 'Minimum Spend Requirement', hi: 'न्यूनतम खरीदारी राशि');
@@ -277,15 +267,15 @@ class AppStrings {
   // ---------------------------------------------------------------------------
   // 10. Agent 7: Company Gifts & Stock (هدايا الشركات)
   // ---------------------------------------------------------------------------
-  String get giftsTitle => _t(ar: 'مخزون هدايا الشركات والجوائز', en: 'Company Prize Inventory & Stock', hi: 'कंपनी उपहार और पुरस्कार सूची');
+  String get giftsTitle => _t(ar: 'كتالوج هدايا وجوائز الشركات', en: 'Company Master Gifts Catalog', hi: 'कंपनी मास्टर उपहार कैटलॉग');
   String get giftsSubtitle => _t(
-    ar: 'إضافة وإدارة الهدايا والجوائز المتاحة لكل شركة وتحديد أوزان ونسب الفوز',
-    en: 'Manage company promotional gift stocks and winning probability weights',
-    hi: 'कंपनी उपहार स्टॉक और जीतने की संभावना प्रबंधित करें',
+    ar: 'تعريف وتوحيد مسميات الهدايا والجوائز وقسائم المشتريات المعتمدة لكل شركة',
+    en: 'Define and standardize official company gifts, physical products, and vouchers',
+    hi: 'कंपनी उपहारों, उत्पादों और वाउचर को परिभाषित और मानकीकृत करें',
   );
-  String get addGiftCardTitle => _t(ar: 'إضافة جائزة / هدية جديدة', en: 'Add New Gift / Reward', hi: 'नया उपहार / पुरस्कार जोड़ें');
-  String get registeredGiftsTableTitle => _t(ar: 'قائمة الهدايا المسجلة للشركة', en: 'Registered Gifts for Company', hi: 'कंपनी के लिए पंजीकृत उपहार');
-  String get giftNameField => _t(ar: 'اسم الهدية / الجائزة', en: 'Gift Name / Reward', hi: 'उपहार का नाम');
+  String get addGiftCardTitle => _t(ar: 'إضافة هدية أو فواتشر للكتالوج المعتمد', en: 'Add Gift or Voucher to Master Catalog', hi: 'मास्टर कैटलॉग में उपहार या वाउचर जोड़ें');
+  String get registeredGiftsTableTitle => _t(ar: 'كتالوج الهدايا والجوائز المعتمدة للشركة', en: 'Approved Gifts Catalog for Company', hi: 'कंपनी के लिए स्वीकृत उपहार सूची');
+  String get giftNameField => _t(ar: 'اسم الهدية / المنتج', en: 'Gift / Product Name', hi: 'उपहार / उत्पाद का नाम');
   String get giftQuantityField => _t(ar: 'الكمية المتاحة (المخزون)', en: 'Available Quantity (Stock)', hi: 'उपलब्ध मात्रा (स्टॉक)');
   String get giftWinProbabilityField => _t(ar: 'وزن / نسبة الفوز (Probability Weight)', en: 'Winning Probability Weight', hi: 'जीतने की संभावना (वेट)');
   String get giftDescriptionField => _t(ar: 'وصف الهدية وكيفية الاستلام', en: 'Reward Description & Redemption Terms', hi: 'उपहार का विवरण');
@@ -338,6 +328,124 @@ class AppStrings {
     hi: 'यह वास्तविक स्टॉक को प्रभावित किए बिना ग्राहक अनुभव का एक लाइव सिमुलेशन है।',
   );
   String get demoExitBtn => _t(ar: 'إنهاء الديمو والعودة', en: 'Exit Demo', hi: 'डेमो समाप्त करें');
+  
+  // ---------------------------------------------------------------------------
+  // 14.0 Branch Stock Balances System (منظومة تغذية وتوزيع أرصدة الفروع)
+  // ---------------------------------------------------------------------------
+  String get branchBalancesNavTitle => _t(
+    ar: 'الأرصدة',
+    en: 'Branch Balances',
+    hi: 'शाखा शेष',
+  );
+  String get branchBalancesNavSubtitle => _t(
+    ar: 'تغذية وتوزيع أرصدة الهدايا والقسائم على الفروع',
+    en: 'Direct gift & voucher quota allocation across branches',
+    hi: 'शाखाओं में प्रत्यक्ष उपहार और वाउचर कोटा आवंटन',
+  );
+  String get branchBalancesNavTooltip => _t(
+    ar: 'المكان المركزي لتغذية وتحديد أرصدة الهدايا لكافة الفروع ومتابعة السحب',
+    en: 'Central hub for feeding branch gift quotas and tracking live claims',
+    hi: 'शाखा उपहार कोटा खिलाने और वास्तविक समय के दावों को ट्रैक करने का केंद्रीय केंद्र',
+  );
+  String get saveAllBalancesBtn => _t(
+    ar: 'حفظ وتثبيت كافة الأرصدة',
+    en: 'Save & Sync All Balances',
+    hi: 'सभी शेष राशि सहेजें',
+  );
+  String get bulkDistributeTitle => _t(
+    ar: 'شريط التوزيع الموحد السريع',
+    en: 'Quick Bulk Distribution',
+    hi: 'त्वरित थोक वितरण',
+  );
+  String get applyToAllBranchesBtn => _t(
+    ar: 'تطبيق موحد على كافة الفروع',
+    en: 'Apply to All Branches',
+    hi: 'सभी शाखाओं पर लागू करें',
+  );
+  String get matrixGridView => _t(
+    ar: 'كشف مصفوفة الفروع',
+    en: 'Branch Matrix Grid',
+    hi: 'शाखा मैट्रिक्स ग्रिड',
+  );
+  String get branchCardsView => _t(
+    ar: 'بطاقات الفروع',
+    en: 'Branch Cards',
+    hi: 'शाखा कार्ड',
+  );
+
+  // ---------------------------------------------------------------------------
+  // 15.0 Daily Branch Sales & Disbursals System (منظومة المبيعات وسحب الهدايا اليومي)
+  // ---------------------------------------------------------------------------
+  String get dailyBranchSalesNavTitle => _t(
+    ar: 'المبيعات اليومية',
+    en: 'Daily Sales & Gifts',
+    hi: 'दैनिक बिक्री और उपहार',
+  );
+  String get dailyBranchSalesNavSubtitle => _t(
+    ar: 'متابعة المبيعات والهدايا المنصرفة يومياً لكل فرع',
+    en: 'Daily sales revenue and gift disbursals per branch',
+    hi: 'प्रत्येक शाखा में दैनिक बिक्री और उपहार वितरण',
+  );
+  String get dailyBranchSalesNavTooltip => _t(
+    ar: 'كشف تحليلي مفصل للمبيعات اليومية وتوزيع الهدايا والقسائم عبر أيام الفعالية',
+    en: 'Detailed daily sales breakdown & gift disbursals across campaign days',
+    hi: 'अभियान के दिनों में विस्तृत दैनिक बिक्री और उपहार वितरण विवरण',
+  );
+  String get syncAndBackfillDailySalesBtn => _t(
+    ar: 'مزامنة وترميم السجلات',
+    en: 'Sync & Backfill Daily Logs',
+    hi: 'दैनिक लॉग सिंक और रीफ्रेश करें',
+  );
+  String get dailySalesTotalKpi => _t(
+    ar: 'إجمالي مبيعات اليوم',
+    en: 'Today\'s Total Sales',
+    hi: 'आज की कुल बिक्री',
+  );
+  String get dailyInvoicesCountKpi => _t(
+    ar: 'عدد الفواتير المنفذة',
+    en: 'Invoices Processed',
+    hi: 'संसाधित चालान',
+  );
+  String get dailyGiftsDisbursedKpi => _t(
+    ar: 'إجمالي الهدايا المنصرفة',
+    en: 'Gifts Handed Over',
+    hi: 'वितरित कुल उपहार',
+  );
+  String get dailyVouchersValueKpi => _t(
+    ar: 'قيمة الفواتشرات المنصرفة',
+    en: 'Vouchers Disbursed',
+    hi: 'वितरित वाउचर मूल्य',
+  );
+  String get prevDayBtn => _t(
+    ar: 'اليوم السابق',
+    en: 'Previous Day',
+    hi: 'पिछला दिन',
+  );
+  String get nextDayBtn => _t(
+    ar: 'اليوم التالي',
+    en: 'Next Day',
+    hi: 'अगला दिन',
+  );
+  String get todayBtn => _t(
+    ar: 'اليوم الحالي',
+    en: 'Today',
+    hi: 'आज',
+  );
+  String get allCampaignDaysBtn => _t(
+    ar: 'إجمالي أيام الحملة',
+    en: 'All Campaign Days',
+    hi: 'अभियान के सभी दिन',
+  );
+  String get branchSalesShareCol => _t(
+    ar: 'نسبة مساهمة الفرع',
+    en: 'Branch Share',
+    hi: 'शाखा योगदान',
+  );
+  String get topProductsDailyTitle => _t(
+    ar: 'أكثر المنتجات مبيعاً اليوم',
+    en: 'Top Selling Products Today',
+    hi: 'आज के सबसे अधिक बिकने वाले उत्पाद',
+  );
   String get playAgainDemo => _t(ar: 'تجربة مرة أخرى 🔄', en: 'Try Again 🔄', hi: 'पुनः प्रयास करें 🔄');
   String get mysteryBoxInstruction => _t(
     ar: 'المس أحد الصناديق الثلاثة لفتحه واكتشاف هديتك المفاجئة!',
@@ -497,19 +605,44 @@ class AppStrings {
     en: 'Company Manager Portal link copied successfully',
     hi: 'कंपनी प्रबंधक पोर्टल लिंक सफलतापूर्वक कॉपी किया गया',
   );
+  String get partnerPortalBadge => _t(
+    ar: 'بوابة الشريك',
+    en: 'Partner Portal',
+    hi: 'भागीदार पोर्टल',
+  );
+  String get analyticsSubtitle => _t(
+    ar: 'التحليلات والمؤشرات والأداء',
+    en: 'Analytics, KPIs & Performance',
+    hi: 'एनालिटिक्स, केपीआई और प्रदर्शन',
+  );
+  String get invoicesSubtitle => _t(
+    ar: 'التدقيق المباشر وتصدير البيانات',
+    en: 'Live Audit & Data Export',
+    hi: 'लाइव ऑडिट और डेटा निर्यात',
+  );
+  String get collapseSidebar => _t(
+    ar: 'تصغير القائمة',
+    en: 'Collapse Menu',
+    hi: 'मेनू छोटा करें',
+  );
+  String get expandSidebar => _t(
+    ar: 'توسيع القائمة',
+    en: 'Expand Menu',
+    hi: 'मेनू बड़ा करें',
+  );
 
   // ---------------------------------------------------------------------------
   // 14.1 Prizes & Stock Balance System (منظومة رصيد وجرد الهدايا والمخزون)
   // ---------------------------------------------------------------------------
   String get prizesStockTitle => _t(
-    ar: 'رصيد وجرد الهدايا',
-    en: 'Prizes & Stock Balance',
-    hi: 'उपहार और स्टॉक शेष',
+    ar: 'الهدايا',
+    en: 'Gifts & Stock',
+    hi: 'उपहार और स्टॉक',
   );
   String get prizesStockSubtitle => _t(
-    ar: 'مراقبة لحظية شاملة لرصيد الهدايا المخصصة، المسحوبة، والمتبقية في الفروع',
-    en: 'Comprehensive real-time monitoring of allocated, claimed, and remaining branch prize stock',
-    hi: 'शाखाओं में आवंटित, वितरित और शेष उपहार स्टॉक की रीयल-टाइम निगरानी',
+    ar: 'جرد وأرصدة الهدايا المباشرة بالفروع ومتابعة المسحوبات اللحظية',
+    en: 'Real-time branch gift stock balances, allocations, and customer claims',
+    hi: 'शाखा उपहार स्टॉक शेष, आवंटन और वास्तविक समय के दावे',
   );
   String get totalAllocatedGifts => _t(
     ar: 'إجمالي الهدايا المخصصة',
@@ -659,6 +792,26 @@ class AppStrings {
     ar: 'منظومة قسائم المشتريات والفواتشر',
     en: 'Voucher Intelligence & Budget',
     hi: 'वाउचर इंटेलिजेंस और बजट',
+  );
+  String get vouchersNavTitle => _t(
+    ar: 'قسائم المشتريات',
+    en: 'Vouchers & Gift Cards',
+    hi: 'शॉपिंग वाउचर',
+  );
+  String get vouchersNavSubtitle => _t(
+    ar: 'أرصدة وفئات القسائم وتوزيع الميزانيات بالفروع',
+    en: 'Voucher Denominations, Budgets & Branch Matrix',
+    hi: 'वाउचर श्रेणियां, बजट और शाखा वितरण',
+  );
+  String get vouchersNavTooltip => _t(
+    ar: 'منظومة تفصيلية لإدارة ومتابعة قسائم المشتريات والفواتشر والميزانيات المالية',
+    en: 'Comprehensive Voucher & Purchasing Gift Cards Intelligence System',
+    hi: 'व्यापक वाउचर और गिफ्ट कार्ड प्रबंधन प्रणाली',
+  );
+  String get exportVouchersExcel => _t(
+    ar: 'تصدير تقرير القسائم Excel',
+    en: 'Export Vouchers Excel',
+    hi: 'वाउचर एक्सेल रिपोर्ट निर्यात करें',
   );
   String get voucherIntelligenceSubtitle => _t(
     ar: 'متابعة تفصيلية لأرصدة وفئات القسائم (25، 50 ج.م) والميزانيات المالية المرصودة والمصروفة والمتبقية',
@@ -2281,6 +2434,75 @@ class AppStrings {
     ar: 'عدد الصفوف:',
     en: 'Rows per page:',
     hi: 'प्रति पृष्ठ पंक्तियाँ:',
+  );
+
+  // ---------------------------------------------------------------------------
+  // Branch & Chain Distribution Charts Localization
+  // ---------------------------------------------------------------------------
+  String get chartViewDonut => _t(
+    ar: 'مخطط دائري تفاعلي',
+    en: 'Interactive Donut',
+    hi: 'डोनट चार्ट',
+  );
+  String get chartViewBar => _t(
+    ar: 'مخطط أعمدة مقارن',
+    en: 'Bar Chart',
+    hi: 'बार चार्ट',
+  );
+  String get chartViewList => _t(
+    ar: 'ترتيب وبطاقات الأداء',
+    en: 'Leaderboard Cards',
+    hi: 'रैंकिंग कार्ड',
+  );
+  String get aggregationBranches => _t(
+    ar: 'فروع ومنافذ البيع',
+    en: 'Individual Outlets',
+    hi: 'शाखाएं और आउटलेट',
+  );
+  String get aggregationChains => _t(
+    ar: 'السلاسل والماركت',
+    en: 'Retail Chains',
+    hi: 'रिटेल चेन',
+  );
+  String get metricRevenue => _t(
+    ar: 'حجم المبيعات المالية',
+    en: 'Sales Revenue',
+    hi: 'बिक्री राजस्व',
+  );
+  String get metricReceiptsCount => _t(
+    ar: 'عدد الفواتير',
+    en: 'Receipts Count',
+    hi: 'रसीदों की संख्या',
+  );
+  String get branchPerformanceBreakdown => _t(
+    ar: 'توزيع وتحليلات أداء الفروع والسلاسل التجارية',
+    en: 'Branch & Retail Chain Performance Intelligence',
+    hi: 'शाखा और रिटेल चेन प्रदर्शन विश्लेषण',
+  );
+  String get avgTicketValue => _t(
+    ar: 'متوسط الفاتورة',
+    en: 'Avg Receipt',
+    hi: 'औसत रसीद',
+  );
+  String get totalActiveBranches => _t(
+    ar: 'المنافذ النشطة',
+    en: 'Active Outlets',
+    hi: 'सक्रिय आउटलेट',
+  );
+  String get topPerformingBranch => _t(
+    ar: 'الأعلى مبيعاً',
+    en: 'Top Performer',
+    hi: 'शीर्ष प्रदर्शनकर्ता',
+  );
+  String get allChainsShare => _t(
+    ar: 'الحصة السوقية للسلاسل',
+    en: 'Chain Market Share',
+    hi: 'चेन बाजार हिस्सेदारी',
+  );
+  String get allBranchesShare => _t(
+    ar: 'توزيع مبيعات الفروع',
+    en: 'Branch Sales Share',
+    hi: 'शाखा बिक्री शेयर',
   );
 }
 

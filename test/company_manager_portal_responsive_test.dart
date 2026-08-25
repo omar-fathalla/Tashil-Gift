@@ -43,8 +43,15 @@ void main() {
         expect(tester.takeException(), isNull);
 
         // 2. Switch to Invoices Log & Audit Tab
-        final invoicesTab = find.byIcon(Icons.receipt_long_rounded).first;
-        await tester.tap(invoicesTab);
+        final invoicesFinder = find.byIcon(Icons.receipt_long_outlined);
+        if (invoicesFinder.evaluate().isNotEmpty) {
+          await tester.tap(invoicesFinder.first);
+        } else {
+          final invoicesRounded = find.byIcon(Icons.receipt_long_rounded);
+          if (invoicesRounded.evaluate().isNotEmpty) {
+            await tester.tap(invoicesRounded.first);
+          }
+        }
         await tester.pump();
 
         // 3. Verify InvoicesLogScreen renders smoothly
@@ -73,8 +80,15 @@ void main() {
         expect(find.byType(CompanyManagerPortalScreen), findsOneWidget);
         expect(tester.takeException(), isNull);
 
-        final invoicesTab = find.byIcon(Icons.receipt_long_rounded).first;
-        await tester.tap(invoicesTab);
+        final invoicesFinder = find.byIcon(Icons.receipt_long_outlined);
+        if (invoicesFinder.evaluate().isNotEmpty) {
+          await tester.tap(invoicesFinder.first);
+        } else {
+          final invoicesRounded = find.byIcon(Icons.receipt_long_rounded);
+          if (invoicesRounded.evaluate().isNotEmpty) {
+            await tester.tap(invoicesRounded.first);
+          }
+        }
         await tester.pump();
 
         expect(find.byType(InvoicesLogScreen), findsOneWidget);

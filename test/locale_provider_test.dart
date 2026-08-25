@@ -72,9 +72,9 @@ void main() {
       expect(stringsEn.navCreateCampaign, equals('Create New Campaign'));
       expect(stringsHi.navCreateCampaign, equals('नया अभियान बनाएं'));
 
-      expect(stringsAr.navCompanyGifts, equals('هدايا الشركات'));
-      expect(stringsEn.navCompanyGifts, equals('Company Gifts'));
-      expect(stringsHi.navCompanyGifts, equals('कंपनी उपहार'));
+      expect(stringsAr.navCompanyGifts, equals('كتالوج هدايا الشركات'));
+      expect(stringsEn.navCompanyGifts, equals('Company Gifts Catalog'));
+      expect(stringsHi.navCompanyGifts, equals('कंपनी उपहार सूची'));
 
       expect(stringsAr.navGameTypes, equals('أنواع الألعاب'));
       expect(stringsEn.navGameTypes, equals('Game Types'));

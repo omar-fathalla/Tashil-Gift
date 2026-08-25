@@ -1,0 +1,54 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "receipts_transactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "companySlug", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "receipts_transactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "campaignId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "receipts_transactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "companySlug", "order": "ASCENDING" },
+        { "fieldPath": "is_valid", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "companySlug", "order": "ASCENDING" },
+        { "fieldPath": "startDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "company_gifts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "companySlug", "order": "ASCENDING" },
+        { "fieldPath": "giftName", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "validation_transactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "companySlug", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

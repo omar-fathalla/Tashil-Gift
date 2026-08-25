@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:al_mraay/core/localization/app_strings.dart';
 import 'package:al_mraay/core/widgets/m3_button_groups.dart';
 import 'package:al_mraay/features/company_portal/presentation/company_prizes_stock_report_screen.dart';
+import 'package:al_mraay/features/company_portal/presentation/company_vouchers_report_screen.dart';
 import 'package:al_mraay/features/admin/domain/company_gift_model.dart';
 import 'package:al_mraay/features/admin/domain/event_model.dart';
 
@@ -11,8 +12,8 @@ void main() {
   group('Company Prizes & Real-Time Stock Balance System Tests', () {
     test('Section 14.1 Trilingual Localization Strings for Prizes Stock Balance are complete', () {
       final stringsAr = AppStrings.fromLocale('ar');
-      expect(stringsAr.prizesStockTitle, contains('رصيد وجرد الهدايا'));
-      expect(stringsAr.prizesStockSubtitle, contains('مراقبة لحظية'));
+      expect(stringsAr.prizesStockTitle, contains('الهدايا'));
+      expect(stringsAr.prizesStockSubtitle, contains('الهدايا'));
       expect(stringsAr.totalAllocatedGifts, contains('الهدايا المخصصة'));
       expect(stringsAr.awardedGiftsCount, contains('الهدايا المصروفة'));
       expect(stringsAr.remainingStockBalance, contains('الرصيد المتبقي'));
@@ -28,8 +29,8 @@ void main() {
       expect(stringsAr.exportStockReportCsv, contains('تصدير تقرير'));
 
       final stringsEn = AppStrings.fromLocale('en');
-      expect(stringsEn.prizesStockTitle, contains('Prizes & Stock Balance'));
-      expect(stringsEn.prizesStockSubtitle, contains('real-time'));
+      expect(stringsEn.prizesStockTitle, contains('Gifts'));
+      expect(stringsEn.prizesStockSubtitle, contains('branch gift stock'));
       expect(stringsEn.totalAllocatedGifts, contains('Total Allocated'));
       expect(stringsEn.awardedGiftsCount, contains('Awarded'));
       expect(stringsEn.remainingStockBalance, contains('Remaining Stock'));
@@ -285,7 +286,7 @@ void main() {
       expect(metrics.branchTotalVoucherBudget['فرع سموحة'], equals(27500.0));
     });
 
-    testWidgets('CompanyPrizesStockReportScreen renders 4 Voucher KPI cards and matrix action', (tester) async {
+    testWidgets('CompanyVouchersReportScreen renders 4 Voucher KPI cards and matrix action', (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
@@ -294,7 +295,7 @@ void main() {
         const ProviderScope(
           child: MaterialApp(
             home: Scaffold(
-              body: CompanyPrizesStockReportScreen(
+              body: CompanyVouchersReportScreen(
                 lockedCompanySlug: 'unilever',
                 lockedCompanyName: 'يونيليفر مصر',
                 isEmbedded: true,

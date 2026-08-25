@@ -111,5 +111,66 @@ void main() {
       expect(branchInvoiceCounts['فرع سموحة (الإسكندرية)'], 5);
       expect(branchRevenues['فرع سموحة (الإسكندرية)'], 984.0);
     });
+
+    test('Store code variations (Store: 418, فرع كود 418, كود 418) normalize and consolidate without rogue branches', () {
+      final canonicalBranches = [
+        'فرع عجمي ستار (الإسكندرية)',
+        'فرع سموحة (الإسكندرية)',
+        'المنتزه (الإسكندرية)',
+      ];
+
+      // Simulated DB branches mapping code 418 to 'فرع عجمي ستار'
+      final dbBranches = [
+        {
+          'branchName': 'فرع عجمي ستار (الإسكندرية)',
+          'branchCode': '418',
+          'storeId': '418',
+        },
+        {
+          'branchName': 'فرع سموحة (الإسكندرية)',
+          'branchCode': '102',
+          'storeId': '102',
+        },
+      ];
+
+      final rawDetections = [
+        {'raw': 'Store: 418', 'spend': 295.0},
+        {'raw': 'فرع كود 418', 'spend': 120.0},
+        {'raw': 'فرع عجمي ستار', 'spend': 55743.0},
+      ];
+
+      final Map<String, double> branchRevenues = {};
+      final Map<String, int> branchCounts = {};
+
+      for (final item in rawDetections) {
+        final raw = item['raw'] as String;
+        final spend = item['spend'] as double;
+
+        // Code matching simulation
+        String effective = raw;
+        final clean = raw.trim();
+        final codeMatch = RegExp(r'\b418\b').hasMatch(clean);
+        if (codeMatch) {
+          final matchedDb = dbBranches.firstWhere((b) => b['branchCode'] == '418');
+          effective = matchedDb['branchName']!;
+        } else {
+          for (final c in canonicalBranches) {
+            if (c.contains(clean) || clean.contains(c)) {
+              effective = c;
+              break;
+            }
+          }
+        }
+
+        branchRevenues[effective] = (branchRevenues[effective] ?? 0.0) + spend;
+        branchCounts[effective] = (branchCounts[effective] ?? 0) + 1;
+      }
+
+      // Must consolidate all 3 transactions into the single canonical branch
+      expect(branchCounts.length, 1);
+      expect(branchCounts['فرع عجمي ستار (الإسكندرية)'], 3);
+      expect(branchRevenues['فرع عجمي ستار (الإسكندرية)'], 55743.0 + 295.0 + 120.0);
+    });
   });
 }
+

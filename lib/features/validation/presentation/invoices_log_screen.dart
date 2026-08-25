@@ -15,6 +15,8 @@ import '../../../core/constants/country_currency_config.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../admin/domain/event_model.dart';
+import '../../../core/utils/arabic_numbers_utils.dart';
+import '../../../core/widgets/portal_screen_header_card.dart';
 
 enum DateFilterType { all, today, last7Days, thisMonth, custom }
 
@@ -37,14 +39,16 @@ class InvoicesLogScreen extends ConsumerStatefulWidget {
 }
 
 class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
-  static const int _pageSize = 20;
-  int _displayedItemCount = _pageSize;
+  static const int _pageSize = 25;
+  int _currentPage = 0;
+  int _mobileLimit = 25;
   final ScrollController _scrollController = ScrollController();
   bool _isLoadingMore = false;
 
   final TextEditingController _searchController = TextEditingController();
   String _selectedCampaignId = 'all';
   String _selectedCompanySlug = 'all';
+  String _selectedBranch = 'all';
   String _statusFilter = 'all'; // 'all', 'accepted', 'rejected'
   DateFilterType _dateFilter = DateFilterType.all;
   DateTimeRange? _customDateRange;
@@ -53,11 +57,9 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
   @override
   void initState() {
     super.initState();
+    _selectedCompanySlug = widget.lockedCompanySlug ?? 'all';
     if (widget.initialEventId != null && widget.initialEventId!.isNotEmpty) {
       _selectedCampaignId = widget.initialEventId!;
-    }
-    if (widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty) {
-      _selectedCompanySlug = widget.lockedCompanySlug!;
     }
     _scrollController.addListener(_onScroll);
   }
@@ -98,7 +100,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     Future.delayed(const Duration(milliseconds: 300), () {
       if (mounted) {
         setState(() {
-          _displayedItemCount += _pageSize;
+          _mobileLimit += _pageSize;
           _isLoadingMore = false;
         });
       }
@@ -107,7 +109,8 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
 
   void _resetPagination() {
     setState(() {
-      _displayedItemCount = _pageSize;
+      _currentPage = 0;
+      _mobileLimit = _pageSize;
       _isLoadingMore = false;
     });
     if (_scrollController.hasClients) {
@@ -177,11 +180,170 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       _searchController.clear();
       _selectedCampaignId = 'all';
       _selectedCompanySlug = widget.lockedCompanySlug ?? 'all';
+      _selectedBranch = 'all';
       _statusFilter = 'all';
       _dateFilter = DateFilterType.all;
       _customDateRange = null;
+      _currentPage = 0;
+      _mobileLimit = _pageSize;
     });
     _resetPagination();
+  }
+
+  static String _cleanBranchForComparison(String branch) {
+    var s = branch.trim().toLowerCase().toEnglishDigits();
+    // Diacritics
+    s = s.replaceAll(RegExp(r'[\u064B-\u065F\u0670]'), '');
+    // Alef normalization
+    s = s.replaceAll(RegExp(r'[أإآ]'), 'ا');
+    // Ta marbuta and ya
+    s = s.replaceAll('ة', 'ه').replaceAll('ى', 'ي');
+    // Remove city / governorate suffixes in parentheses
+    s = s.replaceAll(RegExp(r'\((القاهرة|الإسكندرية|الاسكندرية|الجيزة|الغربية|الدقهلية|المنوفية|الشرقية|البحيرة|كفر الشيخ|دمياط|بورسعيد|السويس|الإسماعيلية|الفيوم|بني سويف|المنيا|أسيوط|سوهاج|قنا|الأقصر|أسوان|مطروح|cairo|alexandria|giza)\)', caseSensitive: false), ' ');
+    // Punctuation, symbols, and brackets
+    s = s.replaceAll(RegExp(r'[\(\)\[\]\{\}\-\_\,\.\:\/]'), ' ');
+    // Remove prefixes and noise words
+    s = s.replaceAll(RegExp(r'\b(فرع|سلسلة|store|branch|مفرع|pos|كود|محافظة|مدينة)\b', caseSensitive: false), ' ');
+    // Extra spaces
+    s = s.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return s;
+  }
+
+  static String _normalizeBranchName(
+    String rawBranch,
+    List<String> canonicalBranches,
+    bool isAr,
+  ) {
+    final clean = rawBranch.trim();
+    if (clean.isEmpty) return isAr ? 'فرع غير محدد' : 'Unspecified Branch';
+    if (canonicalBranches.isEmpty) return clean;
+
+    // 1. Direct case-insensitive match
+    for (final canonical in canonicalBranches) {
+      if (canonical.trim().toLowerCase() == clean.toLowerCase()) {
+        return canonical;
+      }
+    }
+
+    // 2. Cleaned exact match
+    final cleanComp = _cleanBranchForComparison(clean);
+    for (final canonical in canonicalBranches) {
+      final canonComp = _cleanBranchForComparison(canonical);
+      if (cleanComp == canonComp && cleanComp.isNotEmpty) {
+        return canonical;
+      }
+    }
+
+    // 3. Precision Area / Branch matching
+    // A. Gardenia
+    if (cleanComp.contains('جاردينيا') || cleanComp.contains('gardenia')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('جاردينيا')) return canonical;
+      }
+    }
+
+    // B. Agamy
+    if (cleanComp.contains('عجمي') || cleanComp.contains('agamy') || cleanComp.contains('agami')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('عجمي')) return canonical;
+      }
+    }
+
+    // C. Smouha
+    if (cleanComp.contains('سموح') || cleanComp.contains('smouha')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('سموح')) return canonical;
+      }
+    }
+
+    // D. Mahalla El Kubra
+    if (cleanComp.contains('محله') || cleanComp.contains('mahalla')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('محله')) return canonical;
+      }
+    }
+
+    // E. Shebin El Kom
+    if (cleanComp.contains('شين') || cleanComp.contains('شبين') || cleanComp.contains('shebin')) {
+      for (final canonical in canonicalBranches) {
+        final c = _cleanBranchForComparison(canonical);
+        if (c.contains('شبين') || c.contains('شين')) return canonical;
+      }
+    }
+
+    // F. Tagmoo / Fifth Settlement / Park Mall
+    if (cleanComp.contains('تجمع') || cleanComp.contains('tagmoo') || cleanComp.contains('park mall') || cleanComp.contains('fifth')) {
+      for (final canonical in canonicalBranches) {
+        final c = _cleanBranchForComparison(canonical);
+        if (c.contains('تجمع') || c.contains('tagmoo')) return canonical;
+      }
+    }
+
+    // G. 6th of October
+    if (cleanComp.contains('اكتوبر') || cleanComp.contains('october') || cleanComp.contains('سادس')) {
+      for (final canonical in canonicalBranches) {
+        final c = _cleanBranchForComparison(canonical);
+        if (c.contains('اكتوبر') || c.contains('october')) return canonical;
+      }
+    }
+
+    // H. Mansoura
+    if (cleanComp.contains('منصور') || cleanComp.contains('mansoura')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('منصور')) return canonical;
+      }
+    }
+
+    // I. Obour / Salah Salem
+    if (cleanComp.contains('صلاح سالم') || cleanComp.contains('عبور') || cleanComp.contains('obour')) {
+      for (final canonical in canonicalBranches) {
+        final c = _cleanBranchForComparison(canonical);
+        if (c.contains('صلاح سالم') || c.contains('عبور')) return canonical;
+      }
+    }
+
+    // J. Montazah (and Store 418)
+    if (clean.contains('418') || cleanComp.contains('منتزه') || cleanComp.contains('montazah')) {
+      for (final canonical in canonicalBranches) {
+        final c = _cleanBranchForComparison(canonical);
+        if (c.contains('منتزه') || c.contains('montazah') || canonical.contains('418')) return canonical;
+      }
+    }
+
+    // K. Miami
+    if (cleanComp.contains('ميامي') || cleanComp.contains('miami')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('ميامي')) return canonical;
+      }
+    }
+
+    // L. Janaklis
+    if (cleanComp.contains('جناكليس') || cleanComp.contains('janaklis')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('جناكليس')) return canonical;
+      }
+    }
+
+    // 4. Store Code Match (e.g. "Store: 418" / "Store 418" / "كود 418")
+    final rawDigits = RegExp(r'\b\d+\b').allMatches(clean.toEnglishDigits()).map((m) => m.group(0)!).toSet();
+    if (rawDigits.isNotEmpty) {
+      for (final canonical in canonicalBranches) {
+        final canonDigits = RegExp(r'\b\d+\b').allMatches(canonical.toEnglishDigits()).map((m) => m.group(0)!).toSet();
+        if (rawDigits.intersection(canonDigits).isNotEmpty) {
+          return canonical;
+        }
+      }
+    }
+
+    // 5. Fallback containment matching
+    for (final canonical in canonicalBranches) {
+      final canonComp = _cleanBranchForComparison(canonical);
+      if (canonComp.isNotEmpty && (cleanComp.contains(canonComp) || canonComp.contains(cleanComp))) {
+        return canonical;
+      }
+    }
+
+    return clean;
   }
 
   bool _passesDateFilter(DateTime? date) {
@@ -982,12 +1144,18 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     }
 
     final activeFirestore = firestore;
+    final isLocked = widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty;
+
+    Query eventsQuery = activeFirestore.collection('events');
+    if (isLocked) {
+      eventsQuery = eventsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug);
+    }
 
     // Clean M3 Scaffold with NO duplicate AppBar
     return Scaffold(
       backgroundColor: colorScheme.surface,
       body: StreamBuilder<QuerySnapshot>(
-        stream: activeFirestore.collection('events').snapshots(),
+        stream: eventsQuery.snapshots(),
         builder: (context, eventsSnapshot) {
           final eventDocs = eventsSnapshot.data?.docs ?? [];
           final eventsMap = <String, EventModel>{};
@@ -997,8 +1165,15 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
             } catch (_) {}
           }
 
+          Query transactionsQuery = activeFirestore.collection('receipts_transactions');
+          if (_selectedCampaignId != 'ALL' && _selectedCampaignId != 'all' && _selectedCampaignId.isNotEmpty) {
+            transactionsQuery = transactionsQuery.where('campaignId', isEqualTo: _selectedCampaignId);
+          } else if (isLocked) {
+            transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug);
+          }
+
           return StreamBuilder<QuerySnapshot>(
-            stream: activeFirestore.collection('receipts_transactions').snapshots(),
+            stream: transactionsQuery.snapshots(),
             builder: (context, transactionsSnapshot) {
               if (transactionsSnapshot.hasError) {
                 return Center(child: Text('${strings.error}: ${transactionsSnapshot.error}'));
@@ -1038,294 +1213,299 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     required Map<String, EventModel> eventsMap,
     required List<QueryDocumentSnapshot> rawDocs,
   }) {
+    // 1. Scoped Events by locked company
+    final scopedEvents = (widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty)
+        ? eventsMap.values.where((e) {
+            final slug = e.companySlug.toLowerCase();
+            final name = e.targetCompany.toLowerCase();
+            return slug == widget.lockedCompanySlug!.toLowerCase() ||
+                (widget.lockedCompanyName != null && name == widget.lockedCompanyName!.toLowerCase());
+          }).toList()
+        : eventsMap.values.toList();
 
-              // Map documents to enriched representations
-              final allInvoices = rawDocs.map((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                final campaignId = data['campaignId']?.toString() ?? '';
-                final event = eventsMap[campaignId];
-                final eventName = event?.eventName ?? (data['campaignName']?.toString() ?? (isAr ? 'حملة عامة' : 'General Campaign'));
+    // 2. Official Canonical Branches from campaign definitions
+    final List<String> canonicalBranches;
+    if (_selectedCampaignId != 'all' && eventsMap.containsKey(_selectedCampaignId)) {
+      final selEvt = eventsMap[_selectedCampaignId]!;
+      canonicalBranches = selEvt.branchNames.where((b) => b.trim().isNotEmpty).toList();
+    } else {
+      canonicalBranches = scopedEvents
+          .expand((e) => e.branchNames)
+          .map((b) => b.trim())
+          .where((b) => b.isNotEmpty)
+          .toSet()
+          .toList();
+    }
 
-                DateTime? date;
-                if (data['timestamp'] is Timestamp) {
-                  date = (data['timestamp'] as Timestamp).toDate();
-                } else if (data['timestamp'] is String) {
-                  date = DateTime.tryParse(data['timestamp']);
-                }
+    // Map documents to enriched representations with canonical branch resolution
+    final allInvoices = rawDocs.map((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      final campaignId = data['campaignId']?.toString() ?? '';
+      final event = eventsMap[campaignId];
+      final eventName = event?.eventName ?? (data['campaignName']?.toString() ?? (isAr ? 'حملة عامة' : 'General Campaign'));
 
-                final formattedDate = date != null ? DateFormat('yyyy-MM-dd HH:mm').format(date) : (data['receipt_date']?.toString() ?? 'N/A');
+      final eventBranches = (event != null && event.branchNames.isNotEmpty)
+          ? event.branchNames
+          : canonicalBranches;
 
-                return {
-                  'id': doc.id,
-                  ...data,
-                  'date': date,
-                  'formattedDate': formattedDate,
-                  'eventName': eventName,
-                  'campaignId': campaignId,
-                };
-              }).toList()
-                ..sort((a, b) {
-                  final tsA = a['date'] as DateTime?;
-                  final tsB = b['date'] as DateTime?;
-                  if (tsA == null) return 1;
-                  if (tsB == null) return -1;
-                  return tsB.compareTo(tsA);
-                });
+      final rawBranch = (data['branch_detected'] ?? data['branch'] ?? '').toString().trim();
+      final canonicalBranch = _normalizeBranchName(rawBranch, eventBranches, isAr);
 
-              // Apply Filters
-              final query = _searchController.text.trim().toLowerCase();
-              final filteredInvoices = allInvoices.where((inv) {
-                // 1. Campaign Filter
-                if (_selectedCampaignId != 'all' && inv['campaignId'] != _selectedCampaignId) {
-                  return false;
-                }
+      DateTime? date;
+      if (data['timestamp'] is Timestamp) {
+        date = (data['timestamp'] as Timestamp).toDate();
+      } else if (data['timestamp'] is String) {
+        date = DateTime.tryParse(data['timestamp']);
+      }
 
-                // 2. Company Filter
-                if (_selectedCompanySlug != 'all') {
-                  final slug = (inv['companySlug'] ?? '').toString().toLowerCase();
-                  final target = (inv['targetCompany'] ?? '').toString().toLowerCase();
-                  if (slug != _selectedCompanySlug.toLowerCase() && !target.contains(_selectedCompanySlug.toLowerCase())) {
-                    return false;
-                  }
-                }
+      final formattedDate = date != null ? DateFormat('yyyy-MM-dd HH:mm').format(date) : (data['receipt_date']?.toString() ?? 'N/A');
 
-                // 3. Date Filter
-                if (!_passesDateFilter(inv['date'] as DateTime?)) {
-                  return false;
-                }
+      return {
+        'id': doc.id,
+        ...data,
+        'date': date,
+        'formattedDate': formattedDate,
+        'eventName': eventName,
+        'campaignId': campaignId,
+        'raw_branch': rawBranch,
+        'canonical_branch': canonicalBranch,
+        'branch_detected': canonicalBranch,
+      };
+    }).toList()
+      ..sort((a, b) {
+        final tsA = a['date'] as DateTime?;
+        final tsB = b['date'] as DateTime?;
+        if (tsA == null) return 1;
+        if (tsB == null) return -1;
+        return tsB.compareTo(tsA);
+      });
 
-                // 4. Status Filter (all / accepted / rejected)
-                final bool isExplicitlyValid = inv['is_valid'] == true || inv['status'] == 'accepted' || inv['isValid'] == true;
-                final bool isExplicitlyRejected = inv['is_valid'] == false || inv['status'] == 'rejected' || inv['isValid'] == false || ((inv['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
-                final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((inv['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
+    // 3. Dropdown list of branches: STRICTLY CANONICAL BRANCHES
+    final List<String> sortedBranches;
+    if (canonicalBranches.isNotEmpty) {
+      sortedBranches = List<String>.from(canonicalBranches);
+    } else {
+      final dynamicBranches = <String>{};
+      for (final inv in allInvoices) {
+        final b = inv['canonical_branch']?.toString().trim() ?? '';
+        if (b.isNotEmpty) dynamicBranches.add(b);
+      }
+      sortedBranches = dynamicBranches.toList()..sort();
+    }
 
-                if (_statusFilter == 'accepted' && !isValid) return false;
-                if (_statusFilter == 'rejected' && isValid) return false;
+    // Apply Filters
+    final query = _searchController.text.trim().toLowerCase();
+    final filteredInvoices = allInvoices.where((inv) {
+      // 1. Campaign Filter
+      if (_selectedCampaignId != 'all' && inv['campaignId'] != _selectedCampaignId) {
+        return false;
+      }
 
-                // 5. Search Query (Receipt Number, Branch, Store, Customer)
-                if (query.isNotEmpty) {
-                  final receiptNum = (inv['receipt_number'] ?? '').toString().toLowerCase();
-                  final store = (inv['store_chain_detected'] ?? inv['retail_chain_name'] ?? '').toString().toLowerCase();
-                  final branch = (inv['branch_detected'] ?? '').toString().toLowerCase();
-                  final eventName = (inv['eventName'] ?? '').toString().toLowerCase();
-                  final targetComp = (inv['targetCompany'] ?? '').toString().toLowerCase();
-                  final custName = (inv['customerName'] ?? '').toString().toLowerCase();
-                  final custPhone = (inv['customerPhone'] ?? '').toString().toLowerCase();
+      // 2. Company Filter
+      if (_selectedCompanySlug != 'all') {
+        final slug = (inv['companySlug'] ?? '').toString().toLowerCase();
+        final target = (inv['targetCompany'] ?? '').toString().toLowerCase();
+        if (slug != _selectedCompanySlug.toLowerCase() && !target.contains(_selectedCompanySlug.toLowerCase())) {
+          return false;
+        }
+      }
 
-                  final matches = receiptNum.contains(query) ||
-                      store.contains(query) ||
-                      branch.contains(query) ||
-                      eventName.contains(query) ||
-                      targetComp.contains(query) ||
-                      custName.contains(query) ||
-                      custPhone.contains(query);
+      // 3. Branch Filter
+      if (_selectedBranch != 'all') {
+        final invCanonical = (inv['canonical_branch'] ?? '').toString();
+        if (invCanonical != _selectedBranch) {
+          return false;
+        }
+      }
 
-                  if (!matches) return false;
-                }
+      // 4. Date Filter
+      if (!_passesDateFilter(inv['date'] as DateTime?)) {
+        return false;
+      }
 
-                return true;
-              }).toList();
+      // 5. Status Filter (all / accepted / rejected)
+      final bool isExplicitlyValid = inv['is_valid'] == true || inv['status'] == 'accepted' || inv['isValid'] == true;
+      final bool isExplicitlyRejected = inv['is_valid'] == false || inv['status'] == 'rejected' || inv['isValid'] == false || ((inv['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
+      final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((inv['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
 
-              // Calculate Metrics
-              final totalInvoicesCount = filteredInvoices.length;
-              double totalPromoSales = 0.0;
-              int totalExtractedItems = 0;
-              double totalDurationSec = 0.0;
-              int durationCount = 0;
+      if (_statusFilter == 'accepted' && !isValid) return false;
+      if (_statusFilter == 'rejected' && isValid) return false;
 
-              // Distinct companies for company filter
-              final availableCompanies = <String, String>{};
-              for (final inv in allInvoices) {
-                final slug = inv['companySlug']?.toString().trim() ?? '';
-                final name = inv['targetCompany']?.toString().trim() ?? '';
-                if (name.isNotEmpty) {
-                  availableCompanies[slug.isNotEmpty ? slug : name] = name;
-                }
-              }
+      // 6. Search Query (Receipt Number, Branch, Store, Customer)
+      if (query.isNotEmpty) {
+        final receiptNum = (inv['receipt_number'] ?? '').toString().toLowerCase();
+        final store = (inv['store_chain_detected'] ?? inv['retail_chain_name'] ?? '').toString().toLowerCase();
+        final branch = (inv['branch_detected'] ?? '').toString().toLowerCase();
+        final eventName = (inv['eventName'] ?? '').toString().toLowerCase();
+        final targetComp = (inv['targetCompany'] ?? '').toString().toLowerCase();
+        final custName = (inv['customerName'] ?? '').toString().toLowerCase();
+        final custPhone = (inv['customerPhone'] ?? '').toString().toLowerCase();
 
-              for (final inv in filteredInvoices) {
-                final bool isExplicitlyValid = inv['is_valid'] == true || inv['status'] == 'accepted' || inv['isValid'] == true;
-                final bool isExplicitlyRejected = inv['is_valid'] == false || inv['status'] == 'rejected' || inv['isValid'] == false || ((inv['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
-                final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((inv['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
+        final matches = receiptNum.contains(query) ||
+            store.contains(query) ||
+            branch.contains(query) ||
+            eventName.contains(query) ||
+            targetComp.contains(query) ||
+            custName.contains(query) ||
+            custPhone.contains(query);
 
-                if (isValid) {
-                  final promoTotal = (inv['target_company_total'] ?? inv['total_value'] ?? 0);
-                  if (promoTotal is num) totalPromoSales += promoTotal.toDouble();
+        if (!matches) return false;
+      }
 
-                  final products = (inv['extracted_products'] as List?) ?? [];
-                  for (final p in products) {
-                    if (p is Map) {
-                      final qty = p['quantity'];
-                      totalExtractedItems += (qty is num ? qty.toInt() : 1);
-                    }
-                  }
-                }
+      return true;
+    }).toList();
 
-                final dur = inv['analysis_duration_seconds'];
-                if (dur is num && dur > 0) {
-                  totalDurationSec += dur.toDouble();
-                  durationCount++;
-                }
-              }
+    // Calculate Metrics
+    final totalInvoicesCount = filteredInvoices.length;
+    double totalPromoSales = 0.0;
+    int totalExtractedItems = 0;
+    double totalDurationSec = 0.0;
+    int durationCount = 0;
 
-              final avgAiSpeed = durationCount > 0 ? (totalDurationSec / durationCount) : 0.0;
+    // Distinct companies for company filter
+    final availableCompanies = <String, String>{};
+    for (final inv in allInvoices) {
+      final slug = inv['companySlug']?.toString().trim() ?? '';
+      final name = inv['targetCompany']?.toString().trim() ?? '';
+      if (name.isNotEmpty) {
+        availableCompanies[slug.isNotEmpty ? slug : name] = name;
+      }
+    }
 
-              return Column(
-                children: [
-                  // 1. M3 Hero Header (Seamless with Admin Portal)
-                  if (!widget.isEmbedded)
-                    _buildM3HeroHeader(
-                      context: context,
-                      colorScheme: colorScheme,
-                      textTheme: textTheme,
-                      strings: strings,
-                      totalCount: allInvoices.length,
-                      filteredCount: filteredInvoices.length,
-                      onResetFilters: _resetFilters,
-                    ),
+    for (final inv in filteredInvoices) {
+      final bool isExplicitlyValid = inv['is_valid'] == true || inv['status'] == 'accepted' || inv['isValid'] == true;
+      final bool isExplicitlyRejected = inv['is_valid'] == false || inv['status'] == 'rejected' || inv['isValid'] == false || ((inv['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
+      final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((inv['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
 
-                  // 2. KPI Summary Cards
-                  _buildKpiSummaryBar(
-                    colorScheme: colorScheme,
-                    strings: strings,
-                    isAr: isAr,
-                    isHi: ref.isHindi,
-                    activeCountry: activeCountry,
-                    totalInvoices: totalInvoicesCount,
-                    totalPromoSales: totalPromoSales,
-                    totalItems: totalExtractedItems,
-                    avgSpeed: avgAiSpeed,
-                    onExportCsv: () => _exportInvoicesToCsv(filteredInvoices, strings),
-                  ),
+      if (isValid) {
+        final promoTotal = (inv['target_company_total'] ?? inv['total_value'] ?? 0);
+        if (promoTotal is num) totalPromoSales += promoTotal.toDouble();
 
-                  // 3. Filter & Search Controls
-                  _buildFilterControls(
-                    colorScheme: colorScheme,
-                    strings: strings,
-                    isAr: isAr,
-                    eventsMap: eventsMap,
-                    availableCompanies: availableCompanies,
-                    allInvoices: allInvoices,
-                  ),
+        final products = (inv['extracted_products'] as List?) ?? [];
+        for (final p in products) {
+          if (p is Map) {
+            final qty = p['quantity'];
+            totalExtractedItems += (qty is num ? qty.toInt() : 1);
+          }
+        }
+      }
 
-                  const Divider(height: 1),
+      final dur = inv['analysis_duration_seconds'];
+      if (dur is num && dur > 0) {
+        totalDurationSec += dur.toDouble();
+        durationCount++;
+      }
+    }
 
-                  // 4. Invoices List Feed
-                  Expanded(
-                    child: filteredInvoices.isEmpty
-                        ? _buildEmptyState(strings, colorScheme)
-                        : _buildInvoicesFeed(
-                            filteredInvoices: filteredInvoices,
-                            colorScheme: colorScheme,
-                            activeCountry: activeCountry,
-                            strings: strings,
-                            isAr: isAr,
-                          ),
-                  ),
-                ],
-              );
-  }
+    final avgAiSpeed = durationCount > 0 ? (totalDurationSec / durationCount) : 0.0;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 750;
+    final bool hasActiveCampaignBanner = _selectedCampaignId != 'all' && eventsMap.containsKey(_selectedCampaignId);
+    final stickyFilterHeight = _calculateStickyFilterHeight(
+      screenWidth: screenWidth,
+      hasActiveCampaign: hasActiveCampaignBanner,
+    );
 
-  Widget _buildM3HeroHeader({
-    required BuildContext context,
-    required ColorScheme colorScheme,
-    required TextTheme textTheme,
-    required AppStrings strings,
-    required int totalCount,
-    required int filteredCount,
-    required VoidCallback onResetFilters,
-  }) {
-    final canPop = Navigator.canPop(context);
-    final isMobile = MediaQuery.of(context).size.width < 680;
-
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: isMobile ? 12 : 20,
-        vertical: isMobile ? 10 : 14,
-      ),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        border: Border(
-          bottom: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-        ),
-      ),
-      child: Row(
-        children: [
-          if (canPop) ...[
-            IconButton.filledTonal(
-              icon: const Icon(Icons.arrow_back_rounded, size: 20),
-              onPressed: () => Navigator.of(context).pop(),
-              tooltip: strings.backBtn,
-            ),
-            const SizedBox(width: 8),
-          ],
-          Container(
-            padding: EdgeInsets.all(isMobile ? 8 : 10),
-            decoration: BoxDecoration(
-              color: colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(isMobile ? 10 : 14),
-            ),
-            child: Icon(
-              Icons.receipt_long_rounded,
-              color: colorScheme.onPrimaryContainer,
-              size: isMobile ? 20 : 24,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
+    return Scaffold(
+      backgroundColor: colorScheme.surface,
+      body: CustomScrollView(
+        controller: _scrollController,
+        slivers: [
+          // 1. SCROLLABLE TOP HEADER & 4 KPI SUMMARY CARDS (تختفي بسلاسة مع التمرير لأسفل)
+          SliverToBoxAdapter(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        strings.invoicesAuditTitle,
-                        style: (isMobile ? textTheme.titleSmall : textTheme.titleMedium)?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: -0.2,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                if (!widget.isEmbedded)
+                  PortalScreenHeaderCard(
+                    icon: Icons.receipt_long_rounded,
+                    title: strings.invoicesAuditTitle,
+                    subtitle: strings.invoicesAuditSubtitle,
+                    events: eventsMap.values.toList(),
+                    selectedEventId: _selectedCampaignId == 'all' ? null : _selectedCampaignId,
+                    onEventChanged: (val) {
+                      setState(() {
+                        _selectedCampaignId = val ?? 'all';
+                        _resetPagination();
+                      });
+                    },
+                    lockedCompanySlug: widget.lockedCompanySlug,
+                    isMobile: isMobile,
+                    actions: [
+                      FilledButton.tonalIcon(
+                        onPressed: () => _exportInvoicesToCsv(filteredInvoices, strings),
+                        icon: const Icon(Icons.file_download_outlined, size: 18),
+                        label: Text(strings.exportCsvBtn, style: const TextStyle(fontSize: 12)),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: colorScheme.secondaryContainer,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        filteredCount == totalCount ? '$totalCount' : '$filteredCount / $totalCount',
-                        style: TextStyle(
-                          fontSize: isMobile ? 10 : 11,
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.onSecondaryContainer,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  strings.invoicesAuditSubtitle,
-                  style: textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                    fontSize: isMobile ? 10 : null,
+                    ],
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                _buildKpiSummaryBar(
+                  colorScheme: colorScheme,
+                  strings: strings,
+                  isAr: isAr,
+                  isHi: ref.isHindi,
+                  activeCountry: activeCountry,
+                  totalInvoices: totalInvoicesCount,
+                  totalPromoSales: totalPromoSales,
+                  totalItems: totalExtractedItems,
+                  avgSpeed: avgAiSpeed,
+                  onExportCsv: () => _exportInvoicesToCsv(filteredInvoices, strings),
                 ),
               ],
             ),
           ),
-          IconButton.filledTonal(
-            icon: const Icon(Icons.refresh_rounded, size: 20),
-            tooltip: strings.clearFiltersBtn,
-            onPressed: onResetFilters,
+
+          // 2. PINNED / STICKY SEARCH & FILTER CONTROLS TOOLBAR (يثبت في الديسك توب ويمرر بحرية في الموبايل)
+          SliverPersistentHeader(
+            pinned: !isMobile,
+            delegate: _StickyInvoicesFilterDelegate(
+              height: stickyFilterHeight,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: colorScheme.surface,
+                  border: Border(
+                    bottom: BorderSide(
+                      color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+                      width: 1,
+                    ),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 6,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: _buildFilterControls(
+                  colorScheme: colorScheme,
+                  strings: strings,
+                  isAr: isAr,
+                  eventsMap: eventsMap,
+                  availableCompanies: availableCompanies,
+                  availableBranches: sortedBranches,
+                  allInvoices: allInvoices,
+                ),
+              ),
+            ),
           ),
+
+          // 3. SCROLLABLE INVOICES FEED / DATA ROWS
+          if (filteredInvoices.isEmpty)
+            SliverToBoxAdapter(
+              child: _buildEmptyState(strings, colorScheme),
+            )
+          else
+            SliverToBoxAdapter(
+              child: _buildInvoicesFeed(
+                filteredInvoices: filteredInvoices,
+                colorScheme: colorScheme,
+                activeCountry: activeCountry,
+                strings: strings,
+                isAr: isAr,
+                isMobile: isMobile,
+              ),
+            ),
         ],
       ),
     );
@@ -1345,8 +1525,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
   }) {
     final isMobile = MediaQuery.of(context).size.width < 680;
 
-    final cards = [
-      // Card 1: Total Scanned & Audited Invoices
+    final List<Widget> cards = [
       _buildStatKpiCard(
         title: strings.totalReceiptsCount,
         value: '$totalInvoices',
@@ -1358,8 +1537,6 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
         tooltip: isAr ? 'إجمالي عدد الفواتير التي تم مسحها وتدقيقها بالذكاء الاصطناعي' : 'Total receipts processed & audited',
         isMobile: isMobile,
       ),
-
-      // Card 2: Total Promotional Target Sales
       _buildStatKpiCard(
         title: strings.totalPromotionalSales,
         value: '${totalPromoSales.toStringAsFixed(1)} ${activeCountry.currencySymbol}',
@@ -1371,8 +1548,6 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
         tooltip: isAr ? 'إجمالي المبيعات المحققة لمنتجات الحملة بالعُملة المحلية' : 'Total promotional sales volume',
         isMobile: isMobile,
       ),
-
-      // Card 3: Total Extracted Units
       _buildStatKpiCard(
         title: strings.totalItemsPurchased,
         value: '$totalItems',
@@ -1384,8 +1559,6 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
         tooltip: isAr ? 'إجمالي عدد القطع والمنتجات المستخرجة بالفحص' : 'Total product units extracted from receipts',
         isMobile: isMobile,
       ),
-
-      // Card 4: AI Verification Speed
       _buildStatKpiCard(
         title: strings.avgAiSpeed,
         value: avgSpeed > 0 ? '${avgSpeed.toStringAsFixed(2)}s' : '⚡ <2.0s',
@@ -1399,43 +1572,20 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       ),
     ];
 
-    if (isMobile) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: cards
-                .map(
-                  (card) => Padding(
-                    padding: const EdgeInsetsDirectional.only(end: 10),
-                    child: SizedBox(
-                      width: 210,
-                      height: 105,
-                      child: card,
-                    ),
-                  ),
-                )
-                .toList(),
-          ),
-        ),
-      );
-    }
-
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+      padding: EdgeInsets.fromLTRB(isMobile ? 12 : 20, isMobile ? 10 : 16, isMobile ? 12 : 20, isMobile ? 8 : 12),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final double width = constraints.maxWidth;
-          int crossAxisCount = width < 1000 ? 2 : 4;
-          double childAspectRatio = width < 1000 ? 2.1 : 1.9;
+          final int crossAxisCount = width < 1100 ? 2 : 4;
+          final double childAspectRatio = isMobile ? 1.32 : (width < 1100 ? 2.1 : 1.6);
 
           return GridView.count(
             crossAxisCount: crossAxisCount,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            crossAxisSpacing: 14,
-            mainAxisSpacing: 14,
+            crossAxisSpacing: isMobile ? 8 : 14,
+            mainAxisSpacing: isMobile ? 8 : 14,
             childAspectRatio: childAspectRatio,
             children: cards,
           );
@@ -1459,10 +1609,10 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       message: tooltip,
       waitDuration: const Duration(milliseconds: 300),
       child: Container(
-        padding: EdgeInsets.all(isMobile ? 10 : 16),
+        padding: EdgeInsets.all(isMobile ? 8 : 14),
         decoration: BoxDecoration(
           color: colorScheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(isMobile ? 16 : 20),
+          borderRadius: BorderRadius.circular(isMobile ? 14 : 20),
           border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
         ),
         child: Column(
@@ -1473,47 +1623,55 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: EdgeInsets.all(isMobile ? 6 : 10),
+                  padding: EdgeInsets.all(isMobile ? 5 : 8),
                   decoration: BoxDecoration(
                     color: accentColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(isMobile ? 10 : 14),
+                    borderRadius: BorderRadius.circular(isMobile ? 8 : 12),
                   ),
-                  child: Icon(icon, color: accentColor, size: isMobile ? 18 : 22),
+                  child: Icon(icon, color: accentColor, size: isMobile ? 16 : 20),
                 ),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: isMobile ? 6 : 8, vertical: isMobile ? 2 : 3),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
-                  ),
-                  child: Text(
-                    badgeText,
-                    style: GoogleFonts.cairo(
-                      fontSize: isMobile ? 9.5 : 11,
-                      fontWeight: FontWeight.bold,
-                      color: accentColor,
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: isMobile ? 5 : 8, vertical: isMobile ? 2 : 3),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(isMobile ? 6 : 10),
+                    ),
+                    child: Text(
+                      badgeText,
+                      style: GoogleFonts.cairo(
+                        fontSize: isMobile ? 8.5 : 10.5,
+                        fontWeight: FontWeight.bold,
+                        color: accentColor,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
               ],
             ),
-            const Spacer(),
-            Text(
-              value,
-              style: GoogleFonts.cairo(
-                fontSize: isMobile ? 15 : 19,
-                fontWeight: FontWeight.w900,
-                color: colorScheme.onSurface,
-                letterSpacing: -0.3,
+            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(
+                value,
+                style: GoogleFonts.cairo(
+                  fontSize: isMobile ? 15 : 17,
+                  fontWeight: FontWeight.w900,
+                  color: colorScheme.onSurface,
+                  letterSpacing: -0.3,
+                ),
+                maxLines: 1,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 2),
             Text(
               title,
               style: GoogleFonts.cairo(
-                fontSize: isMobile ? 11 : 12,
+                fontSize: isMobile ? 10.5 : 11.5,
                 fontWeight: FontWeight.bold,
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -1523,7 +1681,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
             Text(
               subtitle,
               style: GoogleFonts.cairo(
-                fontSize: isMobile ? 9.5 : 10,
+                fontSize: isMobile ? 9 : 9.5,
                 color: colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
               ),
               maxLines: 1,
@@ -1541,11 +1699,13 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     required bool isAr,
     required Map<String, EventModel> eventsMap,
     required Map<String, String> availableCompanies,
+    required List<String> availableBranches,
     required List<Map<String, dynamic>> allInvoices,
   }) {
     final hasActiveFilters = _searchController.text.isNotEmpty ||
         _selectedCampaignId != 'all' ||
         _selectedCompanySlug != 'all' ||
+        _selectedBranch != 'all' ||
         _statusFilter != 'all' ||
         _dateFilter != DateFilterType.all;
 
@@ -1558,18 +1718,22 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
           }))
         : eventsMap;
 
-    final isMobile = MediaQuery.of(context).size.width < 960;
-
     final searchFieldWidget = TextField(
       controller: _searchController,
-      onChanged: (_) => setState(() {}),
+      onChanged: (_) {
+        setState(() {});
+        _resetPagination();
+      },
       decoration: InputDecoration(
         hintText: strings.searchReceiptPlaceholder,
         prefixIcon: const Icon(Icons.search_rounded),
         suffixIcon: _searchController.text.isNotEmpty
             ? IconButton(
                 icon: const Icon(Icons.clear_rounded, size: 18),
-                onPressed: () => setState(() => _searchController.clear()),
+                onPressed: () {
+                  setState(() => _searchController.clear());
+                  _resetPagination();
+                },
               )
             : null,
         isDense: true,
@@ -1596,10 +1760,156 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
         ),
       ],
       selected: {_statusFilter},
-      onSelectionChanged: (set) => setState(() => _statusFilter = set.first),
+      onSelectionChanged: (set) {
+        setState(() => _statusFilter = set.first);
+        _resetPagination();
+      },
       style: ButtonStyle(
         visualDensity: VisualDensity.compact,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+    );
+
+    final branchPickerWidget = PopupMenuButton<String>(
+      initialValue: _selectedBranch,
+      tooltip: isAr ? 'تصفية حسب الفرع' : 'Filter by Branch',
+      onSelected: (val) {
+        setState(() {
+          _selectedBranch = val;
+        });
+        _resetPagination();
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: 'all',
+          child: Row(
+            children: [
+              Icon(
+                Icons.store_mall_directory_rounded,
+                size: 16,
+                color: _selectedBranch == 'all' ? colorScheme.primary : colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  isAr ? 'كافة الفروع (${availableBranches.length})' : 'All Branches (${availableBranches.length})',
+                  style: TextStyle(
+                    fontWeight: _selectedBranch == 'all' ? FontWeight.bold : FontWeight.normal,
+                    color: _selectedBranch == 'all' ? colorScheme.primary : null,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '${allInvoices.length}',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (availableBranches.isNotEmpty) const PopupMenuDivider(),
+        for (final b in availableBranches)
+          () {
+            final count = allInvoices.where((inv) => inv['canonical_branch'] == b).length;
+            return PopupMenuItem(
+              value: b,
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.storefront_rounded,
+                    size: 16,
+                    color: _selectedBranch == b ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      b,
+                      style: TextStyle(
+                        fontWeight: _selectedBranch == b ? FontWeight.bold : FontWeight.normal,
+                        color: _selectedBranch == b ? colorScheme.primary : null,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _selectedBranch == b
+                          ? colorScheme.primary.withValues(alpha: 0.15)
+                          : colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '$count',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: _selectedBranch == b ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  if (_selectedBranch == b) ...[
+                    const SizedBox(width: 4),
+                    Icon(Icons.check_rounded, size: 16, color: colorScheme.primary),
+                  ],
+                ],
+              ),
+            );
+          }(),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: _selectedBranch != 'all' ? colorScheme.primaryContainer : colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _selectedBranch != 'all' ? colorScheme.primary : colorScheme.outlineVariant,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.storefront_rounded,
+              size: 18,
+              color: _selectedBranch != 'all' ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                _selectedBranch == 'all'
+                    ? (isAr ? 'كافة الفروع (${availableBranches.length})' : 'All Branches (${availableBranches.length})')
+                    : _selectedBranch,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: _selectedBranch != 'all' ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.arrow_drop_down_rounded,
+              size: 18,
+              color: _selectedBranch != 'all' ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
+            ),
+          ],
+        ),
       ),
     );
 
@@ -1613,6 +1923,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
             _dateFilter = type;
             _customDateRange = null;
           });
+          _resetPagination();
         }
       },
       itemBuilder: (context) => [
@@ -1672,280 +1983,342 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       ),
     );
 
-    return Container(
-      padding: EdgeInsets.fromLTRB(isMobile ? 12 : 16, 12, isMobile ? 12 : 16, 8),
-      color: colorScheme.surface,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Filter Controls Row(s)
-          if (isMobile) ...[
-            // Mobile Row 1: Search Bar (Full Width)
-            searchFieldWidget,
-            const SizedBox(height: 8),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobileLayout = constraints.maxWidth < 750;
+        final isWideLayout = constraints.maxWidth >= 1350;
 
-            // Mobile Row 2: Status Filter
-            statusFilterWidget,
-            const SizedBox(height: 8),
-
-            // Mobile Row 3: Action Buttons
-            Row(
+        return Container(
+          padding: EdgeInsets.fromLTRB(isMobileLayout ? 12 : 20, 8, isMobileLayout ? 12 : 20, 8),
+          color: colorScheme.surface,
+          child: SingleChildScrollView(
+            physics: const ClampingScrollPhysics(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(child: datePickerWidget),
-                const SizedBox(width: 8),
-                Expanded(child: exportCsvButton),
-                if (hasActiveFilters) ...[
-                  const SizedBox(width: 6),
-                  IconButton(
-                    tooltip: strings.clearFiltersBtn,
-                    icon: const Icon(Icons.filter_alt_off_rounded, color: Colors.red),
-                    onPressed: _resetFilters,
+                if (isWideLayout) ...[
+                  Row(
+                    children: [
+                      Expanded(child: searchFieldWidget),
+                      const SizedBox(width: 10),
+                      statusFilterWidget,
+                      const SizedBox(width: 10),
+                      branchPickerWidget,
+                      const SizedBox(width: 10),
+                      datePickerWidget,
+                      const SizedBox(width: 10),
+                      exportCsvButton,
+                      if (hasActiveFilters) ...[
+                        const SizedBox(width: 8),
+                        IconButton(
+                          tooltip: strings.clearFiltersBtn,
+                          icon: const Icon(Icons.filter_alt_off_rounded, color: Colors.red),
+                          onPressed: _resetFilters,
+                        ),
+                      ],
+                    ],
                   ),
-                ],
-              ],
-            ),
-          ] else ...[
-            // Desktop Single Row
-            Row(
-              children: [
-                Expanded(child: searchFieldWidget),
-                const SizedBox(width: 8),
-                statusFilterWidget,
-                const SizedBox(width: 8),
-                datePickerWidget,
-                const SizedBox(width: 8),
-                exportCsvButton,
-                if (hasActiveFilters) ...[
-                  const SizedBox(width: 8),
-                  IconButton(
-                    tooltip: strings.clearFiltersBtn,
-                    icon: const Icon(Icons.filter_alt_off_rounded, color: Colors.red),
-                    onPressed: _resetFilters,
+                ] else if (isMobileLayout) ...[
+                  // Row 1: Full-Width Search Field
+                  searchFieldWidget,
+                  const SizedBox(height: 8),
+
+                  // Row 2: Full-Width Segmented Status Controls
+                  SizedBox(
+                    width: double.infinity,
+                    child: statusFilterWidget,
                   ),
-                ],
-              ],
-            ),
-          ],
+                  const SizedBox(height: 8),
 
-          const SizedBox(height: 12),
+                  // Row 3: 50% Branch Picker + 50% Date Picker in a balanced 2-Column Row
+                  Row(
+                    children: [
+                      Expanded(child: branchPickerWidget),
+                      const SizedBox(width: 8),
+                      Expanded(child: datePickerWidget),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
 
-          // Selected Campaign Active Badge (If a specific campaign is chosen)
-          if (_selectedCampaignId != 'all' && scopedEventsMap.containsKey(_selectedCampaignId)) ...[
-            () {
-              final activeEvent = scopedEventsMap[_selectedCampaignId]!;
-              final count = allInvoices.where((inv) => inv['campaignId'] == activeEvent.id).length;
-              final isActive = activeEvent.isActive && !activeEvent.isExpired;
-
-              return Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: colorScheme.primaryContainer.withValues(alpha: 0.45),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: colorScheme.primary.withValues(alpha: 0.6), width: 1.2),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: colorScheme.primary,
-                        borderRadius: BorderRadius.circular(10),
+                  // Row 4: Export CSV Button + Clear Filters (if active)
+                  Row(
+                    children: [
+                      Expanded(child: exportCsvButton),
+                      if (hasActiveFilters) ...[
+                        const SizedBox(width: 8),
+                        IconButton.filledTonal(
+                          tooltip: strings.clearFiltersBtn,
+                          icon: const Icon(Icons.filter_alt_off_rounded, color: Colors.red, size: 18),
+                          onPressed: _resetFilters,
+                        ),
+                      ],
+                    ],
+                  ),
+                ] else ...[
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: constraints.maxWidth > 950 ? 280 : 220,
+                        child: searchFieldWidget,
                       ),
-                      child: Icon(Icons.campaign_rounded, color: colorScheme.onPrimary, size: 20),
+                      statusFilterWidget,
+                      branchPickerWidget,
+                      datePickerWidget,
+                      exportCsvButton,
+                      if (hasActiveFilters) ...[
+                        IconButton(
+                          tooltip: strings.clearFiltersBtn,
+                          icon: const Icon(Icons.filter_alt_off_rounded, color: Colors.red, size: 20),
+                          onPressed: _resetFilters,
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 10),
+                _buildCampaignSelectorSection(
+                  context: context,
+                  colorScheme: colorScheme,
+                  strings: strings,
+                  isAr: isAr,
+                  scopedEventsMap: scopedEventsMap,
+                  availableCompanies: availableCompanies,
+                  allInvoices: allInvoices,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCampaignSelectorSection({
+    required BuildContext context,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+    required Map<String, EventModel> scopedEventsMap,
+    required Map<String, String> availableCompanies,
+    required List<Map<String, dynamic>> allInvoices,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_selectedCampaignId != 'all' && scopedEventsMap.containsKey(_selectedCampaignId)) ...[
+          () {
+            final activeEvent = scopedEventsMap[_selectedCampaignId]!;
+            final count = allInvoices.where((inv) => inv['campaignId'] == activeEvent.id).length;
+            final isActive = activeEvent.isActive && !activeEvent.isExpired;
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer.withValues(alpha: 0.45),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: colorScheme.primary.withValues(alpha: 0.6), width: 1.2),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary,
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(
-                                isAr ? 'الفعالية المحددة:' : 'Active Festival:',
+                    child: Icon(Icons.campaign_rounded, color: colorScheme.onPrimary, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              isAr ? 'الفعالية المحددة:' : 'Active Festival:',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.primary,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: isActive ? Colors.green.shade100 : Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                isActive ? (isAr ? 'نشطة' : 'Active') : (isAr ? 'منتهية' : 'Ended'),
                                 style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.bold,
-                                  color: colorScheme.primary,
+                                  color: isActive ? Colors.green.shade900 : Colors.grey.shade800,
                                 ),
                               ),
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                decoration: BoxDecoration(
-                                  color: isActive ? Colors.green.shade100 : Colors.grey.shade200,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  isActive ? (isAr ? 'نشطة' : 'Active') : (isAr ? 'منتهية' : 'Ended'),
-                                  style: TextStyle(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.bold,
-                                    color: isActive ? Colors.green.shade900 : Colors.grey.shade800,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            activeEvent.eventName,
-                            style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            '${activeEvent.targetCompany}${activeEvent.retailChainName.isNotEmpty ? " • ${activeEvent.retailChainName}" : ""} • ($count ${isAr ? "فاتورة مفحوصة" : "audited invoices"})',
-                            style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          activeEvent.eventName,
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          '${activeEvent.targetCompany} • ${activeEvent.retailChainName} • ($count ${isAr ? "فاتورة" : "receipts"})',
+                          style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    FilledButton.tonalIcon(
-                      onPressed: () => _showCampaignSelectorDialog(
-                        context: context,
-                        colorScheme: colorScheme,
-                        strings: strings,
-                        isAr: isAr,
-                        eventsMap: scopedEventsMap,
-                        availableCompanies: availableCompanies,
-                        allInvoices: allInvoices,
-                      ),
-                      icon: const Icon(Icons.swap_horiz_rounded, size: 16),
-                      label: Text(isAr ? 'تغيير الفعالية' : 'Change', style: const TextStyle(fontSize: 11)),
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        visualDensity: VisualDensity.compact,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.tonalIcon(
+                    onPressed: () => _showCampaignSelectorDialog(
+                      context: context,
+                      colorScheme: colorScheme,
+                      strings: strings,
+                      isAr: isAr,
+                      eventsMap: scopedEventsMap,
+                      availableCompanies: availableCompanies,
+                      allInvoices: allInvoices,
                     ),
-                    const SizedBox(width: 6),
-                    IconButton.filledTonal(
-                      tooltip: isAr ? 'عرض كافة الفعاليات' : 'Show All Campaigns',
-                      icon: const Icon(Icons.close_rounded, size: 18),
-                      onPressed: () {
-                        setState(() {
-                          _selectedCampaignId = 'all';
-                          _resetPagination();
-                        });
-                      },
+                    icon: const Icon(Icons.swap_horiz_rounded, size: 16),
+                    label: Text(isAr ? 'تغيير الفعالية' : 'Change', style: const TextStyle(fontSize: 11)),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      visualDensity: VisualDensity.compact,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
-                  ],
-                ),
-              );
-            }(),
-          ],
+                  ),
+                  const SizedBox(width: 6),
+                  IconButton.filledTonal(
+                    tooltip: isAr ? 'عرض كافة الفعاليات' : 'Show All Campaigns',
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    onPressed: () {
+                      setState(() {
+                        _selectedCampaignId = 'all';
+                        _resetPagination();
+                      });
+                    },
+                  ),
+                ],
+              ),
+            );
+          }(),
+        ],
 
-          // Quick Filter Bar + Open Full Campaign Search Dialog Button
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                // Button to open the full searchable campaign modal
-                FilledButton.icon(
-                  onPressed: () => _showCampaignSelectorDialog(
-                    context: context,
-                    colorScheme: colorScheme,
-                    strings: strings,
-                    isAr: isAr,
-                    eventsMap: scopedEventsMap,
-                    availableCompanies: availableCompanies,
-                    allInvoices: allInvoices,
-                  ),
-                  icon: const Icon(Icons.tune_rounded, size: 16),
-                  label: Text(
-                    isAr
-                        ? 'تصفية الفعاليات والمهرجانات (${scopedEventsMap.length})'
-                        : 'Filter Campaigns (${scopedEventsMap.length})',
-                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
-                  ),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        // Quick Filter Bar + Open Full Campaign Search Dialog Button
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              FilledButton.icon(
+                onPressed: () => _showCampaignSelectorDialog(
+                  context: context,
+                  colorScheme: colorScheme,
+                  strings: strings,
+                  isAr: isAr,
+                  eventsMap: scopedEventsMap,
+                  availableCompanies: availableCompanies,
+                  allInvoices: allInvoices,
+                ),
+                icon: const Icon(Icons.tune_rounded, size: 16),
+                label: Text(
+                  isAr
+                      ? 'تصفية الفعاليات والمهرجانات (${scopedEventsMap.length})'
+                      : 'Filter Campaigns (${scopedEventsMap.length})',
+                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                ),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              ChoiceChip(
+                label: Text('${strings.allCampaigns} (${allInvoices.length})'),
+                selected: _selectedCampaignId == 'all',
+                onSelected: (_) => setState(() {
+                  _selectedCampaignId = 'all';
+                  _resetPagination();
+                }),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              const SizedBox(width: 6),
+
+              for (final entry in scopedEventsMap.entries.take(4)) ...[
+                () {
+                  final event = entry.value;
+                  final count = allInvoices.where((inv) => inv['campaignId'] == event.id).length;
+                  return Padding(
+                    padding: const EdgeInsetsDirectional.only(end: 6),
+                    child: ChoiceChip(
+                      avatar: CircleAvatar(
+                        radius: 10,
+                        backgroundColor: colorScheme.primary.withValues(alpha: 0.15),
+                        child: Icon(Icons.campaign_rounded, size: 12, color: colorScheme.primary),
+                      ),
+                      label: Text('${event.eventName} ($count)'),
+                      selected: _selectedCampaignId == event.id,
+                      onSelected: (_) => setState(() {
+                        _selectedCampaignId = event.id;
+                        _resetPagination();
+                      }),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  );
+                }(),
+              ],
+
+              if (availableCompanies.length > 1 && (widget.lockedCompanySlug == null || widget.lockedCompanySlug!.isEmpty)) ...[
+                const SizedBox(width: 12),
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(end: 8),
+                  child: Text(
+                    '${strings.companyField}:',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.onSurfaceVariant),
                   ),
                 ),
-                const SizedBox(width: 8),
-
-                // Choice chip for "All Campaigns"
                 ChoiceChip(
-                  label: Text('${strings.allCampaigns} (${allInvoices.length})'),
-                  selected: _selectedCampaignId == 'all',
+                  label: Text(strings.allCampaigns),
+                  selected: _selectedCompanySlug == 'all',
                   onSelected: (_) => setState(() {
-                    _selectedCampaignId = 'all';
+                    _selectedCompanySlug = 'all';
                     _resetPagination();
                   }),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
                 const SizedBox(width: 6),
-
-                // Top active campaigns (up to 4) for one-click access
-                for (final entry in scopedEventsMap.entries.take(4)) ...[
-                  () {
-                    final event = entry.value;
-                    final count = allInvoices.where((inv) => inv['campaignId'] == event.id).length;
-                    return Padding(
-                      padding: const EdgeInsetsDirectional.only(end: 6),
-                      child: ChoiceChip(
-                        avatar: CircleAvatar(
-                          radius: 10,
-                          backgroundColor: colorScheme.primary.withValues(alpha: 0.15),
-                          child: Icon(Icons.campaign_rounded, size: 12, color: colorScheme.primary),
-                        ),
-                        label: Text('${event.eventName} ($count)'),
-                        selected: _selectedCampaignId == event.id,
-                        onSelected: (_) => setState(() {
-                          _selectedCampaignId = event.id;
-                          _resetPagination();
-                        }),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                    );
-                  }(),
-                ],
-
-                // Company Filter Chips (If multiple companies)
-                if (availableCompanies.length > 1 && (widget.lockedCompanySlug == null || widget.lockedCompanySlug!.isEmpty)) ...[
-                  const SizedBox(width: 12),
+                for (final comp in availableCompanies.entries) ...[
                   Padding(
-                    padding: const EdgeInsetsDirectional.only(end: 8),
-                    child: Text(
-                      '${strings.companyField}:',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.onSurfaceVariant),
+                    padding: const EdgeInsetsDirectional.only(end: 6),
+                    child: ChoiceChip(
+                      label: Text(comp.value),
+                      selected: _selectedCompanySlug == comp.key,
+                      onSelected: (_) => setState(() {
+                        _selectedCompanySlug = comp.key;
+                        _resetPagination();
+                      }),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                   ),
-                  ChoiceChip(
-                    label: Text(strings.allCampaigns),
-                    selected: _selectedCompanySlug == 'all',
-                    onSelected: (_) => setState(() {
-                      _selectedCompanySlug = 'all';
-                      _resetPagination();
-                    }),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  const SizedBox(width: 6),
-                  for (final comp in availableCompanies.entries) ...[
-                    Padding(
-                      padding: const EdgeInsetsDirectional.only(end: 6),
-                      child: ChoiceChip(
-                        label: Text(comp.value),
-                        selected: _selectedCompanySlug == comp.key,
-                        onSelected: (_) => setState(() {
-                          _selectedCompanySlug = comp.key;
-                          _resetPagination();
-                        }),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                    ),
-                  ],
                 ],
               ],
-            ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -2017,7 +2390,6 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // Header
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20.0),
                     child: Row(
@@ -2058,7 +2430,6 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
 
                   const SizedBox(height: 12),
 
-                  // Search Field inside Modal
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20.0),
                     child: TextField(
@@ -2088,7 +2459,6 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
 
                   const SizedBox(height: 10),
 
-                  // Filter Segmented Pills (Status & Companies)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20.0),
                     child: SingleChildScrollView(
@@ -2142,7 +2512,6 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                   const SizedBox(height: 12),
                   const Divider(height: 1),
 
-                  // Option to Select "All Campaigns"
                   ListTile(
                     leading: Container(
                       padding: const EdgeInsets.all(8),
@@ -2182,7 +2551,6 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                   ),
                   const Divider(height: 1),
 
-                  // Events List inside Modal
                   Expanded(
                     child: filteredEvents.isEmpty
                         ? Center(
@@ -2257,8 +2625,8 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                                           child: Icon(
                                             gameIcon,
                                             color: isSelected
-                                                ? colorScheme.onPrimary
-                                                : colorScheme.onSecondaryContainer,
+                                              ? colorScheme.onPrimary
+                                              : colorScheme.onSecondaryContainer,
                                             size: 22,
                                           ),
                                         ),
@@ -2462,7 +2830,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
             const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: _resetFilters,
-              icon: const Icon(Icons.refresh_rounded, size: 18),
+              icon: const Icon(Icons.filter_alt_off_rounded, size: 16),
               label: Text(strings.clearFiltersBtn, style: const TextStyle(fontSize: 12)),
             ),
           ],
@@ -2477,647 +2845,754 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     required CountryCurrency activeCountry,
     required AppStrings strings,
     required bool isAr,
+    required bool isMobile,
   }) {
     final isAdmin = ref.watch(isAdminProvider) && !widget.isEmbedded;
-    final visibleInvoices = filteredInvoices.take(_displayedItemCount).toList();
-    final hasMore = _displayedItemCount < filteredInvoices.length;
+    final totalItems = filteredInvoices.length;
+
+    // Desktop fixed-page slicing (25 items) vs Mobile progressive batch limit
+    final int safePage;
+    final int totalPages;
+    final List<Map<String, dynamic>> visibleInvoices;
+
+    if (isMobile) {
+      safePage = 0;
+      totalPages = (totalItems / _pageSize).ceil();
+      visibleInvoices = filteredInvoices.take(_mobileLimit).toList();
+    } else {
+      totalPages = (totalItems / _pageSize).ceil();
+      safePage = _currentPage.clamp(0, totalPages > 0 ? totalPages - 1 : 0);
+      final startIndex = safePage * _pageSize;
+      final endIndex = (startIndex + _pageSize).clamp(0, totalItems);
+      visibleInvoices = filteredInvoices.sublist(startIndex, endIndex);
+    }
 
     return ListView.builder(
-      controller: _scrollController,
-      padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 32.0),
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: EdgeInsets.fromLTRB(isMobile ? 12 : 20, 12, isMobile ? 12 : 20, isMobile ? 96 : 32),
       itemCount: visibleInvoices.length + 1,
       itemBuilder: (context, index) {
         if (index == visibleInvoices.length) {
-          // Bottom Load More Indicator or End of List Footer
-          if (hasMore) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20.0),
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.2,
-                          color: colorScheme.primary,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        isAr
-                            ? 'جاري استدعاء 20 فاتورة إضافية (تم عرض ${visibleInvoices.length} من ${filteredInvoices.length})...'
-                            : 'Loading 20 more invoices (${visibleInvoices.length} of ${filteredInvoices.length} loaded)...',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+          if (isMobile) {
+            return _buildMobileLoadMoreFooter(
+              totalItems: totalItems,
+              currentLimit: _mobileLimit,
+              colorScheme: colorScheme,
+              isAr: isAr,
+              onLoadMore: () => setState(() => _mobileLimit += _pageSize),
             );
           } else {
-            // End of records reached footer
-            return Container(
-              margin: const EdgeInsets.only(top: 10, bottom: 20),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.check_circle_rounded, size: 16, color: Colors.green.shade700),
-                  const SizedBox(width: 8),
-                  Text(
-                    isAr
-                        ? 'تم عرض كافة الفواتير المسجلة بنجاح (المجموع: ${filteredInvoices.length} فاتورة)'
-                        : 'All ${filteredInvoices.length} invoices successfully loaded',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  if (filteredInvoices.length > 5) ...[
-                    const SizedBox(width: 12),
-                    TextButton.icon(
-                      onPressed: () {
-                        if (_scrollController.hasClients) {
-                          _scrollController.animateTo(
-                            0,
-                            duration: const Duration(milliseconds: 400),
-                            curve: Curves.easeOut,
-                          );
-                        }
-                      },
-                      icon: const Icon(Icons.arrow_upward_rounded, size: 14),
-                      label: Text(
-                        isAr ? 'الرجوع للأعلى' : 'Back to top',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                      ),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+            return _buildPaginationControls(
+              totalItems: totalItems,
+              currentPage: safePage,
+              pageSize: _pageSize,
+              colorScheme: colorScheme,
+              strings: strings,
+              isAr: isAr,
+              onPageChanged: (newPage) {
+                setState(() => _currentPage = newPage);
+                if (_scrollController.hasClients) {
+                  _scrollController.animateTo(
+                    0,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOut,
+                  );
+                }
+              },
             );
           }
         }
 
         final inv = visibleInvoices[index];
-        final docId = inv['id'] as String;
-        final isExpanded = _expandedDocIds.contains(docId);
+        return _buildInvoiceCard(
+          context: context,
+          inv: inv,
+          colorScheme: colorScheme,
+          activeCountry: activeCountry,
+          strings: strings,
+          isAr: isAr,
+          isMobile: isMobile,
+          isAdmin: isAdmin,
+        );
+      },
+    );
+  }
 
-        final receiptNumber = inv['receipt_number']?.toString() ?? 'N/A';
-        final totalValue = inv['target_company_total'] ?? inv['total_value'] ?? 0;
-        final imageUrl = inv['image_url']?.toString() ?? '';
-        final storeChain = (inv['store_chain_detected'] ?? inv['retail_chain_name'] ?? '').toString();
-        final branch = (inv['branch_detected'] ?? '').toString();
-        final eventName = inv['eventName']?.toString() ?? '';
-        final targetCompany = inv['targetCompany']?.toString() ?? (isAr ? 'الشركة الراعية' : 'Sponsor Company');
-        final formattedDate = inv['formattedDate']?.toString() ?? 'N/A';
-        final durationSec = inv['analysis_duration_seconds'] is num ? (inv['analysis_duration_seconds'] as num).toDouble() : null;
-        final kpiRating = inv['ai_kpi_rating'] as String?;
-        final customerName = inv['customerName']?.toString();
-        final customerPhone = inv['customerPhone']?.toString();
-        final products = (inv['extracted_products'] as List?) ?? [];
+  Widget _buildInvoiceCard({
+    required BuildContext context,
+    required Map<String, dynamic> inv,
+    required ColorScheme colorScheme,
+    required CountryCurrency activeCountry,
+    required AppStrings strings,
+    required bool isAr,
+    required bool isMobile,
+    required bool isAdmin,
+  }) {
+    final docId = inv['id'] as String;
+    final isExpanded = _expandedDocIds.contains(docId);
 
-        return Card(
-          elevation: 1,
-          margin: const EdgeInsets.only(bottom: 14),
-          color: colorScheme.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(
-              color: isExpanded ? colorScheme.primary : colorScheme.outlineVariant.withValues(alpha: 0.6),
-              width: isExpanded ? 1.5 : 1,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header Row
-              Padding(
-                padding: const EdgeInsets.all(14.0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Thumbnail with M3 Zoom Badge
-                    GestureDetector(
-                      onTap: () => _showImagePreviewDialog(
-                        context: context,
-                        imageUrl: imageUrl,
-                        receiptNumber: receiptNumber,
-                        store: storeChain.isNotEmpty ? (branch.isNotEmpty ? '$storeChain - $branch' : storeChain) : '',
-                        totalValue: totalValue,
-                        date: formattedDate,
-                        currencySymbol: activeCountry.currencySymbol,
-                        colorScheme: colorScheme,
-                        strings: strings,
-                        docId: docId,
-                        storagePath: inv['storage_path']?.toString(),
-                        canDelete: isAdmin,
-                      ),
-                      child: Tooltip(
-                        message: imageUrl.isNotEmpty ? 'انقر لمعاينة وتكبير صورة الفاتورة' : 'لا توجد صورة مسجلة',
-                        child: MouseRegion(
-                          cursor: SystemMouseCursors.click,
-                          child: ClipRRect(
+    final receiptNumber = inv['receipt_number']?.toString() ?? 'N/A';
+    final totalValue = inv['target_company_total'] ?? inv['total_value'] ?? 0;
+    final imageUrl = inv['image_url']?.toString() ?? '';
+    final storeChain = (inv['store_chain_detected'] ?? inv['retail_chain_name'] ?? '').toString();
+    final branch = (inv['branch_detected'] ?? '').toString();
+    final eventName = inv['eventName']?.toString() ?? '';
+    final targetCompany = inv['targetCompany']?.toString() ?? (isAr ? 'الشركة الراعية' : 'Sponsor Company');
+    final formattedDate = inv['formattedDate']?.toString() ?? 'N/A';
+    final durationSec = inv['analysis_duration_seconds'] is num ? (inv['analysis_duration_seconds'] as num).toDouble() : null;
+    final kpiRating = inv['ai_kpi_rating'] as String?;
+    final customerName = inv['customerName']?.toString();
+    final customerPhone = inv['customerPhone']?.toString();
+    final products = (inv['extracted_products'] as List?) ?? [];
+
+    return Card(
+      elevation: 1,
+      margin: const EdgeInsets.only(bottom: 14),
+      color: colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isExpanded ? colorScheme.primary : colorScheme.outlineVariant.withValues(alpha: 0.6),
+          width: isExpanded ? 1.5 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Row
+          Padding(
+            padding: const EdgeInsets.all(14.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Thumbnail with M3 Zoom Badge
+                GestureDetector(
+                  onTap: () => _showImagePreviewDialog(
+                    context: context,
+                    imageUrl: imageUrl,
+                    receiptNumber: receiptNumber,
+                    store: storeChain.isNotEmpty ? (branch.isNotEmpty ? '$storeChain - $branch' : storeChain) : '',
+                    totalValue: totalValue,
+                    date: formattedDate,
+                    currencySymbol: activeCountry.currencySymbol,
+                    colorScheme: colorScheme,
+                    strings: strings,
+                    docId: docId,
+                    storagePath: inv['storage_path']?.toString(),
+                    canDelete: isAdmin,
+                  ),
+                  child: Tooltip(
+                    message: imageUrl.isNotEmpty ? 'انقر لمعاينة وتكبير صورة الفاتورة' : 'لا توجد صورة مسجلة',
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          width: 68,
+                          height: 68,
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerHighest,
                             borderRadius: BorderRadius.circular(12),
-                            child: Container(
-                              width: 68,
-                              height: 68,
-                              decoration: BoxDecoration(
-                                color: colorScheme.surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
-                              ),
-                              child: Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  _buildReceiptImage(imageUrl, fit: BoxFit.cover),
-                                  if (imageUrl.isNotEmpty)
-                                    Positioned(
-                                      bottom: 3,
-                                      right: 3,
-                                      child: Container(
-                                        padding: const EdgeInsets.all(3),
-                                        decoration: BoxDecoration(
-                                          color: Colors.black.withValues(alpha: 0.65),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: const Icon(Icons.zoom_in_rounded, size: 13, color: Colors.white),
-                                      ),
+                            border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+                          ),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              _buildReceiptImage(imageUrl, fit: BoxFit.cover),
+                              if (imageUrl.isNotEmpty)
+                                Positioned(
+                                  bottom: 3,
+                                  right: 3,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(3),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withValues(alpha: 0.65),
+                                      shape: BoxShape.circle,
                                     ),
+                                    child: const Icon(Icons.zoom_in_rounded, size: 13, color: Colors.white),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(width: 12),
+
+                // Middle Column: Receipt #, Speed Badge, Store, Status, Customer Info, Date
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Row 1: Receipt Number with Copy Action & Speed Badge
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(
+                            child: InkWell(
+                              onTap: () => _copyToClipboard(receiptNumber, context, strings),
+                              borderRadius: BorderRadius.circular(6),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      '#$receiptNumber',
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.3,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Icon(Icons.copy_rounded, size: 14, color: colorScheme.onSurfaceVariant),
                                 ],
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(width: 12),
-
-                    // Middle Column: Receipt #, Badges, Store, Date
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Receipt Number with Copy Action
-                          Row(
-                            children: [
-                              Expanded(
-                                child: InkWell(
-                                  onTap: () => _copyToClipboard(receiptNumber, context, strings),
-                                  borderRadius: BorderRadius.circular(6),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          '#$receiptNumber',
-                                          style: const TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.bold,
-                                            letterSpacing: 0.3,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Icon(Icons.copy_rounded, size: 14, color: colorScheme.onSurfaceVariant),
-                                    ],
-                                  ),
-                                ),
-                              ),
-
-                              // Store / Branch Tag
-                              if (storeChain.isNotEmpty || branch.isNotEmpty)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue.shade50,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: Colors.blue.shade200),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.storefront_rounded, size: 13, color: Colors.blue.shade800),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        branch.isNotEmpty ? '$storeChain - $branch' : storeChain,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.blue.shade900,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 6),
-
-                          // Event & Company & Status Chips Row
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 4,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              () {
-                                final bool isExplicitlyValid = inv['is_valid'] == true || inv['status'] == 'accepted' || inv['isValid'] == true;
-                                final bool isExplicitlyRejected = inv['is_valid'] == false || inv['status'] == 'rejected' || inv['isValid'] == false || ((inv['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
-                                final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((inv['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
-
-                                return Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: isValid ? Colors.green.shade100 : Colors.red.shade100,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: isValid ? Colors.green.shade400 : Colors.red.shade400),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        isValid ? Icons.check_circle_rounded : Icons.cancel_rounded,
-                                        size: 12,
-                                        color: isValid ? Colors.green.shade800 : Colors.red.shade800,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        isValid ? (isAr ? 'مقبولة' : 'Accepted') : (isAr ? 'مرفوضة' : 'Rejected'),
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          color: isValid ? Colors.green.shade900 : Colors.red.shade900,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }(),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          if (durationSec != null) ...[
+                            const SizedBox(width: 6),
+                            Tooltip(
+                              message: kpiRating ?? (durationSec <= 2.0 ? '⚡ فائق السرعة' : '🟢 ممتاز'),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: colorScheme.primaryContainer,
+                                  color: durationSec <= 2.0
+                                      ? Colors.green.shade50
+                                      : (durationSec <= 3.5 ? Colors.teal.shade50 : Colors.amber.shade50),
                                   borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  eventName,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: colorScheme.onPrimaryContainer,
+                                  border: Border.all(
+                                    color: durationSec <= 2.0
+                                        ? Colors.green.shade300
+                                        : (durationSec <= 3.5 ? Colors.teal.shade300 : Colors.amber.shade300),
                                   ),
                                 ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: colorScheme.secondaryContainer,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  targetCompany,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: colorScheme.onSecondaryContainer,
-                                  ),
-                                ),
-                              ),
-                              if (inv['rejection_reason'] != null && inv['rejection_reason'].toString().isNotEmpty)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red.shade50,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: Colors.red.shade200),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.info_outline_rounded, size: 12, color: Colors.red.shade800),
-                                      const SizedBox(width: 4),
-                                      Flexible(
-                                        child: Text(
-                                          inv['rejection_reason'].toString(),
-                                          style: TextStyle(
-                                            fontSize: 10.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.red.shade900,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              if (inv['is_handwritten'] == true)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red.shade100,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: Colors.red.shade400),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.edit_note_rounded, size: 12, color: Colors.red.shade900),
-                                      const SizedBox(width: 3),
-                                      Text(
-                                        '✍️ محررة يدوياً (مخالف)',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.red.shade900,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              if (inv['is_tampered'] == true)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange.shade100,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: Colors.orange.shade400),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.gavel_rounded, size: 12, color: Colors.orange.shade900),
-                                      const SizedBox(width: 3),
-                                      Text(
-                                        '⚠️ اشتباه تلاعب بالأرقام',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.orange.shade900,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              if (inv['is_screen_capture'] == true)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.purple.shade100,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: Colors.purple.shade400),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.phone_android_rounded, size: 12, color: Colors.purple.shade900),
-                                      const SizedBox(width: 3),
-                                      Text(
-                                        '📱 تصوير شاشة',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.purple.shade900,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              if (customerName != null && customerName.isNotEmpty)
-                                Text(
-                                  '👤 $customerName ${customerPhone != null ? "($customerPhone)" : ""}',
-                                  style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
-                                ),
-                              if ((inv['voucher_serials'] as List?)?.isNotEmpty ?? false)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.amber.shade100,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: Colors.amber.shade400),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.confirmation_number_rounded, size: 12, color: Colors.amber.shade900),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        '💳 فواتشر: ${(inv['voucher_serials'] as List).join(" | ")}',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.amber.shade900,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 6),
-
-                          // Date & Speed KPI Row
-                          Row(
-                            children: [
-                              Icon(Icons.access_time_rounded, size: 13, color: colorScheme.onSurfaceVariant),
-                              const SizedBox(width: 4),
-                              Text(
-                                formattedDate,
-                                style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
-                              ),
-                              const Spacer(),
-
-                              if (durationSec != null) ...[
-                                Tooltip(
-                                  message: kpiRating ?? (durationSec <= 2.0 ? '⚡ فائق السرعة' : '🟢 ممتاز'),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: durationSec <= 2.0
-                                          ? Colors.green.shade50
-                                          : (durationSec <= 3.5 ? Colors.teal.shade50 : Colors.amber.shade50),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(
-                                        color: durationSec <= 2.0
-                                            ? Colors.green.shade300
-                                            : (durationSec <= 3.5 ? Colors.teal.shade300 : Colors.amber.shade300),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.bolt_rounded,
+                                      size: 12,
+                                      color: durationSec <= 2.0 ? Colors.green.shade800 : Colors.amber.shade900,
+                                    ),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      '${durationSec.toStringAsFixed(2)}s',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: durationSec <= 2.0 ? Colors.green.shade900 : Colors.amber.shade900,
                                       ),
                                     ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.bolt_rounded,
-                                          size: 13,
-                                          color: durationSec <= 2.0 ? Colors.green.shade800 : Colors.amber.shade900,
-                                        ),
-                                        const SizedBox(width: 2),
-                                        Text(
-                                          '${durationSec.toStringAsFixed(2)}s',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: durationSec <= 2.0 ? Colors.green.shade900 : Colors.amber.shade900,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                  ],
                                 ),
-                              ],
-                            ],
-                          ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
-                    ),
-                  ],
-                ),
-              ),
 
-              // Bottom Action Bar: Spend Total + Expand Button + Admin Delete Action
-              Builder(
-                builder: (context) {
-                  final isMobile = MediaQuery.of(context).size.width < 680;
-                  final itemsBtnLabel = isMobile
-                      ? '${isAr ? "الأصناف" : "Items"} (${products.length})'
-                      : '${strings.viewReceiptProducts} (${products.length} ${strings.itemsCountLabel})';
-
-                  return Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: isMobile ? 10 : 14,
-                      vertical: isMobile ? 8 : 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colorScheme.surfaceContainerLow,
-                      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
-                    ),
-                    child: Row(
-                      children: [
-                        // Total Spend Highlight
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                      // Row 2: Store / Branch Tag
+                      if (storeChain.isNotEmpty || branch.isNotEmpty) ...[
+                        const SizedBox(height: 5),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.blue.shade200),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                '${strings.targetCompanyField}: $targetCompany',
+                              Icon(Icons.storefront_rounded, size: 12, color: Colors.blue.shade800),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  branch.isNotEmpty ? '$storeChain - $branch' : storeChain,
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.blue.shade900,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(height: 5),
+
+                      // Row 3: Event & Company & Status Chips Row
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          () {
+                            final bool isExplicitlyValid = inv['is_valid'] == true || inv['status'] == 'accepted' || inv['isValid'] == true;
+                            final bool isExplicitlyRejected = inv['is_valid'] == false || inv['status'] == 'rejected' || inv['isValid'] == false || ((inv['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
+                            final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((inv['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
+
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isValid ? Colors.green.shade50 : Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: isValid ? Colors.green.shade300 : Colors.red.shade300),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    isValid ? Icons.check_circle_rounded : Icons.cancel_rounded,
+                                    size: 12,
+                                    color: isValid ? Colors.green.shade800 : Colors.red.shade800,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    isValid ? (isAr ? 'مقبولة' : 'Valid') : (isAr ? 'مرفوضة' : 'Rejected'),
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: isValid ? Colors.green.shade900 : Colors.red.shade900,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }(),
+
+                          if (eventName.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: colorScheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                eventName,
                                 style: TextStyle(
-                                  fontSize: isMobile ? 10 : 11,
+                                  fontSize: 10.5,
                                   color: colorScheme.onSurfaceVariant,
+                                  fontWeight: FontWeight.w500,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                              Text(
-                                '$totalValue ${activeCountry.currencySymbol}',
-                                style: TextStyle(
-                                  fontSize: isMobile ? 14 : 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: colorScheme.primary,
+                            ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 5),
+
+                      // Row 4: Customer Info (if available) & Date
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          if (customerName != null && customerName.isNotEmpty)
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.person_outline_rounded, size: 12, color: colorScheme.onSurfaceVariant),
+                                const SizedBox(width: 3),
+                                Text(
+                                  customerName,
+                                  style: TextStyle(fontSize: 10.5, color: colorScheme.onSurfaceVariant),
                                 ),
+                              ],
+                            ),
+                          if (customerPhone != null && customerPhone.isNotEmpty)
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.phone_outlined, size: 12, color: colorScheme.onSurfaceVariant),
+                                const SizedBox(width: 3),
+                                Text(
+                                  customerPhone,
+                                  style: TextStyle(fontSize: 10.5, color: colorScheme.onSurfaceVariant),
+                                ),
+                              ],
+                            ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.access_time_rounded, size: 12, color: colorScheme.onSurfaceVariant),
+                              const SizedBox(width: 3),
+                              Text(
+                                formattedDate,
+                                style: TextStyle(fontSize: 10.5, color: colorScheme.onSurfaceVariant),
                               ),
                             ],
                           ),
-                        ),
-
-                        const SizedBox(width: 8),
-
-                        // Items Count Button with Expand action
-                        OutlinedButton.icon(
-                          onPressed: () => _toggleExpand(docId),
-                          icon: Icon(
-                            isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                            size: isMobile ? 16 : 18,
-                          ),
-                          label: Text(
-                            itemsBtnLabel,
-                            style: TextStyle(
-                              fontSize: isMobile ? 11 : 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: isMobile ? 8 : 12,
-                              vertical: isMobile ? 6 : 8,
-                            ),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-
-                        // Admin-Only Delete Action Button (Never displayed for Company Manager View)
-                        if (isAdmin) ...[
-                          const SizedBox(width: 8),
-                          IconButton.outlined(
-                            onPressed: () => _confirmAndDeleteInvoice(
-                              context: context,
-                              docId: docId,
-                              receiptNumber: receiptNumber,
-                              totalValue: totalValue,
-                              currencySymbol: activeCountry.currencySymbol,
-                              storagePath: inv['storage_path']?.toString(),
-                              imageUrl: imageUrl,
-                              strings: strings,
-                              colorScheme: colorScheme,
-                            ),
-                            icon: Icon(Icons.delete_outline_rounded, color: colorScheme.error, size: isMobile ? 18 : 20),
-                            style: IconButton.styleFrom(
-                              side: BorderSide(color: colorScheme.error.withValues(alpha: 0.4)),
-                              backgroundColor: colorScheme.errorContainer.withValues(alpha: 0.2),
-                              padding: EdgeInsets.all(isMobile ? 6 : 8),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                            tooltip: strings.deleteInvoiceTooltip,
-                          ),
                         ],
-                      ],
-                    ),
-                  );
-                },
-              ),
-
-              // Expanded Itemized Products Table with Barcodes
-              if (isExpanded) ...[
-                const Divider(height: 1),
-                _buildItemizedProductsTable(
-                  products: products,
-                  colorScheme: colorScheme,
-                  activeCountry: activeCountry,
-                  strings: strings,
-                  targetCompany: targetCompany,
+                      ),
+                    ],
+                  ),
                 ),
               ],
+            ),
+          ),
+
+          // Bottom Action Bar: Spend Total + Expand Button + Admin Delete Action
+          Builder(
+            builder: (context) {
+              final isCardMobile = MediaQuery.of(context).size.width < 680;
+              final itemsBtnLabel = isCardMobile
+                  ? '${isAr ? "الأصناف" : "Items"} (${products.length})'
+                  : '${strings.viewReceiptProducts} (${products.length} ${strings.itemsCountLabel})';
+
+              return Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: isCardMobile ? 10 : 14,
+                  vertical: isCardMobile ? 8 : 10,
+                ),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerLow,
+                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+                ),
+                child: Row(
+                  children: [
+                    // Total Spend Highlight
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${strings.targetCompanyField}: $targetCompany',
+                            style: TextStyle(
+                              fontSize: isCardMobile ? 10 : 11,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            '$totalValue ${activeCountry.currencySymbol}',
+                            style: TextStyle(
+                              fontSize: isCardMobile ? 14 : 16,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(width: 8),
+
+                    // Items Count Button with Expand action
+                    OutlinedButton.icon(
+                      onPressed: () => _toggleExpand(docId),
+                      icon: Icon(
+                        isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                        size: isCardMobile ? 16 : 18,
+                      ),
+                      label: Text(
+                        itemsBtnLabel,
+                        style: TextStyle(
+                          fontSize: isCardMobile ? 11 : 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isCardMobile ? 8 : 12,
+                          vertical: isCardMobile ? 6 : 8,
+                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+
+                    // Admin-Only Delete Action Button (Never displayed for Company Manager View)
+                    if (isAdmin) ...[
+                      const SizedBox(width: 8),
+                      IconButton.outlined(
+                        onPressed: () => _confirmAndDeleteInvoice(
+                          context: context,
+                          docId: docId,
+                          receiptNumber: receiptNumber,
+                          totalValue: totalValue,
+                          currencySymbol: activeCountry.currencySymbol,
+                          storagePath: inv['storage_path']?.toString(),
+                          imageUrl: imageUrl,
+                          strings: strings,
+                          colorScheme: colorScheme,
+                        ),
+                        icon: Icon(Icons.delete_outline_rounded, color: colorScheme.error, size: isCardMobile ? 18 : 20),
+                        style: IconButton.styleFrom(
+                          side: BorderSide(color: colorScheme.error.withValues(alpha: 0.4)),
+                          backgroundColor: colorScheme.errorContainer.withValues(alpha: 0.2),
+                          padding: EdgeInsets.all(isCardMobile ? 6 : 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        tooltip: strings.deleteInvoiceTooltip,
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            },
+          ),
+
+          // Expanded Itemized Products Table with Barcodes
+          if (isExpanded) ...[
+            const Divider(height: 1),
+            _buildItemizedProductsTable(
+              products: products,
+              colorScheme: colorScheme,
+              activeCountry: activeCountry,
+              strings: strings,
+              targetCompany: targetCompany,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaginationControls({
+    required int totalItems,
+    required int currentPage,
+    required int pageSize,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+    required ValueChanged<int> onPageChanged,
+  }) {
+    if (totalItems <= pageSize) return const SizedBox.shrink();
+
+    final totalPages = (totalItems / pageSize).ceil();
+    final startItem = (currentPage * pageSize) + 1;
+    final endItem = ((currentPage + 1) * pageSize).clamp(0, totalItems);
+
+    return Container(
+      margin: const EdgeInsets.only(top: 16, bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Range & Total summary
+          Text(
+            isAr
+                ? 'عرض $startItem-$endItem من إجمالي $totalItems'
+                : 'Showing $startItem-$endItem of $totalItems',
+            style: GoogleFonts.cairo(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+
+          // Navigation Controls
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // First Page
+              Tooltip(
+                message: isAr ? 'الصفحة الأولى' : 'First Page',
+                child: IconButton.filledTonal(
+                  icon: Icon(
+                    isAr ? Icons.last_page_rounded : Icons.first_page_rounded,
+                    size: 18,
+                  ),
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: currentPage > 0 ? () => onPageChanged(0) : null,
+                ),
+              ),
+              const SizedBox(width: 4),
+
+              // Previous Page
+              Tooltip(
+                message: isAr ? 'الصفحة السابقة' : 'Previous Page',
+                child: IconButton.filledTonal(
+                  icon: Icon(
+                    isAr ? Icons.chevron_right_rounded : Icons.chevron_left_rounded,
+                    size: 18,
+                  ),
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: currentPage > 0 ? () => onPageChanged(currentPage - 1) : null,
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // Current Page Badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: colorScheme.primary.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Text(
+                  isAr
+                      ? 'صفحة ${currentPage + 1} من $totalPages'
+                      : 'Page ${currentPage + 1} of $totalPages',
+                  style: GoogleFonts.cairo(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onPrimaryContainer,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // Next Page
+              Tooltip(
+                message: isAr ? 'الصفحة التالية' : 'Next Page',
+                child: IconButton.filledTonal(
+                  icon: Icon(
+                    isAr ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
+                    size: 18,
+                  ),
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: currentPage < totalPages - 1
+                      ? () => onPageChanged(currentPage + 1)
+                      : null,
+                ),
+              ),
+              const SizedBox(width: 4),
+
+              // Last Page
+              Tooltip(
+                message: isAr ? 'الصفحة الأخيرة' : 'Last Page',
+                child: IconButton.filledTonal(
+                  icon: Icon(
+                    isAr ? Icons.first_page_rounded : Icons.last_page_rounded,
+                    size: 18,
+                  ),
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: currentPage < totalPages - 1
+                      ? () => onPageChanged(totalPages - 1)
+                      : null,
+                ),
+              ),
             ],
           ),
-        );
-      },
+        ],
+      ),
     );
+  }
+
+  Widget _buildMobileLoadMoreFooter({
+    required int totalItems,
+    required int currentLimit,
+    required ColorScheme colorScheme,
+    required bool isAr,
+    required VoidCallback onLoadMore,
+  }) {
+    if (totalItems <= _pageSize) return const SizedBox.shrink();
+
+    final hasMore = currentLimit < totalItems;
+    final remaining = totalItems - currentLimit;
+
+    if (hasMore) {
+      return Container(
+        margin: const EdgeInsets.only(top: 14, bottom: 24),
+        child: Center(
+          child: FilledButton.tonalIcon(
+            onPressed: onLoadMore,
+            icon: const Icon(Icons.expand_more_rounded, size: 18),
+            label: Text(
+              isAr
+                  ? 'عرض 25 فاتورة إضافية (متبقي $remaining من $totalItems)'
+                  : 'Load 25 More Invoices ($remaining of $totalItems remaining)',
+              style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+          ),
+        ),
+      );
+    } else {
+      return Container(
+        margin: const EdgeInsets.only(top: 14, bottom: 24),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.check_circle_rounded, size: 16, color: Colors.green.shade700),
+            const SizedBox(width: 8),
+            Text(
+              isAr
+                  ? 'تم عرض كافة الـ $totalItems فاتورة بالكامل'
+                  : 'All $totalItems invoices displayed',
+              style: GoogleFonts.cairo(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            if (totalItems > 5) ...[
+              const SizedBox(width: 12),
+              TextButton.icon(
+                onPressed: () {
+                  if (_scrollController.hasClients) {
+                    _scrollController.animateTo(
+                      0,
+                      duration: const Duration(milliseconds: 400),
+                      curve: Curves.easeOut,
+                    );
+                  }
+                },
+                icon: const Icon(Icons.arrow_upward_rounded, size: 14),
+                label: Text(
+                  isAr ? 'الرجوع للأعلى' : 'Back to top',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
   }
 
   Widget _buildItemizedProductsTable({
@@ -3280,5 +3755,44 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
         ],
       ),
     );
+  }
+
+  static double _calculateStickyFilterHeight({
+    required double screenWidth,
+    required bool hasActiveCampaign,
+  }) {
+    if (screenWidth < 750) {
+      return hasActiveCampaign ? 285.0 : 195.0;
+    } else if (screenWidth < 1350) {
+      return hasActiveCampaign ? 245.0 : 155.0;
+    } else {
+      return hasActiveCampaign ? 208.0 : 120.0;
+    }
+  }
+}
+
+class _StickyInvoicesFilterDelegate extends SliverPersistentHeaderDelegate {
+  final double height;
+  final Widget child;
+
+  _StickyInvoicesFilterDelegate({
+    required this.height,
+    required this.child,
+  });
+
+  @override
+  double get minExtent => height;
+
+  @override
+  double get maxExtent => height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return SizedBox.expand(child: child);
+  }
+
+  @override
+  bool shouldRebuild(covariant _StickyInvoicesFilterDelegate oldDelegate) {
+    return oldDelegate.height != height || oldDelegate.child != child;
   }
 }
