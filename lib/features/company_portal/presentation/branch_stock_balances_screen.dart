@@ -10,6 +10,7 @@ import '../../../core/utils/arabic_numbers_utils.dart';
 import '../../../core/utils/file_download_helper.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
+import '../../../core/widgets/m3_button_groups.dart';
 import '../../../core/services/company_gifts_service.dart';
 import '../../admin/domain/event_model.dart';
 import '../../admin/domain/company_gift_model.dart';
@@ -35,7 +36,11 @@ class BranchStockBalancesScreen extends ConsumerStatefulWidget {
   ConsumerState<BranchStockBalancesScreen> createState() => _BranchStockBalancesScreenState();
 }
 
-class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesScreen> {
+class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesScreen>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   int _viewMode = 0; // 0: Matrix Grid, 1: Branch Cards
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _bulkQtyController = TextEditingController();
@@ -44,6 +49,11 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
   bool _isSaving = false;
   bool _isExporting = false;
   String _searchQuery = '';
+
+  // In-memory cache for instant 0ms tab switching
+  List<EventModel>? _cachedAllEvents;
+  List<CompanyGiftModel>? _cachedMasterGifts;
+  List<QueryDocumentSnapshot>? _cachedTxDocs;
 
   // Controllers map: key = "${eventId}_${branchName}_${giftKey}"
   final Map<String, TextEditingController> _controllers = {};
@@ -376,6 +386,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final strings = AppStrings.of(ref);
@@ -418,21 +429,27 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
               ? db.collection('events').where('companySlug', isEqualTo: targetSlug).snapshots()
               : db.collection('events').snapshots(),
           builder: (context, eventsSnapshot) {
-            if (eventsSnapshot.connectionState == ConnectionState.waiting && !eventsSnapshot.hasData) {
+            if (eventsSnapshot.connectionState == ConnectionState.waiting && !eventsSnapshot.hasData && _cachedAllEvents == null) {
               return const Center(child: CircularProgressIndicator());
             }
 
             final eventDocs = eventsSnapshot.data?.docs ?? [];
-            final allEvents = eventDocs
-                .map((d) {
-                  try {
-                    return EventModel.fromFirestore(d);
-                  } catch (_) {
-                    return null;
-                  }
-                })
-                .whereType<EventModel>()
-                .toList();
+            final allEvents = eventDocs.isNotEmpty
+                ? eventDocs
+                    .map((d) {
+                      try {
+                        return EventModel.fromFirestore(d);
+                      } catch (_) {
+                        return null;
+                      }
+                    })
+                    .whereType<EventModel>()
+                    .toList()
+                : (_cachedAllEvents ?? []);
+
+            if (allEvents.isNotEmpty) {
+              _cachedAllEvents = allEvents;
+            }
 
             final events = _selectedEventId != null && _selectedEventId!.isNotEmpty
                 ? (allEvents.where((e) => e.id == _selectedEventId).toList().isNotEmpty
@@ -450,26 +467,35 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                   ? db.collection('company_gifts').where('companySlug', isEqualTo: targetSlug).snapshots()
                   : db.collection('company_gifts').snapshots(),
               builder: (context, giftsSnapshot) {
-                if (giftsSnapshot.connectionState == ConnectionState.waiting && !giftsSnapshot.hasData) {
+                if (giftsSnapshot.connectionState == ConnectionState.waiting && !giftsSnapshot.hasData && _cachedMasterGifts == null) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
                 final giftDocs = giftsSnapshot.data?.docs ?? [];
-                final masterGifts = giftDocs
-                    .map((d) {
-                      try {
-                        return CompanyGiftModel.fromFirestore(d);
-                      } catch (_) {
-                        return null;
-                      }
-                    })
-                    .whereType<CompanyGiftModel>()
-                    .toList();
+                final masterGifts = giftDocs.isNotEmpty
+                    ? giftDocs
+                        .map((d) {
+                          try {
+                            return CompanyGiftModel.fromFirestore(d);
+                          } catch (_) {
+                            return null;
+                          }
+                        })
+                        .whereType<CompanyGiftModel>()
+                        .toList()
+                    : (_cachedMasterGifts ?? []);
+
+                if (masterGifts.isNotEmpty) {
+                  _cachedMasterGifts = masterGifts;
+                }
 
                 return StreamBuilder<QuerySnapshot>(
                   stream: txQuery.snapshots(),
                   builder: (context, txSnapshot) {
-                    final txDocs = txSnapshot.data?.docs ?? [];
+                    final txDocs = txSnapshot.data?.docs ?? _cachedTxDocs ?? [];
+                    if (txSnapshot.hasData && txSnapshot.data!.docs.isNotEmpty) {
+                      _cachedTxDocs = txSnapshot.data!.docs;
+                    }
 
                     return _buildBalancesContent(
                       context: context,
@@ -725,43 +751,54 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
           LayoutBuilder(
             builder: (context, constraints) {
               final isNarrow = constraints.maxWidth < 650;
-              final searchField = TextField(
-                controller: _searchController,
-                style: GoogleFonts.cairo(),
-                decoration: InputDecoration(
-                  hintText: isAr ? 'البحث عن فرع محدد...' : 'Search branch...',
-                  prefixIcon: Icon(Icons.search_rounded, color: colorScheme.primary),
-                  suffixIcon: _searchController.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear_rounded, size: 16),
-                          onPressed: () => _searchController.clear(),
-                        )
-                      : null,
-                  filled: true,
-                  fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+              final searchField = Container(
+                height: 44,
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+                ),
+                child: TextField(
+                  controller: _searchController,
+                  style: GoogleFonts.cairo(fontSize: 13.5),
+                  decoration: InputDecoration(
+                    hintText: isAr ? 'البحث عن فرع محدد...' : 'Search branch...',
+                    hintStyle: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant, fontSize: 13),
+                    prefixIcon: Icon(Icons.search_rounded, color: colorScheme.primary, size: 20),
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 16),
+                            onPressed: () => _searchController.clear(),
+                          )
+                        : null,
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
                 ),
               );
 
-              final segmentBtn = SegmentedButton<int>(
-                segments: [
-                  ButtonSegment(
-                    value: 0,
-                    icon: const Icon(Icons.grid_on_rounded, size: 18),
-                    label: Text(strings.matrixGridView, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12)),
-                  ),
-                  ButtonSegment(
-                    value: 1,
-                    icon: const Icon(Icons.view_agenda_rounded, size: 18),
-                    label: Text(strings.branchCardsView, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12)),
-                  ),
-                ],
-                selected: {_viewMode},
-                onSelectionChanged: (val) {
+              final segmentBtn = M3ConnectedButtonGroup<int>(
+                height: 40,
+                borderRadius: 12,
+                selectedValue: _viewMode,
+                onSelected: (val) {
                   setState(() {
-                    _viewMode = val.first;
+                    _viewMode = val;
                   });
                 },
+                segments: [
+                  M3ButtonSegment<int>(
+                    value: 0,
+                    icon: Icons.grid_on_rounded,
+                    label: strings.matrixGridView,
+                  ),
+                  M3ButtonSegment<int>(
+                    value: 1,
+                    icon: Icons.view_agenda_rounded,
+                    label: strings.branchCardsView,
+                  ),
+                ],
               );
 
               if (isNarrow) {
@@ -770,7 +807,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                   children: [
                     searchField,
                     const SizedBox(height: 10),
-                    Center(child: segmentBtn),
+                    SizedBox(width: double.infinity, child: segmentBtn),
                   ],
                 );
               }
@@ -902,7 +939,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                   height: 14,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Icon(Icons.table_view_rounded, size: 16, color: Color(0xFF006C50)),
+              : const Icon(Icons.table_view_rounded, size: 16),
           label: Text(
             isAr ? 'تصدير Excel' : 'Export Excel',
             style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
@@ -931,7 +968,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                 )
               : const Icon(Icons.save_rounded, size: 16),
           label: Text(
-            _isSaving ? (isAr ? 'جاري الحفظ...' : 'Saving...') : strings.saveAllBalancesBtn,
+            _isSaving ? (isAr ? 'جاري الحفظ...' : 'Saving...') : (isAr ? 'حفظ وتثبيت كافة الأرصدة' : strings.saveAllBalancesBtn),
             style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
           ),
           style: FilledButton.styleFrom(
@@ -995,18 +1032,25 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
             color: colorScheme.surfaceContainerLow,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.shadow.withValues(alpha: 0.04),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (isCompact) ...[
                 headerTitleWidget,
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 Row(
                   children: [
-                    Expanded(child: exportExcelBtn),
-                    const SizedBox(width: 8),
                     Expanded(child: saveAllBtn),
+                    const SizedBox(width: 8),
+                    Expanded(child: exportExcelBtn),
                   ],
                 ),
               ] else ...[
@@ -1084,54 +1128,84 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
 
               const SizedBox(height: 14),
 
-              // 4 Executive Hero KPI Cards in 2x2 Grid on Mobile and 4 in a row on Desktop
+              // 4 Executive Hero KPI Cards: 1 column on Mobile, 2 on Tablet, 4 on Desktop
               LayoutBuilder(
                 builder: (context, kpiConstraints) {
-                  final isMedium = kpiConstraints.maxWidth < 1050;
-                  final crossAxisCount = isMedium ? 2 : 4;
-                  final childAspectRatio = isCompact ? 1.45 : (isMedium ? 1.6 : 1.8);
+                  final double width = kpiConstraints.maxWidth;
+                  final bool isMobile = width < 600;
+
+                  int crossAxisCount = 4;
+                  double childAspectRatio = 1.65;
+                  if (width < 600) {
+                    crossAxisCount = 1;
+                    childAspectRatio = 2.35;
+                  } else if (width < 960) {
+                    crossAxisCount = 2;
+                    childAspectRatio = 1.85;
+                  } else if (width < 1200) {
+                    crossAxisCount = 2;
+                    childAspectRatio = 2.1;
+                  }
+
+                  final cards = [
+                    _buildExecutiveKpiCard(
+                      title: strings.coveredOutletsCount,
+                      value: '$coveredBranchesCount',
+                      unit: isAr ? 'فرع' : 'Branches',
+                      subtitle: isAr ? 'الفروع المعتمدة في الحملة' : 'Verified campaign branches',
+                      badgeText: isAr ? 'فروع نشطة' : 'Branches',
+                      icon: Icons.storefront_rounded,
+                      color: const Color(0xFF0284C7),
+                      colorScheme: colorScheme,
+                      tooltip: isAr ? 'إجمالي الفروع والمنافذ المعتمدة لتوزيع الهدايا' : 'Covered promotional branches',
+                      isMobile: isMobile,
+                    ),
+                    _buildExecutiveKpiCard(
+                      title: strings.totalAllocatedGifts,
+                      value: '$totalAllocated',
+                      unit: isAr ? 'قطعة' : 'Pcs',
+                      subtitle: isAr ? 'إجمالي الحصة الموزعة للفروع' : 'Total branch allocated quota',
+                      badgeText: isAr ? 'حصة مخصصة' : 'Allocated',
+                      icon: Icons.inventory_2_rounded,
+                      color: const Color(0xFF006C50),
+                      colorScheme: colorScheme,
+                      tooltip: isAr ? 'إجمالي عدد القطع والهدايا المخصصة لكافة الفروع' : 'Total allocated gift units',
+                      isMobile: isMobile,
+                    ),
+                    _buildExecutiveKpiCard(
+                      title: strings.awardedGiftsCount,
+                      value: '$totalClaimed',
+                      unit: isAr ? 'قطعة' : 'Pcs',
+                      subtitle: isAr ? 'الهدايا المسلمة للمستهلكين' : 'Delivered promotional gifts',
+                      badgeText: isAr ? 'هدايا مصروفة' : 'Claimed',
+                      icon: Icons.card_giftcard_rounded,
+                      color: const Color(0xFFD97706),
+                      colorScheme: colorScheme,
+                      tooltip: isAr ? 'إجمالي عدد الهدايا والجوائز المصروفة فعلياً للعملاء' : 'Total gifts disbursed to winners',
+                      isMobile: isMobile,
+                    ),
+                    _buildExecutiveKpiCard(
+                      title: strings.remainingStockBalance,
+                      value: '$totalRemaining',
+                      unit: isAr ? 'قطعة' : 'Pcs',
+                      subtitle: isAr ? 'الرصيد المتبقي بمخزون الفروع' : 'Remaining stock at branches',
+                      badgeText: isAr ? 'مخزون متبقي' : 'In Stock',
+                      icon: Icons.savings_rounded,
+                      color: const Color(0xFF7C3AED),
+                      colorScheme: colorScheme,
+                      tooltip: isAr ? 'رصيد الهدايا المتبقي بالمنافذ والمتاح للصرف' : 'Remaining stock balance',
+                      isMobile: isMobile,
+                    ),
+                  ];
 
                   return GridView.count(
                     crossAxisCount: crossAxisCount,
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    mainAxisSpacing: 8,
-                    crossAxisSpacing: 8,
+                    mainAxisSpacing: isMobile ? 12 : 14,
+                    crossAxisSpacing: isMobile ? 12 : 14,
                     childAspectRatio: childAspectRatio,
-                    children: [
-                      _buildExecutiveKpiCard(
-                        title: strings.coveredOutletsCount,
-                        value: '$coveredBranchesCount',
-                        unit: isAr ? 'فرع' : 'Branches',
-                        icon: Icons.storefront_rounded,
-                        color: const Color(0xFF0284C7),
-                        colorScheme: colorScheme,
-                      ),
-                      _buildExecutiveKpiCard(
-                        title: strings.totalAllocatedGifts,
-                        value: '$totalAllocated',
-                        unit: isAr ? 'قطعة' : 'Pcs',
-                        icon: Icons.inventory_2_rounded,
-                        color: const Color(0xFF006C50),
-                        colorScheme: colorScheme,
-                      ),
-                      _buildExecutiveKpiCard(
-                        title: strings.awardedGiftsCount,
-                        value: '$totalClaimed',
-                        unit: isAr ? 'قطعة' : 'Pcs',
-                        icon: Icons.shopping_bag_rounded,
-                        color: const Color(0xFFD97706),
-                        colorScheme: colorScheme,
-                      ),
-                      _buildExecutiveKpiCard(
-                        title: strings.remainingStockBalance,
-                        value: '$totalRemaining',
-                        unit: isAr ? 'قطعة' : 'Pcs',
-                        icon: Icons.savings_rounded,
-                        color: const Color(0xFF006874),
-                        colorScheme: colorScheme,
-                      ),
-                    ],
+                    children: cards,
                   );
                 },
               ),
@@ -1146,81 +1220,116 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
     required String title,
     required String value,
     required String unit,
+    required String subtitle,
+    required String badgeText,
     required IconData icon,
     required Color color,
     required ColorScheme colorScheme,
+    required String tooltip,
+    bool isMobile = false,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.04),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, size: 16, color: color),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: GoogleFonts.cairo(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w600,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: AlignmentDirectional.centerStart,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 300),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  value,
-                  style: GoogleFonts.cairo(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: color,
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
                   ),
+                  child: Icon(icon, size: 18, color: color),
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  unit,
-                  style: GoogleFonts.cairo(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w600,
-                    color: colorScheme.onSurfaceVariant,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    badgeText,
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
             ),
-          ),
-        ],
+            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerStart,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    value,
+                    style: GoogleFonts.cairo(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: colorScheme.onSurface,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    unit,
+                    style: GoogleFonts.cairo(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 1),
+            Text(
+              title,
+              style: GoogleFonts.cairo(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: colorScheme.onSurfaceVariant,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              subtitle,
+              style: GoogleFonts.cairo(
+                fontSize: 9.5,
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1233,152 +1342,215 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
     required List<String> branches,
     required List<EventModel> events,
   }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: colorScheme.primary.withValues(alpha: 0.25)),
-      ),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 10,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(Icons.bolt_rounded, color: colorScheme.primary, size: 20),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                strings.bulkDistributeTitle,
-                style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: colorScheme.onSurface),
-              ),
-            ],
-          ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 650;
 
-          // Gift Selector Dropdown
-          SizedBox(
-            width: 230,
-            child: DropdownButtonFormField<String>(
-              initialValue: _selectedBulkGiftKey != null && masterGifts.any((g) => (g.id.isNotEmpty ? g.id : g.giftName) == _selectedBulkGiftKey)
-                  ? _selectedBulkGiftKey
-                  : (masterGifts.isNotEmpty ? (masterGifts.first.id.isNotEmpty ? masterGifts.first.id : masterGifts.first.giftName) : null),
-              isExpanded: true,
-              decoration: InputDecoration(
-                labelText: isAr ? 'اختر الصنف / الهدية' : 'Select Gift / Voucher',
-                labelStyle: GoogleFonts.cairo(fontSize: 11),
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                filled: true,
-                fillColor: colorScheme.surface,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: colorScheme.outlineVariant)),
-              ),
-              items: masterGifts.map((g) {
-                final key = g.id.isNotEmpty ? g.id : g.giftName;
-                return DropdownMenuItem(
-                  value: key,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        g.isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
-                        size: 14,
-                        color: g.isVoucher ? const Color(0xFFD97706) : const Color(0xFF006C50),
-                      ),
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(
-                          g.giftName,
-                          style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
+        final giftSelector = DropdownButtonFormField<String>(
+          initialValue: _selectedBulkGiftKey != null &&
+                  masterGifts.any((g) => (g.id.isNotEmpty ? g.id : g.giftName) == _selectedBulkGiftKey)
+              ? _selectedBulkGiftKey
+              : (masterGifts.isNotEmpty
+                  ? (masterGifts.first.id.isNotEmpty ? masterGifts.first.id : masterGifts.first.giftName)
+                  : null),
+          isExpanded: true,
+          decoration: InputDecoration(
+            labelText: isAr ? 'اختر الصنف / الهدية' : 'Select Gift / Voucher',
+            labelStyle: GoogleFonts.cairo(fontSize: 11),
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            filled: true,
+            fillColor: colorScheme.surface,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: colorScheme.outlineVariant),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.7)),
+            ),
+          ),
+          items: masterGifts.map((g) {
+            final key = g.id.isNotEmpty ? g.id : g.giftName;
+            return DropdownMenuItem(
+              value: key,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    g.isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
+                    size: 16,
+                    color: g.isVoucher ? const Color(0xFFD97706) : const Color(0xFF006C50),
                   ),
-                );
-              }).toList(),
-              onChanged: (val) {
-                setState(() {
-                  _selectedBulkGiftKey = val;
-                });
-              },
-            ),
-          ),
-
-          // Quantity Input
-          SizedBox(
-            width: 110,
-            child: TextField(
-              controller: _bulkQtyController,
-              keyboardType: TextInputType.number,
-              inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
-              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
-              decoration: InputDecoration(
-                hintText: isAr ? 'الكمية (50)' : 'Qty (50)',
-                hintStyle: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant),
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                filled: true,
-                fillColor: colorScheme.surface,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: colorScheme.outlineVariant)),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      g.giftName,
+                      style: GoogleFonts.cairo(fontSize: 12.5, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
+            );
+          }).toList(),
+          onChanged: (val) {
+            setState(() {
+              _selectedBulkGiftKey = val;
+            });
+          },
+        );
+
+        final qtyField = TextField(
+          controller: _bulkQtyController,
+          keyboardType: TextInputType.number,
+          inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
+          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
+          decoration: InputDecoration(
+            hintText: isAr ? 'الكمية (50)' : 'Qty (50)',
+            hintStyle: GoogleFonts.cairo(fontSize: 11.5, color: colorScheme.onSurfaceVariant),
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            filled: true,
+            fillColor: colorScheme.surface,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: colorScheme.outlineVariant),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.7)),
             ),
           ),
+        );
 
-          // Apply Button
-          FilledButton.icon(
-            onPressed: () => _applyBulkDistribution(branches, events),
-            icon: const Icon(Icons.bolt_rounded, size: 16),
-            label: Text(
-              strings.applyToAllBranchesBtn,
-              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
-            ),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF006C50),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
+        final applyBtn = FilledButton.icon(
+          onPressed: () => _applyBulkDistribution(branches, events),
+          icon: const Icon(Icons.bolt_rounded, size: 16),
+          label: Text(
+            strings.applyToAllBranchesBtn,
+            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
           ),
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF006C50),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
 
-          // Zero Button
-          OutlinedButton.icon(
-            onPressed: () {
-              if (_selectedBulkGiftKey != null) {
-                setState(() {
-                  for (final event in events) {
-                    for (final branchName in branches) {
-                      final cellKey = '${event.id}_${branchName}_$_selectedBulkGiftKey';
-                      if (_controllers.containsKey(cellKey)) {
-                        _controllers[cellKey]!.text = '0';
-                      }
+        final zeroBtn = OutlinedButton.icon(
+          onPressed: () {
+            if (_selectedBulkGiftKey != null) {
+              setState(() {
+                for (final event in events) {
+                  for (final branchName in branches) {
+                    final cellKey = '${event.id}_${branchName}_$_selectedBulkGiftKey';
+                    if (_controllers.containsKey(cellKey)) {
+                      _controllers[cellKey]!.text = '0';
                     }
                   }
-                });
-              }
-            },
-            icon: const Icon(Icons.refresh_rounded, size: 16, color: Colors.red),
-            label: Text(
-              isAr ? 'تصفير الصنف' : 'Zero Item',
-              style: GoogleFonts.cairo(color: Colors.red[800], fontWeight: FontWeight.bold, fontSize: 12),
-            ),
-            style: OutlinedButton.styleFrom(
-              side: BorderSide(color: Colors.red.withValues(alpha: 0.4)),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
+                }
+              });
+            }
+          },
+          icon: const Icon(Icons.refresh_rounded, size: 16, color: Colors.red),
+          label: Text(
+            isAr ? 'تصفير الصنف' : 'Zero Item',
+            style: GoogleFonts.cairo(color: Colors.red[800], fontWeight: FontWeight.bold, fontSize: 12),
           ),
-        ],
-      ),
+          style: OutlinedButton.styleFrom(
+            side: BorderSide(color: Colors.red.withValues(alpha: 0.4), width: 1.2),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+
+        if (isMobile) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: colorScheme.primary.withValues(alpha: 0.25)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(Icons.bolt_rounded, color: colorScheme.primary, size: 20),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      strings.bulkDistributeTitle,
+                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13.5, color: colorScheme.onSurface),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                giftSelector,
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    SizedBox(width: 110, child: qtyField),
+                    const SizedBox(width: 8),
+                    Expanded(child: applyBtn),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                zeroBtn,
+              ],
+            ),
+          );
+        }
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: colorScheme.primary.withValues(alpha: 0.25)),
+          ),
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.bolt_rounded, color: colorScheme.primary, size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    strings.bulkDistributeTitle,
+                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: colorScheme.onSurface),
+                  ),
+                ],
+              ),
+              SizedBox(width: 230, child: giftSelector),
+              SizedBox(width: 110, child: qtyField),
+              applyBtn,
+              zeroBtn,
+            ],
+          ),
+        );
+      },
     );
   }
 

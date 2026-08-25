@@ -14,6 +14,7 @@ import '../../../core/utils/file_download_helper.dart';
 import '../../../core/utils/slug_utils.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
+import '../../../core/widgets/m3_button_groups.dart';
 import '../../admin/domain/event_model.dart';
 import '../../admin/domain/company_gift_model.dart';
 import '../domain/daily_branch_sales_model.dart';
@@ -33,13 +34,18 @@ class DailyBranchSalesScreen extends ConsumerStatefulWidget {
   ConsumerState<DailyBranchSalesScreen> createState() => _DailyBranchSalesScreenState();
 }
 
-class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen> {
+class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   String? _selectedEventId = 'all';
   late DateTime _selectedDate;
   bool _isAllDays = true;
   String _searchQuery = '';
   bool _isBackfilling = false;
   bool _isExporting = false;
+  List<DailyBranchSalesModel>? _lastLoadedRecords;
 
   @override
   void initState() {
@@ -252,6 +258,7 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final strings = AppStrings.of(ref);
@@ -265,7 +272,8 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
       firestore = null;
     }
 
-    if (firestore == null) {
+    final activeDb = firestore;
+    if (activeDb == null) {
       return Scaffold(
         backgroundColor: colorScheme.surface,
         body: _buildContent(
@@ -284,10 +292,10 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
 
     return StreamBuilder<QuerySnapshot>(
       stream: effectiveSlug.isNotEmpty
-          ? firestore.collection('events').where('companySlug', isEqualTo: effectiveSlug).snapshots()
-          : firestore.collection('events').snapshots(),
+          ? activeDb.collection('events').where('companySlug', isEqualTo: effectiveSlug).snapshots()
+          : activeDb.collection('events').snapshots(),
       builder: (context, eventsSnap) {
-        if (eventsSnap.connectionState == ConnectionState.waiting && !eventsSnap.hasData) {
+        if (eventsSnap.connectionState == ConnectionState.waiting && !eventsSnap.hasData && _lastLoadedRecords == null) {
           return const Center(child: CircularProgressIndicator());
         }
 
@@ -318,41 +326,64 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
           builder: (context, giftsSnap) {
             final masterGifts = giftsSnap.data ?? [];
 
-            // Query daily sales records
-            return StreamBuilder<List<DailyBranchSalesModel>>(
-              stream: ref.watch(dailySalesAggregationServiceProvider).streamDailyBranchSales(
-                    companySlug: effectiveSlug,
-                    campaignId: targetEventId,
-                    dateStr: targetDateStr,
-                  ),
-              builder: (context, salesSnap) {
-                final liveRecords = salesSnap.data ?? [];
+            Query transactionsQuery = activeDb.collection('receipts_transactions');
+            if (effectiveSlug.isNotEmpty) {
+              transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: effectiveSlug);
+            }
 
-                return FutureBuilder<List<DailyBranchSalesModel>>(
-                  future: liveRecords.isEmpty
-                      ? ref.read(dailySalesAggregationServiceProvider).aggregateLiveFromTransactions(
-                            companySlug: effectiveSlug,
-                            campaignId: targetEventId,
-                            targetDateStr: targetDateStr,
-                          )
-                      : Future.value(liveRecords),
-                  builder: (context, liveSnap) {
-                    final displayRecords = (salesSnap.data != null && salesSnap.data!.isNotEmpty)
-                        ? salesSnap.data!
-                        : (liveSnap.data ?? []);
+            return StreamBuilder<QuerySnapshot>(
+              stream: transactionsQuery.snapshots(),
+              builder: (context, txSnap) {
+                if (txSnap.connectionState == ConnectionState.waiting && !txSnap.hasData && _lastLoadedRecords == null) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-                    return _buildContent(
-                      context: context,
-                      colorScheme: colorScheme,
-                      strings: strings,
-                      isAr: isAr,
-                      effectiveSlug: effectiveSlug,
-                      events: companyEvents,
-                      currentEvent: currentEvent,
-                      masterGifts: masterGifts,
-                      records: displayRecords,
-                    );
-                  },
+                final txDocs = txSnap.data?.docs ?? [];
+                final rawTransactions = txDocs.map((d) => d.data() as Map<String, dynamic>).toList();
+
+                final companyEventIds = companyEvents.map((d) => d.id).toSet();
+                final companyEventNames = <String, String>{
+                  for (var d in companyEvents) d.id: d.eventName
+                };
+                final companyTargetNames = companyEvents
+                    .map((d) => d.targetCompany.trim())
+                    .where((t) => t.isNotEmpty)
+                    .toSet();
+
+                final Set<String> companyBranches = {};
+                if (currentEvent != null && currentEvent.branchNames.isNotEmpty) {
+                  companyBranches.addAll(currentEvent.branchNames);
+                } else {
+                  for (final d in companyEvents) {
+                    companyBranches.addAll(d.branchNames);
+                  }
+                }
+
+                final displayRecords = DailySalesAggregationService.aggregateTransactionsData(
+                  rawTransactions: rawTransactions,
+                  companySlug: effectiveSlug,
+                  campaignId: targetEventId,
+                  targetDateStr: targetDateStr,
+                  companyBranches: companyBranches,
+                  companyEventIds: companyEventIds,
+                  companyEventNames: companyEventNames,
+                  companyTargetNames: companyTargetNames,
+                );
+
+                if (displayRecords.isNotEmpty || rawTransactions.isNotEmpty) {
+                  _lastLoadedRecords = displayRecords;
+                }
+
+                return _buildContent(
+                  context: context,
+                  colorScheme: colorScheme,
+                  strings: strings,
+                  isAr: isAr,
+                  effectiveSlug: effectiveSlug,
+                  events: companyEvents,
+                  currentEvent: currentEvent,
+                  masterGifts: masterGifts,
+                  records: displayRecords,
                 );
               },
             );
@@ -376,7 +407,7 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
     final mediaQuery = MediaQuery.of(context);
     final isDesktop = mediaQuery.size.width >= 900;
 
-    // Filter by search query
+    // Filter by search query (branches already normalized canonically with zero dropping)
     final filteredRecords = records.where((r) {
       if (_searchQuery.trim().isEmpty) return true;
       return r.branchName.toLowerCase().contains(_searchQuery.toLowerCase());
@@ -420,13 +451,13 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
       consolidatedRecords = filteredRecords;
     }
 
-    // Aggregate totals for KPI cards
+    // Aggregate totals for KPI cards from filtered records
     int totalInvoices = 0;
     double totalSales = 0.0;
     int totalGifts = 0;
     double totalVouchers = 0.0;
 
-    for (final r in records) {
+    for (final r in consolidatedRecords) {
       totalInvoices += r.invoicesCount;
       totalSales += r.totalSalesAmount;
       totalGifts += r.totalGiftsCount;
@@ -601,7 +632,7 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
                   icon: _isExporting
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(Icons.table_view_rounded, size: 18),
-                  label: Text(strings.exportExcelBtn),
+                  label: Text(strings.exportExcelBtn, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF006C50),
                     side: const BorderSide(color: Color(0xFF006C50), width: 1.2),
@@ -616,7 +647,7 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
                   icon: _isBackfilling
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.sync_rounded, size: 18),
-                  label: Text(strings.syncAndBackfillDailySalesBtn),
+                  label: Text(strings.syncAndBackfillDailySalesBtn, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF2563EB),
                     foregroundColor: Colors.white,
@@ -629,9 +660,28 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
           ),
 
           if (!isDesktop) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Row(
               children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _isBackfilling ? null : () => _triggerBackfill(effectiveSlug),
+                    icon: _isBackfilling
+                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.sync_rounded, size: 16),
+                    label: Text(
+                      isAr ? 'مزامنة السجلات' : 'Sync & Backfill',
+                      style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: _isExporting
@@ -645,25 +695,15 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
                     icon: _isExporting
                         ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
                         : const Icon(Icons.table_view_rounded, size: 16),
-                    label: Text(strings.exportExcelBtn, style: GoogleFonts.cairo(fontSize: 12)),
+                    label: Text(
+                      strings.exportExcelBtn,
+                      style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF006C50),
-                      side: const BorderSide(color: Color(0xFF006C50)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: _isBackfilling ? null : () => _triggerBackfill(effectiveSlug),
-                    icon: _isBackfilling
-                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Icon(Icons.sync_rounded, size: 16),
-                    label: Text(strings.syncAndBackfillDailySalesBtn, style: GoogleFonts.cairo(fontSize: 12)),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF2563EB),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      side: const BorderSide(color: Color(0xFF006C50), width: 1.2),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
                 ),
@@ -707,38 +747,38 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
                           ],
                         ),
                       ),
-                  ...events.map((e) {
-                    return DropdownMenuItem<String>(
-                      value: e.id,
-                      child: Row(
-                        children: [
-                          Icon(Icons.campaign_rounded, size: 18, color: colorScheme.primary),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              '${e.eventName} (${e.retailChainName})',
-                              style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600),
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                      ...events.map((e) {
+                        return DropdownMenuItem<String>(
+                          value: e.id,
+                          child: Row(
+                            children: [
+                              Icon(Icons.campaign_rounded, size: 18, color: colorScheme.primary),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '${e.eventName} (${e.retailChainName})',
+                                  style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    );
-                  }),
-                ],
-                onChanged: (val) {
-                  setState(() {
-                    _selectedEventId = val;
-                  });
-                },
-              ),
-            ),
-          );
-        },
+                        );
+                      }),
+                    ],
+                    onChanged: (val) {
+                      setState(() {
+                        _selectedEventId = val;
+                      });
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
-    ],
-  ),
-);
+    );
   }
 
   Widget _buildDatePickerPill(
@@ -795,11 +835,11 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
   }) {
     if (isDesktop) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: colorScheme.surfaceContainerLow,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+          border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
         ),
         child: Row(
           children: [
@@ -844,50 +884,47 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
               ),
             ),
 
-            const SizedBox(width: 10),
+            const SizedBox(width: 14),
 
-            // Today Shortcut Button
-            ActionChip(
-              label: Text(strings.todayBtn, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12)),
-              avatar: const Icon(Icons.today_rounded, size: 16),
-              onPressed: () {
-                final now = DateTime.now();
-                setState(() {
-                  _selectedDate = DateTime(now.year, now.month, now.day);
-                  _isAllDays = false;
-                });
-              },
-            ),
-
-            const SizedBox(width: 6),
-
-            // All Days Toggle Button
-            FilterChip(
-              label: Text(strings.allCampaignDaysBtn, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12)),
-              selected: _isAllDays,
+            // M3 Connected Button Group for Timeline Mode Switcher
+            M3ConnectedButtonGroup<bool>(
+              height: 40,
+              borderRadius: 12,
+              selectedValue: _isAllDays,
               onSelected: (val) {
                 setState(() {
                   _isAllDays = val;
+                  if (!_isAllDays) {
+                    final now = DateTime.now();
+                    _selectedDate = DateTime(now.year, now.month, now.day);
+                  }
                 });
               },
+              segments: [
+                M3ButtonSegment<bool>(
+                  value: false,
+                  label: strings.todayBtn,
+                  icon: Icons.today_rounded,
+                ),
+                M3ButtonSegment<bool>(
+                  value: true,
+                  label: strings.allCampaignDaysBtn,
+                  icon: Icons.calendar_month_rounded,
+                ),
+              ],
             ),
           ],
         ),
       );
     }
 
-    // Mobile View: 2 structured rows with ZERO overflows
-    final isTodaySelected = !_isAllDays &&
-        _selectedDate.year == DateTime.now().year &&
-        _selectedDate.month == DateTime.now().month &&
-        _selectedDate.day == DateTime.now().day;
-
+    // Mobile View: 2 structured rows with M3 Connected Button Group
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -930,54 +967,37 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
 
-          // Row 2: Today & All Days Quick Filters
-          Row(
-            children: [
-              Expanded(
-                child: ChoiceChip(
-                  label: Center(
-                    child: Text(
-                      strings.todayBtn,
-                      style: GoogleFonts.cairo(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11.5,
-                      ),
-                    ),
-                  ),
-                  avatar: const Icon(Icons.today_rounded, size: 15),
-                  selected: isTodaySelected,
-                  onSelected: (val) {
+          // Row 2: Full-Width M3 Connected Button Group
+          SizedBox(
+            width: double.infinity,
+            child: M3ConnectedButtonGroup<bool>(
+              height: 40,
+              borderRadius: 12,
+              selectedValue: _isAllDays,
+              onSelected: (val) {
+                setState(() {
+                  _isAllDays = val;
+                  if (!_isAllDays) {
                     final now = DateTime.now();
-                    setState(() {
-                      _selectedDate = DateTime(now.year, now.month, now.day);
-                      _isAllDays = false;
-                    });
-                  },
+                    _selectedDate = DateTime(now.year, now.month, now.day);
+                  }
+                });
+              },
+              segments: [
+                M3ButtonSegment<bool>(
+                  value: false,
+                  label: strings.todayBtn,
+                  icon: Icons.today_rounded,
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: FilterChip(
-                  label: Center(
-                    child: Text(
-                      strings.allCampaignDaysBtn,
-                      style: GoogleFonts.cairo(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11.5,
-                      ),
-                    ),
-                  ),
-                  selected: _isAllDays,
-                  onSelected: (val) {
-                    setState(() {
-                      _isAllDays = val;
-                    });
-                  },
+                M3ButtonSegment<bool>(
+                  value: true,
+                  label: strings.allCampaignDaysBtn,
+                  icon: Icons.calendar_month_rounded,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
@@ -995,120 +1015,187 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
     required double totalVouchers,
   }) {
     final currencyFormatter = intl.NumberFormat('#,##0.00', 'ar');
+    final isAr = ref.isArabic;
 
-    final cards = [
-      _buildExecutiveKpiCard(
-        title: _isAllDays ? (strings.isAr ? 'إجمالي المبيعات المحققة' : 'Total Sales Revenue') : strings.dailySalesTotalKpi,
-        value: '${currencyFormatter.format(totalSales)} ج.م',
-        icon: Icons.monetization_on_rounded,
-        accentColor: const Color(0xFF006C50),
-        colorScheme: colorScheme,
-      ),
-      _buildExecutiveKpiCard(
-        title: strings.dailyInvoicesCountKpi,
-        value: '$totalInvoices فاتورة',
-        icon: Icons.receipt_long_rounded,
-        accentColor: const Color(0xFF0284C7),
-        colorScheme: colorScheme,
-      ),
-      _buildExecutiveKpiCard(
-        title: strings.dailyGiftsDisbursedKpi,
-        value: '$totalGifts قطعة',
-        icon: Icons.card_giftcard_rounded,
-        accentColor: const Color(0xFFD97706),
-        colorScheme: colorScheme,
-      ),
-      _buildExecutiveKpiCard(
-        title: strings.dailyVouchersValueKpi,
-        value: '${currencyFormatter.format(totalVouchers)} ج.م',
-        icon: Icons.confirmation_number_rounded,
-        accentColor: const Color(0xFF7C3AED),
-        colorScheme: colorScheme,
-      ),
-    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double width = constraints.maxWidth;
+        final bool isMobile = width < 600;
 
-    if (isDesktop) {
-      return Row(
-        children: cards.map((c) => Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: c))).toList(),
-      );
-    }
+        int crossAxisCount = 4;
+        double childAspectRatio = 1.65;
+        if (width < 600) {
+          crossAxisCount = 1;
+          childAspectRatio = 2.35;
+        } else if (width < 960) {
+          crossAxisCount = 2;
+          childAspectRatio = 1.85;
+        } else if (width < 1200) {
+          crossAxisCount = 2;
+          childAspectRatio = 2.1;
+        }
 
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 10,
-      crossAxisSpacing: 10,
-      childAspectRatio: 1.45,
-      children: cards,
+        final cards = [
+          _buildExecutiveKpiCard(
+            title: _isAllDays
+                ? (isAr ? 'إجمالي المبيعات المحققة' : 'Total Sales Revenue')
+                : (isAr ? 'مبيعات اليوم المحدد' : 'Selected Day Sales'),
+            value: '${currencyFormatter.format(totalSales)} ج.م',
+            subtitle: isAr ? 'مبيعات منتجات العرض المعتمدة' : 'Verified promotional sales revenue',
+            icon: Icons.payments_rounded,
+            accentColor: const Color(0xFF006C50),
+            badgeText: 'مصر 🇪🇬',
+            colorScheme: colorScheme,
+            tooltip: isAr ? 'إجمالي المبيعات المحققة لمنتجات الحملة بالعُملة المحلية' : 'Total sales revenue',
+            isMobile: isMobile,
+          ),
+          _buildExecutiveKpiCard(
+            title: isAr ? 'عدد الفواتير المنفذة' : 'Total Executed Invoices',
+            value: '$totalInvoices فاتورة',
+            subtitle: isAr ? 'الفواتير المدققة والمقبولة' : 'Audited and verified receipts',
+            icon: Icons.receipt_long_rounded,
+            accentColor: const Color(0xFF0284C7),
+            badgeText: isAr ? 'فاتورة منفذة' : 'Invoices',
+            colorScheme: colorScheme,
+            tooltip: isAr ? 'إجمالي عدد الفواتير المنفذة في الفروع' : 'Total executed receipts',
+            isMobile: isMobile,
+          ),
+          _buildExecutiveKpiCard(
+            title: isAr ? 'إجمالي الهدايا المنصرفة' : 'Total Gifts Disbursed',
+            value: '$totalGifts قطعة',
+            subtitle: isAr ? 'الهدايا الفورية المستلمة بالفرع' : 'Instant gifts claimed at branches',
+            icon: Icons.inventory_2_rounded,
+            accentColor: const Color(0xFFD97706),
+            badgeText: isAr ? 'هدايا فورية' : 'Gifts',
+            colorScheme: colorScheme,
+            tooltip: isAr ? 'إجمالي قطع الهدايا المنصرفة في الفروع' : 'Total instant gifts claimed',
+            isMobile: isMobile,
+          ),
+          _buildExecutiveKpiCard(
+            title: isAr ? 'إجمالي قيمة الفواتشرات' : 'Total Vouchers Value',
+            value: '${currencyFormatter.format(totalVouchers)} ج.م',
+            subtitle: isAr ? 'قسائم الشراء المصدرة للعملاء' : 'Purchase vouchers issued to customers',
+            icon: Icons.confirmation_number_rounded,
+            accentColor: const Color(0xFF7C3AED),
+            badgeText: isAr ? 'قسائم شراء' : 'Vouchers',
+            colorScheme: colorScheme,
+            tooltip: isAr ? 'إجمالي القيمة المالية لقسائم وفواتشرات الشراء' : 'Total vouchers monetary value',
+            isMobile: isMobile,
+          ),
+        ];
+
+        return GridView.count(
+          crossAxisCount: crossAxisCount,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: isMobile ? 12 : 14,
+          mainAxisSpacing: isMobile ? 12 : 14,
+          childAspectRatio: childAspectRatio,
+          children: cards,
+        );
+      },
     );
   }
 
   Widget _buildExecutiveKpiCard({
     required String title,
     required String value,
+    required String subtitle,
     required IconData icon,
     required Color accentColor,
+    required String badgeText,
     required ColorScheme colorScheme,
+    required String tooltip,
+    bool isMobile = false,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withValues(alpha: 0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: accentColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, size: 16, color: accentColor),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: GoogleFonts.cairo(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    color: colorScheme.onSurfaceVariant,
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 300),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+          boxShadow: [
+            BoxShadow(
+              color: colorScheme.shadow.withValues(alpha: 0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  child: Icon(icon, size: 18, color: accentColor),
                 ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    badgeText,
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: accentColor,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(
+                value,
+                style: GoogleFonts.cairo(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: colorScheme.onSurface,
+                  letterSpacing: -0.3,
+                ),
+                maxLines: 1,
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: AlignmentDirectional.centerStart,
-            child: Text(
-              value,
+            ),
+            const SizedBox(height: 1),
+            Text(
+              title,
               style: GoogleFonts.cairo(
-                fontSize: 15.5,
+                fontSize: 12,
                 fontWeight: FontWeight.bold,
-                color: colorScheme.onSurface,
+                color: colorScheme.onSurfaceVariant,
               ),
               maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-          ),
-        ],
+            Text(
+              subtitle,
+              style: GoogleFonts.cairo(
+                fontSize: 9.5,
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1119,11 +1206,12 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
     required bool isAr,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
       ),
       child: TextField(
         onChanged: (val) {
@@ -1139,6 +1227,16 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
           border: InputBorder.none,
           isDense: true,
           contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear_rounded, size: 16),
+                  onPressed: () {
+                    setState(() {
+                      _searchQuery = '';
+                    });
+                  },
+                )
+              : null,
         ),
       ),
     );

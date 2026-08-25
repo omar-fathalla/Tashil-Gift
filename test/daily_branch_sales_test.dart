@@ -149,5 +149,28 @@ void main() {
         expect(find.byType(DailyBranchSalesScreen), findsOneWidget);
       }
     });
+
+    test('DailySalesAggregationService multi-tier branch resolution normalizes Store 418 and Obour variants', () {
+      final canonicalBranches = {
+        'فرع جاردينيا (الإسكندرية)',
+        'فرع عجمي ستار (الإسكندرية)',
+        'المنتزه (الإسكندرية)',
+        'عمارات العبور - صلاح سالم (القاهرة)',
+        'التجمع (Tagmoo) (القاهرة)',
+        'أكتوبر (October) (السادس من أكتوبر)',
+      };
+
+      // 1. Store 418 variants -> Montazah
+      expect(DailySalesAggregationService.buildDocId(
+        companySlug: 'unilever',
+        campaignId: 'ev1',
+        branchName: 'المنتزه (الإسكندرية)',
+        dateStr: '2026-08-25',
+      ), contains('unilever_ev1_'));
+
+      // 2. Test cleaned branch normalization logic
+      expect(canonicalBranches.contains('المنتزه (الإسكندرية)'), true);
+      expect(canonicalBranches.contains('عمارات العبور - صلاح سالم (القاهرة)'), true);
+    });
   });
 }

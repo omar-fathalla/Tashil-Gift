@@ -57,7 +57,10 @@ final isAdminProvider = Provider<bool>((ref) {
 final firestoreProvider = Provider<FirebaseFirestore>((ref) {
   final instance = FirebaseFirestore.instance;
   try {
-    instance.settings = const Settings(persistenceEnabled: true);
+    instance.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
   } catch (_) {}
   return instance;
 });

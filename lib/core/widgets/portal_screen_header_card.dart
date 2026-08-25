@@ -128,8 +128,8 @@ class PortalScreenHeaderCard extends ConsumerWidget {
                   Expanded(
                     child: Text(
                       (lockedCompanySlug != null && lockedCompanySlug!.isNotEmpty)
-                          ? '🌐 ${strings.companyAllCampaigns}'
-                          : (isAr ? '🌐 كافة الحملات والفعاليات (All)' : '🌐 All Campaigns & Events'),
+                          ? strings.companyAllCampaigns
+                          : (isAr ? 'كافة الحملات والفعاليات (All)' : 'All Campaigns & Events'),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),

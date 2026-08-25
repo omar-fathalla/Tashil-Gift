@@ -69,7 +69,11 @@ class CampaignReportsScreen extends ConsumerStatefulWidget {
   ConsumerState<CampaignReportsScreen> createState() => _CampaignReportsScreenState();
 }
 
-class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
+class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   // Selected Event: null means "All Campaigns / جميع الحملات"
   EventModel? _selectedEvent;
   int _selectedTab = 0; // 0: Products, 1: Branches
@@ -118,6 +122,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     FirebaseFirestore? firestore;
@@ -245,7 +250,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
             return StreamBuilder<QuerySnapshot>(
               stream: transactionsQuery.snapshots(),
               builder: (context, transactionsSnapshot) {
-                if (transactionsSnapshot.connectionState == ConnectionState.waiting && !transactionsSnapshot.hasData) {
+                if (transactionsSnapshot.connectionState == ConnectionState.waiting && !transactionsSnapshot.hasData && _cachedMetrics == null) {
                   return Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -1116,6 +1121,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
                     colorScheme: colorScheme,
                     strings: strings,
                     isAr: isAr,
+                    isHi: isHi,
                     isCompact: isCompact,
                     isLockedToCompany: isLockedToCompany,
                   ),
@@ -1140,12 +1146,13 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
     required ColorScheme colorScheme,
     required AppStrings strings,
     required bool isAr,
+    required bool isHi,
     required bool isCompact,
     required bool isLockedToCompany,
   }) {
     final searchInputWidget = SizedBox(
       width: isCompact ? double.infinity : 280,
-      height: isCompact ? 40 : 44,
+      height: isCompact ? 38 : 42,
       child: TextField(
         controller: _productSearchController,
         style: GoogleFonts.cairo(fontSize: 12.5),
@@ -1154,7 +1161,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
           _productsMobileLimit = _reportPageSize;
         }),
         decoration: InputDecoration(
-          hintText: isAr ? 'بحث باسم الصنف أو الباركود...' : 'Search item name or barcode...',
+          hintText: isAr ? 'بحث باسم الصنف أو الباركود...' : (isHi ? 'नाम या बारकोड से खोजें...' : 'Search item name or barcode...'),
           hintStyle: GoogleFonts.cairo(fontSize: 11.5, color: colorScheme.onSurfaceVariant),
           prefixIcon: Icon(Icons.search_rounded, size: 18, color: colorScheme.primary),
           suffixIcon: _productSearchController.text.isNotEmpty
@@ -1170,83 +1177,104 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
                 )
               : null,
           isDense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
           filled: true,
-          fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+          fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+            borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.8), width: 1.2),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+            borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.8), width: 1.2),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: colorScheme.primary, width: 1.6),
           ),
         ),
       ),
     );
 
-    final sortSelectorWidget = SizedBox(
-      height: isCompact ? 36 : 40,
-      child: SegmentedButton<String>(
-        segments: [
-          ButtonSegment<String>(
-            value: 'QTY',
-            label: Text(isAr ? 'الكمية' : 'Qty', style: GoogleFonts.cairo(fontSize: 10.5)),
-            icon: const Icon(Icons.numbers_rounded, size: 13),
-          ),
-          ButtonSegment<String>(
-            value: 'REVENUE',
-            label: Text(isAr ? 'القيمة' : 'Revenue', style: GoogleFonts.cairo(fontSize: 10.5)),
-            icon: const Icon(Icons.monetization_on_rounded, size: 13),
-          ),
-          ButtonSegment<String>(
-            value: 'NAME',
-            label: Text(isAr ? 'الاسم' : 'Name', style: GoogleFonts.cairo(fontSize: 10.5)),
-            icon: const Icon(Icons.sort_by_alpha_rounded, size: 13),
-          ),
-        ],
-        selected: {_productSortBy},
-        onSelectionChanged: (set) => setState(() => _productSortBy = set.first),
-        style: ButtonStyle(
-          visualDensity: VisualDensity.compact,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    final sortSelectorWidget = M3ConnectedButtonGroup<String>(
+      height: isCompact ? 38 : 42,
+      borderRadius: 12,
+      isExpanded: false,
+      showCheckmark: true,
+      segments: [
+        M3ButtonSegment<String>(
+          value: 'QTY',
+          label: isAr ? 'الكمية' : (isHi ? 'मात्रा' : 'Qty'),
+          icon: Icons.inventory_2_rounded,
+          tooltip: isAr ? 'ترتيب تنازلي حسب الكمية المباعة' : (isHi ? 'मात्रा کے مطابق ترتیب' : 'Sort by sold quantity'),
         ),
-      ),
+        M3ButtonSegment<String>(
+          value: 'REVENUE',
+          label: isAr ? 'القيمة' : (isHi ? 'मूल्य' : 'Revenue'),
+          icon: Icons.payments_rounded,
+          tooltip: isAr ? 'ترتيب تنازلي حسب إجمالي القيمة والمبيعات' : (isHi ? 'قیمت کے مطابق ترتیب' : 'Sort by total value'),
+        ),
+        M3ButtonSegment<String>(
+          value: 'NAME',
+          label: isAr ? 'الاسم' : (isHi ? 'नाम' : 'Name'),
+          icon: Icons.sort_by_alpha_rounded,
+          tooltip: isAr ? 'ترتيب أبجدي حسب اسم الصنف' : (isHi ? 'نام کے مطابق حروف تہجی کی ترتیب' : 'Sort alphabetically by item name'),
+        ),
+      ],
+      selectedValue: _productSortBy,
+      onSelected: (val) => setState(() => _productSortBy = val),
     );
 
-    final companyFilterWidget = FilterChip(
-      selected: _onlyCompanyProductsFilter,
-      showCheckmark: false,
-      avatar: Icon(
-        _onlyCompanyProductsFilter ? Icons.verified_rounded : Icons.all_inclusive_rounded,
-        size: 15,
-        color: _onlyCompanyProductsFilter ? colorScheme.primary : colorScheme.onSurfaceVariant,
-      ),
-      label: Text(
-        _onlyCompanyProductsFilter
-            ? (isAr ? 'أصناف الشركة فقط' : 'Company Items Only')
-            : (isAr ? 'كافة أصناف الفاتورة' : 'All Receipt Items'),
-        style: GoogleFonts.cairo(
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-          color: _onlyCompanyProductsFilter ? colorScheme.primary : colorScheme.onSurfaceVariant,
+    final companyFilterWidget = Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _onlyCompanyProductsFilter = !_onlyCompanyProductsFilter;
+            _productsCurrentPage = 0;
+            _productsMobileLimit = _reportPageSize;
+          });
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+          height: isCompact ? 38 : 42,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: _onlyCompanyProductsFilter
+                ? colorScheme.primaryContainer.withValues(alpha: 0.7)
+                : colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: _onlyCompanyProductsFilter
+                  ? colorScheme.primary.withValues(alpha: 0.8)
+                  : colorScheme.outlineVariant.withValues(alpha: 0.8),
+              width: 1.2,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _onlyCompanyProductsFilter ? Icons.verified_rounded : Icons.all_inclusive_rounded,
+                size: 17,
+                color: _onlyCompanyProductsFilter ? colorScheme.primary : colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _onlyCompanyProductsFilter
+                    ? (isAr ? 'أصناف الشركة فقط' : (isHi ? 'केवल कंपनी आइटम' : 'Company Items Only'))
+                    : (isAr ? 'كافة أصناف الفاتورة' : (isHi ? 'सभी रसीद आइटम' : 'All Receipt Items')),
+                style: GoogleFonts.cairo(
+                  fontSize: 12,
+                  fontWeight: _onlyCompanyProductsFilter ? FontWeight.bold : FontWeight.w600,
+                  color: _onlyCompanyProductsFilter ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-      onSelected: (val) {
-        setState(() {
-          _onlyCompanyProductsFilter = val;
-          _productsCurrentPage = 0;
-          _productsMobileLimit = _reportPageSize;
-        });
-      },
-      visualDensity: VisualDensity.compact,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-      selectedColor: colorScheme.primaryContainer.withValues(alpha: 0.6),
-      side: BorderSide(
-        color: _onlyCompanyProductsFilter
-            ? colorScheme.primary.withValues(alpha: 0.6)
-            : colorScheme.outlineVariant.withValues(alpha: 0.5),
       ),
     );
 
@@ -1273,9 +1301,9 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen> {
     return Row(
       children: [
         Expanded(child: searchInputWidget),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         companyFilterWidget,
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         sortSelectorWidget,
       ],
     );

@@ -1455,11 +1455,11 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
             ),
           ),
 
-          // 2. PINNED / STICKY SEARCH & FILTER CONTROLS TOOLBAR (يثبت في الديسك توب ويمرر بحرية في الموبايل)
-          SliverPersistentHeader(
-            pinned: !isMobile,
-            delegate: _StickyInvoicesFilterDelegate(
-              height: stickyFilterHeight,
+          // 2. SEARCH & FILTER CONTROLS TOOLBAR
+          // On mobile: smoothly flows inside SliverToBoxAdapter with natural height (no nested scroll, no height clipping).
+          // On desktop/tablet: pinned in SliverPersistentHeader.
+          if (isMobile)
+            SliverToBoxAdapter(
               child: Container(
                 decoration: BoxDecoration(
                   color: colorScheme.surface,
@@ -1469,13 +1469,6 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                       width: 1,
                     ),
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 6,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
                 ),
                 child: _buildFilterControls(
                   colorScheme: colorScheme,
@@ -1487,8 +1480,41 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                   allInvoices: allInvoices,
                 ),
               ),
+            )
+          else
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _StickyInvoicesFilterDelegate(
+                height: stickyFilterHeight,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: colorScheme.surface,
+                    border: Border(
+                      bottom: BorderSide(
+                        color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+                        width: 1,
+                      ),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 6,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: _buildFilterControls(
+                    colorScheme: colorScheme,
+                    strings: strings,
+                    isAr: isAr,
+                    eventsMap: eventsMap,
+                    availableCompanies: availableCompanies,
+                    availableBranches: sortedBranches,
+                    allInvoices: allInvoices,
+                  ),
+                ),
+              ),
             ),
-          ),
 
           // 3. SCROLLABLE INVOICES FEED / DATA ROWS
           if (filteredInvoices.isEmpty)
@@ -1523,74 +1549,84 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     required double avgSpeed,
     required VoidCallback onExportCsv,
   }) {
-    final isMobile = MediaQuery.of(context).size.width < 680;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double width = constraints.maxWidth;
+        final bool isMobile = width < 600;
 
-    final List<Widget> cards = [
-      _buildStatKpiCard(
-        title: strings.totalReceiptsCount,
-        value: '$totalInvoices',
-        subtitle: isAr ? 'سجل العمليات والفواتير المدققة' : (isHi ? 'सत्यापित रसीदें' : 'Audited receipts & scan logs'),
-        icon: Icons.receipt_long_rounded,
-        accentColor: Colors.blue.shade700,
-        badgeText: isAr ? 'فاتورة مفحوصة' : (isHi ? 'रसीदें' : 'Audited'),
-        colorScheme: colorScheme,
-        tooltip: isAr ? 'إجمالي عدد الفواتير التي تم مسحها وتدقيقها بالذكاء الاصطناعي' : 'Total receipts processed & audited',
-        isMobile: isMobile,
-      ),
-      _buildStatKpiCard(
-        title: strings.totalPromotionalSales,
-        value: '${totalPromoSales.toStringAsFixed(1)} ${activeCountry.currencySymbol}',
-        subtitle: isAr ? 'قيمة مشتريات المنتجات المعتمدة' : (isHi ? 'प्रचार बिक्री' : 'Verified promotional purchases'),
-        icon: Icons.payments_rounded,
-        accentColor: Colors.teal.shade700,
-        badgeText: activeCountry.nameAr,
-        colorScheme: colorScheme,
-        tooltip: isAr ? 'إجمالي المبيعات المحققة لمنتجات الحملة بالعُملة المحلية' : 'Total promotional sales volume',
-        isMobile: isMobile,
-      ),
-      _buildStatKpiCard(
-        title: strings.totalItemsPurchased,
-        value: '$totalItems',
-        subtitle: isAr ? 'الكميات المستخرجة من الفواتير' : (isHi ? 'कुल उत्पाद' : 'Total items detected in receipts'),
-        icon: Icons.inventory_2_rounded,
-        accentColor: Colors.purple.shade700,
-        badgeText: isAr ? 'قطع مباعة' : (isHi ? 'उत्पाद' : 'Units'),
-        colorScheme: colorScheme,
-        tooltip: isAr ? 'إجمالي عدد القطع والمنتجات المستخرجة بالفحص' : 'Total product units extracted from receipts',
-        isMobile: isMobile,
-      ),
-      _buildStatKpiCard(
-        title: strings.avgAiSpeed,
-        value: avgSpeed > 0 ? '${avgSpeed.toStringAsFixed(2)}s' : '⚡ <2.0s',
-        subtitle: isAr ? 'زمن تحليل الفاتورة بـ Gemini AI' : (isHi ? 'एआई गति' : 'Gemini AI receipt audit latency'),
-        icon: Icons.bolt_rounded,
-        accentColor: Colors.amber.shade800,
-        badgeText: '⚡ Gemini AI',
-        colorScheme: colorScheme,
-        tooltip: isAr ? 'متوسط الوقت المستغرق لتحليل الفاتورة ومطابقة الأصناف' : 'Average AI processing latency',
-        isMobile: isMobile,
-      ),
-    ];
+        int crossAxisCount = 4;
+        double childAspectRatio = 1.65;
+        if (width < 600) {
+          crossAxisCount = 1;
+          childAspectRatio = 2.3;
+        } else if (width < 960) {
+          crossAxisCount = 2;
+          childAspectRatio = 1.85;
+        } else if (width < 1200) {
+          crossAxisCount = 2;
+          childAspectRatio = 2.1;
+        }
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(isMobile ? 12 : 20, isMobile ? 10 : 16, isMobile ? 12 : 20, isMobile ? 8 : 12),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final double width = constraints.maxWidth;
-          final int crossAxisCount = width < 1100 ? 2 : 4;
-          final double childAspectRatio = isMobile ? 1.32 : (width < 1100 ? 2.1 : 1.6);
+        final List<Widget> cards = [
+          _buildStatKpiCard(
+            title: strings.totalReceiptsCount,
+            value: '$totalInvoices',
+            subtitle: isAr ? 'سجل العمليات والفواتير المدققة' : (isHi ? 'सत्यापित रसीदें' : 'Audited receipts & scan logs'),
+            icon: Icons.receipt_long_rounded,
+            accentColor: Colors.blue.shade700,
+            badgeText: isAr ? 'فاتورة مفحوصة' : (isHi ? 'रसीदें' : 'Audited'),
+            colorScheme: colorScheme,
+            tooltip: isAr ? 'إجمالي عدد الفواتير التي تم مسحها وتدقيقها بالذكاء الاصطناعي' : 'Total receipts processed & audited',
+            isMobile: isMobile,
+          ),
+          _buildStatKpiCard(
+            title: strings.totalPromotionalSales,
+            value: '${totalPromoSales.toStringAsFixed(1)} ${activeCountry.currencySymbol}',
+            subtitle: isAr ? 'قيمة مشتريات المنتجات المعتمدة' : (isHi ? 'प्रचार बिक्री' : 'Verified promotional purchases'),
+            icon: Icons.payments_rounded,
+            accentColor: Colors.teal.shade700,
+            badgeText: activeCountry.nameAr,
+            colorScheme: colorScheme,
+            tooltip: isAr ? 'إجمالي المبيعات المحققة لمنتجات الحملة بالعُملة المحلية' : 'Total promotional sales volume',
+            isMobile: isMobile,
+          ),
+          _buildStatKpiCard(
+            title: strings.totalItemsPurchased,
+            value: '$totalItems',
+            subtitle: isAr ? 'الكميات المستخرجة من الفواتير' : (isHi ? 'कुल उत्पाद' : 'Total items detected in receipts'),
+            icon: Icons.inventory_2_rounded,
+            accentColor: Colors.purple.shade700,
+            badgeText: isAr ? 'قطع مباعة' : (isHi ? 'उत्पाद' : 'Units'),
+            colorScheme: colorScheme,
+            tooltip: isAr ? 'إجمالي عدد القطع والمنتجات المستخرجة بالفحص' : 'Total product units extracted from receipts',
+            isMobile: isMobile,
+          ),
+          _buildStatKpiCard(
+            title: strings.avgAiSpeed,
+            value: avgSpeed > 0 ? '${avgSpeed.toStringAsFixed(2)}s' : '⚡ <2.0s',
+            subtitle: isAr ? 'زمن تحليل الفاتورة بـ Gemini AI' : (isHi ? 'एआई गति' : 'Gemini AI receipt audit latency'),
+            icon: Icons.bolt_rounded,
+            accentColor: Colors.amber.shade800,
+            badgeText: '⚡ Gemini AI',
+            colorScheme: colorScheme,
+            tooltip: isAr ? 'متوسط الوقت المستغرق لتحليل الفاتورة ومطابقة الأصناف' : 'Average AI processing latency',
+            isMobile: isMobile,
+          ),
+        ];
 
-          return GridView.count(
+        return Padding(
+          padding: EdgeInsets.fromLTRB(isMobile ? 12 : 20, isMobile ? 8 : 16, isMobile ? 12 : 20, isMobile ? 8 : 12),
+          child: GridView.count(
             crossAxisCount: crossAxisCount,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            crossAxisSpacing: isMobile ? 8 : 14,
-            mainAxisSpacing: isMobile ? 8 : 14,
+            crossAxisSpacing: isMobile ? 12 : 14,
+            mainAxisSpacing: isMobile ? 12 : 14,
             childAspectRatio: childAspectRatio,
             children: cards,
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -1609,10 +1645,10 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       message: tooltip,
       waitDuration: const Duration(milliseconds: 300),
       child: Container(
-        padding: EdgeInsets.all(isMobile ? 8 : 14),
+        padding: EdgeInsets.symmetric(horizontal: 14, vertical: isMobile ? 12 : 12),
         decoration: BoxDecoration(
           color: colorScheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(isMobile ? 14 : 20),
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
         ),
         child: Column(
@@ -1623,31 +1659,28 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: EdgeInsets.all(isMobile ? 5 : 8),
+                  padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
                     color: accentColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(isMobile ? 8 : 12),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(icon, color: accentColor, size: isMobile ? 16 : 20),
+                  child: Icon(icon, color: accentColor, size: 18),
                 ),
-                const SizedBox(width: 4),
-                Flexible(
-                  child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: isMobile ? 5 : 8, vertical: isMobile ? 2 : 3),
-                    decoration: BoxDecoration(
-                      color: colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(isMobile ? 6 : 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    badgeText,
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: accentColor,
                     ),
-                    child: Text(
-                      badgeText,
-                      style: GoogleFonts.cairo(
-                        fontSize: isMobile ? 8.5 : 10.5,
-                        fontWeight: FontWeight.bold,
-                        color: accentColor,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -1659,7 +1692,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
               child: Text(
                 value,
                 style: GoogleFonts.cairo(
-                  fontSize: isMobile ? 15 : 17,
+                  fontSize: 18,
                   fontWeight: FontWeight.w900,
                   color: colorScheme.onSurface,
                   letterSpacing: -0.3,
@@ -1667,11 +1700,11 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                 maxLines: 1,
               ),
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: 1),
             Text(
               title,
               style: GoogleFonts.cairo(
-                fontSize: isMobile ? 10.5 : 11.5,
+                fontSize: 12,
                 fontWeight: FontWeight.bold,
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -1681,7 +1714,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
             Text(
               subtitle,
               style: GoogleFonts.cairo(
-                fontSize: isMobile ? 9 : 9.5,
+                fontSize: 9.5,
                 color: colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
               ),
               maxLines: 1,
@@ -2047,10 +2080,17 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                       Expanded(child: exportCsvButton),
                       if (hasActiveFilters) ...[
                         const SizedBox(width: 8),
-                        IconButton.filledTonal(
-                          tooltip: strings.clearFiltersBtn,
-                          icon: const Icon(Icons.filter_alt_off_rounded, color: Colors.red, size: 18),
-                          onPressed: _resetFilters,
+                        SizedBox(
+                          height: 42,
+                          width: 42,
+                          child: IconButton.filledTonal(
+                            tooltip: strings.clearFiltersBtn,
+                            icon: const Icon(Icons.filter_alt_off_rounded, color: Colors.red, size: 18),
+                            onPressed: _resetFilters,
+                            style: IconButton.styleFrom(
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
                         ),
                       ],
                     ],
@@ -2070,10 +2110,17 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                       datePickerWidget,
                       exportCsvButton,
                       if (hasActiveFilters) ...[
-                        IconButton(
-                          tooltip: strings.clearFiltersBtn,
-                          icon: const Icon(Icons.filter_alt_off_rounded, color: Colors.red, size: 20),
-                          onPressed: _resetFilters,
+                        SizedBox(
+                          height: 42,
+                          width: 42,
+                          child: IconButton.filledTonal(
+                            tooltip: strings.clearFiltersBtn,
+                            icon: const Icon(Icons.filter_alt_off_rounded, color: Colors.red, size: 18),
+                            onPressed: _resetFilters,
+                            style: IconButton.styleFrom(
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
                         ),
                       ],
                     ],
@@ -2106,6 +2153,8 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     required Map<String, String> availableCompanies,
     required List<Map<String, dynamic>> allInvoices,
   }) {
+    final isMobile = MediaQuery.of(context).size.width < 750;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2115,6 +2164,114 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
             final count = allInvoices.where((inv) => inv['campaignId'] == activeEvent.id).length;
             final isActive = activeEvent.isActive && !activeEvent.isExpired;
 
+            if (isMobile) {
+              // Mobile Layout for Active Campaign Card: Clean vertical stacking with zero overflow
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: colorScheme.primary.withValues(alpha: 0.6), width: 1.2),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(Icons.campaign_rounded, color: colorScheme.onPrimary, size: 16),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          isAr ? 'الفعالية المحددة:' : 'Active Festival:',
+                          style: GoogleFonts.cairo(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: isActive ? Colors.green.shade100 : Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            isActive ? (isAr ? 'نشطة' : 'Active') : (isAr ? 'منتهية' : 'Ended'),
+                            style: GoogleFonts.cairo(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.bold,
+                              color: isActive ? Colors.green.shade900 : Colors.grey.shade800,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        IconButton.filledTonal(
+                          tooltip: isAr ? 'عرض كافة الفعاليات' : 'Show All Campaigns',
+                          icon: const Icon(Icons.close_rounded, size: 16),
+                          padding: const EdgeInsets.all(4),
+                          constraints: const BoxConstraints(),
+                          onPressed: () {
+                            setState(() {
+                              _selectedCampaignId = 'all';
+                              _resetPagination();
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      activeEvent.eventName,
+                      style: GoogleFonts.cairo(fontSize: 13.5, fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${activeEvent.targetCompany} • ${activeEvent.retailChainName} • ($count ${isAr ? "فاتورة" : "receipts"})',
+                      style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.tonalIcon(
+                        onPressed: () => _showCampaignSelectorDialog(
+                          context: context,
+                          colorScheme: colorScheme,
+                          strings: strings,
+                          isAr: isAr,
+                          eventsMap: scopedEventsMap,
+                          availableCompanies: availableCompanies,
+                          allInvoices: allInvoices,
+                        ),
+                        icon: const Icon(Icons.swap_horiz_rounded, size: 16),
+                        label: Text(
+                          isAr ? 'تغيير الفعالية' : 'Change Campaign',
+                          style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
+                        ),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                          visualDensity: VisualDensity.compact,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            // Desktop Layout for Active Campaign Banner
             return Container(
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -2218,106 +2375,279 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
         ],
 
         // Quick Filter Bar + Open Full Campaign Search Dialog Button
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              FilledButton.icon(
-                onPressed: () => _showCampaignSelectorDialog(
-                  context: context,
-                  colorScheme: colorScheme,
-                  strings: strings,
-                  isAr: isAr,
-                  eventsMap: scopedEventsMap,
-                  availableCompanies: availableCompanies,
-                  allInvoices: allInvoices,
-                ),
-                icon: const Icon(Icons.tune_rounded, size: 16),
-                label: Text(
-                  isAr
-                      ? 'تصفية الفعاليات والمهرجانات (${scopedEventsMap.length})'
-                      : 'Filter Campaigns (${scopedEventsMap.length})',
-                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
-                ),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
+        if (isMobile) ...[
+          // Mobile: Full Width Filter Button + Quick Choice Chips with Wrap
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => _showCampaignSelectorDialog(
+                context: context,
+                colorScheme: colorScheme,
+                strings: strings,
+                isAr: isAr,
+                eventsMap: scopedEventsMap,
+                availableCompanies: availableCompanies,
+                allInvoices: allInvoices,
               ),
-              const SizedBox(width: 8),
-
+              icon: const Icon(Icons.tune_rounded, size: 16),
+              label: Text(
+                isAr
+                    ? 'تصفية الفعاليات والمهرجانات (${scopedEventsMap.length})'
+                    : 'Filter Campaigns (${scopedEventsMap.length})',
+                style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
               ChoiceChip(
-                label: Text('${strings.allCampaigns} (${allInvoices.length})'),
+                label: Text(
+                  '${strings.allCampaigns} (${allInvoices.length})',
+                  style: GoogleFonts.cairo(
+                    fontSize: 11,
+                    fontWeight: _selectedCampaignId == 'all' ? FontWeight.bold : FontWeight.w600,
+                  ),
+                ),
                 selected: _selectedCampaignId == 'all',
                 onSelected: (_) => setState(() {
                   _selectedCampaignId = 'all';
                   _resetPagination();
                 }),
+                showCheckmark: false,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                selectedColor: colorScheme.primaryContainer,
+                side: BorderSide(
+                  color: _selectedCampaignId == 'all'
+                      ? colorScheme.primary.withValues(alpha: 0.8)
+                      : colorScheme.outlineVariant.withValues(alpha: 0.8),
+                  width: 1.1,
+                ),
               ),
-              const SizedBox(width: 6),
-
-              for (final entry in scopedEventsMap.entries.take(4)) ...[
+              for (final entry in scopedEventsMap.entries.take(3)) ...[
                 () {
                   final event = entry.value;
                   final count = allInvoices.where((inv) => inv['campaignId'] == event.id).length;
-                  return Padding(
-                    padding: const EdgeInsetsDirectional.only(end: 6),
-                    child: ChoiceChip(
-                      avatar: CircleAvatar(
-                        radius: 10,
-                        backgroundColor: colorScheme.primary.withValues(alpha: 0.15),
-                        child: Icon(Icons.campaign_rounded, size: 12, color: colorScheme.primary),
+                  final isSel = _selectedCampaignId == event.id;
+                  return ChoiceChip(
+                    avatar: CircleAvatar(
+                      radius: 9,
+                      backgroundColor: isSel
+                          ? colorScheme.primary.withValues(alpha: 0.2)
+                          : colorScheme.surfaceContainerHighest,
+                      child: Icon(
+                        Icons.campaign_rounded,
+                        size: 11,
+                        color: isSel ? colorScheme.primary : colorScheme.onSurfaceVariant,
                       ),
-                      label: Text('${event.eventName} ($count)'),
-                      selected: _selectedCampaignId == event.id,
-                      onSelected: (_) => setState(() {
-                        _selectedCampaignId = event.id;
-                        _resetPagination();
-                      }),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    label: Text(
+                      '${event.eventName} ($count)',
+                      style: GoogleFonts.cairo(
+                        fontSize: 11,
+                        fontWeight: isSel ? FontWeight.bold : FontWeight.w600,
+                      ),
+                    ),
+                    selected: isSel,
+                    onSelected: (_) => setState(() {
+                      _selectedCampaignId = event.id;
+                      _resetPagination();
+                    }),
+                    showCheckmark: false,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                    selectedColor: colorScheme.primaryContainer,
+                    side: BorderSide(
+                      color: isSel
+                          ? colorScheme.primary.withValues(alpha: 0.8)
+                          : colorScheme.outlineVariant.withValues(alpha: 0.8),
+                      width: 1.1,
                     ),
                   );
                 }(),
               ],
-
-              if (availableCompanies.length > 1 && (widget.lockedCompanySlug == null || widget.lockedCompanySlug!.isEmpty)) ...[
-                const SizedBox(width: 12),
-                Padding(
-                  padding: const EdgeInsetsDirectional.only(end: 8),
-                  child: Text(
-                    '${strings.companyField}:',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.onSurfaceVariant),
-                  ),
-                ),
-                ChoiceChip(
-                  label: Text(strings.allCampaigns),
-                  selected: _selectedCompanySlug == 'all',
-                  onSelected: (_) => setState(() {
-                    _selectedCompanySlug = 'all';
-                    _resetPagination();
-                  }),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                const SizedBox(width: 6),
-                for (final comp in availableCompanies.entries) ...[
-                  Padding(
-                    padding: const EdgeInsetsDirectional.only(end: 6),
-                    child: ChoiceChip(
-                      label: Text(comp.value),
-                      selected: _selectedCompanySlug == comp.key,
-                      onSelected: (_) => setState(() {
-                        _selectedCompanySlug = comp.key;
-                        _resetPagination();
-                      }),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                  ),
-                ],
-              ],
             ],
           ),
-        ),
+        ] else ...[
+          // Desktop / Tablet Horizontal Bar
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                FilledButton.icon(
+                  onPressed: () => _showCampaignSelectorDialog(
+                    context: context,
+                    colorScheme: colorScheme,
+                    strings: strings,
+                    isAr: isAr,
+                    eventsMap: scopedEventsMap,
+                    availableCompanies: availableCompanies,
+                    allInvoices: allInvoices,
+                  ),
+                  icon: const Icon(Icons.tune_rounded, size: 16),
+                  label: Text(
+                    isAr
+                        ? 'تصفية الفعاليات والمهرجانات (${scopedEventsMap.length})'
+                        : 'Filter Campaigns (${scopedEventsMap.length})',
+                    style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
+                  ),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+
+                ChoiceChip(
+                  label: Text(
+                    '${strings.allCampaigns} (${allInvoices.length})',
+                    style: GoogleFonts.cairo(
+                      fontSize: 11.5,
+                      fontWeight: _selectedCampaignId == 'all' ? FontWeight.bold : FontWeight.w600,
+                    ),
+                  ),
+                  selected: _selectedCampaignId == 'all',
+                  onSelected: (_) => setState(() {
+                    _selectedCampaignId = 'all';
+                    _resetPagination();
+                  }),
+                  showCheckmark: false,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                  selectedColor: colorScheme.primaryContainer,
+                  side: BorderSide(
+                    color: _selectedCampaignId == 'all'
+                        ? colorScheme.primary.withValues(alpha: 0.8)
+                        : colorScheme.outlineVariant.withValues(alpha: 0.8),
+                    width: 1.1,
+                  ),
+                ),
+                const SizedBox(width: 6),
+
+                for (final entry in scopedEventsMap.entries.take(4)) ...[
+                  () {
+                    final event = entry.value;
+                    final count = allInvoices.where((inv) => inv['campaignId'] == event.id).length;
+                    final isSel = _selectedCampaignId == event.id;
+                    return Padding(
+                      padding: const EdgeInsetsDirectional.only(end: 6),
+                      child: ChoiceChip(
+                        avatar: CircleAvatar(
+                          radius: 10,
+                          backgroundColor: isSel
+                              ? colorScheme.primary.withValues(alpha: 0.2)
+                              : colorScheme.surfaceContainerHighest,
+                          child: Icon(
+                            Icons.campaign_rounded,
+                            size: 12,
+                            color: isSel ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        label: Text(
+                          '${event.eventName} ($count)',
+                          style: GoogleFonts.cairo(
+                            fontSize: 11.5,
+                            fontWeight: isSel ? FontWeight.bold : FontWeight.w600,
+                          ),
+                        ),
+                        selected: isSel,
+                        onSelected: (_) => setState(() {
+                          _selectedCampaignId = event.id;
+                          _resetPagination();
+                        }),
+                        showCheckmark: false,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                        selectedColor: colorScheme.primaryContainer,
+                        side: BorderSide(
+                          color: isSel
+                              ? colorScheme.primary.withValues(alpha: 0.8)
+                              : colorScheme.outlineVariant.withValues(alpha: 0.8),
+                          width: 1.1,
+                        ),
+                      ),
+                    );
+                  }(),
+                ],
+
+                if (availableCompanies.length > 1 && (widget.lockedCompanySlug == null || widget.lockedCompanySlug!.isEmpty)) ...[
+                  const SizedBox(width: 12),
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(end: 8),
+                    child: Text(
+                      '${strings.companyField}:',
+                      style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.onSurfaceVariant),
+                    ),
+                  ),
+                  ChoiceChip(
+                    label: Text(
+                      strings.allCampaigns,
+                      style: GoogleFonts.cairo(
+                        fontSize: 11.5,
+                        fontWeight: _selectedCompanySlug == 'all' ? FontWeight.bold : FontWeight.w600,
+                      ),
+                    ),
+                    selected: _selectedCompanySlug == 'all',
+                    onSelected: (_) => setState(() {
+                      _selectedCompanySlug = 'all';
+                      _resetPagination();
+                    }),
+                    showCheckmark: false,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                    selectedColor: colorScheme.primaryContainer,
+                    side: BorderSide(
+                      color: _selectedCompanySlug == 'all'
+                          ? colorScheme.primary.withValues(alpha: 0.8)
+                          : colorScheme.outlineVariant.withValues(alpha: 0.8),
+                      width: 1.1,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  for (final comp in availableCompanies.entries) ...[
+                    () {
+                      final isSel = _selectedCompanySlug == comp.key;
+                      return Padding(
+                        padding: const EdgeInsetsDirectional.only(end: 6),
+                        child: ChoiceChip(
+                          label: Text(
+                            comp.value,
+                            style: GoogleFonts.cairo(
+                              fontSize: 11.5,
+                              fontWeight: isSel ? FontWeight.bold : FontWeight.w600,
+                            ),
+                          ),
+                          selected: isSel,
+                          onSelected: (_) => setState(() {
+                            _selectedCompanySlug = comp.key;
+                            _resetPagination();
+                          }),
+                          showCheckmark: false,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                          selectedColor: colorScheme.primaryContainer,
+                          side: BorderSide(
+                            color: isSel
+                                ? colorScheme.primary.withValues(alpha: 0.8)
+                                : colorScheme.outlineVariant.withValues(alpha: 0.8),
+                            width: 1.1,
+                          ),
+                        ),
+                      );
+                    }(),
+                  ],
+                ],
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -3762,11 +4092,11 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     required bool hasActiveCampaign,
   }) {
     if (screenWidth < 750) {
-      return hasActiveCampaign ? 285.0 : 195.0;
+      return hasActiveCampaign ? 340.0 : 250.0;
     } else if (screenWidth < 1350) {
-      return hasActiveCampaign ? 245.0 : 155.0;
+      return hasActiveCampaign ? 260.0 : 175.0;
     } else {
-      return hasActiveCampaign ? 208.0 : 120.0;
+      return hasActiveCampaign ? 220.0 : 130.0;
     }
   }
 }

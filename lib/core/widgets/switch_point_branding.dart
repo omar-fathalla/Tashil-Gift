@@ -72,6 +72,57 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
     final activeCountry = ref.watch(activeCountryProvider);
     final isAr = ref.isArabic;
 
+    if (isMobile) {
+      return Container(
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerLow,
+          border: Border(
+            bottom: BorderSide(
+              color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+              width: 1,
+            ),
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 8,
+          vertical: 6,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // 1. Right Side (Start in RTL): The Menu / Drawer / Leading button alone
+            if (leading != null)
+              leading!
+            else if (customActions != null && customActions!.isNotEmpty)
+              Row(mainAxisSize: MainAxisSize.min, children: customActions!)
+            else
+              const SizedBox(width: 36),
+
+            // 2. Middle / Center: Language Switcher + Country & Currency Switcher
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildLanguageSelector(context, ref, colorScheme, true, isAr),
+                const SizedBox(width: 4),
+                _buildCountryCurrencySelector(context, ref, colorScheme, true, activeCountry),
+              ],
+            ),
+
+            // 3. Left Side (End in RTL): System Dark/Light Mode + Switch Point Brand Logo
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildThemeModeButton(ref, colorScheme, isDark, true),
+                const SizedBox(width: 4),
+                _buildMobileLogo(context, colorScheme),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerLow,
@@ -82,260 +133,287 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
           ),
         ),
       ),
-      padding: EdgeInsets.symmetric(
-        horizontal: isMobile ? 8 : 16,
-        vertical: isMobile ? 6 : 8,
+      padding: const EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 8,
       ),
       child: Row(
         children: [
-          ?leading,
+          if (leading != null) ...[
+            leading!,
+            const SizedBox(width: 8),
+          ],
 
           // Switch Point Brand Logo & Title with click-to-website
-          if (isMobile)
-            Tooltip(
-              message: AppVersionConfig.tooltipText,
-              child: InkWell(
-                onTap: () => SwitchPointInfo.launchLink(SwitchPointInfo.websiteUrl),
-                borderRadius: BorderRadius.circular(12),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          colorScheme.primary,
-                          colorScheme.tertiary,
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: [
-                        BoxShadow(
-                          color: colorScheme.primary.withValues(alpha: 0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
+          Expanded(
+            child: InkWell(
+              onTap: () => SwitchPointInfo.launchLink(SwitchPointInfo.websiteUrl),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            colorScheme.primary,
+                            colorScheme.tertiary,
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.hub_rounded,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                  ),
-                ),
-              ),
-            )
-          else
-            Expanded(
-              child: InkWell(
-                onTap: () => SwitchPointInfo.launchLink(SwitchPointInfo.websiteUrl),
-                borderRadius: BorderRadius.circular(12),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              colorScheme.primary,
-                              colorScheme.tertiary,
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: colorScheme.primary.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
                           ),
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: colorScheme.primary.withValues(alpha: 0.3),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.hub_rounded,
-                          color: Colors.white,
-                          size: 22,
-                        ),
+                        ],
                       ),
-                      const SizedBox(width: 10),
-                      Flexible(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    SwitchPointInfo.platformName,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.cairo(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: colorScheme.primary,
-                                      letterSpacing: 0.5,
-                                    ),
+                      child: const Icon(
+                        Icons.hub_rounded,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Flexible(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  SwitchPointInfo.platformName,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: colorScheme.primary,
+                                    letterSpacing: 0.5,
                                   ),
                                 ),
-                                const SizedBox(width: 5),
-                                Tooltip(
-                                  message: AppVersionConfig.tooltipText,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                    decoration: BoxDecoration(
-                                      color: colorScheme.primaryContainer,
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      AppVersionConfig.versionDisplay,
-                                      style: GoogleFonts.cairo(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                        color: colorScheme.onPrimaryContainer,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Text(
-                              subtitle ?? (isAr ? 'حلول الترويج والتحقق الذكي متعدد الشركات' : (ref.isHindi ? 'स्मार्ट मल्टी-कंपनी प्रचार और एआई सत्यापन' : 'Smart Multi-Company Promotion & AI Verification')),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                              style: GoogleFonts.cairo(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                                color: colorScheme.onSurfaceVariant,
                               ),
+                              const SizedBox(width: 5),
+                              Tooltip(
+                                message: AppVersionConfig.tooltipText,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.primaryContainer,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    AppVersionConfig.versionDisplay,
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: colorScheme.onPrimaryContainer,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            subtitle ?? (isAr ? 'حلول الترويج والتحقق الذكي متعدد الشركات' : (ref.isHindi ? 'स्मार्ट मल्टी-कंपनी प्रचार और एआई सत्यापन' : 'Smart Multi-Company Promotion & AI Verification')),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: GoogleFonts.cairo(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: colorScheme.onSurfaceVariant,
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
+          ),
 
           // Custom Actions (e.g. Preview button)
           if (customActions != null) ...customActions!,
 
-          SizedBox(width: isMobile ? 2 : 8),
+          const SizedBox(width: 8),
 
           // Language Switcher (العربية / English / हिन्दी)
-          PopupMenuButton<String>(
-            tooltip: isAr ? 'تغيير لغة النظام' : (ref.isHindi ? 'भाषा बदलें' : 'Change System Language'),
-            position: PopupMenuPosition.under,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
-            ),
-            color: colorScheme.surfaceContainerHigh,
-            elevation: 6,
-            onSelected: (String code) {
-              ref.setLocale(code);
-            },
-            itemBuilder: (BuildContext context) {
-              return AppLanguage.values.map((lang) {
-                final isSelected = ref.watch(localeProvider).languageCode == lang.code;
-                return PopupMenuItem<String>(
-                  value: lang.code,
-                  child: Row(
-                    children: [
-                      Text(lang.flagEmoji, style: const TextStyle(fontSize: 18)),
-                      const SizedBox(width: 10),
-                      Text(
-                        lang.label,
-                        style: GoogleFonts.cairo(
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          color: isSelected ? colorScheme.primary : colorScheme.onSurface,
-                        ),
-                      ),
-                      if (isSelected) ...[
-                        const Spacer(),
-                        Icon(
-                          Icons.check_rounded,
-                          color: colorScheme.primary,
-                          size: 18,
-                        ),
-                      ],
-                    ],
-                  ),
-                );
-              }).toList();
-            },
-            child: Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: isMobile ? 5 : 10,
-                vertical: isMobile ? 4 : 6,
-              ),
-              decoration: BoxDecoration(
-                color: colorScheme.primaryContainer.withValues(alpha: 0.45),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: colorScheme.primary.withValues(alpha: 0.35),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    ref.currentAppLanguage.flagEmoji,
-                    style: TextStyle(fontSize: isMobile ? 14 : 16),
-                  ),
-                  if (!isMobile) ...[
-                    const SizedBox(width: 4),
-                    Text(
-                      ref.currentAppLanguage.shortLabel,
-                      style: GoogleFonts.cairo(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.primary,
-                      ),
-                    ),
-                  ],
-                  Icon(
-                    Icons.arrow_drop_down_rounded,
-                    size: isMobile ? 16 : 18,
-                    color: colorScheme.primary,
-                  ),
-                ],
-              ),
-            ),
-          ),
+          _buildLanguageSelector(context, ref, colorScheme, false, isAr),
 
-          SizedBox(width: isMobile ? 2 : 8),
+          const SizedBox(width: 8),
 
           // Country & Currency Selector
-          _buildCountryCurrencySelector(context, ref, colorScheme, isMobile, activeCountry),
+          _buildCountryCurrencySelector(context, ref, colorScheme, false, activeCountry),
 
-          SizedBox(width: isMobile ? 2 : 8),
+          const SizedBox(width: 8),
 
           // Theme Mode Switcher (Dark / Light)
-          IconButton(
-            icon: Icon(
-              isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-              color: isDark ? Colors.amber : colorScheme.onSurfaceVariant,
-              size: isMobile ? 18 : 24,
-            ),
-            padding: EdgeInsets.all(isMobile ? 4 : 8),
-            constraints: isMobile ? const BoxConstraints() : null,
-            tooltip: isDark ? 'التحويل للوضع الفاتح (Light Mode)' : 'التحويل للوضع الداكن (Dark Mode)',
-            onPressed: () {
-              ref.read(themeModeProvider.notifier).state =
-                  isDark ? ThemeMode.light : ThemeMode.dark;
-            },
-          ),
+          _buildThemeModeButton(ref, colorScheme, isDark, false),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMobileLogo(BuildContext context, ColorScheme colorScheme) {
+    return Tooltip(
+      message: AppVersionConfig.tooltipText,
+      child: InkWell(
+        onTap: () => SwitchPointInfo.launchLink(SwitchPointInfo.websiteUrl),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+          child: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  colorScheme.primary,
+                  colorScheme.tertiary,
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(
+                  color: colorScheme.primary.withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.hub_rounded,
+              color: Colors.white,
+              size: 18,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThemeModeButton(
+    WidgetRef ref,
+    ColorScheme colorScheme,
+    bool isDark,
+    bool isMobile,
+  ) {
+    return IconButton(
+      icon: Icon(
+        isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+        color: isDark ? Colors.amber : colorScheme.onSurfaceVariant,
+        size: isMobile ? 18 : 24,
+      ),
+      padding: EdgeInsets.all(isMobile ? 4 : 8),
+      constraints: isMobile ? const BoxConstraints() : null,
+      tooltip: isDark
+          ? 'التحويل للوضع الفاتح (Light Mode)'
+          : 'التحويل للوضع الداكن (Dark Mode)',
+      onPressed: () {
+        ref.read(themeModeProvider.notifier).state =
+            isDark ? ThemeMode.light : ThemeMode.dark;
+      },
+    );
+  }
+
+  Widget _buildLanguageSelector(
+    BuildContext context,
+    WidgetRef ref,
+    ColorScheme colorScheme,
+    bool isMobile,
+    bool isAr,
+  ) {
+    return PopupMenuButton<String>(
+      tooltip: isAr
+          ? 'تغيير لغة النظام'
+          : (ref.isHindi ? 'भाषा बदलें' : 'Change System Language'),
+      position: PopupMenuPosition.under,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+      ),
+      color: colorScheme.surfaceContainerHigh,
+      elevation: 6,
+      onSelected: (String code) {
+        ref.setLocale(code);
+      },
+      itemBuilder: (BuildContext context) {
+        return AppLanguage.values.map((lang) {
+          final isSelected = ref.watch(localeProvider).languageCode == lang.code;
+          return PopupMenuItem<String>(
+            value: lang.code,
+            child: Row(
+              children: [
+                Text(lang.flagEmoji, style: const TextStyle(fontSize: 18)),
+                const SizedBox(width: 10),
+                Text(
+                  lang.label,
+                  style: GoogleFonts.cairo(
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    color: isSelected ? colorScheme.primary : colorScheme.onSurface,
+                  ),
+                ),
+                if (isSelected) ...[
+                  const Spacer(),
+                  Icon(
+                    Icons.check_rounded,
+                    color: colorScheme.primary,
+                    size: 18,
+                  ),
+                ],
+              ],
+            ),
+          );
+        }).toList();
+      },
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 6 : 10,
+          vertical: isMobile ? 4 : 6,
+        ),
+        decoration: BoxDecoration(
+          color: colorScheme.primaryContainer.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: colorScheme.primary.withValues(alpha: 0.35),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              ref.currentAppLanguage.flagEmoji,
+              style: TextStyle(fontSize: isMobile ? 14 : 16),
+            ),
+            if (!isMobile) ...[
+              const SizedBox(width: 4),
+              Text(
+                ref.currentAppLanguage.shortLabel,
+                style: GoogleFonts.cairo(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.primary,
+                ),
+              ),
+            ],
+            Icon(
+              Icons.arrow_drop_down_rounded,
+              size: isMobile ? 16 : 18,
+              color: colorScheme.primary,
+            ),
+          ],
+        ),
       ),
     );
   }

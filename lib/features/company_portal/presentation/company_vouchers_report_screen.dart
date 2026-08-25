@@ -113,11 +113,21 @@ class CompanyVouchersReportScreen extends ConsumerStatefulWidget {
   ConsumerState<CompanyVouchersReportScreen> createState() => _CompanyVouchersReportScreenState();
 }
 
-class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersReportScreen> {
+class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersReportScreen>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   String? _selectedEventId;
   String? _selectedBranch;
   double? _selectedVoucherDenomFilter;
   final TextEditingController _branchSearchController = TextEditingController();
+
+  // In-memory cache for instant 0ms tab switching
+  List<EventModel>? _cachedAllEvents;
+  List<QueryDocumentSnapshot>? _cachedGiftsDocs;
+  List<QueryDocumentSnapshot>? _cachedTxDocs;
+  List<BranchModel>? _cachedDbBranches;
 
   @override
   void initState() {
@@ -371,6 +381,7 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
   // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final currentLocale = ref.watch(localeProvider);
     final isAr = currentLocale.languageCode == 'ar';
     final isHi = currentLocale.languageCode == 'hi';
@@ -432,18 +443,25 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                   stream: db.collection('branches').snapshots(),
                   builder: (context, branchesSnapshot) {
                     if (eventsSnapshot.connectionState == ConnectionState.waiting &&
-                        !eventsSnapshot.hasData) {
+                        !eventsSnapshot.hasData &&
+                        _cachedAllEvents == null) {
                       return const Center(child: CircularProgressIndicator());
                     }
 
-                    final allEvents = eventsSnapshot.data?.docs.map((d) {
-                          try {
-                            return EventModel.fromFirestore(d);
-                          } catch (_) {
-                            return null;
-                          }
-                        }).whereType<EventModel>().toList() ??
-                        [];
+                    final eventDocs = eventsSnapshot.data?.docs;
+                    final allEvents = (eventDocs != null && eventDocs.isNotEmpty)
+                        ? eventDocs.map((d) {
+                              try {
+                                return EventModel.fromFirestore(d);
+                              } catch (_) {
+                                return null;
+                              }
+                            }).whereType<EventModel>().toList()
+                        : (_cachedAllEvents ?? []);
+
+                    if (allEvents.isNotEmpty) {
+                      _cachedAllEvents = allEvents;
+                    }
 
                     // Resolve Company Scoping
                     final effectiveSlug = widget.lockedCompanySlug?.trim().toLowerCase() ?? '';
@@ -459,24 +477,38 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                       return matchSlug || matchName;
                     }).toList();
 
-                    final masterGifts = giftsSnapshot.data?.docs.map((d) {
+                    final giftDocs = giftsSnapshot.data?.docs ?? _cachedGiftsDocs ?? [];
+                    if (giftsSnapshot.hasData && giftsSnapshot.data!.docs.isNotEmpty) {
+                      _cachedGiftsDocs = giftsSnapshot.data!.docs;
+                    }
+
+                    final masterGifts = giftDocs.map((d) {
                           try {
                             return CompanyGiftModel.fromFirestore(d);
                           } catch (_) {
                             return null;
                           }
-                        }).whereType<CompanyGiftModel>().toList() ??
-                        [];
+                        }).whereType<CompanyGiftModel>().toList();
 
-                    final txDocs = txSnapshot.data?.docs ?? [];
-                    final dbBranches = branchesSnapshot.data?.docs.map((d) {
-                          try {
-                            return BranchModel.fromFirestore(d);
-                          } catch (_) {
-                            return null;
-                          }
-                        }).whereType<BranchModel>().toList() ??
-                        [];
+                    final txDocs = txSnapshot.data?.docs ?? _cachedTxDocs ?? [];
+                    if (txSnapshot.hasData && txSnapshot.data!.docs.isNotEmpty) {
+                      _cachedTxDocs = txSnapshot.data!.docs;
+                    }
+
+                    final branchDocs = branchesSnapshot.data?.docs;
+                    final dbBranches = (branchDocs != null && branchDocs.isNotEmpty)
+                        ? branchDocs.map((d) {
+                              try {
+                                return BranchModel.fromFirestore(d);
+                              } catch (_) {
+                                return null;
+                              }
+                            }).whereType<BranchModel>().toList()
+                        : (_cachedDbBranches ?? []);
+
+                    if (dbBranches.isNotEmpty) {
+                      _cachedDbBranches = dbBranches;
+                    }
 
                     return _buildVouchersView(
                       context: context,
@@ -647,18 +679,18 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
 
     final content = Directionality(
       textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // 1. Fixed / Sticky Top Header & Controls Card (يبقى ثابتاً عند التمرير)
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              isMobile ? 12 : 20,
-              isMobile ? 12 : 20,
-              isMobile ? 12 : 20,
-              14,
-            ),
-            child: _buildHeaderControlsCard(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          isMobile ? 12 : 20,
+          isMobile ? 12 : 20,
+          isMobile ? 12 : 20,
+          isMobile ? 96 : 20,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 1. Executive Top Header & Controls Card
+            _buildHeaderControlsCard(
               context: context,
               colorScheme: colorScheme,
               textTheme: textTheme,
@@ -671,59 +703,44 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
               voucherMetrics: voucherMetrics,
               txDocs: txDocs,
             ),
-          ),
+            const SizedBox(height: 16),
 
-          // 2. Scrollable Content (Denominations, Hero KPI Grid, and Branch Distribution Matrix)
-          Expanded(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                isMobile ? 12 : 20,
-                0,
-                isMobile ? 12 : 20,
-                isMobile ? 96 : 20,
+            // 2. Denominations Tabs Selector (كافة الفئات، فئة 25، فئة 50...)
+            if (voucherMetrics.denominations.isNotEmpty) ...[
+              _buildDenominationTabs(
+                colorScheme: colorScheme,
+                strings: strings,
+                isAr: isAr,
+                voucherMetrics: voucherMetrics,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // 2. Denominations Tabs Selector (كافة الفئات، فئة 25، فئة 50...)
-                  if (voucherMetrics.denominations.isNotEmpty) ...[
-                    _buildDenominationTabs(
-                      colorScheme: colorScheme,
-                      strings: strings,
-                      isAr: isAr,
-                      voucherMetrics: voucherMetrics,
-                    ),
-                    const SizedBox(height: 16),
-                  ],
+              const SizedBox(height: 16),
+            ],
 
-                  // 3. Hero KPI Grid (4 Dedicated Cards: Units, Budget, Disbursed Value, Remaining Balance)
-                  _buildVoucherKpiGrid(
-                    colorScheme: colorScheme,
-                    strings: strings,
-                    isAr: isAr,
-                    isHi: isHi,
-                    isMobile: isMobile,
-                    voucherMetrics: voucherMetrics,
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // 4. On-page Branch Allocation Matrix Table & Breakdown
-                  _buildBranchDistributionMatrixCard(
-                    colorScheme: colorScheme,
-                    strings: strings,
-                    isAr: isAr,
-                    isHi: isHi,
-                    isMobile: isMobile,
-                    voucherMetrics: voucherMetrics,
-                    distinctBranches: distinctBranches.toList(),
-                    dbBranches: dbBranches,
-                  ),
-                ],
-              ),
+            // 3. Hero KPI Grid (4 Dedicated Cards: Units, Budget, Disbursed Value, Remaining Balance)
+            _buildVoucherKpiGrid(
+              colorScheme: colorScheme,
+              strings: strings,
+              isAr: isAr,
+              isHi: isHi,
+              isMobile: isMobile,
+              voucherMetrics: voucherMetrics,
             ),
-          ),
-        ],
+
+            const SizedBox(height: 20),
+
+            // 4. On-page Branch Allocation Matrix Table & Breakdown
+            _buildBranchDistributionMatrixCard(
+              colorScheme: colorScheme,
+              strings: strings,
+              isAr: isAr,
+              isHi: isHi,
+              isMobile: isMobile,
+              voucherMetrics: voucherMetrics,
+              distinctBranches: distinctBranches.toList(),
+              dbBranches: dbBranches,
+            ),
+          ],
+        ),
       ),
     );
 
@@ -1177,7 +1194,7 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
   }
 
   // ---------------------------------------------------------------------------
-  // 3. Hero KPI Grid (4 Dedicated Cards in 2x2 Grid on Mobile)
+  // 3. Hero KPI Grid (1 Column on Mobile, 2 on Tablet, 4 on Desktop)
   // ---------------------------------------------------------------------------
   Widget _buildVoucherKpiGrid({
     required ColorScheme colorScheme,
@@ -1221,80 +1238,100 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                 .map((d) => '${d.label} (${_formatCount(d.allocatedCount > 0 ? d.allocatedCount : d.masterTotalCount)})')
                 .join(' • '));
 
-    final cards = [
-      _buildStatCard(
-        colorScheme: colorScheme,
-        icon: Icons.confirmation_number_rounded,
-        iconColor: const Color(0xFFD97706),
-        title: strings.totalVouchersAllocated,
-        value: _formatCount(totalAllocated),
-        badgeText: selectedDenom != null
-            ? 'فئة ${selectedDenom.label}'
-            : (voucherMetrics.denominations.length > 1
-                ? '${voucherMetrics.denominations.length} ${strings.activeDenominationsCount}'
-                : (voucherMetrics.denominations.isNotEmpty
-                    ? 'فئة ${voucherMetrics.denominations.first.label}'
-                    : (isAr ? 'قسائم مشتريات' : 'Vouchers'))),
-        badgeColor: const Color(0xFFD97706).withValues(alpha: 0.12),
-        badgeTextColor: const Color(0xFFB45309),
-        subtitle: denomsText,
-      ),
-      _buildStatCard(
-        colorScheme: colorScheme,
-        icon: Icons.account_balance_wallet_rounded,
-        iconColor: const Color(0xFF006C50),
-        title: strings.totalVouchersBudget,
-        value: _formatMoney(totalBudget, isAr: isAr),
-        badgeText: isAr ? 'الميزانية المرصودة' : 'Allocated Budget',
-        badgeColor: const Color(0xFF006C50).withValues(alpha: 0.12),
-        badgeTextColor: const Color(0xFF006C50),
-        subtitle: isAr ? 'التكلفة الإجمالية لكافة القسائم المعتمدة' : 'Total voucher financial backing',
-      ),
-      _buildStatCard(
-        colorScheme: colorScheme,
-        icon: Icons.shopping_bag_rounded,
-        iconColor: const Color(0xFF00639B),
-        title: strings.claimedVouchersValue,
-        value: _formatMoney(totalClaimedVal, isAr: isAr),
-        badgeText: '${(depletionRate * 100).toStringAsFixed(0)}% ${strings.depletionRateLabel}',
-        badgeColor: const Color(0xFF00639B).withValues(alpha: 0.12),
-        badgeTextColor: const Color(0xFF00639B),
-        subtitle: '${_formatCount(totalClaimedCount)} ${isAr ? 'قسيمة تم تسليمها للفائزين' : 'claimed vouchers'}',
-      ),
-      _buildStatCard(
-        colorScheme: colorScheme,
-        icon: Icons.savings_rounded,
-        iconColor: totalRemainingCount <= 0
-            ? const Color(0xFFB3261E)
-            : (totalRemainingCount < 50 ? const Color(0xFFD97706) : const Color(0xFF006874)),
-        title: strings.remainingVouchersValue,
-        value: _formatMoney(totalRemainingVal, isAr: isAr),
-        badgeText: totalRemainingCount <= 0
-            ? strings.stockDepletedBadge
-            : (totalRemainingCount < 50 ? strings.stockLowBadge : strings.stockHealthyBadge),
-        badgeColor: (totalRemainingCount <= 0
-                ? const Color(0xFFB3261E)
-                : (totalRemainingCount < 50 ? const Color(0xFFD97706) : const Color(0xFF006874)))
-            .withValues(alpha: 0.12),
-        badgeTextColor: totalRemainingCount <= 0
-            ? const Color(0xFFB3261E)
-            : (totalRemainingCount < 50 ? const Color(0xFFD97706) : const Color(0xFF006874)),
-        subtitle: '${_formatCount(totalRemainingCount)} ${isAr ? 'قسيمة جاهزة ومتاحة للصرف' : 'ready for redemption'}',
-      ),
-    ];
-
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isMedium = constraints.maxWidth < 1050;
-        final crossAxisCount = isMedium ? 2 : 4;
-        final childAspectRatio = constraints.maxWidth < 640 ? 1.35 : (isMedium ? 1.55 : 1.65);
+        final double width = constraints.maxWidth;
+        final bool isMobileWidth = width < 600;
+
+        int crossAxisCount = 4;
+        double childAspectRatio = 1.65;
+        if (width < 600) {
+          crossAxisCount = 1;
+          childAspectRatio = 2.35;
+        } else if (width < 960) {
+          crossAxisCount = 2;
+          childAspectRatio = 1.85;
+        } else if (width < 1200) {
+          crossAxisCount = 2;
+          childAspectRatio = 2.1;
+        }
+
+        final cards = [
+          _buildStatCard(
+            colorScheme: colorScheme,
+            icon: Icons.confirmation_number_rounded,
+            iconColor: const Color(0xFFD97706),
+            title: isAr ? 'إجمالي قسائم المشتريات' : strings.totalVouchersAllocated,
+            value: _formatCount(totalAllocated),
+            badgeText: selectedDenom != null
+                ? 'فئة ${selectedDenom.label}'
+                : (voucherMetrics.denominations.length > 1
+                    ? '${voucherMetrics.denominations.length} ${strings.activeDenominationsCount}'
+                    : (voucherMetrics.denominations.isNotEmpty
+                        ? 'فئة ${voucherMetrics.denominations.first.label}'
+                        : (isAr ? 'قسائم مشتريات' : 'Vouchers'))),
+            badgeColor: const Color(0xFFD97706).withValues(alpha: 0.12),
+            badgeTextColor: const Color(0xFFB45309),
+            subtitle: denomsText,
+            tooltip: isAr ? 'إجمالي عدد قسائم وفواتشرات المشتريات المعتمدة للحملة' : 'Total purchase vouchers allocated',
+            isMobile: isMobileWidth,
+          ),
+          _buildStatCard(
+            colorScheme: colorScheme,
+            icon: Icons.account_balance_wallet_rounded,
+            iconColor: const Color(0xFF006C50),
+            title: isAr ? 'الميزانية المرصودة الإجمالية' : strings.totalVouchersBudget,
+            value: _formatMoney(totalBudget, isAr: isAr),
+            badgeText: isAr ? 'الميزانية المعتمدة' : 'Allocated Budget',
+            badgeColor: const Color(0xFF006C50).withValues(alpha: 0.12),
+            badgeTextColor: const Color(0xFF006C50),
+            subtitle: isAr ? 'التكلفة الإجمالية لكافة القسائم المعتمدة' : 'Total voucher financial backing',
+            tooltip: isAr ? 'القيمة المالية الإجمالية لقسائم الشراء المعتمدة' : 'Total allocated voucher budget',
+            isMobile: isMobileWidth,
+          ),
+          _buildStatCard(
+            colorScheme: colorScheme,
+            icon: Icons.shopping_bag_rounded,
+            iconColor: const Color(0xFF00639B),
+            title: isAr ? 'قيمة القسائم المصروفة' : strings.claimedVouchersValue,
+            value: _formatMoney(totalClaimedVal, isAr: isAr),
+            badgeText: '${(depletionRate * 100).toStringAsFixed(0)}% ${strings.depletionRateLabel}',
+            badgeColor: const Color(0xFF00639B).withValues(alpha: 0.12),
+            badgeTextColor: const Color(0xFF00639B),
+            subtitle: '${_formatCount(totalClaimedCount)} ${isAr ? 'قسيمة تم تسليمها للفائزين' : 'claimed vouchers'}',
+            tooltip: isAr ? 'القيمة المالية الإجمالية للقسائم المسلمة للمستهلكين' : 'Total disbursed voucher monetary value',
+            isMobile: isMobileWidth,
+          ),
+          _buildStatCard(
+            colorScheme: colorScheme,
+            icon: Icons.savings_rounded,
+            iconColor: totalRemainingCount <= 0
+                ? const Color(0xFFB3261E)
+                : (totalRemainingCount < 50 ? const Color(0xFFD97706) : const Color(0xFF006874)),
+            title: isAr ? 'الرصيد المالي المتبقي' : strings.remainingVouchersValue,
+            value: _formatMoney(totalRemainingVal, isAr: isAr),
+            badgeText: totalRemainingCount <= 0
+                ? strings.stockDepletedBadge
+                : (totalRemainingCount < 50 ? strings.stockLowBadge : strings.stockHealthyBadge),
+            badgeColor: (totalRemainingCount <= 0
+                    ? const Color(0xFFB3261E)
+                    : (totalRemainingCount < 50 ? const Color(0xFFD97706) : const Color(0xFF006874)))
+                .withValues(alpha: 0.12),
+            badgeTextColor: totalRemainingCount <= 0
+                ? const Color(0xFFB3261E)
+                : (totalRemainingCount < 50 ? const Color(0xFFD97706) : const Color(0xFF006874)),
+            subtitle: '${_formatCount(totalRemainingCount)} ${isAr ? 'قسيمة جاهزة ومتاحة للصرف' : 'ready for redemption'}',
+            tooltip: isAr ? 'القيمة المالية المتبقية من قسائم الشراء المتاحة للصرف' : 'Remaining voucher financial budget in stock',
+            isMobile: isMobileWidth,
+          ),
+        ];
 
         return GridView.count(
           crossAxisCount: crossAxisCount,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
+          mainAxisSpacing: isMobileWidth ? 12 : 14,
+          crossAxisSpacing: isMobileWidth ? 12 : 14,
           childAspectRatio: childAspectRatio,
           children: cards,
         );
@@ -1312,60 +1349,51 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
     required Color badgeColor,
     required Color badgeTextColor,
     required String subtitle,
+    required String tooltip,
+    bool isMobile = false,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, size: 16, color: iconColor),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: GoogleFonts.cairo(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Flexible(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 300),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+          boxShadow: [
+            BoxShadow(
+              color: colorScheme.shadow.withValues(alpha: 0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
-                    color: badgeColor,
-                    borderRadius: BorderRadius.circular(6),
+                    color: iconColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, size: 18, color: iconColor),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     badgeText,
                     style: GoogleFonts.cairo(
-                      fontSize: 9.5,
+                      fontSize: 10,
                       fontWeight: FontWeight.bold,
                       color: badgeTextColor,
                     ),
@@ -1373,31 +1401,45 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(
+                value,
+                style: GoogleFonts.cairo(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: colorScheme.onSurface,
+                  letterSpacing: -0.3,
+                ),
+                maxLines: 1,
               ),
-            ],
-          ),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: AlignmentDirectional.centerStart,
-            child: Text(
-              value,
+            ),
+            const SizedBox(height: 1),
+            Text(
+              title,
               style: GoogleFonts.cairo(
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-                color: colorScheme.onSurface,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: colorScheme.onSurfaceVariant,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-          ),
-          Text(
-            subtitle,
-            style: GoogleFonts.cairo(
-              fontSize: 10,
-              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+            Text(
+              subtitle,
+              style: GoogleFonts.cairo(
+                fontSize: 9.5,
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

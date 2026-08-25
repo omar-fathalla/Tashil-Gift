@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_service.dart';
 import '../../features/company_portal/domain/daily_branch_sales_model.dart';
 import '../../core/utils/slug_utils.dart';
+import '../../core/utils/arabic_numbers_utils.dart';
 
 final dailySalesAggregationServiceProvider = Provider<DailySalesAggregationService>((ref) {
   final firestore = ref.watch(firestoreProvider);
@@ -51,28 +52,209 @@ class DailySalesAggregationService {
     return 0.0;
   }
 
-  static String _normalizeBranch(String rawBranch, Set<String> canonicalBranches) {
-    if (rawBranch.isEmpty) return '';
+  static String _cleanBranchForComparison(String branch) {
+    var s = branch.trim().toLowerCase().toEnglishDigits();
+    // Diacritics
+    s = s.replaceAll(RegExp(r'[\u064B-\u065F\u0670]'), '');
+    // Alef normalization
+    s = s.replaceAll(RegExp(r'[أإآ]'), 'ا');
+    // Ta marbuta and ya
+    s = s.replaceAll('ة', 'ه').replaceAll('ى', 'ي');
+    // Remove city / governorate suffixes in parentheses (Rule #8)
+    s = s.replaceAll(
+      RegExp(
+        r'\((القاهرة|الإسكندرية|الاسكندرية|الجيزة|الغربية|الدقهلية|المنوفية|الشرقية|البحيرة|كفر الشيخ|دمياط|بورسعيد|السويس|الإسماعيلية|الفيوم|بني سويف|المنيا|أسيوط|سوهاج|قنا|الأقصر|أسوان|مطروح|cairo|alexandria|giza)\)',
+        caseSensitive: false,
+      ),
+      ' ',
+    );
+    // Punctuation, symbols, and brackets
+    s = s.replaceAll(RegExp(r'[\(\)\[\]\{\}\-\_\,\.\:\/]'), ' ');
+    // Remove prefixes and noise words
+    s = s.replaceAll(RegExp(r'\b(فرع|سلسلة|store|branch|مفرع|pos|كود|محافظة|مدينة)\b', caseSensitive: false), ' ');
+    // Extra spaces
+    s = s.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return s;
+  }
 
-    // Strip parenthetical governorate (Rule #8)
-    String cleaned = rawBranch
-        .replaceAll(RegExp(r'\s*\([^)]*\)'), '')
-        .replaceAll(RegExp(r'فرع\s+'), '')
-        .trim();
+  /// Validates whether a transaction document data represents an accepted valid invoice
+  static bool isValidInvoice(Map<String, dynamic> data) {
+    final bool isExplicitlyValid = data['is_valid'] == true || data['status'] == 'accepted' || data['isValid'] == true;
+    final bool isExplicitlyRejected = data['is_valid'] == false ||
+        data['status'] == 'rejected' ||
+        data['status'] == 'fraud' ||
+        data['status'] == 'deleted' ||
+        data['isValid'] == false ||
+        data['is_fraud'] == true ||
+        ((data['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
+    return isExplicitlyValid || (!isExplicitlyRejected && ((data['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
+  }
 
-    for (final cb in canonicalBranches) {
-      final cbClean = cb
-          .replaceAll(RegExp(r'\s*\([^)]*\)'), '')
-          .replaceAll(RegExp(r'فرع\s+'), '')
-          .trim();
-      if (cbClean.toLowerCase() == cleaned.toLowerCase() ||
-          cb.toLowerCase() == rawBranch.toLowerCase() ||
-          rawBranch.contains(cbClean) ||
-          cbClean.contains(cleaned)) {
-        return cb;
+  /// Extracts the net sales revenue for target company promo with unified priority matching Campaign Reports
+  static double extractSalesAmount(Map<String, dynamic> data) {
+    final num? directVal = (data['target_company_total'] ??
+        data['total_value'] ??
+        data['promo_sales'] ??
+        data['total_amount'] ??
+        data['totalAmount'] ??
+        data['receipt_total'] ??
+        data['net_amount'] ??
+        data['total']) as num?;
+    if (directVal != null && directVal > 0) {
+      return directVal.toDouble();
+    }
+
+    // Fallback: sum of extracted target products
+    double sum = 0.0;
+    final rawExtracted = (data['extracted_products'] as List?) ?? [];
+    for (final p in rawExtracted) {
+      if (p is Map) {
+        final pQty = (p['quantity'] as num?)?.toInt() ?? 1;
+        final pPrice = (p['price'] ?? p['unit_price'] as num?)?.toDouble() ?? 0.0;
+        sum += (pQty * pPrice);
       }
     }
-    return rawBranch;
+    return sum;
+  }
+
+  /// Universal Canonical Branch Resolution (Zero-Dropping: Returns clean string if no canonical match found)
+  static String normalizeBranchName(
+    String rawBranch,
+    Iterable<String> canonicalBranches, {
+    bool isAr = true,
+  }) {
+    final clean = rawBranch.trim();
+    if (clean.isEmpty) return isAr ? 'فرع غير محدد' : 'Unspecified Branch';
+    final branchesList = canonicalBranches.where((b) => b.trim().isNotEmpty).toList();
+    if (branchesList.isEmpty) return clean;
+
+    // 1. Direct case-insensitive match
+    for (final canonical in branchesList) {
+      if (canonical.trim().toLowerCase() == clean.toLowerCase()) {
+        return canonical;
+      }
+    }
+
+    // 2. Cleaned exact match
+    final cleanComp = _cleanBranchForComparison(clean);
+    for (final canonical in branchesList) {
+      final canonComp = _cleanBranchForComparison(canonical);
+      if (cleanComp == canonComp && cleanComp.isNotEmpty) {
+        return canonical;
+      }
+    }
+
+    // 3. Precision Area / Branch matching (Rule #8)
+    // A. Gardenia
+    if (cleanComp.contains('جاردينيا') || cleanComp.contains('gardenia')) {
+      for (final canonical in branchesList) {
+        if (_cleanBranchForComparison(canonical).contains('جاردينيا')) return canonical;
+      }
+    }
+
+    // B. Agamy
+    if (cleanComp.contains('عجمي') || cleanComp.contains('agamy') || cleanComp.contains('agami')) {
+      for (final canonical in branchesList) {
+        if (_cleanBranchForComparison(canonical).contains('عجمي')) return canonical;
+      }
+    }
+
+    // C. Smouha
+    if (cleanComp.contains('سموح') || cleanComp.contains('smouha')) {
+      for (final canonical in branchesList) {
+        if (_cleanBranchForComparison(canonical).contains('سموح')) return canonical;
+      }
+    }
+
+    // D. Mahalla El Kubra
+    if (cleanComp.contains('محله') || cleanComp.contains('mahalla')) {
+      for (final canonical in branchesList) {
+        if (_cleanBranchForComparison(canonical).contains('محله')) return canonical;
+      }
+    }
+
+    // E. Shebin El Kom
+    if (cleanComp.contains('شين') || cleanComp.contains('شبين') || cleanComp.contains('shebin')) {
+      for (final canonical in branchesList) {
+        final c = _cleanBranchForComparison(canonical);
+        if (c.contains('شبين') || c.contains('شين')) return canonical;
+      }
+    }
+
+    // F. Tagmoo / Fifth Settlement / Park Mall
+    if (cleanComp.contains('تجمع') || cleanComp.contains('tagmoo') || cleanComp.contains('park mall') || cleanComp.contains('fifth')) {
+      for (final canonical in branchesList) {
+        final c = _cleanBranchForComparison(canonical);
+        if (c.contains('تجمع') || c.contains('tagmoo')) return canonical;
+      }
+    }
+
+    // G. 6th of October
+    if (cleanComp.contains('اكتوبر') || cleanComp.contains('october') || cleanComp.contains('سادس')) {
+      for (final canonical in branchesList) {
+        final c = _cleanBranchForComparison(canonical);
+        if (c.contains('اكتوبر') || c.contains('october')) return canonical;
+      }
+    }
+
+    // H. Mansoura
+    if (cleanComp.contains('منصور') || cleanComp.contains('mansoura')) {
+      for (final canonical in branchesList) {
+        if (_cleanBranchForComparison(canonical).contains('منصور')) return canonical;
+      }
+    }
+
+    // I. Obour / Salah Salem
+    if (cleanComp.contains('صلاح سالم') || cleanComp.contains('عبور') || cleanComp.contains('obour')) {
+      for (final canonical in branchesList) {
+        final c = _cleanBranchForComparison(canonical);
+        if (c.contains('صلاح سالم') || c.contains('عبور')) return canonical;
+      }
+    }
+
+    // J. Montazah (and Store 418 / كود 418)
+    if (clean.toEnglishDigits().contains('418') || cleanComp.contains('منتزه') || cleanComp.contains('montazah')) {
+      for (final canonical in branchesList) {
+        final c = _cleanBranchForComparison(canonical);
+        if (c.contains('منتزه') || c.contains('montazah') || canonical.toEnglishDigits().contains('418')) return canonical;
+      }
+    }
+
+    // K. Miami
+    if (cleanComp.contains('ميامي') || cleanComp.contains('miami')) {
+      for (final canonical in branchesList) {
+        if (_cleanBranchForComparison(canonical).contains('ميامي')) return canonical;
+      }
+    }
+
+    // L. Janaklis
+    if (cleanComp.contains('جناكليس') || cleanComp.contains('janaklis')) {
+      for (final canonical in branchesList) {
+        if (_cleanBranchForComparison(canonical).contains('جناكليس')) return canonical;
+      }
+    }
+
+    // 4. Store Code Match (e.g. "Store: 418" / "Store 418" / "كود 418")
+    final rawDigits = RegExp(r'\b\d+\b').allMatches(clean.toEnglishDigits()).map((m) => m.group(0)!).toSet();
+    if (rawDigits.isNotEmpty) {
+      for (final canonical in branchesList) {
+        final canonDigits = RegExp(r'\b\d+\b').allMatches(canonical.toEnglishDigits()).map((m) => m.group(0)!).toSet();
+        if (rawDigits.intersection(canonDigits).isNotEmpty) {
+          return canonical;
+        }
+      }
+    }
+
+    // 5. Fallback containment matching
+    for (final canonical in branchesList) {
+      final canonComp = _cleanBranchForComparison(canonical);
+      if (canonComp.isNotEmpty && (cleanComp.contains(canonComp) || canonComp.contains(cleanComp))) {
+        return canonical;
+      }
+    }
+
+    // 6. Zero-Dropping Guarantee: Return clean raw string if no canonical match, NEVER drop invoice!
+    return clean;
   }
 
   /// Real-time stream of daily branch sales from materialized collection `daily_campaign_branch_sales`
@@ -104,59 +286,23 @@ class DailySalesAggregationService {
     });
   }
 
-  /// On-demand real-time aggregation from `receipts_transactions`
-  /// Reads 100% of receipts without dropping valid invoices.
-  Future<List<DailyBranchSalesModel>> aggregateLiveFromTransactions({
+  /// Core pure aggregation algorithm from raw transaction data maps (0ms CPU overhead)
+  static List<DailyBranchSalesModel> aggregateTransactionsData({
+    required List<Map<String, dynamic>> rawTransactions,
     required String companySlug,
     String? campaignId,
-    String? targetDateStr, // Optional specific date (YYYY-MM-DD)
-  }) async {
-    final db = _firestore;
-    if (db == null) return [];
-
+    String? targetDateStr,
+    Set<String> companyBranches = const {},
+    Set<String> companyEventIds = const {},
+    Map<String, String> companyEventNames = const {},
+    Set<String> companyTargetNames = const {},
+  }) {
     final slug = companySlug.toLowerCase().trim();
-    if (slug.isEmpty) return [];
-
-    // 1. Fetch company events to resolve campaign metadata and canonical branch lists
-    final eventsSnap = await db.collection('events').get();
-    final companyEvents = eventsSnap.docs.where((d) {
-      final data = d.data();
-      final eSlug = (data['companySlug'] ?? data['company_slug'] ?? '').toString().toLowerCase().trim();
-      final targetComp = (data['targetCompany'] ?? data['target_company'] ?? '').toString().toLowerCase().trim();
-      return (slug.isNotEmpty && eSlug == slug) || (slug.isNotEmpty && targetComp.contains(slug));
-    }).toList();
-
-    final companyEventIds = companyEvents.map((d) => d.id).toSet();
-    final companyEventNames = <String, String>{
-      for (var d in companyEvents) d.id: (d.data()['eventName'] ?? d.data()['name'] ?? 'حملة ترويجية').toString()
-    };
-    final companyTargetNames = companyEvents
-        .map((d) => (d.data()['targetCompany'] ?? d.data()['target_company'] ?? '').toString().trim())
-        .where((t) => t.isNotEmpty)
-        .toSet();
-
-    final Set<String> companyBranches = {};
-    for (final d in companyEvents) {
-      final bNames = (d.data()['branchNames'] as List?)?.map((e) => e.toString().trim()).where((e) => e.isNotEmpty) ?? [];
-      companyBranches.addAll(bNames);
-      final prizes = (d.data()['allocatedPrizes'] as List?) ?? [];
-      for (final p in prizes) {
-        if (p is Map) {
-          final b = (p['branchName'] ?? p['branch_name'] ?? '').toString().trim();
-          if (b.isNotEmpty) companyBranches.add(b);
-        }
-      }
-    }
-
-    // 2. Query transactions collection
-    final txSnap = await db.collection('receipts_transactions').get();
-    if (txSnap.docs.isEmpty) return [];
+    if (slug.isEmpty || rawTransactions.isEmpty) return [];
 
     final Map<String, _DailyBranchAccumulator> accumulators = {};
 
-    for (final doc in txSnap.docs) {
-      final data = doc.data();
-
+    for (final data in rawTransactions) {
       // Check Company Match (Supports slug, targetCompany, companyName, campaignId)
       final docSlug = (data['companySlug'] ?? data['company_slug'] ?? '').toString().toLowerCase().trim();
       final docTarget = (data['targetCompany'] ?? data['target_company'] ?? data['companyName'] ?? data['company'] ?? '').toString().toLowerCase().trim();
@@ -180,9 +326,8 @@ class DailySalesAggregationService {
         if (docCampaignId != campaignId) continue;
       }
 
-      // Check Status: ONLY skip explicit fraudulent or deleted receipts
-      final status = (data['status'] ?? '').toString().toLowerCase().trim();
-      if (status == 'rejected' || status == 'fraud' || status == 'deleted' || data['is_fraud'] == true) {
+      // Check Status with Unified Rule (matches Campaign Reports & Invoices Log)
+      if (!isValidInvoice(data)) {
         continue;
       }
 
@@ -226,12 +371,9 @@ class DailySalesAggregationService {
         if (dateStr != targetDateStr) continue;
       }
 
-      // Extract Branch with Rule #8 Canonical Normalization
-      String rawBranch = (data['canonical_branch'] ?? data['branch_detected'] ?? data['branch_name'] ?? data['branchName'] ?? data['branch'] ?? '').toString().trim();
-      String branchName = _normalizeBranch(rawBranch, companyBranches);
-      if (branchName.isEmpty) {
-        branchName = 'الفرع الرئيسي';
-      }
+      // Extract Branch with Rule #8 Canonical Normalization (Never dropped)
+      final rawBranch = (data['canonical_branch'] ?? data['branch_detected'] ?? data['branch_name'] ?? data['branchName'] ?? data['branch'] ?? '').toString().trim();
+      final branchName = normalizeBranchName(rawBranch, companyBranches);
       final branchId = (data['branch_id'] ?? data['branchId'] ?? '').toString();
       final retailChain = (data['retail_chain_name'] ?? data['store_chain_detected'] ?? data['store_chain'] ?? '').toString();
 
@@ -261,27 +403,8 @@ class DailySalesAggregationService {
       // Add Invoice Count
       acc.invoicesCount += 1;
 
-      // Extract Sales Total from all possible field names
-      double salesVal = (data['target_company_total'] ??
-              data['promo_sales'] ??
-              data['total_value'] ??
-              data['total_amount'] ??
-              data['totalAmount'] ??
-              data['receipt_total'] ??
-              data['net_amount'] ??
-              data['total'] as num?)
-          ?.toDouble() ?? 0.0;
-
-      if (salesVal <= 0.0) {
-        final rawExtracted = (data['extracted_products'] as List?) ?? [];
-        for (final p in rawExtracted) {
-          if (p is Map) {
-            final pQty = (p['quantity'] as num?)?.toInt() ?? 1;
-            final pPrice = (p['price'] ?? p['unit_price'] as num?)?.toDouble() ?? 0.0;
-            salesVal += (pQty * pPrice);
-          }
-        }
-      }
+      // Extract Sales Total using Unified Logic
+      final salesVal = extractSalesAmount(data);
       acc.totalSalesAmount += salesVal;
 
       // Extract Disbursed Gifts and Vouchers
@@ -416,6 +539,68 @@ class DailySalesAggregationService {
     return accumulators.values.map((a) => a.toModel()).toList();
   }
 
+  /// On-demand real-time aggregation from `receipts_transactions`
+  /// Reads 100% of receipts without dropping valid invoices.
+  Future<List<DailyBranchSalesModel>> aggregateLiveFromTransactions({
+    required String companySlug,
+    String? campaignId,
+    String? targetDateStr, // Optional specific date (YYYY-MM-DD)
+  }) async {
+    final db = _firestore;
+    if (db == null) return [];
+
+    final slug = companySlug.toLowerCase().trim();
+    if (slug.isEmpty) return [];
+
+    // 1. Fetch company events to resolve campaign metadata and canonical branch lists
+    final eventsSnap = await db.collection('events').get();
+    final companyEvents = eventsSnap.docs.where((d) {
+      final data = d.data();
+      final eSlug = (data['companySlug'] ?? data['company_slug'] ?? '').toString().toLowerCase().trim();
+      final targetComp = (data['targetCompany'] ?? data['target_company'] ?? '').toString().toLowerCase().trim();
+      return (slug.isNotEmpty && eSlug == slug) || (slug.isNotEmpty && targetComp.contains(slug));
+    }).toList();
+
+    final companyEventIds = companyEvents.map((d) => d.id).toSet();
+    final companyEventNames = <String, String>{
+      for (var d in companyEvents) d.id: (d.data()['eventName'] ?? d.data()['name'] ?? 'حملة ترويجية').toString()
+    };
+    final companyTargetNames = companyEvents
+        .map((d) => (d.data()['targetCompany'] ?? d.data()['target_company'] ?? '').toString().trim())
+        .where((t) => t.isNotEmpty)
+        .toSet();
+
+    final Set<String> companyBranches = {};
+    for (final d in companyEvents) {
+      final bNames = (d.data()['branchNames'] as List?)?.map((e) => e.toString().trim()).where((e) => e.isNotEmpty) ?? [];
+      companyBranches.addAll(bNames);
+      final prizes = (d.data()['allocatedPrizes'] as List?) ?? [];
+      for (final p in prizes) {
+        if (p is Map) {
+          final b = (p['branchName'] ?? p['branch_name'] ?? '').toString().trim();
+          if (b.isNotEmpty) companyBranches.add(b);
+        }
+      }
+    }
+
+    // 2. Query transactions collection
+    final txSnap = await db.collection('receipts_transactions').get();
+    if (txSnap.docs.isEmpty) return [];
+
+    final rawTxList = txSnap.docs.map((d) => d.data()).toList();
+
+    return aggregateTransactionsData(
+      rawTransactions: rawTxList,
+      companySlug: slug,
+      campaignId: campaignId,
+      targetDateStr: targetDateStr,
+      companyBranches: companyBranches,
+      companyEventIds: companyEventIds,
+      companyEventNames: companyEventNames,
+      companyTargetNames: companyTargetNames,
+    );
+  }
+
   /// Backfills and materializes all historical daily branch sales records into `daily_campaign_branch_sales`
   /// Uses atomic batch writes with single-pass optimization.
   Future<int> backfillDailySalesFromTransactions({
@@ -425,6 +610,32 @@ class DailySalesAggregationService {
     final db = _firestore;
     if (db == null) return 0;
 
+    final slug = companySlug.toLowerCase().trim();
+    if (slug.isEmpty) return 0;
+
+    // 1. Wipe existing stale/rogue daily sales records for this company/campaign to ensure 100% clean sync
+    final oldDocsQuery = campaignId != null && campaignId.isNotEmpty && campaignId != 'all' && campaignId != 'ALL'
+        ? db.collection('daily_campaign_branch_sales').where('companySlug', isEqualTo: slug).where('campaignId', isEqualTo: campaignId)
+        : db.collection('daily_campaign_branch_sales').where('companySlug', isEqualTo: slug);
+    final oldDocs = await oldDocsQuery.get();
+    if (oldDocs.docs.isNotEmpty) {
+      WriteBatch deleteBatch = db.batch();
+      int dCount = 0;
+      for (final d in oldDocs.docs) {
+        deleteBatch.delete(d.reference);
+        dCount++;
+        if (dCount >= 400) {
+          await deleteBatch.commit();
+          deleteBatch = db.batch();
+          dCount = 0;
+        }
+      }
+      if (dCount > 0) {
+        await deleteBatch.commit();
+      }
+    }
+
+    // 2. Perform live multi-tier aggregation with canonical branch scoping
     final models = await aggregateLiveFromTransactions(
       companySlug: companySlug,
       campaignId: campaignId,
