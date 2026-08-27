@@ -18,13 +18,16 @@ void main() {
       ),
       PromotionalRuleItem(
         id: 'rule_2',
-        ruleTitle: 'عرض شرنك 2ق تريزيمي -> هدية تريزيمي 250 مل',
-        triggerProduct: 'عرض شرنك 2ق تريزيمي، تريزيمي شرنك',
-        minQuantity: 1,
+        ruleTitle: 'عرض تريزيمي 400 مل (شراء 2 قطعة) -> هدية تريزيمي 250 مل',
+        triggerProduct: 'تريزيمي 400 مل، تريزيمى شامبو + بلسم 400 ملى، تريزيمى شامبو + بلسم، تريزيمي شامبو، تريزيمي بلسم، تريزيمي، تريزمي، tresemme',
+        minQuantity: 2,
         rewardType: 'free_product',
         rewardValue: 'تريزيمي 250 مل هدية',
         rewardAmount: 0.0,
         allowMultipliers: true,
+        linkedGifts: [
+          LinkedGiftAllocation(giftId: 'g_tresemme', giftName: 'تريزيمي 250 مل هديه', quantity: 1, unitValue: 0.0, giftType: 'product'),
+        ],
       ),
       PromotionalRuleItem(
         id: 'rule_3',
@@ -68,8 +71,8 @@ void main() {
       ),
     ];
 
-    test('Customer Receipt from Fathalla with Axe Spray + Sunsilk + 2x Rexona Roll-on matches BOTH Rule 3 and Rule 5', () {
-      // Exact products extracted from the user's receipt image:
+    test('Customer Receipt from Fathalla with Twin-Bundle Axe Spray (335 EGP) + Sunsilk + 2x Rexona Roll-on matches BOTH Rule 4 (125 EGP) and Rule 5 (50 EGP)', () {
+      // Exact products extracted from the user's receipt image (with twin-pack bundle pricing):
       final extractedProducts = [
         ExtractedProductItem(
           name: 'اكس اسبراى 150مل',
@@ -111,16 +114,90 @@ void main() {
       expect(matchedResults.length, 2);
 
       final matchedRuleIds = matchedResults.map((r) => r.rule.id).toSet();
-      expect(matchedRuleIds, contains('rule_3')); // 1x Axe Spray -> 50 EGP voucher
-      expect(matchedRuleIds, contains('rule_5')); // 2x Rexona Roll-on (روول اون) -> 50 EGP voucher
+      expect(matchedRuleIds, contains('rule_4')); // Twin-bundle Axe Spray (335 EGP) -> Rule 4 (125 EGP voucher)
+      expect(matchedRuleIds, contains('rule_5')); // 2x Rexona Roll-on (روول اون) -> Rule 5 (50 EGP voucher)
 
       // Synthesize composite bundle
       final bundle = CompositePromotionalBundle.fromMatchedRules(matchedResults);
-      expect(bundle.totalVoucherValue, 100.0);
+      expect(bundle.totalVoucherValue, 175.0); // 125 + 50 = 175 EGP
       expect(bundle.matchedRules.length, 2);
-      expect(bundle.combinedLinkedGifts.length, 1); // Consolidated into single v_50 allocation
-      expect(bundle.combinedLinkedGifts.first.quantity, 2); // 2x 50 EGP = 100 EGP
-      expect(bundle.compositePrizeTitle, contains('50'));
+      expect(bundle.compositePrizeTitle, contains('125'));
+    });
+
+    test('Customer Receipt with ONLY 1 Twin-Bundle Axe Spray (335 EGP) yields EXACTLY 125 EGP (3 vouchers: 2x 50 + 1x 25), NEVER 375 EGP', () {
+      final extractedProducts = [
+        ExtractedProductItem(
+          name: 'اكس اسبراى 150مل',
+          price: 270.0,
+          originalPrice: 335.0,
+          discountAmount: 65.0,
+          quantity: 1,
+          isTargetCompany: true,
+        ),
+      ];
+
+      final matchedResults = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: extractedProducts,
+        promotionalRules: rules,
+        allowCampaignMultipliers: true,
+      );
+
+      expect(matchedResults.length, 1);
+      expect(matchedResults.first.rule.id, 'rule_4');
+      expect(matchedResults.first.totalRewardAmount, 125.0);
+
+      final bundle = CompositePromotionalBundle.fromMatchedRules(matchedResults);
+      expect(bundle.totalVoucherValue, 125.0);
+      expect(bundle.combinedLinkedGifts.fold<int>(0, (sum, g) => sum + g.quantity), 3); // 2x 50 + 1x 25 = 3 vouchers total
+    });
+
+    test('Customer Receipt with 2 Twin-Bundles (or 4 cans) yields EXACTLY 250 EGP (6 vouchers: 4x 50 + 2x 25)', () {
+      final extractedProducts = [
+        ExtractedProductItem(
+          name: 'اكس اسبراى 150مل',
+          price: 270.0,
+          originalPrice: 335.0,
+          discountAmount: 65.0,
+          quantity: 2, // 2 twin bundles = 4 cans
+          isTargetCompany: true,
+        ),
+      ];
+
+      final matchedResults = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: extractedProducts,
+        promotionalRules: rules,
+        allowCampaignMultipliers: true,
+      );
+
+      expect(matchedResults.length, 1);
+      expect(matchedResults.first.rule.id, 'rule_4');
+      expect(matchedResults.first.multiplier, 2);
+      expect(matchedResults.first.totalRewardAmount, 250.0);
+
+      final bundle = CompositePromotionalBundle.fromMatchedRules(matchedResults);
+      expect(bundle.totalVoucherValue, 250.0);
+      expect(bundle.combinedLinkedGifts.fold<int>(0, (sum, g) => sum + g.quantity), 6); // 4x 50 + 2x 25 = 6 vouchers total
+    });
+
+    test('Customer Receipt with single Axe Spray (140 EGP) matches Rule 3 (50 EGP)', () {
+      final extractedProducts = [
+        ExtractedProductItem(
+          name: 'اكس اسبراى 150مل',
+          price: 140.0,
+          quantity: 1,
+          isTargetCompany: true,
+        ),
+      ];
+
+      final matchedResults = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: extractedProducts,
+        promotionalRules: rules,
+        allowCampaignMultipliers: true,
+      );
+
+      expect(matchedResults.length, 1);
+      expect(matchedResults.first.rule.id, 'rule_3'); // 1x single spray -> Rule 3 (50 EGP voucher)
+      expect(matchedResults.first.totalRewardAmount, 50.0);
     });
 
     test('Receipt with phonetic spelling variations (رووول، اسبرى، تريزمي، صنسلك) matches seamlessly', () {
@@ -290,6 +367,31 @@ void main() {
 
       final v25Gift = bundle.combinedLinkedGifts.firstWhere((g) => g.giftName.contains('25'));
       expect(v25Gift.quantity, 1);
+    });
+
+    test('Customer Receipt from Rehab with 2x Tresemme 400ml matches Rule 2 and yields EXACTLY 1 Tresemme 250ml gift', () {
+      final rehabItems = [
+        ExtractedProductItem(
+          name: 'تريزيمى شامبو + بلسم 400 ملى لشعر املس ك',
+          price: 299.0,
+          quantity: 2,
+          barcode: '6221155612168',
+          isTargetCompany: true,
+        ),
+      ];
+
+      final matchedResults = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: rehabItems,
+        promotionalRules: rules,
+        allowCampaignMultipliers: true,
+      );
+
+      expect(matchedResults.length, 1);
+      final tresemmeMatch = matchedResults.first;
+      expect(tresemmeMatch.rule.id, 'rule_2');
+      expect(tresemmeMatch.multiplier, 1); // 2 bottles / 2 minQuantity = 1 gift
+      expect(tresemmeMatch.multipliedLinkedGifts.first.quantity, 1); // exactly 1 gift of Tresemme 250ml
+      expect(tresemmeMatch.multipliedLinkedGifts.first.giftName, contains('تريزيمي 250 مل'));
     });
   });
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -9,6 +10,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../../../core/services/firebase_service.dart';
 import '../../../core/services/ai_receipt_service.dart';
+import '../../../core/services/ai_product_discovery_service.dart';
 import '../../../core/services/company_products_service.dart';
 import '../../../core/services/retail_chains_service.dart';
 import '../../../core/utils/error_handler.dart';
@@ -387,6 +389,16 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         transactionData['prize_won'] = null;
         await transactionRef.set(transactionData);
       }
+
+      // Harvest discovered products asynchronously for the AI Product Discovery Hub
+      unawaited(ref.read(aiProductDiscoveryServiceProvider).autoHarvestFromReceiptAnalysis(
+        companySlug: activeEvent.companySlug,
+        companyName: activeEvent.targetCompany,
+        retailChain: result.storeChainDetected,
+        branch: result.branchDetected,
+        receiptNumber: receiptNumber.isNotEmpty ? receiptNumber : cleanReceiptNumber,
+        extractedProducts: result.extractedProducts,
+      ));
 
       if (!mounted) return;
 
@@ -971,6 +983,16 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         transactionData['timestamp'] = FieldValue.serverTimestamp();
         await docRef.set(transactionData);
       }
+
+      // Harvest discovered products asynchronously even if receipt didn't meet spend threshold
+      unawaited(ref.read(aiProductDiscoveryServiceProvider).autoHarvestFromReceiptAnalysis(
+        companySlug: activeEvent.companySlug,
+        companyName: activeEvent.targetCompany,
+        retailChain: result.storeChainDetected,
+        branch: result.branchDetected,
+        receiptNumber: receiptNumber.isNotEmpty ? receiptNumber : cleanReceiptNumber,
+        extractedProducts: result.extractedProducts,
+      ));
     } catch (e) {
       debugPrint('Error recording rejected receipt transaction to Firestore: $e');
     }

@@ -594,12 +594,14 @@ $rulesListFormatted
    - قم بكتابة ملخص الجوائز المجمعة في (matchedRewardValue) (مثال: "فواتشر 50 جنيه + فواتشر 50 جنيه").
    - قم بتعيين (matchedRuleId) بمعرف القاعدة الأولى المطابقة.
 3. في حال وجود أكثر من قاعدة لنفس المنتج بمستويات كميات مختلفة (مثل: شراء 1 اسبراي ريكسونا -> 50 ج.م، وشراء 2 اسبراي ريكسونا -> 125 ج.م)، يجب عليك اختيار القاعدة ذات الكمية المشروطة الأعلى التي حققها العميل (مثال: إذا اشترى 2 أو أكثر، اختر قاعدة الـ 125 ج.م).
-4. [مضاعفة الجوائز والفرص]: إذا كانت القاعدة تتيح المضاعفة، وكان العميل قد اشترى مضاعفات الكمية المشروطة:
+4. [حزم البندل وعروض الشرنك المزدوجة (Twin Bundles & Shrink)]: إذا احتوت الفاتورة على صنف حزمة مزدوجة أو شرنك (مثل عبوة أكس 2 قطعة أو سعر 335 ج.م مع خصم ~65 ج.م بصافي 270 ج.م، أو احتوى الاسم على كلمات شرنك/مزدوج/2ق)، يُعامل الصنف كـ (2 قطعة) ويطابق فوراً قاعدة الـ 2 قطعة (عرض الـ 125 ج.م).
+5. [عروض تريزيمي Tresemme]: أصناف تريزيمي (شامبو أو بلسم 400 مل، مثل 'تريزيمى شامبو + بلسم 400 ملى' أو باركود 6221155612168) تتبع شركة يونيليفر، وشراء قطعتين (الكمية = 2) يحقق شرط الـ 2 قطعة لقاعدة تريزيمي (rule_2) ويمنح هدية واحدة معتمدة من تريزيمي 250 مل (كمنتج مجاني free_product).
+6. [مضاعفة الجوائز والفرص]: إذا كانت القاعدة تتيح المضاعفة، وكان العميل قد اشترى مضاعفات الكمية المشروطة:
    - احسب عدد مرات تكرار العرض واضرب قيمة المكافأة بعدد المرات.
-5. قم بتعبئة حقل (matchedRuleId) بمعرف القاعدة المطابقة (مثل "rule_4" أو "rule_3").
-6. قم بتعبئة حقل (matchedRuleTitle) بعنوان القاعدة المطابقة.
-7. قم بتعبئة حقل (matchedRewardType) بنوع المكافأة ("voucher" أو "free_product").
-8. إذا لم تنطبق أي من هذه القواعد الخاصة، اترك حقل (matchedRuleId) فارغاً "" وحقل (matchedRuleIds) كقائمة فارغة [].
+7. قم بتعبئة حقل (matchedRuleId) بمعرف القاعدة المطابقة (مثل "rule_2" أو "rule_4" أو "rule_3").
+8. قم بتعبئة حقل (matchedRuleTitle) بعنوان القاعدة المطابقة.
+9. قم بتعبئة حقل (matchedRewardType) بنوع المكافأة ("voucher" أو "free_product").
+10. إذا لم تنطبق أي من هذه القواعد الخاصة، اترك حقل (matchedRuleId) فارغاً "" وحقل (matchedRuleIds) كقائمة فارغة [].
 ''';
       }
 
@@ -1243,7 +1245,7 @@ class PromotionalRuleMatcher {
 
         for (final p in effectiveProducts) {
           if (_matchesProduct(p, rule.triggerProduct)) {
-            totalMatchedQty += p.quantity > 0 ? p.quantity : 1;
+            totalMatchedQty += getEffectiveProductQuantity(p);
             matchedItemCount++;
           }
         }
@@ -1301,7 +1303,7 @@ class PromotionalRuleMatcher {
     if (effectiveProducts.isNotEmpty) {
       for (final p in effectiveProducts) {
         if (_matchesProduct(p, matchedRule.triggerProduct)) {
-          totalTriggerQty += p.quantity > 0 ? p.quantity : 1;
+          totalTriggerQty += getEffectiveProductQuantity(p);
         }
       }
     }
@@ -1404,7 +1406,7 @@ class PromotionalRuleMatcher {
       int totalAvailableQty = 0;
       for (final p in effectiveProducts) {
         if (sortedGroup.any((r) => _matchesProduct(p, r.triggerProduct))) {
-          totalAvailableQty += p.quantity > 0 ? p.quantity : 1;
+          totalAvailableQty += getEffectiveProductQuantity(p);
         }
       }
 
@@ -1498,6 +1500,29 @@ class PromotionalRuleMatcher {
     }
 
     return allMatchedResults;
+  }
+
+  /// Resolves the effective physical piece count of an item, taking into account twin bundles / shrink packs
+  /// where POS registers 1 quantity for a 2-piece physical promotional pack.
+  static int getEffectiveProductQuantity(ExtractedProductItem p) {
+    int qty = p.quantity > 0 ? p.quantity : 1;
+    final nameLower = _normalize(p.name);
+
+    // 1. Explicit keyword indicators for bundle/shrink/twin packs
+    final hasBundleName = RegExp(r'\b(شرنك|دبل|مزدوج|باندل|بندل|توين|2\s*قطعة|2\s*قطع|2\s*ق|2x|2\*)\b')
+        .hasMatch(nameLower);
+
+    // 2. Price heuristic for deodorant bodyspray twin bundles (Axe / Rexona)
+    // In retail, a single 150ml can is ~150-185 EGP. A twin bundle is 300+ EGP (e.g. 335 EGP gross, ~270 EGP net).
+    final bool isSpray = nameLower.contains('اسبراي') || nameLower.contains('اكس') || nameLower.contains('ريكسونا');
+    final double grossPrice = p.originalPrice ?? p.price;
+    final bool hasBundlePrice = isSpray && (grossPrice >= 280.0 || (p.price >= 250.0 && p.discountAmount >= 40.0));
+
+    if (hasBundleName || hasBundlePrice) {
+      return qty * 2;
+    }
+
+    return qty;
   }
 
   static const Set<String> _noiseWords = {
@@ -1623,12 +1648,33 @@ class PromotionalRuleMatcher {
   }
 
   static String _getProductGroupKey(PromotionalRuleItem rule) {
-    final raw = rule.triggerProduct.isNotEmpty ? rule.triggerProduct : rule.ruleTitle;
+    final raw = _normalize(rule.triggerProduct.isNotEmpty ? rule.triggerProduct : rule.ruleTitle);
+
+    // Canonical FMCG product family grouping:
+    if (raw.contains('رول') || raw.contains('roll')) {
+      return 'rollon_family';
+    }
+    if (raw.contains('اسبراي') || raw.contains('اكس') || raw.contains('ريكسونا') || raw.contains('spray')) {
+      return 'spray_family';
+    }
+    if (raw.contains('كلير') || raw.contains('clear')) {
+      return 'clear_family';
+    }
+    if (raw.contains('تريزيمي') || raw.contains('tresemme')) {
+      return 'tresemme_family';
+    }
+    if (raw.contains('صنسيلك') || raw.contains('sunsilk')) {
+      return 'sunsilk_family';
+    }
+    if (raw.contains('دوف') || raw.contains('dove')) {
+      return 'dove_family';
+    }
+
     final tokens = _extractTokens(raw)..sort();
     if (tokens.isNotEmpty) {
       return tokens.join('_');
     }
-    return _normalize(raw);
+    return raw;
   }
 }
 

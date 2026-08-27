@@ -22,6 +22,9 @@ import '../../games/presentation/game_types_screen.dart';
 import 'retail_chains_screen.dart';
 import 'chain_products_intelligence_screen.dart';
 import 'ai_speed_benchmark_screen.dart';
+import 'ai_brain_rules_screen.dart';
+import 'ai_product_discovery_screen.dart';
+import '../../../core/services/ai_product_discovery_service.dart';
 import 'widgets/voucher_serials_management_dialog.dart';
 import '../../../core/services/company_gifts_service.dart';
 import '../../../core/utils/url_builder.dart';
@@ -507,6 +510,38 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   selectedIcon: const Icon(Icons.speed_rounded),
                   label: Text(strings.navAiSpeedBenchmark),
                 ),
+                NavigationRailDestination(
+                  icon: const Icon(Icons.psychology_outlined),
+                  selectedIcon: const Icon(Icons.psychology_rounded),
+                  label: Text(strings.navAiBrainRules),
+                ),
+                NavigationRailDestination(
+                  icon: StreamBuilder<int>(
+                    stream: ref.watch(aiProductDiscoveryServiceProvider).streamPendingCount(),
+                    builder: (context, snapshot) {
+                      final count = snapshot.data ?? 0;
+                      return Badge(
+                        isLabelVisible: count > 0,
+                        label: Text('$count'),
+                        backgroundColor: Colors.orange.shade800,
+                        child: const Icon(Icons.auto_awesome_outlined),
+                      );
+                    },
+                  ),
+                  selectedIcon: StreamBuilder<int>(
+                    stream: ref.watch(aiProductDiscoveryServiceProvider).streamPendingCount(),
+                    builder: (context, snapshot) {
+                      final count = snapshot.data ?? 0;
+                      return Badge(
+                        isLabelVisible: count > 0,
+                        label: Text('$count'),
+                        backgroundColor: Colors.orange.shade800,
+                        child: const Icon(Icons.auto_awesome_rounded),
+                      );
+                    },
+                  ),
+                  label: Text(strings.navAiProductDiscovery),
+                ),
               ],
             ),
             VerticalDivider(thickness: 1, width: 1, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
@@ -527,7 +562,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       ),
       bottomNavigationBar: isMobile
           ? NavigationBar(
-              selectedIndex: _selectedIndex > 9 ? 0 : _selectedIndex,
+              selectedIndex: _selectedIndex > 10 ? 0 : _selectedIndex,
               onDestinationSelected: (index) {
                 setState(() => _selectedIndex = index);
               },
@@ -630,6 +665,10 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         return const GameTypesScreen();
       case 9:
         return const AiSpeedBenchmarkScreen();
+      case 10:
+        return const AiBrainRulesScreen();
+      case 11:
+        return const AiProductDiscoveryScreen();
       default:
         return _buildCampaignsDashboard(firestore, strings, isAr);
     }

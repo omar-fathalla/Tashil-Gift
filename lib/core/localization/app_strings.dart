@@ -81,6 +81,8 @@ class AppStrings {
   String get navCompanyGifts => _t(ar: 'كتالوج هدايا الشركات', en: 'Company Gifts Catalog', hi: 'कंपनी उपहार सूची');
   String get navGameTypes => _t(ar: 'أنواع الألعاب', en: 'Game Types', hi: 'खेल के प्रकार');
   String get navAiSpeedBenchmark => _t(ar: 'اختبار سرعة الـ AI (KPI) ⚡', en: 'AI Latency & Speed KPI ⚡', hi: 'एआई स्पीड टेस्ट ⚡');
+  String get navAiBrainRules => _t(ar: 'الذكاء الاصطناعي', en: 'Artificial Intelligence', hi: 'आर्टिफिशियल इंटेलिजेंस');
+  String get navAiProductDiscovery => _t(ar: 'استكشاف وتحديث الأصناف 🔍', en: 'AI Product Discovery & Sync 🔍', hi: 'एआई उत्पाद खोज और सिंक 🔍');
   String get previewClientApp => _t(ar: 'معاينة تطبيق العميل / البروموتر', en: 'Preview Client / Promoter App', hi: 'ग्राहक ऐप का पूर्वावलोकन');
   String get collapseMenu => _t(ar: 'طي القائمة (أيقونات فقط)', en: 'Collapse Menu (Icons Only)', hi: 'मेनू संक्षिप्त करें');
   String get expandMenu => _t(ar: 'توسيع القائمة (أيقونات ونص)', en: 'Expand Menu (Icons & Text)', hi: 'मेनू विस्तृत करें');
@@ -2522,6 +2524,40 @@ class AppStrings {
     en: 'Review New Products',
     hi: 'नए उत्पादों की समीक्षा करें',
   );
+  String get discoveryHubTitle => _t(
+    ar: 'مركز استكشاف وتحديث أصناف الشركات بالذكاء الاصطناعي',
+    en: 'AI Product Discovery & Catalog Enrichment Hub',
+    hi: 'एआई उत्पाद खोज और कैटलॉग संवर्धन केंद्र',
+  );
+  String get discoveryHubSubtitle => _t(
+    ar: 'الحصاد التلقائي للأصناف والباركودات الجديدة من واقع فواتير المبيعات واعتمادها في كتالوج الشركات',
+    en: 'Automated harvesting of new products and barcodes from real sales receipts and syncing to catalogs',
+    hi: 'बिक्री रसीदों से नए उत्पादों और बारकोड का स्वचालित संकलन और कैटलॉग में सिंक',
+  );
+  String get pendingTabLabel => _t(ar: 'بانتظار الاعتماد', en: 'Pending Review', hi: 'समीक्षा लंबित');
+  String get approvedTabLabel => _t(ar: 'المعتمدة بالكتالوج', en: 'Approved & Synced', hi: 'स्वीकृत और सिंक');
+  String get rejectedTabLabel => _t(ar: 'المستبعدة', en: 'Dismissed', hi: 'खारिज');
+  String get allCompaniesFilter => _t(ar: 'كافة الشركات', en: 'All Companies', hi: 'सभी कंपनियां');
+  String get scanPastInvoicesAction => _t(ar: 'فحص واستكشاف الفواتير السابقة 🔍', en: 'Deep Scan Historical Invoices 🔍', hi: 'पिछली रसीदें स्कैन करें 🔍');
+  String get approveAllPendingAction => _t(ar: 'اعتماد الكل وإضافتها للكتالوج ⚡', en: 'Approve All & Sync to Catalog ⚡', hi: 'सभी को स्वीकार और सिंक करें ⚡');
+  String get approveSingleItemAction => _t(ar: 'اعتماد', en: 'Approve', hi: 'स्वीकार करें');
+  String get rejectSingleItemAction => _t(ar: 'استبعاد', en: 'Dismiss', hi: 'खारिज करें');
+  String get editItemTitle => _t(ar: 'تعديل بيانات الصنف قبل الاعتماد', en: 'Edit Product Details Before Approval', hi: 'अनुमोदन से पहले विवरण संपादित करें');
+  String get canonicalNameField => _t(ar: 'الاسم المعتمد للصنف', en: 'Canonical Product Name', hi: 'मानक उत्पाद का नाम');
+  String get brandField => _t(ar: 'العلامة التجارية', en: 'Brand', hi: 'ब्रांड');
+  String get discoveryCategoryField => _t(ar: 'القسم والتصنيف', en: 'Category', hi: 'श्रेणी');
+  String get unitSizeField => _t(ar: 'الحجم / العبوة', en: 'Unit Size', hi: 'इकाई आकार');
+  String get discoveryBarcodeField => _t(ar: 'الباركود الدولي', en: 'Barcode', hi: 'बारकोड');
+  String get averagePriceField => _t(ar: 'متوسط السعر', en: 'Average Price', hi: 'औसत मूल्य');
+  String get retailChainsObserved => _t(ar: 'السلاسل التي رُصد بها', en: 'Observed Retail Chains', hi: 'देखी गई रिटेल चेन');
+  String get frequencyCount => _t(ar: 'مرات الظهور', en: 'Frequency', hi: 'बारंबारता');
+  String get confidenceMetric => _t(ar: 'مؤشر الثقة', en: 'Confidence', hi: 'विश्वास सूचकांक');
+  String get emptyDiscoveryStateTitle => _t(ar: 'لا توجد أصناف جديدة بانتظار الاعتماد 🎉', en: 'No Pending Products to Review 🎉', hi: 'समीक्षा के लिए कोई नया उत्पाद नहीं 🎉');
+  String get emptyDiscoveryStateSubtitle => _t(
+    ar: 'جميع أصناف فواتير المبيعات الحالية مسجلة مسبقاً في الكتالوج، وسيقوم الذكاء الاصطناعي بحصاد أي صنف جديد تلقائياً عند فحص الفواتير.',
+    en: 'All current sales receipt items are already cataloged. AI will automatically harvest any new item during future scans.',
+    hi: 'सभी वर्तमान रसीद उत्पाद पहले से ही कैटलॉग में हैं। भविष्य के स्कैन में एआई स्वतः नए आइटम एकत्र करेगा।',
+  );
   String get rowsPerPageLabel => _t(
     ar: 'عدد الصفوف:',
     en: 'Rows per page:',
@@ -2596,6 +2632,58 @@ class AppStrings {
     en: 'Branch Sales Share',
     hi: 'शाखा बिक्री शेयर',
   );
+
+  // ---------------------------------------------------------------------------
+  // 17. AI Brain & Knowledge Base Directives
+  // ---------------------------------------------------------------------------
+  String get aiBrainTitle => _t(
+    ar: 'مركز حوكمة وتعليم الذكاء الاصطناعي لفحص الفواتير والعروض',
+    en: 'AI Receipt & Promotional Intelligence Knowledge Base',
+    hi: 'एआई रसीद और प्रचार नियम ज्ञानकोष',
+  );
+  String get aiBrainSubtitle => _t(
+    ar: 'السجل الشامل للقواعد والخوارزميات والمعايير الذكية التي تم تدريب نموذج الذكاء الاصطناعي عليها لتطبيقها تلقائياً عبر كافة الحملات',
+    en: 'The comprehensive registry of intelligent heuristics, algorithms, and rules taught to the AI engine, applied automatically across all campaigns',
+    hi: 'एआई इंजन को सिखाए गए नियमों और एल्गोरिदम की व्यापक निर्देशिका, जो सभी अभियानों में स्वचालित रूप से लागू होती है',
+  );
+  String get totalAiDirectivesCount => _t(
+    ar: 'إجمالي بنود وقواعد الذكاء المعتمدة',
+    en: 'Total Intelligence Directives',
+    hi: 'कुल स्वीकृत एआई निर्देश',
+  );
+  String get activeAiModelPrimary => _t(
+    ar: 'النموذج القياسي الأساسي',
+    en: 'Primary AI Architecture',
+    hi: 'प्राथमिक एआई मॉडल',
+  );
+  String get overallAiAccuracyScore => _t(
+    ar: 'معدل دقة استخراج وفحص البونات',
+    en: 'POS Accuracy Score',
+    hi: 'रसीद सत्यापन सटीकता',
+  );
+  String get filterAllDirectives => _t(ar: 'كافة البنود (الكل)', en: 'All Directives', hi: 'सभी निर्देश');
+  String get searchDirectivesPlaceholder => _t(
+    ar: 'بحث في قواعد وخوارزميات الذكاء الاصطناعي...',
+    en: 'Search AI directives, rules, or algorithms...',
+    hi: 'एआई नियमों या एल्गोरिदम में खोजें...',
+  );
+  String get directiveStatusActive => _t(
+    ar: 'مفعل عالمياً على كافة الحملات',
+    en: 'Globally Active across All Campaigns',
+    hi: 'सभी अभियानों पर सक्रिय',
+  );
+  String get directiveStatusInactive => _t(
+    ar: 'معطل مؤقتاً',
+    en: 'Temporarily Disabled',
+    hi: 'अस्थायी रूप से अक्षम',
+  );
+  String get directiveLogicHeader => _t(ar: 'المنطق والخوارزمية البرمجية:', en: 'Logic & Algorithm:', hi: 'तर्क और एल्गोरिदम:');
+  String get directiveExampleHeader => _t(ar: 'مثال عملي حي من واقع البونات:', en: 'Real-world Receipt Example:', hi: 'वास्तविक रसीद उदाहरण:');
+  String get addNewDirectiveBtn => _t(ar: 'توثيق وإضافة بند تدريبي جديد', en: 'Teach AI / Add New Directive', hi: 'नया एआई निर्देश जोड़ें');
+  String get resetToDefaultsBtn => _t(ar: 'استعادة البنود المعيارية الأساسية', en: 'Restore Default Directives', hi: 'डिफ़ॉल्ट निर्देश पुनर्स्थापित करें');
+  String get directiveDetailsTitle => _t(ar: 'تفاصيل البند المعياري الذكي', en: 'Directive Specifications', hi: 'निर्देश विवरण');
+  String get directiveSavedSuccess => _t(ar: 'تم حفظ وتوثيق البند بنجاح في عقل الذكاء الاصطناعي', en: 'Directive successfully recorded in AI Brain', hi: 'निर्देश सफलतापूर्वक एआई में दर्ज किया गया');
+  String get directiveDeletedSuccess => _t(ar: 'تم حذف البند بنجاح', en: 'Directive deleted successfully', hi: 'निर्देश सफलतापूर्वक हटा दिया गया');
 }
 
 

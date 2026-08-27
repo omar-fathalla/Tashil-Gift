@@ -12,6 +12,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/services/firebase_service.dart';
 import '../../../core/services/ai_receipt_service.dart';
+import '../../../core/services/ai_product_discovery_service.dart';
 import '../../../core/services/company_products_service.dart';
 import '../../../core/services/retail_chains_service.dart';
 import '../../../core/utils/error_handler.dart';
@@ -680,6 +681,16 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         transactionData['prize_won'] = null;
         await transactionRef.set(transactionData);
       }
+
+      // Harvest discovered products asynchronously for the AI Product Discovery Hub
+      unawaited(ref.read(aiProductDiscoveryServiceProvider).autoHarvestFromReceiptAnalysis(
+        companySlug: _activeEvent!.companySlug,
+        companyName: _activeEvent!.targetCompany,
+        retailChain: result.storeChainDetected,
+        branch: result.branchDetected,
+        receiptNumber: receiptNumber,
+        extractedProducts: result.extractedProducts,
+      ));
 
       if (!mounted) return;
 
@@ -1702,6 +1713,16 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         transactionData['timestamp'] = FieldValue.serverTimestamp();
         await docRef.set(transactionData);
       }
+
+      // Harvest discovered products asynchronously even if receipt didn't meet spend threshold
+      unawaited(ref.read(aiProductDiscoveryServiceProvider).autoHarvestFromReceiptAnalysis(
+        companySlug: activeEvent.companySlug,
+        companyName: activeEvent.targetCompany,
+        retailChain: result.storeChainDetected,
+        branch: result.branchDetected,
+        receiptNumber: receiptNumber,
+        extractedProducts: result.extractedProducts,
+      ));
     } catch (e) {
       debugPrint('Error recording rejected receipt transaction to Firestore: $e');
     }

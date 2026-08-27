@@ -1393,6 +1393,22 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         linkedGiftName: decomposed.firstOrNull?.giftName,
       );
       setState(() => _promotionalRules.add(newRule));
+    } else if (presetKey == 'axe_twin_shrink') {
+      final decomposed = CampaignAiAssistantService.decomposeVoucherAmount(125.0, _companyGifts);
+      final newRule = PromotionalRuleItem(
+        id: 'rule_${_promotionalRules.length + 1}',
+        ruleTitle: 'عرض شرنك أكس المزدوج (بندل 2 قطعة) -> فواتشر 125 ج.م',
+        triggerProduct: 'عرض اكس شرنك، اكس اسبراي شرنك، اكس مزدوج، اكس اسبراي 150مل 335، اكس اسبراي 150مل',
+        minQuantity: 1,
+        rewardType: 'voucher',
+        rewardValue: 'قسيمة مشتريات بقيمة 125 ج.م',
+        rewardAmount: 125.0,
+        allowMultipliers: true,
+        linkedGifts: decomposed,
+        linkedGiftId: decomposed.firstOrNull?.giftId,
+        linkedGiftName: decomposed.firstOrNull?.giftName,
+      );
+      setState(() => _promotionalRules.add(newRule));
     }
   }
 
@@ -4308,6 +4324,10 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   DropdownMenuItem(
                     value: 'rollon_2pc_50',
                     child: Text('💳 شراء 2 رول أون ريكسونا أو أكس -> فواتشر 50 ج.م', style: TextStyle(fontSize: 12.5)),
+                  ),
+                  DropdownMenuItem(
+                    value: 'axe_twin_shrink',
+                    child: Text('💳 شراء عرض شرنك أكس المزدوج (بندل 2 قطعة) -> فواتشر 125 ج.م', style: TextStyle(fontSize: 12.5)),
                   ),
                 ],
                 onChanged: (val) {
