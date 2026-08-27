@@ -80,9 +80,9 @@ class AppStrings {
   String get createCampaignTitle => _t(ar: 'إنشاء حملة ترويجية جديدة', en: 'Create New Promotional Campaign', hi: 'नया प्रचार अभियान बनाएं');
   String get navCompanyGifts => _t(ar: 'كتالوج هدايا الشركات', en: 'Company Gifts Catalog', hi: 'कंपनी उपहार सूची');
   String get navGameTypes => _t(ar: 'أنواع الألعاب', en: 'Game Types', hi: 'खेल के प्रकार');
-  String get navAiSpeedBenchmark => _t(ar: 'اختبار سرعة الـ AI (KPI) ⚡', en: 'AI Latency & Speed KPI ⚡', hi: 'एआई स्पीड टेस्ट ⚡');
+  String get navAiSpeedBenchmark => _t(ar: 'اختبار سرعة الـ AI (KPI)', en: 'AI Latency & Speed KPI', hi: 'एआई स्पीड टेस्ट');
   String get navAiBrainRules => _t(ar: 'الذكاء الاصطناعي', en: 'Artificial Intelligence', hi: 'आर्टिफिशियल इंटेलिजेंस');
-  String get navAiProductDiscovery => _t(ar: 'استكشاف وتحديث الأصناف 🔍', en: 'AI Product Discovery & Sync 🔍', hi: 'एआई उत्पाद खोज और सिंक 🔍');
+  String get navAiProductDiscovery => _t(ar: 'تحديث الأصناف', en: 'Update Products Catalog', hi: 'उत्पाद अद्यतन');
   String get previewClientApp => _t(ar: 'معاينة تطبيق العميل / البروموتر', en: 'Preview Client / Promoter App', hi: 'ग्राहक ऐप का पूर्वावलोकन');
   String get collapseMenu => _t(ar: 'طي القائمة (أيقونات فقط)', en: 'Collapse Menu (Icons Only)', hi: 'मेनू संक्षिप्त करें');
   String get expandMenu => _t(ar: 'توسيع القائمة (أيقونات ونص)', en: 'Expand Menu (Icons & Text)', hi: 'मेनू विस्तृत करें');

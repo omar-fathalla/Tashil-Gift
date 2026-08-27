@@ -99,7 +99,27 @@ List<ValidationConditionItem> buildValidationConditionItems({
   }
 
   // 2. Retail Chain & Branch Condition
-  if (!isBranchMatched || (retailChainName.isNotEmpty && storeChainDetected.isNotEmpty && !storeChainDetected.contains(retailChainName))) {
+  bool isChainMatched = true;
+  if (retailChainName.trim().isNotEmpty && storeChainDetected.trim().isNotEmpty) {
+    final allowedChains = retailChainName
+        .split(RegExp(r'[\•\,\،\/\-\|\+]'))
+        .map((s) => s.trim().toLowerCase())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    final detChainNorm = storeChainDetected.trim().toLowerCase();
+
+    isChainMatched = allowedChains.isEmpty || allowedChains.any((ac) {
+      return detChainNorm.contains(ac) ||
+             ac.contains(detChainNorm) ||
+             (detChainNorm.contains('جملة') && ac.contains('جملة')) ||
+             (detChainNorm.contains('فتح') && ac.contains('فتح')) ||
+             (detChainNorm.contains('كارفور') && ac.contains('كارفور')) ||
+             (detChainNorm.contains('سبينس') && ac.contains('سبينس')) ||
+             (detChainNorm.contains('خير') && ac.contains('خير'));
+    });
+  }
+
+  if (!isBranchMatched || !isChainMatched) {
     final allowed = isAllBranches || allowedBranches.isEmpty
         ? (retailChainName.isNotEmpty ? 'كافة فروع $retailChainName' : 'جميع الفروع')
         : allowedBranches.join('، ');
@@ -114,7 +134,7 @@ List<ValidationConditionItem> buildValidationConditionItems({
   }
 
   // 3. Products inclusion condition
-  if (!hasTargetProducts) {
+  if (!hasTargetProducts && targetCompanyTotal <= 0) {
     items.add(
       ValidationConditionItem(
         title: 'المنتجات المؤهلة للعرض',

@@ -425,6 +425,37 @@ void main() {
       expect(reasons.first, contains('تم رصد (1) قطعة'));
       expect(reasons.first, contains('(2) قطعة'));
     });
+
+    test('Customer in Gomla Market Obour Buildings buying 1x Tresemme Shampoo (شامبوزيت 400مل) auto-infers target company, reconciles branch, and reports quantity rule reason', () {
+      // 1. Test brand auto-inference from raw JSON
+      final rawItemJson = {
+        'name': 'تريزيمى شامبوزيت جوز الهند والصبار 400مل',
+        'price': 295.0,
+        'quantity': 1,
+        'barcode': '6221155612182',
+        // isTargetCompany is omitted or false in raw JSON
+      };
+      final item = ExtractedProductItem.fromJson(rawItemJson);
+      expect(item.isTargetCompany, isTrue); // Auto-inferred
+
+      // 2. Test rule matching: 1 bottle does not meet Rule 2 (needs 2)
+      final matchedResults = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: [item],
+        promotionalRules: rules,
+        allowCampaignMultipliers: true,
+      );
+      expect(matchedResults, isEmpty);
+
+      // 3. Test unfulfilled reasons
+      final reasons = PromotionalRuleMatcher.getUnfulfilledPromotionReasons(
+        extractedProducts: [item],
+        promotionalRules: rules,
+      );
+      expect(reasons.isNotEmpty, true);
+      expect(reasons.first, contains('تريزيمي'));
+      expect(reasons.first, contains('تم رصد (1) قطعة'));
+      expect(reasons.first, contains('(2) قطعة'));
+    });
   });
 }
 

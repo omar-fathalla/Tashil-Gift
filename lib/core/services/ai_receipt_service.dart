@@ -74,11 +74,43 @@ class ExtractedProductItem {
       rawOriginalPrice = null;
     }
 
+    final nameLower = name.toLowerCase();
+    bool isTarget = json['isTargetCompany'] == true;
+    if (!isTarget) {
+      if (nameLower.contains('تريزيم') ||
+          nameLower.contains('تريزم') ||
+          nameLower.contains('tresem') ||
+          nameLower.contains('كلير') ||
+          nameLower.contains('clear') ||
+          nameLower.contains('أكس') ||
+          nameLower.contains('اكس') ||
+          nameLower.contains('axe') ||
+          nameLower.contains('ريكسونا') ||
+          nameLower.contains('rexona') ||
+          nameLower.contains('صنسيلك') ||
+          nameLower.contains('صنسلك') ||
+          nameLower.contains('sunsilk') ||
+          nameLower.contains('دوف') ||
+          nameLower.contains('dove') ||
+          nameLower.contains('لايفبوي') ||
+          nameLower.contains('lifebuoy') ||
+          nameLower.contains('لوكس') ||
+          nameLower.contains('lux') ||
+          nameLower.contains('سيجنال') ||
+          nameLower.contains('signal') ||
+          nameLower.contains('كلوز اب') ||
+          nameLower.contains('close up') ||
+          nameLower.contains('فازلين') ||
+          nameLower.contains('vaseline')) {
+        isTarget = true;
+      }
+    }
+
     return ExtractedProductItem(
       name: name,
       price: rawPrice,
       quantity: quantity,
-      isTargetCompany: json['isTargetCompany'] ?? false,
+      isTargetCompany: isTarget,
       barcode: json['barcode']?.toString().trim() ?? '',
       originalPrice: rawOriginalPrice,
       discountAmount: rawDiscount,
@@ -991,6 +1023,53 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           }
         }
 
+        // Auto-reconcile detected branch against allowedBranches in Dart using canonical resolution
+        if (allowedBranches.isNotEmpty) {
+          final detectedRaw = result.branchDetected.trim();
+          final detectedClean = detectedRaw
+              .replaceAll(RegExp(r'\s*\([^)]*\)'), '')
+              .replaceAll('فرع', '')
+              .replaceAll('-', ' ')
+              .replaceAll(RegExp(r'\s+'), ' ')
+              .trim()
+              .toLowerCase();
+
+          for (final ab in allowedBranches) {
+            final abClean = ab
+                .replaceAll(RegExp(r'\s*\([^)]*\)'), '')
+                .replaceAll('فرع', '')
+                .replaceAll('-', ' ')
+                .replaceAll(RegExp(r'\s+'), ' ')
+                .trim()
+                .toLowerCase();
+
+            if (detectedClean.isNotEmpty && abClean.isNotEmpty) {
+              if (detectedClean == abClean ||
+                  detectedClean.contains(abClean) ||
+                  abClean.contains(detectedClean) ||
+                  (detectedClean.contains('عبور') && abClean.contains('عبور')) ||
+                  (detectedClean.contains('رحاب') && abClean.contains('رحاب')) ||
+                  (detectedClean.contains('سموحة') && abClean.contains('سموحة')) ||
+                  (detectedClean.contains('جاردينيا') && abClean.contains('جاردينيا')) ||
+                  (detectedClean.contains('عجمي') && abClean.contains('عجمي')) ||
+                  (detectedClean.contains('محلة') && abClean.contains('محلة')) ||
+                  (detectedClean.contains('تجمع') && abClean.contains('تجمع')) ||
+                  (detectedClean.contains('أكتوبر') && abClean.contains('أكتوبر')) ||
+                  (detectedClean.contains('منصورة') && abClean.contains('منصورة')) ||
+                  (detectedClean.contains('شبين') && abClean.contains('شبين')) ||
+                  (detectedClean.contains('منتزه') && abClean.contains('منتزه')) ||
+                  (detectedClean.contains('ميامي') && abClean.contains('ميامي')) ||
+                  (detectedClean.contains('جناكليس') && abClean.contains('جناكليس'))) {
+                result = result.copyWith(
+                  isBranchMatched: true,
+                  branchDetected: ab,
+                );
+                break;
+              }
+            }
+          }
+        }
+
         // Branch matching fallback validation
         if (retailChainName.trim().isNotEmpty && !isAllBranches && allowedBranches.isNotEmpty) {
           if (!result.isBranchMatched) {
@@ -1668,6 +1747,8 @@ class PromotionalRuleMatcher {
     str = str.replaceAll('ئ', 'ي');
 
     // POS & transliteration dictionary normalization
+    str = str.replaceAll(RegExp(r'شامبوزيت'), 'شامبو زيت');
+    str = str.replaceAll(RegExp(r'بلسمزيت'), 'بلسم زيت');
     str = str.replaceAll(RegExp(r'\b(روول|رووول|roll\s*on|roll-on|rollon)\b'), 'رول اون');
     str = str.replaceAll(RegExp(r'\b(اسبرى|اسبري|اسبراى|سبراي|سبراى|بخاخ|body\s*spray)\b'), 'اسبراي');
     str = str.replaceAll(RegExp(r'\b(شمبو|شامبوا|shampoo)\b'), 'شامبو');

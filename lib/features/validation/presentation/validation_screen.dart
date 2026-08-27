@@ -173,6 +173,15 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       if (!result.isValid) {
         if (!mounted) return;
         final activeCountry = ref.read(activeCountryProvider);
+        final unfulfilledList = result.unfulfilledConditions.isNotEmpty
+            ? result.unfulfilledConditions
+            : (activeEvent.promotionalRules.isNotEmpty
+                ? PromotionalRuleMatcher.getUnfulfilledPromotionReasons(
+                    result: result,
+                    promotionalRules: activeEvent.promotionalRules,
+                  )
+                : [result.message.trim().isNotEmpty ? result.message.trim() : 'الفاتورة غير مطابقة لشروط الحملة']);
+
         final conditions = buildValidationConditionItems(
           isValid: false,
           message: result.message,
@@ -180,7 +189,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           minimumSpend: activeEvent.minimumSpend,
           targetCompany: activeEvent.targetCompany,
           currencySymbol: activeCountry.currencySymbol,
-          unfulfilledConditions: result.unfulfilledConditions,
+          unfulfilledConditions: unfulfilledList,
           isBranchMatched: result.isBranchMatched,
           storeChainDetected: result.storeChainDetected,
           branchDetected: result.branchDetected,
@@ -188,7 +197,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           allowedBranches: activeEvent.branchNames,
           isAllBranches: activeEvent.isAllBranches,
           receiptDate: result.receiptDate,
-          hasTargetProducts: result.extractedProducts.any((p) => p.isTargetCompany),
+          hasTargetProducts: result.extractedProducts.any((p) => p.isTargetCompany) || result.targetCompanyTotal > 0,
           isHandwritten: result.isHandwritten,
           isThermalPosReceipt: result.isThermalPosReceipt,
           isTampered: result.isTampered,
@@ -196,9 +205,6 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           fraudReasons: result.fraudReasons,
         );
 
-        final unfulfilledList = result.unfulfilledConditions.isNotEmpty
-            ? result.unfulfilledConditions
-            : [result.message.trim().isNotEmpty ? result.message.trim() : 'الفاتورة غير مطابقة لشروط الحملة'];
         final rejectionReasonText = unfulfilledList.join(' • ');
 
         // Asynchronously persist rejected transaction to Firestore & Storage for audit

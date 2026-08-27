@@ -42,6 +42,22 @@ class CreateEventScreen extends ConsumerStatefulWidget {
   ConsumerState<CreateEventScreen> createState() => _CreateEventScreenState();
 }
 
+class RuleConflictIssue {
+  final String title;
+  final String description;
+  final List<int> conflictingRuleIndices;
+  final String? suggestedFixLabel;
+  final VoidCallback? onResolve;
+
+  RuleConflictIssue({
+    required this.title,
+    required this.description,
+    required this.conflictingRuleIndices,
+    this.suggestedFixLabel,
+    this.onResolve,
+  });
+}
+
 class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _eventNameController;
@@ -54,6 +70,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   String _aiValidationSummary = '';
   List<PromotionalRuleItem> _promotionalRules = [];
   bool _isAiStructuringRules = false;
+  bool _isPromptExpanded = false;
+  bool _isAiAssistantExpanded = false;
   late final TextEditingController _welcomeTitleController;
   late final TextEditingController _welcomeMessageController;
   late final TextEditingController _termsController;
@@ -1244,7 +1262,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     }
   }
 
-  void _syncPromptFromRules() {
+  void _syncPromptFromRules({bool showSnackbar = true}) {
     final targetCompany = _targetCompanyController.text.trim().isNotEmpty
         ? _targetCompanyController.text.trim()
         : 'الشركة المستهدفة';
@@ -1271,16 +1289,18 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       _customPromptController.text = formatted;
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          AppStrings.of(ref).syncPromptSuccessMsg,
-          style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+    if (showSnackbar && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            AppStrings.of(ref).syncPromptSuccessMsg,
+            style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+          ),
+          backgroundColor: Colors.teal.shade700,
+          behavior: SnackBarBehavior.floating,
         ),
-        backgroundColor: Colors.teal.shade700,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+      );
+    }
   }
 
   void _applyRulePreset(String presetKey) {
@@ -1315,6 +1335,38 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         ],
       );
       setState(() => _promotionalRules.add(newRule));
+      _syncPromptFromRules(showSnackbar: false);
+    } else if (presetKey == 'tresemme_single') {
+      final matchedGift = _companyGifts.where((g) => g.giftName.contains('تريزيمي') || g.giftName.contains('Tresemme')).firstOrNull;
+      if (matchedGift == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isAr ? 'صنف هدية تريزيمي غير متوفر في مخزون هدايا الشركة حالياً' : 'Tresemme gift is not in company stock',
+              style: GoogleFonts.cairo(),
+            ),
+            backgroundColor: Colors.orange.shade800,
+          ),
+        );
+        return;
+      }
+      final newRule = PromotionalRuleItem(
+        id: 'rule_${_promotionalRules.length + 1}',
+        ruleTitle: 'عرض تريزيمي 400 مل (شراء 1 قطعة) -> هدية ${matchedGift.giftName}',
+        triggerProduct: 'تريزيمي 400 مل، تريزيمى 400 مل، تريزمي 400، tresemme 400ml',
+        minQuantity: 1,
+        rewardType: 'free_product',
+        rewardValue: matchedGift.giftName,
+        rewardAmount: 0.0,
+        allowMultipliers: true,
+        linkedGiftId: matchedGift.id,
+        linkedGiftName: matchedGift.giftName,
+        linkedGifts: [
+          LinkedGiftAllocation(giftId: matchedGift.id, giftName: matchedGift.giftName, quantity: 1, giftType: 'product'),
+        ],
+      );
+      setState(() => _promotionalRules.add(newRule));
+      _syncPromptFromRules(showSnackbar: false);
     } else if (presetKey == 'tresemme_shrink') {
       final matchedGift = _companyGifts.where((g) => g.giftName.contains('تريزيمي') || g.giftName.contains('Tresemme')).firstOrNull;
       if (matchedGift == null) {
@@ -1345,6 +1397,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         ],
       );
       setState(() => _promotionalRules.add(newRule));
+      _syncPromptFromRules(showSnackbar: false);
     } else if (presetKey == 'spray_1pc_50') {
       final decomposed = CampaignAiAssistantService.decomposeVoucherAmount(50.0, _companyGifts);
       final newRule = PromotionalRuleItem(
@@ -1361,6 +1414,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         linkedGiftName: decomposed.firstOrNull?.giftName,
       );
       setState(() => _promotionalRules.add(newRule));
+      _syncPromptFromRules(showSnackbar: false);
     } else if (presetKey == 'spray_2pc_125') {
       final decomposed = CampaignAiAssistantService.decomposeVoucherAmount(125.0, _companyGifts);
       final newRule = PromotionalRuleItem(
@@ -1377,6 +1431,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         linkedGiftName: decomposed.firstOrNull?.giftName,
       );
       setState(() => _promotionalRules.add(newRule));
+      _syncPromptFromRules(showSnackbar: false);
     } else if (presetKey == 'rollon_2pc_50') {
       final decomposed = CampaignAiAssistantService.decomposeVoucherAmount(50.0, _companyGifts);
       final newRule = PromotionalRuleItem(
@@ -1393,6 +1448,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         linkedGiftName: decomposed.firstOrNull?.giftName,
       );
       setState(() => _promotionalRules.add(newRule));
+      _syncPromptFromRules(showSnackbar: false);
     } else if (presetKey == 'axe_twin_shrink') {
       final decomposed = CampaignAiAssistantService.decomposeVoucherAmount(125.0, _companyGifts);
       final newRule = PromotionalRuleItem(
@@ -1409,7 +1465,90 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         linkedGiftName: decomposed.firstOrNull?.giftName,
       );
       setState(() => _promotionalRules.add(newRule));
+      _syncPromptFromRules(showSnackbar: false);
     }
+  }
+
+  List<RuleConflictIssue> _detectRuleConflicts() {
+    final conflicts = <RuleConflictIssue>[];
+    if (_promotionalRules.isEmpty) return conflicts;
+
+    // 1. Check title vs quantity mismatch (e.g. title says "شراء 1 قطعة" while minQuantity is 2)
+    for (int i = 0; i < _promotionalRules.length; i++) {
+      final rule = _promotionalRules[i];
+      final title = rule.ruleTitle.trim();
+      final titleHas1 = RegExp(r'(شراء\s*1\s*قطعة|شراء\s*1\s*قطعه|1\s*قطعة|1\s*قطعه|قطعة\s*واحدة|قطعه\s*واحده)').hasMatch(title);
+      final titleHas2 = RegExp(r'(شراء\s*2\s*قطعة|شراء\s*2\s*قطعه|2\s*قطعة|2\s*قطعه|قطعتين|قطعتان|2\s*قطع|2\s*ق|شرنك)').hasMatch(title);
+
+      if (titleHas1 && rule.minQuantity > 1) {
+        conflicts.add(RuleConflictIssue(
+          title: 'تضارب في القاعدة #${i + 1} (${rule.ruleTitle})',
+          description: 'عنوان القاعدة يذكر (شراء 1 قطعة) بينما الحد الأدنى المضبوط برمجياً هو (${rule.minQuantity}) قطعة.',
+          conflictingRuleIndices: [i],
+          suggestedFixLabel: 'ضبط الحد الأدنى إلى 1 قطعة فوراً ⚡',
+          onResolve: () {
+            setState(() {
+              _promotionalRules[i] = rule.copyWith(minQuantity: 1);
+            });
+            _syncPromptFromRules(showSnackbar: false);
+          },
+        ));
+      } else if (titleHas2 && rule.minQuantity == 1 && !rule.triggerProduct.contains('شرنك') && !rule.triggerProduct.contains('مزدوج') && !rule.triggerProduct.contains('بندل') && !rule.triggerProduct.contains('باندل')) {
+        conflicts.add(RuleConflictIssue(
+          title: 'تضارب في القاعدة #${i + 1} (${rule.ruleTitle})',
+          description: 'عنوان القاعدة يذكر (شراء 2 قطعة) بينما الحد الأدنى المضبوط برمجياً هو (1) قطعة.',
+          conflictingRuleIndices: [i],
+          suggestedFixLabel: 'ضبط الحد الأدنى إلى 2 قطعة فوراً ⚡',
+          onResolve: () {
+            setState(() {
+              _promotionalRules[i] = rule.copyWith(minQuantity: 2);
+            });
+            _syncPromptFromRules(showSnackbar: false);
+          },
+        ));
+      }
+    }
+
+    // 2. Check duplicate / conflicting rules with identical trigger products and identical minQuantity
+    for (int i = 0; i < _promotionalRules.length; i++) {
+      for (int j = i + 1; j < _promotionalRules.length; j++) {
+        final ruleA = _promotionalRules[i];
+        final ruleB = _promotionalRules[j];
+
+        final normA = _normalizeProductKeywords(ruleA.triggerProduct);
+        final normB = _normalizeProductKeywords(ruleB.triggerProduct);
+
+        final bool isSimilarProduct = (normA.isNotEmpty && normB.isNotEmpty) &&
+            (normA == normB || (normA.length > 5 && normB.length > 5 && (normA.contains(normB) || normB.contains(normA))));
+
+        if (isSimilarProduct && ruleA.minQuantity == ruleB.minQuantity) {
+          conflicts.add(RuleConflictIssue(
+            title: 'تكرار متعارض بين القاعدة #${i + 1} والقاعدة #${j + 1}',
+            description: 'كلا القاعدتين تشترطان نفس الأصناف (${ruleA.triggerProduct}) بنفس الكمية (${ruleA.minQuantity}) ولكن بمكافأتين منفصلتين.',
+            conflictingRuleIndices: [i, j],
+            suggestedFixLabel: 'حذف القاعدة المكررة #${j + 1} 🗑️',
+            onResolve: () {
+              setState(() {
+                _promotionalRules.removeAt(j);
+              });
+              _syncPromptFromRules(showSnackbar: false);
+            },
+          ));
+        }
+      }
+    }
+
+    return conflicts;
+  }
+
+  String _normalizeProductKeywords(String s) {
+    return s.toLowerCase()
+        .replaceAll(RegExp(r'[\s,\.،/\+\-_]+'), '')
+        .replaceAll('أ', 'ا')
+        .replaceAll('إ', 'ا')
+        .replaceAll('آ', 'ا')
+        .replaceAll('ة', 'ه')
+        .replaceAll('ى', 'ي');
   }
 
   void _showAddOrEditPromotionalRuleDialog(BuildContext context, {int? ruleIndex}) {
@@ -1647,6 +1786,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         _promotionalRules.add(updatedRule);
                       }
                     });
+                    _syncPromptFromRules(showSnackbar: false);
                     Navigator.pop(dialogCtx);
                   },
                   child: Text(strings.save),
@@ -2784,71 +2924,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
                 const SizedBox(height: 20),
 
-                // Section 6: AI Campaign Idea & Rules Assistant (Smart Prompt Generator)
-                _buildAiCampaignAssistantSection(context, colorScheme, isMobile, strings),
-
-                const SizedBox(height: 20),
-
-                // Section 7: AI Prompt Editor
-                _buildSectionCard(
-                  context: context,
-                  icon: Icons.psychology_rounded,
-                  title: 'محرر البرومبت للذكاء الاصطناعي (AI Prompt)',
-                  subtitle: 'تعليمات الفحص والتدقيق الموجهة لموديل الذكاء الاصطناعي لفحص الفاتورة بدقة',
-                  children: [
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        _buildVariableChip(context, '{TARGET_COMPANY}', 'اسم الشركة المستهدفة'),
-                        _buildVariableChip(context, '{MIN_SPEND}', 'الحد الأدنى للإنفاق'),
-                        _buildVariableChip(context, '{REQUIRED_PRODUCTS}', 'المنتجات المشترطة'),
-                        const SizedBox(width: 6),
-                        FilledButton.tonalIcon(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: Colors.teal.shade700.withValues(alpha: 0.12),
-                            foregroundColor: Colors.teal.shade800,
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                          icon: const Icon(Icons.auto_awesome_rounded, size: 16),
-                          label: Text(
-                            strings.syncPromptFromRulesBtn,
-                            style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
-                          ),
-                          onPressed: _syncPromptFromRules,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceContainerLowest,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: colorScheme.outlineVariant.withValues(alpha: 0.6),
-                        ),
-                      ),
-                      padding: const EdgeInsets.all(12),
-                      child: TextFormField(
-                        controller: _customPromptController,
-                        maxLines: 11,
-                        style: const TextStyle(
-                          fontFamily: 'monospace',
-                          fontSize: 13.5,
-                          height: 1.5,
-                        ),
-                        decoration: const InputDecoration(
-                          border: InputBorder.none,
-                          isDense: true,
-                          contentPadding: EdgeInsets.all(8),
-                        ),
-                        validator: (value) => value == null || value.isEmpty ? 'البرومبت مطلوب' : null,
-                      ),
-                    ),
-                  ],
-                ),
+                // Section 6: Unified AI & Promotional Rules Studio
+                _buildUnifiedAiAndRulesStudio(context, colorScheme, isMobile, strings),
 
                 const SizedBox(height: 20),
 
@@ -3883,25 +3960,27 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     );
   }
 
-  Widget _buildAiCampaignAssistantSection(
+  Widget _buildUnifiedAiAndRulesStudio(
     BuildContext context,
     ColorScheme colorScheme,
     bool isMobile,
     AppStrings strings,
   ) {
+    final conflicts = _detectRuleConflicts();
+
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            colorScheme.primary.withValues(alpha: 0.07),
-            colorScheme.secondary.withValues(alpha: 0.04),
+            colorScheme.primary.withValues(alpha: 0.08),
+            colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
           ],
         ),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: colorScheme.primary.withValues(alpha: 0.3),
+          color: colorScheme.primary.withValues(alpha: 0.35),
           width: 1.5,
         ),
       ),
@@ -3909,7 +3988,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Section Title & AI Badge
+          // Studio Main Header
           Row(
             children: [
               Container(
@@ -3933,9 +4012,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       children: [
                         Flexible(
                           child: Text(
-                            strings.aiCampaignAssistantTitle,
+                            'استوديو العروض وقواعد الذكاء الاصطناعي (AI & Rules Studio)',
                             style: GoogleFonts.cairo(
-                              fontSize: 17,
+                              fontSize: 16,
                               fontWeight: FontWeight.bold,
                               color: colorScheme.onSurface,
                             ),
@@ -3951,7 +4030,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Text(
-                            'AI ⚡ Assistant',
+                            'AI ⚡ Studio',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 11,
@@ -3963,7 +4042,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      strings.aiCampaignAssistantSubtitle,
+                      'إدارة وتنسيق قواعد العروض والجوائز الترويجية، وربطها بمخزون الشركة، وتوليد منطق الفحص الذكي تلقائياً.',
                       style: TextStyle(
                         fontSize: 12.5,
                         color: colorScheme.onSurfaceVariant,
@@ -3977,275 +4056,275 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
           const SizedBox(height: 16),
 
-          // Preset Suggestion Chips Header & Wrap
-          Text(
-            strings.presetIdeasHeader,
-            style: GoogleFonts.cairo(
-              fontSize: 12.5,
-              fontWeight: FontWeight.bold,
-              color: colorScheme.onSurfaceVariant,
+          // ⚠️ Smart Conflict & Duplicate Detector Alert Banner
+          if (conflicts.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.amber.shade400, width: 1.5),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, color: Colors.amber.shade900, size: 22),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'الكاشف الذكي: تم رصد (${conflicts.length}) تعارض أو تكرار في قواعد العرض',
+                          style: GoogleFonts.cairo(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF451A03),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ...conflicts.map((conflict) {
+                    return Container(
+                      margin: const EdgeInsets.only(top: 6),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.amber.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  conflict.title,
+                                  style: GoogleFonts.cairo(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12.5,
+                                    color: const Color(0xFF451A03),
+                                  ),
+                                ),
+                                Text(
+                                  conflict.description,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 11.5,
+                                    color: Colors.amber.shade900,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (conflict.onResolve != null && conflict.suggestedFixLabel != null)
+                            FilledButton.tonal(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: Colors.amber.shade800,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              onPressed: conflict.onResolve,
+                              child: Text(
+                                conflict.suggestedFixLabel!,
+                                style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildPresetChip(
-                label: strings.presetIdea1,
-                textToAdd: 'عند شراء عبوة كبيرة من المنتج يتم الحصول على عبوة صغيرة هدية فورية.',
-                colorScheme: colorScheme,
-              ),
-              _buildPresetChip(
-                label: strings.presetIdea2,
-                textToAdd: 'عند شراء أي عبوة اسبراي ريكسونا أو أكس يتم الحصول على قسيمة مشتريات (Voucher) بقيمة 50 جنيه، وتتضاعف القسيمة مع كل قطعة إضافية.',
-                colorScheme: colorScheme,
-              ),
-              _buildPresetChip(
-                label: strings.presetIdea3,
-                textToAdd: 'عند شراء قطعتين من منتجات تريزمي يحصل العميل على عبوة تريزمي 250 مل هدية مجانية.',
-                colorScheme: colorScheme,
-              ),
-              _buildPresetChip(
-                label: strings.presetIdea4,
-                textToAdd: 'عند شراء أي قطعة اسبراي (ريكسونا أو أكس) يتم الحصول على فواتشر بقيمة 50 جنيه.\nعند شراء أي 2 قطعة اسبراي (ريكسونا أو أكس) يتم الحصول على فواتشر بقيمة 125 جنيه.\nعند شراء أي 2 قطعة ريكسونا رول اون (ريكسونا أو أكس) يتم الحصول على فواتشر بقيمة 50 جنيه.',
-                colorScheme: colorScheme,
-              ),
-            ],
-          ),
-
-          if (_companyGifts.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              strings.dynamicInventoryChipsHeader,
-              style: GoogleFonts.cairo(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: Colors.teal.shade800,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _companyGifts.take(6).map((gift) {
-                final isVoucher = gift.isVoucher;
-                return ActionChip(
-                  avatar: Icon(
-                    isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
-                    size: 15,
-                    color: isVoucher ? Colors.amber.shade900 : Colors.teal.shade700,
-                  ),
-                  label: Text(
-                    isVoucher
-                        ? '${gift.giftName} (${gift.formattedUnitValue})'
-                        : gift.giftName,
-                    style: GoogleFonts.cairo(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600,
-                      color: colorScheme.onSurface,
-                    ),
-                  ),
-                  backgroundColor: isVoucher
-                      ? Colors.amber.shade50.withValues(alpha: 0.8)
-                      : Colors.teal.shade50.withValues(alpha: 0.8),
-                  side: BorderSide(
-                    color: isVoucher
-                        ? Colors.amber.shade300
-                        : Colors.teal.shade300,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  onPressed: () {
-                    final textToAdd = isVoucher
-                        ? 'عند شراء [حدد المنتج والكمية] يتم الحصول على ${gift.giftName} بقيمة ${gift.unitValue} جنيه.'
-                        : 'عند شراء [حدد المنتج والكمية] يحصل العميل على عبوة ${gift.giftName} مجاناً.';
-                    final current = _promotionalIdeaController.text.trim();
-                    if (current.isEmpty) {
-                      _promotionalIdeaController.text = textToAdd;
-                    } else {
-                      _promotionalIdeaController.text = '$current\n$textToAdd';
-                    }
-                  },
-                );
-              }).toList(),
-            ),
+            const SizedBox(height: 16),
           ],
 
-          const SizedBox(height: 14),
-
-          // Text Field for natural language prompt
+          // 1️⃣ الخطوة 1: تحديد وإضافة العروض (1-Click Presets & Assistant)
           Container(
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: colorScheme.surface,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: colorScheme.outlineVariant.withValues(alpha: 0.8),
-              ),
+              border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
             ),
-            padding: const EdgeInsets.all(12),
-            child: TextFormField(
-              controller: _promotionalIdeaController,
-              maxLines: 4,
-              minLines: 2,
-              style: const TextStyle(fontSize: 13.5, height: 1.5),
-              decoration: InputDecoration(
-                hintText: strings.aiCampaignIdeaHint,
-                hintStyle: TextStyle(
-                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-                  fontSize: 12.5,
-                ),
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: const EdgeInsets.all(4),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 14),
-
-          // Magic Generate Action Button
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: FilledButton.icon(
-              onPressed: _isAiStructuringRules ? null : _structureCampaignWithAi,
-              icon: _isAiStructuringRules
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.touch_app_rounded, color: colorScheme.primary, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      '1️⃣ إضافة وتحديد عروض الحملة:',
+                      style: GoogleFonts.cairo(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onSurface,
                       ),
-                    )
-                  : const Icon(Icons.auto_awesome_rounded, size: 20),
-              label: Text(
-                _isAiStructuringRules
-                    ? strings.aiGeneratingRulesLoading
-                    : strings.aiGenerateRulesBtn,
-                style: GoogleFonts.cairo(
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.bold,
+                    ),
+                    const Spacer(),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        side: BorderSide(color: Colors.teal.shade700.withValues(alpha: 0.5)),
+                      ),
+                      icon: const Icon(Icons.add_rounded, size: 16, color: Colors.teal),
+                      label: Text(
+                        strings.addCustomRuleBtn,
+                        style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.teal.shade800),
+                      ),
+                      onPressed: () => _showAddOrEditPromotionalRuleDialog(context),
+                    ),
+                  ],
                 ),
-              ),
-              style: FilledButton.styleFrom(
-                backgroundColor: colorScheme.primary,
-                foregroundColor: colorScheme.onPrimary,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-            ),
-          ),
+                const SizedBox(height: 10),
 
-          // AI Logic & Rules Summary Preview Card
-          if (_aiValidationSummary.isNotEmpty || _promotionalRules.isNotEmpty) ...[
-            const SizedBox(height: 20),
-            _buildAiRulesPreviewContainer(context, colorScheme, strings),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPresetChip({
-    required String label,
-    required String textToAdd,
-    required ColorScheme colorScheme,
-  }) {
-    return ActionChip(
-      avatar: const Icon(Icons.lightbulb_outline_rounded, size: 16),
-      label: Text(
-        label,
-        style: GoogleFonts.cairo(
-          fontSize: 11.5,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-      side: BorderSide(
-        color: colorScheme.outlineVariant.withValues(alpha: 0.6),
-      ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      onPressed: () {
-        final current = _promotionalIdeaController.text.trim();
-        if (current.isEmpty) {
-          _promotionalIdeaController.text = textToAdd;
-        } else {
-          _promotionalIdeaController.text = '$current\n$textToAdd';
-        }
-      },
-    );
-  }
-
-  Widget _buildAiRulesPreviewContainer(
-    BuildContext context,
-    ColorScheme colorScheme,
-    AppStrings strings,
-  ) {
-    return Container(
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: colorScheme.primary.withValues(alpha: 0.3),
-        ),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Row(
-            children: [
-              Icon(Icons.fact_check_rounded, color: colorScheme.primary, size: 22),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  strings.aiValidationSummaryHeader,
-                  style: GoogleFonts.cairo(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.primary,
+                // Quick Presets Dropdown
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.amber.shade300),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      hint: Row(
+                        children: [
+                          const Icon(Icons.flash_on_rounded, size: 18, color: Colors.amber),
+                          const SizedBox(width: 8),
+                          Text(
+                            '⚡ نماذج عروض وقواعد شائعة جاهزة (إدراج فوري بنقرة واحدة)...',
+                            style: GoogleFonts.cairo(fontSize: 12.5, fontWeight: FontWeight.bold, color: const Color(0xFF451A03)),
+                          ),
+                        ],
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'tresemme_single',
+                          child: Text('🧴 شراء 1 تريزيمي 400 مل -> هدية تريزيمي 250 مل', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'tresemme_shrink',
+                          child: Text('🧴 شراء عرض شرنك تريزيمي 2ق (أو بكج مزدوج) -> هدية تريزيمي 250 مل', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'clear_360',
+                          child: Text('🧴 شراء 1 كلير 360 مل -> هدية كلير 90 مل', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'spray_1pc_50',
+                          child: Text('💳 شراء 1 اسبراي ريكسونا أو أكس -> فواتشر 50 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'spray_2pc_125',
+                          child: Text('💳 شراء 2 اسبراي ريكسونا أو أكس -> فواتشر 125 ج.م (2×50 + 1×25)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'rollon_2pc_50',
+                          child: Text('💳 شراء 2 رول أون ريكسونا أو أكس -> فواتشر 50 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'axe_twin_shrink',
+                          child: Text('💳 شراء عرض شرنك أكس المزدوج (بندل 2 قطعة) -> فواتشر 125 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          _applyRulePreset(val);
+                        }
+                      },
+                    ),
                   ),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.clear_rounded, size: 18),
-                tooltip: strings.clearAiSummaryBtn,
-                onPressed: () {
-                  setState(() {
-                    _aiValidationSummary = '';
-                    _promotionalRules.clear();
-                  });
-                },
-              ),
-            ],
-          ),
-          const Divider(height: 18),
 
-          // Summary Text
-          if (_aiValidationSummary.isNotEmpty)
-            SelectableText(
-              _aiValidationSummary,
-              style: TextStyle(
-                fontSize: 13,
-                height: 1.55,
-                color: colorScheme.onSurface,
-              ),
+                const SizedBox(height: 12),
+
+                // Collapsible Natural Language AI Assistant Expansion
+                Theme(
+                  data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    initiallyExpanded: _isAiAssistantExpanded,
+                    onExpansionChanged: (exp) => setState(() => _isAiAssistantExpanded = exp),
+                    leading: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(Icons.auto_fix_high_rounded, color: colorScheme.primary, size: 18),
+                    ),
+                    title: Text(
+                      'أو صياغة فكرة العرض بحرية عبر مساعد الذكاء الاصطناعي 🪄',
+                      style: GoogleFonts.cairo(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                    children: [
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _promotionalIdeaController,
+                        maxLines: 3,
+                        minLines: 2,
+                        style: const TextStyle(fontSize: 13, height: 1.4),
+                        decoration: InputDecoration(
+                          hintText: strings.aiCampaignIdeaHint,
+                          hintStyle: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6)),
+                          filled: true,
+                          fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: colorScheme.outlineVariant)),
+                          contentPadding: const EdgeInsets.all(10),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 42,
+                        child: FilledButton.icon(
+                          onPressed: _isAiStructuringRules ? null : _structureCampaignWithAi,
+                          icon: _isAiStructuringRules
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                                )
+                              : const Icon(Icons.auto_awesome_rounded, size: 18),
+                          label: Text(
+                            _isAiStructuringRules ? strings.aiGeneratingRulesLoading : strings.aiGenerateRulesBtn,
+                            style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                          ),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: colorScheme.primary,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
+          ),
 
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
+
+          // 2️⃣ الخطوة 2: بطاقات العروض والجوائز المعتمدة (Active Promotional Rules Cards)
           Row(
             children: [
+              Icon(Icons.fact_check_rounded, color: colorScheme.primary, size: 20),
+              const SizedBox(width: 8),
               Text(
-                strings.aiPromotionalRulesListTitle,
+                '2️⃣ قواعد العروض والجوائز المعتمدة في الحملة:',
                 style: GoogleFonts.cairo(
-                  fontSize: 13.5,
+                  fontSize: 14,
                   fontWeight: FontWeight.bold,
                   color: colorScheme.onSurface,
                 ),
@@ -4267,80 +4346,49 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                 ),
               ),
               const Spacer(),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  side: BorderSide(color: Colors.teal.shade700.withValues(alpha: 0.5)),
+              if (_promotionalRules.isNotEmpty)
+                TextButton.icon(
+                  style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                  icon: const Icon(Icons.clear_all_rounded, size: 16),
+                  label: Text('مسح الكل', style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold)),
+                  onPressed: () {
+                    setState(() {
+                      _promotionalRules.clear();
+                      _aiValidationSummary = '';
+                    });
+                    _syncPromptFromRules(showSnackbar: false);
+                  },
                 ),
-                icon: const Icon(Icons.add_rounded, size: 16, color: Colors.teal),
-                label: Text(
-                  strings.addCustomRuleBtn,
-                  style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.teal.shade800),
-                ),
-                onPressed: () => _showAddOrEditPromotionalRuleDialog(context),
-              ),
             ],
           ),
+
           const SizedBox(height: 8),
-          // Presets Dropdown
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                isExpanded: true,
-                hint: Row(
-                  children: [
-                    const Icon(Icons.flash_on_rounded, size: 16, color: Colors.amber),
-                    const SizedBox(width: 6),
-                    Text(
-                      strings.presetRulesDropdownHint,
-                      style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
-                    ),
-                  ],
-                ),
-                items: const [
-                  DropdownMenuItem(
-                    value: 'clear_360',
-                    child: Text('🎁 شراء 1 كلير 360 مل -> كلير 90 مل هدية', style: TextStyle(fontSize: 12.5)),
+
+          if (_promotionalRules.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+              ),
+              child: Column(
+                children: [
+                  Icon(Icons.card_giftcard_rounded, size: 36, color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
+                  const SizedBox(height: 8),
+                  Text(
+                    'لم يتم إضافة أي قواعد عروض ترويجية حتى الآن',
+                    style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold, color: colorScheme.onSurfaceVariant),
                   ),
-                  DropdownMenuItem(
-                    value: 'tresemme_shrink',
-                    child: Text('🎁 شراء عرض تريزيمي شرنك 2ق -> تريزيمي 250 مل هدية', style: TextStyle(fontSize: 12.5)),
-                  ),
-                  DropdownMenuItem(
-                    value: 'spray_1pc_50',
-                    child: Text('💳 شراء 1 اسبراي ريكسونا أو أكس -> فواتشر 50 ج.م', style: TextStyle(fontSize: 12.5)),
-                  ),
-                  DropdownMenuItem(
-                    value: 'spray_2pc_125',
-                    child: Text('💳 شراء 2 اسبراي ريكسونا أو أكس -> فواتشر 125 ج.م (2×50 + 1×25)', style: TextStyle(fontSize: 12.5)),
-                  ),
-                  DropdownMenuItem(
-                    value: 'rollon_2pc_50',
-                    child: Text('💳 شراء 2 رول أون ريكسونا أو أكس -> فواتشر 50 ج.م', style: TextStyle(fontSize: 12.5)),
-                  ),
-                  DropdownMenuItem(
-                    value: 'axe_twin_shrink',
-                    child: Text('💳 شراء عرض شرنك أكس المزدوج (بندل 2 قطعة) -> فواتشر 125 ج.م', style: TextStyle(fontSize: 12.5)),
+                  Text(
+                    'اختر نموذجاً جاهزاً من القائمة أعلاه أو أضف قاعدة مخصصة بنقرة واحدة.',
+                    style: GoogleFonts.cairo(fontSize: 11.5, color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7)),
                   ),
                 ],
-                onChanged: (val) {
-                  if (val != null) {
-                    _applyRulePreset(val);
-                  }
-                },
               ),
-            ),
-          ),
-          const SizedBox(height: 10),
-
-          if (_promotionalRules.isNotEmpty) ...[
+            )
+          else
             ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -4351,7 +4399,106 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                 return _buildRuleItemTile(rule, index, colorScheme, strings);
               },
             ),
-          ],
+
+          const SizedBox(height: 16),
+
+          // 3️⃣ الخطوة 3: التوليد التلقائي للبرومبت مع خيار المعاينة المتقدمة
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.teal.shade50,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.teal.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.check_circle_rounded, color: Colors.teal.shade800, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'منطق تدقيق وفحص الذكاء الاصطناعي (AI Prompt) متزامن ويعمل تلقائياً في الخلفية 100%',
+                    style: GoogleFonts.cairo(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.teal.shade900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          // Optional Advanced Prompt Customizer Accordion (Closed by default)
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+              initiallyExpanded: _isPromptExpanded,
+              onExpansionChanged: (exp) => setState(() => _isPromptExpanded = exp),
+              leading: Icon(Icons.code_rounded, size: 18, color: colorScheme.onSurfaceVariant),
+              title: Text(
+                '👁️ معاينة أو تخصيص متقدم للبرومبت البرمجي (AI Prompt Customizer) - اختياري للمطورين',
+                style: GoogleFonts.cairo(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              children: [
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    _buildVariableChip(context, '{TARGET_COMPANY}', 'اسم الشركة'),
+                    _buildVariableChip(context, '{MIN_SPEND}', 'الحد الأدنى'),
+                    _buildVariableChip(context, '{REQUIRED_PRODUCTS}', 'المنتجات المشترطة'),
+                    const SizedBox(width: 6),
+                    FilledButton.tonalIcon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.teal.shade700.withValues(alpha: 0.12),
+                        foregroundColor: Colors.teal.shade800,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      icon: const Icon(Icons.auto_awesome_rounded, size: 15),
+                      label: Text(
+                        strings.syncPromptFromRulesBtn,
+                        style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: _syncPromptFromRules,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerLowest,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+                  ),
+                  padding: const EdgeInsets.all(10),
+                  child: TextFormField(
+                    controller: _customPromptController,
+                    maxLines: 9,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12.5,
+                      height: 1.45,
+                    ),
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.all(6),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -4521,6 +4668,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   setState(() {
                     _promotionalRules.removeAt(index);
                   });
+                  _syncPromptFromRules(showSnackbar: false);
                 },
               ),
             ],

@@ -1242,21 +1242,22 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
             // Top Row: Campaign Title, Status Badge, and Quick Switch Toggle
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Row(
+                  child: Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 10,
+                    runSpacing: 6,
                     children: [
-                      Flexible(
-                        child: Text(
-                          event.eventName,
-                          style: GoogleFonts.cairo(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                            color: colorScheme.primary,
-                          ),
+                      Text(
+                        event.eventName,
+                        style: GoogleFonts.cairo(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: colorScheme.primary,
                         ),
                       ),
-                      const SizedBox(width: 10),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
@@ -1283,7 +1284,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     ],
                   ),
                 ),
+                const SizedBox(width: 12),
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       isAr ? 'الحالة: ' : 'Status: ',
@@ -1357,31 +1360,20 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     colorScheme: colorScheme,
                     tooltip: isAr ? 'تاريخ بداية ونهاية سريان الحملة' : 'Campaign validity date range',
                   ),
+                if (event.requiredProducts.isNotEmpty)
+                  _buildMetadataPill(
+                    icon: Icons.inventory_2_rounded,
+                    label: '${isAr ? "الأصناف المستهدفة: " : "Target Items: "}${event.requiredProducts.length} ${isAr ? "صنفاً" : "items"}',
+                    colorScheme: colorScheme,
+                    customBg: Colors.indigo.shade50,
+                    customBorder: Colors.indigo.shade200,
+                    customColor: Colors.indigo.shade900,
+                    tooltip: isAr
+                        ? 'الأصناف المستهدفة (${event.requiredProducts.length} صنف):\n${event.requiredProducts.join(" • ")}'
+                        : 'Target Products (${event.requiredProducts.length} items):\n${event.requiredProducts.join(" • ")}',
+                  ),
               ],
             ),
-
-            if (event.requiredProducts.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.inventory_2_rounded, size: 14, color: colorScheme.primary),
-                    const SizedBox(width: 6),
-                    Text(
-                      '${isAr ? "الأصناف المخصصة المستهدفة: " : "Target Items: "}${event.requiredProducts.join(", ")}',
-                      style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600, color: colorScheme.onSurface),
-                    ),
-                  ],
-                ),
-              ),
-            ],
             const SizedBox(height: 14),
 
             // AI Prompt Guidelines (Smart Tonal Container)
@@ -1400,11 +1392,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     children: [
                       Icon(Icons.auto_awesome_rounded, size: 16, color: colorScheme.primary),
                       const SizedBox(width: 6),
-                      Text(
-                        isAr ? 'البرومبت المخصص للذكاء الاصطناعي (Gemini Vision AI Prompt):' : 'Custom Gemini AI Verification Prompt:',
-                        style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12, color: colorScheme.primary),
+                      Expanded(
+                        child: Text(
+                          isAr ? 'البرومبت المخصص للذكاء الاصطناعي (Gemini Vision AI Prompt):' : 'Custom Gemini AI Verification Prompt:',
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12, color: colorScheme.primary),
+                        ),
                       ),
-                      const Spacer(),
+                      const SizedBox(width: 8),
                       Tooltip(
                         message: isAr ? 'نسخ نص برومبت الذكاء الاصطناعي للحافظة' : 'Copy AI prompt text',
                         child: InkWell(

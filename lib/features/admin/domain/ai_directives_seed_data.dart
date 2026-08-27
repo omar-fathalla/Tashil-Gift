@@ -443,5 +443,26 @@ class AiDirectivesSeedData {
           tags: ['zero-fallback', 'strict-qualification', 'tresemme', 'clear', 'promotional-governance', 'temperature-zero'],
           lastUpdated: '2026-08-27',
         ),
+
+        const AiDirectiveModel(
+          id: 'AIR-21',
+          code: 'POS_CONCATENATION_AND_CANONICAL_BRANCH_RECONCILER',
+          orderIndex: 21,
+          category: AiDirectiveCategory.branchGovernance,
+          titleAr: 'تفكيك الكلمات الملتصقة في بونات الكاشير والمطابقة الحتمية للفروع (POS De-concatenation & Canonical Branch Reconciler)',
+          titleEn: 'POS Word De-concatenation & Deterministic Canonical Branch Reconciliation',
+          descriptionAr:
+              'معالجة دمج الكلمات الملتصقة في أنظمة الكاشير (مثل: شامبوزيت -> شامبو زيت) والمطابقة الحتمية للفرع المعتمد بتجريد المحافظات (مثل مطابقة "عمارات العبور - صلاح سالم" مع "عمارات العبور - صلاح سالم (القاهرة)" في جملة ماركت Store 419) مع ضمان توضيح سبب عدم الاستحقاق الدقيق دون أخطاء وهمية في السلسلة أو الشركة.',
+          descriptionEn:
+              'De-concatenates merged POS receipt words (e.g. شامبوزيت -> شامبو زيت) and deterministically reconciles detected branches with approved campaign branches stripping geographic parentheticals (e.g. Gomla Market Store 419 Obour Buildings), eliminating false rejection reasons.',
+          logicAr:
+              '1. استبدال الكلمات الملتصقة في دالة _normalize لتفكيكها (مثل شامبوزيت -> شامبو زيت).\n2. التحقق من تطابق الفرع عبر التجريد الجغرافي والكلمات الجوهرية (عبور، رحاب، سموحة، إلخ) قبل إطلاق قرار عدم مطابقة الفرع.\n3. التحقق من السلسلة التجارية عبر تجزئة السلاسل المتعددة (•, ,, /) لضمان قبول سلاسل الحملة المجمعة.\n4. تصنيف صنف تريزيمي كمنتج مؤهل للشركة وتوجيه التقرير التشخيصي للكمية بدلاً من رسائل عدم وجود منتجات.',
+          logicEn:
+              '1. Automatically splits fused POS words in _normalize.\n2. Performs canonical core token branch matching against allowed branches before flagging branch mismatch.\n3. Accurately verifies composite retail chains with delimiter parsing.\n4. Ensures valid Unilever items like Tresemme are recognized as target company items.',
+          exampleInput: 'بون جملة ماركت Store 419 (عمارات العبور - صلاح سالم) يحتوي على "تريزيمى شامبوزيت جوز الهند 400مل" الكمية 1',
+          exampleOutput: 'مطابقة الفرع والسلسلة 100%، وتوضيح أن العرض يتطلب شراء 2 قطعة من تريزيمي شامبو 400 مل للحصول على الهدية بدقة تامة.',
+          tags: ['pos-concatenation', 'branch-reconciliation', 'gomla-market', 'tresemme', 'obour-buildings', 'unilever'],
+          lastUpdated: '2026-08-27',
+        ),
       ];
 }
