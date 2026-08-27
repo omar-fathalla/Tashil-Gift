@@ -204,6 +204,63 @@ void main() {
       final axeGifts = bundle.combinedLinkedGifts.firstWhere((g) => g.giftId == 'v_50');
       expect(axeGifts.quantity, 2);
     });
+
+    test('Greedy Tiered Waterfall: Customer buying 3 Axe sprays gets 1x (2-pcs tier @ 125 EGP) + 1x (1-pc tier @ 50 EGP) = 175 EGP total', () {
+      final tieredRules = [
+        PromotionalRuleItem(
+          id: 'rule_axe_2',
+          ruleTitle: 'عرض اسبراي أكس قطعتين -> فواتشر 125 ج.م',
+          triggerProduct: 'اسبراي أكس، axe',
+          minQuantity: 2,
+          rewardType: 'voucher',
+          rewardValue: 'فواتشر بقيمة 125 جنيه',
+          rewardAmount: 125.0,
+          allowMultipliers: true,
+          linkedGifts: [
+            LinkedGiftAllocation(giftId: 'v_50', giftName: 'فواتشر 50 جنيه', quantity: 2, unitValue: 50.0, giftType: 'voucher'),
+            LinkedGiftAllocation(giftId: 'v_25', giftName: 'فواتشر 25 جنيه', quantity: 1, unitValue: 25.0, giftType: 'voucher'),
+          ],
+        ),
+        PromotionalRuleItem(
+          id: 'rule_axe_1',
+          ruleTitle: 'عرض اسبراي أكس قطعة واحدة -> فواتشر 50 ج.م',
+          triggerProduct: 'اسبراي أكس، axe',
+          minQuantity: 1,
+          rewardType: 'voucher',
+          rewardValue: 'فواتشر بقيمة 50 جنيه',
+          rewardAmount: 50.0,
+          allowMultipliers: true,
+          linkedGifts: [
+            LinkedGiftAllocation(giftId: 'v_50', giftName: 'فواتشر 50 جنيه', quantity: 1, unitValue: 50.0, giftType: 'voucher'),
+          ],
+        ),
+      ];
+
+      final basket = [
+        ExtractedProductItem(name: 'اكس اسبراى 150 مل', price: 170.0, quantity: 2, isTargetCompany: true),
+        ExtractedProductItem(name: 'اكس اسبراى 150 مل', price: 170.0, quantity: 1, isTargetCompany: true),
+      ];
+
+      final matched = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: basket,
+        promotionalRules: tieredRules,
+        allowCampaignMultipliers: true,
+      );
+
+      // Expect both tiers to trigger: 1x rule_axe_2 (for 2 pcs) + 1x rule_axe_1 (for 1 pc)
+      expect(matched.length, 2);
+      expect(matched.any((r) => r.rule.id == 'rule_axe_2' && r.multiplier == 1 && r.totalRewardAmount == 125.0), isTrue);
+      expect(matched.any((r) => r.rule.id == 'rule_axe_1' && r.multiplier == 1 && r.totalRewardAmount == 50.0), isTrue);
+
+      final bundle = CompositePromotionalBundle.fromMatchedRules(matched);
+      expect(bundle.totalVoucherValue, 175.0); // 125 + 50 = 175 EGP
+
+      // Verify gifts breakdown: 3x 50 EGP + 1x 25 EGP
+      final v50 = bundle.combinedLinkedGifts.firstWhere((g) => g.giftId == 'v_50');
+      final v25 = bundle.combinedLinkedGifts.firstWhere((g) => g.giftId == 'v_25');
+      expect(v50.quantity, 3);
+      expect(v25.quantity, 1);
+    });
   });
 }
 

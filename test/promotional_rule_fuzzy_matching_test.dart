@@ -118,7 +118,8 @@ void main() {
       final bundle = CompositePromotionalBundle.fromMatchedRules(matchedResults);
       expect(bundle.totalVoucherValue, 100.0);
       expect(bundle.matchedRules.length, 2);
-      expect(bundle.combinedLinkedGifts.length, 2);
+      expect(bundle.combinedLinkedGifts.length, 1); // Consolidated into single v_50 allocation
+      expect(bundle.combinedLinkedGifts.first.quantity, 2); // 2x 50 EGP = 100 EGP
       expect(bundle.compositePrizeTitle, contains('50'));
     });
 
@@ -138,76 +139,102 @@ void main() {
         ),
       ];
 
-      final matched = PromotionalRuleMatcher.matchAllWithMultipliers(
+      final matchedResults = PromotionalRuleMatcher.matchAllWithMultipliers(
         extractedProducts: variedProducts,
-        promotionalRules: rules,
-      );
-
-      expect(matched.length, 2);
-      final bundle = CompositePromotionalBundle.fromMatchedRules(matched);
-      expect(bundle.totalVoucherValue, 100.0);
-    });
-
-    test('Multiple chances / multipliers work across multiple matched rules simultaneously', () {
-      final highVolumeProducts = [
-        ExtractedProductItem(
-          name: 'اكس اسبراى 150مل',
-          price: 270.0,
-          quantity: 4, // 4 sprays -> Rule 4 (2 pcs for 125 EGP) x2 = 250 EGP
-          isTargetCompany: true,
-        ),
-        ExtractedProductItem(
-          name: 'ريكسونا روول اون',
-          price: 69.0,
-          quantity: 4, // 4 roll-ons -> Rule 5 (2 pcs for 50 EGP) x2 = 100 EGP
-          isTargetCompany: true,
-        ),
-      ];
-
-      final matched = PromotionalRuleMatcher.matchAllWithMultipliers(
-        extractedProducts: highVolumeProducts,
         promotionalRules: rules,
         allowCampaignMultipliers: true,
       );
 
-      expect(matched.length, 2);
-      final sprayMatch = matched.firstWhere((m) => m.rule.id == 'rule_4');
-      final rollonMatch = matched.firstWhere((m) => m.rule.id == 'rule_5');
+      expect(matchedResults.length, 2);
+      expect(matchedResults.any((r) => r.rule.id == 'rule_3'), isTrue);
+      expect(matchedResults.any((r) => r.rule.id == 'rule_5'), isTrue);
 
-      expect(sprayMatch.multiplier, 2);
-      expect(sprayMatch.totalRewardAmount, 250.0);
-
-      expect(rollonMatch.multiplier, 2);
-      expect(rollonMatch.totalRewardAmount, 100.0);
-
-      final bundle = CompositePromotionalBundle.fromMatchedRules(matched);
-      expect(bundle.totalVoucherValue, 350.0); // 250 + 100 = 350 EGP
-      expect(bundle.totalChances, 4); // 2 + 2 = 4 chances
+      final bundle = CompositePromotionalBundle.fromMatchedRules(matchedResults);
+      expect(bundle.totalVoucherValue, 100.0);
     });
 
-    test('Fathalla Receipt with 3 Clear Shampoo and 3 Axe Spray yields exactly 3 Clear 90ml + 125 EGP Voucher (6 gifts total, never 24)', () {
-      final fthallaItems = [
+    test('Multiple chances / multipliers work across multiple matched rules simultaneously', () {
+      final multiItems = [
         ExtractedProductItem(
-          name: 'شامبو كلير 360 ملي',
-          price: 198.0,
-          originalPrice: 230.0,
-          discountAmount: 32.0,
+          name: 'شامبو صنسيلك لمعان ساحر 350 مل',
+          price: 95.0,
           quantity: 2,
           isTargetCompany: true,
         ),
         ExtractedProductItem(
-          name: 'شامبو كلير 360 مل',
-          price: 99.0,
-          originalPrice: 115.0,
-          discountAmount: 16.0,
+          name: 'شامبو كلير 360 مل ضد القشرة رجالي',
+          price: 110.0,
+          quantity: 2,
+          isTargetCompany: true,
+        ),
+        ExtractedProductItem(
+          name: 'اسبراي اكس دارك تمبتيشن 150 مل',
+          price: 140.0,
+          quantity: 4,
+          isTargetCompany: true,
+        ),
+      ];
+
+      final matchedResults = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: multiItems,
+        promotionalRules: rules,
+        allowCampaignMultipliers: true,
+      );
+
+      expect(matchedResults.length, 2);
+
+      // Rule 1: Clear 360ml -> 2 bottles bought -> multiplier = 2
+      final clearMatch = matchedResults.firstWhere((m) => m.rule.id == 'rule_1');
+      expect(clearMatch.multiplier, 2);
+
+      // Rule 4: Axe Spray 2 pcs -> 4 bought -> multiplier = 2 (250 EGP voucher)
+      final axeMatch = matchedResults.firstWhere((m) => m.rule.id == 'rule_4');
+      expect(axeMatch.multiplier, 2);
+      expect(axeMatch.totalRewardAmount, 250.0);
+
+      final bundle = CompositePromotionalBundle.fromMatchedRules(matchedResults);
+      expect(bundle.totalVoucherValue, 250.0);
+    });
+
+    test('Fathalla Receipt with 3 Clear Shampoo and 3 Axe Spray yields exactly 3 Clear 90ml + 125 EGP Voucher + 50 EGP Voucher (7 gifts total, never 24)', () {
+      final fthallaItems = [
+        ExtractedProductItem(
+          name: 'صانصيلك شا مبو 600 مل',
+          price: 112.0,
+          originalPrice: 132.0,
+          discountAmount: 20.0,
           quantity: 1,
           isTargetCompany: true,
         ),
         ExtractedProductItem(
+          name: 'صانصيلك شا مبو 600 مل',
+          price: 112.0,
+          originalPrice: 132.0,
+          discountAmount: 20.0,
+          quantity: 1,
+          isTargetCompany: true,
+        ),
+        ExtractedProductItem(
+          name: 'صانصيلك شا مبو 600 مل',
+          price: 112.0,
+          originalPrice: 132.0,
+          discountAmount: 20.0,
+          quantity: 1,
+          isTargetCompany: true,
+        ),
+        ExtractedProductItem(
+          name: 'كلير 360 مل شامبو انتعاش',
+          price: 95.0,
+          originalPrice: 110.0,
+          discountAmount: 15.0,
+          quantity: 3,
+          isTargetCompany: true,
+        ),
+        ExtractedProductItem(
           name: 'اكس اسبراى 150 مل',
-          price: 278.0,
-          originalPrice: 340.0,
-          discountAmount: 62.0,
+          price: 139.0,
+          originalPrice: 170.0,
+          discountAmount: 31.0,
           quantity: 2,
           isTargetCompany: true,
         ),
@@ -219,12 +246,6 @@ void main() {
           quantity: 1,
           isTargetCompany: true,
         ),
-        ExtractedProductItem(
-          name: 'فاين برستيج سحب',
-          price: 495.0,
-          quantity: 3,
-          isTargetCompany: false,
-        ),
       ];
 
       // Total receipt spend is 1209 EGP
@@ -234,7 +255,8 @@ void main() {
         allowCampaignMultipliers: true,
       );
 
-      expect(matchedResults.length, 2);
+      // Expect 3 matched rule results: Clear 3x, Axe 2-pcs tier 1x, Axe 1-pc tier 1x
+      expect(matchedResults.length, 3);
 
       // Rule 1: Clear 360ml -> 3 bottles bought -> multiplier = 3
       final clearMatch = matchedResults.firstWhere((m) => m.rule.id == 'rule_1');
@@ -242,27 +264,32 @@ void main() {
       expect(clearMatch.rule.triggerProduct, contains('كلير 360 مل'));
 
       // Rule 4: Axe Spray 2 pcs -> 3 bought -> picked Rule 4 with multiplier = 1 (125 EGP voucher)
-      final axeMatch = matchedResults.firstWhere((m) => m.rule.id == 'rule_4');
-      expect(axeMatch.multiplier, 1);
-      expect(axeMatch.totalRewardAmount, 125.0);
+      final axeMatch2 = matchedResults.firstWhere((m) => m.rule.id == 'rule_4');
+      expect(axeMatch2.multiplier, 1);
+      expect(axeMatch2.totalRewardAmount, 125.0);
+
+      // Rule 3: Axe Spray 1 pc -> remainder 1 bought -> picked Rule 3 with multiplier = 1 (50 EGP voucher)
+      final axeMatch1 = matchedResults.firstWhere((m) => m.rule.id == 'rule_3');
+      expect(axeMatch1.multiplier, 1);
+      expect(axeMatch1.totalRewardAmount, 50.0);
 
       // Composite bundle aggregation
       final bundle = CompositePromotionalBundle.fromMatchedRules(matchedResults);
-      expect(bundle.totalVoucherValue, 125.0); // Exactly 125 EGP, NOT 500 EGP!
-      expect(bundle.totalChances, 4); // 3 (Clear) + 1 (Axe) = 4
+      expect(bundle.totalVoucherValue, 175.0); // 125 + 50 = 175 EGP
+      expect(bundle.totalChances, 5); // 3 (Clear) + 1 (Axe 2pc) + 1 (Axe 1pc) = 5
 
       // Combined linked gifts count
       final totalItemsCount = bundle.combinedLinkedGifts.fold<int>(0, (sum, g) => sum + g.quantity);
-      expect(totalItemsCount, 6); // 3 Clear + 2 Voucher 50 + 1 Voucher 25 = 6 gifts, NOT 24!
+      expect(totalItemsCount, 7); // 3 Clear + 3 Voucher 50 + 1 Voucher 25 = 7 gifts!
 
       final clearGift = bundle.combinedLinkedGifts.firstWhere((g) => g.giftName.contains('كلير'));
-      expect(clearGift.quantity, 3); // 3 units, NOT 12!
+      expect(clearGift.quantity, 3);
 
       final v50Gift = bundle.combinedLinkedGifts.firstWhere((g) => g.giftName.contains('50'));
-      expect(v50Gift.quantity, 2); // 2 units, NOT 8!
+      expect(v50Gift.quantity, 3); // 2 from rule_4 + 1 from rule_3 = 3 units
 
       final v25Gift = bundle.combinedLinkedGifts.firstWhere((g) => g.giftName.contains('25'));
-      expect(v25Gift.quantity, 1); // 1 unit, NOT 4!
+      expect(v25Gift.quantity, 1);
     });
   });
 }

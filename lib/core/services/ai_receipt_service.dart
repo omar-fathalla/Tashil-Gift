@@ -957,9 +957,9 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
 
           if (matchedBranchByCode != null) {
             final isAllowed = isAllBranches || allowedBranches.isEmpty || allowedBranches.any((ab) {
-              final cleanAb = ab.trim().toLowerCase();
-              final cleanBName = matchedBranchByCode!.branchName.trim().toLowerCase();
-              final cleanCity = matchedBranchByCode.city.trim().toLowerCase();
+              final cleanAb = ab.replaceAll(RegExp(r'[\(\)]'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+              final cleanBName = matchedBranchByCode!.branchName.replaceAll(RegExp(r'[\(\)]'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+              final cleanCity = matchedBranchByCode.city.replaceAll(RegExp(r'[\(\)]'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
               return cleanAb.contains(cleanBName) || cleanBName.contains(cleanAb) || (cleanCity.isNotEmpty && cleanAb.contains(cleanCity));
             });
 
@@ -1385,10 +1385,10 @@ class PromotionalRuleMatcher {
       return single != null ? [single] : [];
     }
 
-    // Group rules by canonical trigger product tokens (to resolve tiers of the same product)
+    // 1. Group rules by canonical product family tokens (to resolve and bundle tiers of the same product family)
     final Map<String, List<PromotionalRuleItem>> rulesByProductGroup = {};
     for (final rule in promotionalRules) {
-      final key = _normalize(rule.triggerProduct.isNotEmpty ? rule.triggerProduct : rule.ruleTitle);
+      final key = _getProductGroupKey(rule);
       rulesByProductGroup.putIfAbsent(key, () => []).add(rule);
     }
 
@@ -1396,71 +1396,83 @@ class PromotionalRuleMatcher {
     final Set<String> matchedRuleIds = {};
 
     for (final group in rulesByProductGroup.values) {
-      // Find matching rules within this product family
-      PromotionalRuleItem? bestMatchingRule;
-      int maxMatchedTriggerQty = 0;
+      // Sort rules within the family descending by minQuantity (highest tier first: e.g. 2 pcs before 1 pc)
+      final sortedGroup = List<PromotionalRuleItem>.from(group)
+        ..sort((a, b) => b.minQuantity.compareTo(a.minQuantity));
 
-      for (final rule in group) {
-        int triggerQty = 0;
-        int matchedCount = 0;
-        for (final p in effectiveProducts) {
-          if (_matchesProduct(p, rule.triggerProduct)) {
-            triggerQty += p.quantity > 0 ? p.quantity : 1;
-            matchedCount++;
-          }
-        }
-
-        final bool isAiExplicitMatch = aiMatchedRuleIds.contains(rule.id);
-
-        if ((matchedCount > 0 && triggerQty >= rule.minQuantity) || isAiExplicitMatch) {
-          if (bestMatchingRule == null || rule.minQuantity > bestMatchingRule.minQuantity || isAiExplicitMatch) {
-            bestMatchingRule = rule;
-            maxMatchedTriggerQty = math.max(triggerQty, rule.minQuantity);
-          }
+      // Calculate total available quantity of qualifying products in the customer's receipt for this family
+      int totalAvailableQty = 0;
+      for (final p in effectiveProducts) {
+        if (sortedGroup.any((r) => _matchesProduct(p, r.triggerProduct))) {
+          totalAvailableQty += p.quantity > 0 ? p.quantity : 1;
         }
       }
 
-      if (bestMatchingRule != null) {
-        int multiplier = 1;
-        if (bestMatchingRule.minQuantity > 0 && maxMatchedTriggerQty >= bestMatchingRule.minQuantity) {
-          if (bestMatchingRule.allowMultipliers || allowCampaignMultipliers) {
-            multiplier = maxMatchedTriggerQty ~/ bestMatchingRule.minQuantity;
-            if (multiplier < 1) multiplier = 1;
+      int remainingQty = totalAvailableQty;
+
+      for (final rule in sortedGroup) {
+        if (remainingQty <= 0) break;
+
+        final bool isAiExplicitMatch = aiMatchedRuleIds.contains(rule.id);
+
+        if (rule.minQuantity > 0 && remainingQty >= rule.minQuantity) {
+          int count = 1;
+          if (rule.allowMultipliers || allowCampaignMultipliers) {
+            count = remainingQty ~/ rule.minQuantity;
+            if (count < 1) count = 1;
           }
-        }
 
-        final double baseAmount = bestMatchingRule.totalVoucherValue > 0
-            ? bestMatchingRule.totalVoucherValue
-            : (bestMatchingRule.rewardAmount > 0 ? bestMatchingRule.rewardAmount : 0.0);
-        final double totalAmount = baseAmount * multiplier;
+          final int usedQty = count * rule.minQuantity;
+          remainingQty -= usedQty;
 
-        final multipliedLinkedGifts = bestMatchingRule.linkedGifts.map((g) {
-          return g.copyWith(quantity: g.quantity * multiplier);
-        }).toList();
+          final double baseAmount = rule.totalVoucherValue > 0
+              ? rule.totalVoucherValue
+              : (rule.rewardAmount > 0 ? rule.rewardAmount : 0.0);
+          final double totalAmount = baseAmount * count;
 
-        String prizeSummary;
-        if (multiplier > 1) {
-          if (bestMatchingRule.rewardType == 'voucher' || baseAmount > 0) {
-            final totalInt = totalAmount == totalAmount.roundToDouble() ? totalAmount.toInt() : totalAmount;
-            prizeSummary = '$multiplier × ${bestMatchingRule.rewardValue} (إجمالي $totalInt جنيه)';
+          final multipliedLinkedGifts = rule.linkedGifts.map((g) {
+            return g.copyWith(quantity: g.quantity * count);
+          }).toList();
+
+          String prizeSummary;
+          if (count > 1) {
+            if (rule.rewardType == 'voucher' || baseAmount > 0) {
+              final totalInt = totalAmount == totalAmount.roundToDouble() ? totalAmount.toInt() : totalAmount;
+              prizeSummary = '$count × ${rule.rewardValue} (إجمالي $totalInt جنيه)';
+            } else {
+              prizeSummary = '$count × ${rule.rewardValue}';
+            }
           } else {
-            prizeSummary = '$multiplier × ${bestMatchingRule.rewardValue}';
+            prizeSummary = rule.rewardValue;
           }
-        } else {
-          prizeSummary = bestMatchingRule.rewardValue;
-        }
 
-        matchedRuleIds.add(bestMatchingRule.id);
-        allMatchedResults.add(
-          MatchedPromotionalRuleResult(
-            rule: bestMatchingRule,
-            multiplier: multiplier,
-            totalTriggerQuantity: maxMatchedTriggerQty,
-            totalRewardAmount: totalAmount,
-            formattedPrizeSummary: prizeSummary,
-            multipliedLinkedGifts: multipliedLinkedGifts,
-          ),
-        );
+          matchedRuleIds.add(rule.id);
+          allMatchedResults.add(
+            MatchedPromotionalRuleResult(
+              rule: rule,
+              multiplier: count,
+              totalTriggerQuantity: usedQty,
+              totalRewardAmount: totalAmount,
+              formattedPrizeSummary: prizeSummary,
+              multipliedLinkedGifts: multipliedLinkedGifts,
+            ),
+          );
+        } else if (isAiExplicitMatch && !matchedRuleIds.contains(rule.id)) {
+          final double baseAmount = rule.totalVoucherValue > 0
+              ? rule.totalVoucherValue
+              : (rule.rewardAmount > 0 ? rule.rewardAmount : 0.0);
+          matchedRuleIds.add(rule.id);
+          allMatchedResults.add(
+            MatchedPromotionalRuleResult(
+              rule: rule,
+              multiplier: 1,
+              totalTriggerQuantity: rule.minQuantity,
+              totalRewardAmount: baseAmount,
+              formattedPrizeSummary: rule.rewardValue,
+              multipliedLinkedGifts: rule.linkedGifts,
+            ),
+          );
+        }
       }
     }
 
@@ -1609,6 +1621,15 @@ class PromotionalRuleMatcher {
     }
     return tokens.toSet().toList();
   }
+
+  static String _getProductGroupKey(PromotionalRuleItem rule) {
+    final raw = rule.triggerProduct.isNotEmpty ? rule.triggerProduct : rule.ruleTitle;
+    final tokens = _extractTokens(raw)..sort();
+    if (tokens.isNotEmpty) {
+      return tokens.join('_');
+    }
+    return _normalize(raw);
+  }
 }
 
 /// Represents the resolved promotional rule result with multiplied rewards and chances
@@ -1660,28 +1681,36 @@ class CompositePromotionalBundle {
       );
     }
 
-    final List<LinkedGiftAllocation> gifts = [];
+    final Map<String, LinkedGiftAllocation> consolidatedGifts = {};
     double totalVoucher = 0.0;
     int chances = 0;
 
     for (final r in rules) {
       totalVoucher += r.totalRewardAmount;
       chances += r.multiplier;
-      if (r.multipliedLinkedGifts.isNotEmpty) {
-        gifts.addAll(r.multipliedLinkedGifts);
-      } else {
-        final isVoucher = r.rule.rewardType == 'voucher' || r.totalRewardAmount > 0;
-        gifts.add(
-          LinkedGiftAllocation(
-            giftId: r.rule.id,
-            giftName: r.rule.rewardValue,
-            quantity: r.multiplier,
-            unitValue: r.rule.rewardAmount > 0
-                ? r.rule.rewardAmount
-                : (r.rule.totalVoucherValue > 0 ? r.rule.totalVoucherValue : 0.0),
-            giftType: isVoucher ? 'voucher' : 'product',
-          ),
-        );
+      final ruleGifts = r.multipliedLinkedGifts.isNotEmpty
+          ? r.multipliedLinkedGifts
+          : [
+              LinkedGiftAllocation(
+                giftId: r.rule.id,
+                giftName: r.rule.rewardValue,
+                quantity: r.multiplier,
+                unitValue: r.rule.rewardAmount > 0
+                    ? r.rule.rewardAmount
+                    : (r.rule.totalVoucherValue > 0 ? r.rule.totalVoucherValue : 0.0),
+                giftType: (r.rule.rewardType == 'voucher' || r.totalRewardAmount > 0) ? 'voucher' : 'product',
+              ),
+            ];
+
+      for (final g in ruleGifts) {
+        if (consolidatedGifts.containsKey(g.giftId)) {
+          final existing = consolidatedGifts[g.giftId]!;
+          consolidatedGifts[g.giftId] = existing.copyWith(
+            quantity: existing.quantity + g.quantity,
+          );
+        } else {
+          consolidatedGifts[g.giftId] = g;
+        }
       }
     }
 
@@ -1689,7 +1718,7 @@ class CompositePromotionalBundle {
 
     return CompositePromotionalBundle(
       matchedRules: rules,
-      combinedLinkedGifts: gifts,
+      combinedLinkedGifts: consolidatedGifts.values.toList(),
       compositePrizeTitle: title,
       totalVoucherValue: totalVoucher,
       totalChances: chances > 0 ? chances : 1,
