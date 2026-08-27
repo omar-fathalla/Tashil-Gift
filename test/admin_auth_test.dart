@@ -159,5 +159,65 @@ void main() {
       expect(find.byIcon(Icons.logout_rounded), findsOneWidget);
       expect(find.byIcon(Icons.logout_rounded), findsOneWidget);
     });
+
+    testWidgets('AuthScreen renders desktop split layout with hero showcase and 4 pillars', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authStateStreamProvider.overrideWith((ref) => Stream.value(null)),
+          ],
+          child: const MaterialApp(
+            home: AuthScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify Brand Headline & Gemini badge
+      expect(find.text('منظومة سويتش بوينت الذكية'), findsOneWidget);
+      expect(find.text('مدعوم بمحرك Gemini 3.7 Flash'), findsOneWidget);
+      expect(find.text('حوكمة وحماية من الاحتيال 100%'), findsOneWidget);
+
+      // Verify 4 System Pillars
+      expect(find.text('إدارة الحملات والفعاليات الترويجية'), findsOneWidget);
+      expect(find.text('فحص الفواتير والأسعار بالذكاء الاصطناعي'), findsOneWidget);
+      expect(find.text('حوكمة الجوائز والمخزون اللحظي'), findsOneWidget);
+      expect(find.text('بوابات وتقارير إدارية متعددة الشركات'), findsOneWidget);
+
+      // Verify Quick Stats
+      expect(find.text('< 1.8 ث'), findsOneWidget);
+      expect(find.text('99.8%'), findsOneWidget);
+      expect(find.text('100%'), findsOneWidget);
+
+      // Verify Login Card
+      expect(find.text('تسجيل الدخول للنظام'), findsOneWidget);
+    });
+
+    testWidgets('AuthScreen renders mobile layout with hero banner', (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authStateStreamProvider.overrideWith((ref) => Stream.value(null)),
+          ],
+          child: const MaterialApp(
+            home: AuthScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify Mobile Banner & Gemini tag
+      expect(find.text('منظومة سويتش بوينت الذكية'), findsOneWidget);
+      expect(find.text('مدعوم بمحرك Gemini 3.7 Flash'), findsOneWidget);
+      expect(find.text('تسجيل الدخول للنظام'), findsOneWidget);
+    });
   });
 }

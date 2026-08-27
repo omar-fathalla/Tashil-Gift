@@ -984,6 +984,98 @@ class AppStrings {
     hi: 'प्रमाणीकरण विफल रहा। कृपया अपने क्रेडेंशियल्स की जांच करें।',
   );
 
+  // Hero Platform Showcase & System Pillars
+  String get heroPlatformTagline => _t(
+    ar: 'المنظومة الذكية الرائدة لإدارة الحملات الترويجية والتحقق الفوري من الفواتير بالذكاء الاصطناعي',
+    en: 'The Leading AI-Powered Platform for Promotional Campaigns & Smart Receipt Verification',
+    hi: 'प्रचार अभियानों और स्मार्ट रसीद सत्यापन के लिए अग्रणी एआई-संचालित मंच',
+  );
+  String get heroGeminiModelBadge => _t(
+    ar: 'مدعوم بمحرك Gemini 3.7 Flash',
+    en: 'Powered by Gemini 3.7 Flash',
+    hi: 'Gemini 3.7 Flash द्वारा संचालित',
+  );
+  String get heroAntiFraudBadge => _t(
+    ar: 'حوكمة وحماية من الاحتيال 100%',
+    en: '100% Anti-Fraud & Single-Resolution',
+    hi: '100% धोखाधड़ी-रोधी और एकल-समाधान',
+  );
+  String get heroPillar1Title => _t(
+    ar: 'إدارة الحملات والفعاليات الترويجية',
+    en: 'Promotional Campaigns & Events Engine',
+    hi: 'प्रचार अभियान और कार्यक्रम इंजन',
+  );
+  String get heroPillar1Desc => _t(
+    ar: 'إطلاق وتخصيص عروض الهايبرماركت والشركات: خصومات مباشرة، سحوبات، فوتشرات، وعجلة الحظ.',
+    en: 'Launch & manage retail & brand events: direct discounts, digital raffles, instant vouchers & lucky wheels.',
+    hi: 'खुदरा और ब्रांड इवेंट लॉन्च और प्रबंधित करें: सीधी छूट, डिजिटल रैफ़ल, तत्काल वाउचर और भाग्य का पहिया।',
+  );
+  String get heroPillar2Title => _t(
+    ar: 'فحص الفواتير والأسعار بالذكاء الاصطناعي',
+    en: 'AI Receipt OCR & Price Intelligence',
+    hi: 'एआई रसीद ओसीआर और मूल्य खुफिया',
+  );
+  String get heroPillar2Desc => _t(
+    ar: 'تدقيق فوري لفواتير الكاشير، استخراج دقيق للأصناف، حساب اقتصاديات القطعة، ومقارنة الأسعار لحظياً.',
+    en: 'Instant POS receipt OCR, exact item extraction, single unit economics & real-time price comparison.',
+    hi: 'तत्काल पीओएस रसीद ओसीआर, सटीक वस्तु निष्कर्षण, एकल इकाई अर्थशास्त्र और वास्तविक समय मूल्य तुलना।',
+  );
+  String get heroPillar3Title => _t(
+    ar: 'حوكمة الجوائز والمخزون اللحظي',
+    en: 'Gift Governance & Live Inventory',
+    hi: 'उपहार शासन और लाइव इन्वेंटरी',
+  );
+  String get heroPillar3Desc => _t(
+    ar: 'احتساب عادل للجوائز المكتسبة، إيصالات رقمية ورموز QR/OTP مؤمنة، ومزامنة حية مع أرصدة الفروع.',
+    en: 'Zero duplicate allocation, tamper-proof QR/OTP digital receipts, and live sync with branch stock.',
+    hi: 'शून्य दोहराव आवंटन, छेड़छाड़-रोधी क्यूआर/ओटीपी डिजिटल रसीदें, और शाखा स्टॉक के साथ लाइव सिंक।',
+  );
+  String get heroPillar4Title => _t(
+    ar: 'بوابات وتقارير إدارية متعددة الشركات',
+    en: 'Multi-Tenant Portals & Live Analytics',
+    hi: 'मल्टी-टेनेंट पोर्टल और लाइव एनालिटिक्स',
+  );
+  String get heroPillar4Desc => _t(
+    ar: 'لوحات تحكم للإدارة والشركات والمحققين، مؤشرات أداء تفاعلية (KPIs)، وقياس عائد الاستثمار الترويجي.',
+    en: 'Role-based portals for Admins, Brands & Cashiers, live KPIs, branch sales logs & campaign ROI.',
+    hi: 'एडमिन, ब्रांड और कैशियर के लिए भूमिका-आधारित पोर्टल, लाइव केपीआई, शाखा बिक्री लॉग और अभियान आरओआई।',
+  );
+  String get heroStatSpeed => _t(
+    ar: '< 1.8 ث',
+    en: '< 1.8s',
+    hi: '< 1.8s',
+  );
+  String get heroStatSpeedLabel => _t(
+    ar: 'سرعة التحقق والمعالجة',
+    en: 'Avg AI OCR Speed',
+    hi: 'औसत एआई ओसीआर गति',
+  );
+  String get heroStatAccuracy => _t(
+    ar: '99.8%',
+    en: '99.8%',
+    hi: '99.8%',
+  );
+  String get heroStatAccuracyLabel => _t(
+    ar: 'دقة استخراج البيانات',
+    en: 'Extraction Accuracy',
+    hi: 'निष्कर्षण सटीकता',
+  );
+  String get heroStatGovernance => _t(
+    ar: '100%',
+    en: '100%',
+    hi: '100%',
+  );
+  String get heroStatGovernanceLabel => _t(
+    ar: 'انضباط حوكمة الجوائز',
+    en: 'Gift Allocation Integrity',
+    hi: 'उपहार आवंटन अखंडता',
+  );
+  String get heroEnterpriseSecurityNote => _t(
+    ar: 'منظومة مؤمنة بتشفير سحابي عالي ومطابقة لمعايير أمن المعلومات المؤسسية',
+    en: 'Enterprise-grade cloud encryption and secure zero-trust session management',
+    hi: 'एंटरप्राइज-ग्रेड क्लाउड एन्क्रिप्शन और सुरक्षित शून्य-विश्वास सत्र प्रबंधन',
+  );
+
   // ---------------------------------------------------------------------------
   // 16. AI Receipt Validation Screen & Operations
   // ---------------------------------------------------------------------------

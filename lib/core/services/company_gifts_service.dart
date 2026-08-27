@@ -1132,4 +1132,132 @@ class CompanyGiftsService {
       });
     }
   }
+
+  /// Records an immutable audit snapshot for a completed weekend/wave cycle,
+  /// saves the settlement to `campaign_stock_settlements`, and updates the active campaign quota for the new wave.
+  Future<String> recordWeekendSettlement({
+    required String companySlug,
+    required EventModel event,
+    required String cycleTitle,
+    required List<String> branches,
+    required List<CompanyGiftModel> masterGifts,
+    required Map<String, int> cellAllocations,
+    required Map<String, int> claimedCache,
+    required int newAllocatedQuota,
+    String performedBy = 'مدير الشركة',
+  }) async {
+    final slug = companySlug.toLowerCase().trim();
+    final eventRef = _firestore.collection('events').doc(event.id);
+    final eventSnap = await eventRef.get();
+    if (!eventSnap.exists) {
+      throw Exception('الفعالية غير موجودة في قاعدة البيانات');
+    }
+
+    final eventData = eventSnap.data() ?? {};
+    final rawPrizes = (eventData['allocatedPrizes'] as List<dynamic>?) ?? [];
+    List<AllocatedPrize> livePrizes = rawPrizes
+        .map((p) => AllocatedPrize.fromMap(Map<String, dynamic>.from(p as Map)))
+        .toList();
+
+    int totalAllocatedBefore = 0;
+    int totalClaimed = 0;
+    int totalReturned = 0;
+
+    final Map<String, dynamic> branchSnapshots = {};
+
+    for (final branchName in branches) {
+      int branchAlloc = 0;
+      int branchClaim = 0;
+      final Map<String, dynamic> branchGifts = {};
+
+      for (final gift in masterGifts) {
+        final giftKey = gift.id.isNotEmpty ? gift.id : gift.giftName;
+        final cellKey = '${event.id}_${branchName}_$giftKey';
+        final alloc = cellAllocations[cellKey] ?? 0;
+        final claimed = claimedCache[cellKey] ?? 0;
+        final returned = (alloc - claimed).clamp(0, alloc);
+
+        branchAlloc += alloc;
+        branchClaim += claimed;
+
+        branchGifts[giftKey] = {
+          'giftId': gift.id,
+          'giftName': gift.giftName,
+          'allocated': alloc,
+          'claimed': claimed,
+          'returned': returned,
+          'unitValue': gift.unitValue,
+          'isVoucher': gift.isVoucher,
+          'giftType': gift.giftType,
+        };
+      }
+
+      final branchRet = (branchAlloc - branchClaim).clamp(0, branchAlloc);
+      totalAllocatedBefore += branchAlloc;
+      totalClaimed += branchClaim;
+      totalReturned += branchRet;
+
+      branchSnapshots[branchName] = {
+        'branchName': branchName,
+        'totalAllocated': branchAlloc,
+        'totalClaimed': branchClaim,
+        'totalReturned': branchRet,
+        'gifts': branchGifts,
+      };
+    }
+
+    // 1. Create settlement snapshot document in Firestore
+    final settlementRef = _firestore.collection('campaign_stock_settlements').doc();
+    final settlementData = {
+      'campaignId': event.id,
+      'campaignName': event.eventName,
+      'companySlug': slug,
+      'cycleTitle': cycleTitle.trim().isNotEmpty ? cycleTitle.trim() : 'تسوية دورة الويك إند',
+      'settledAt': FieldValue.serverTimestamp(),
+      'settledBy': performedBy,
+      'totalAllocatedBefore': totalAllocatedBefore,
+      'totalClaimed': totalClaimed,
+      'totalReturned': totalReturned,
+      'newAllocatedStock': newAllocatedQuota,
+      'branchSnapshots': branchSnapshots,
+    };
+    await settlementRef.set(settlementData);
+
+    // 2. Update the event with the new wave quotas
+    final List<AllocatedPrize> newPrizes = [];
+    for (final prize in livePrizes) {
+      newPrizes.add(prize.copyWith(
+        allocatedQuantity: newAllocatedQuota,
+        remainingQuantity: newAllocatedQuota,
+      ));
+    }
+
+    await eventRef.update({
+      'allocatedPrizes': newPrizes.map((p) => p.toMap()).toList(),
+      'lastSettlementId': settlementRef.id,
+      'lastSettledAt': FieldValue.serverTimestamp(),
+    });
+
+    // 3. Log audit entry in gift_stock_movements
+    final movementRef = _firestore.collection('gift_stock_movements').doc();
+    final movement = GiftStockMovement(
+      id: movementRef.id,
+      companySlug: slug,
+      giftId: event.id,
+      giftName: cycleTitle,
+      movementType: 'settlement_cycle',
+      quantityChange: totalReturned,
+      previousTotal: totalAllocatedBefore,
+      newTotal: newAllocatedQuota * branches.length * masterGifts.length,
+      previousAvailable: totalReturned,
+      newAvailable: newAllocatedQuota * branches.length * masterGifts.length,
+      reference: settlementRef.id,
+      notes: 'تم اعتماد وإغلاق $cycleTitle (منصرف: $totalClaimed, مرتجع: $totalReturned, جديد: $newAllocatedQuota)',
+      performedBy: performedBy,
+      timestamp: DateTime.now(),
+    );
+    await movementRef.set(movement.toFirestore());
+
+    return settlementRef.id;
+  }
 }

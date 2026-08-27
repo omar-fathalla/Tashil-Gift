@@ -16,6 +16,7 @@ import '../../../core/services/company_products_service.dart';
 import '../../../core/services/retail_chains_service.dart';
 import '../../../core/utils/error_handler.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
+import '../../../core/utils/slug_utils.dart';
 import '../../../core/widgets/switch_point_branding.dart';
 import '../../../core/constants/country_currency_config.dart';
 import '../../../core/localization/locale_provider.dart';
@@ -97,7 +98,16 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
     try {
       final firestore = ref.read(firestoreProvider);
       final targetEventId = widget.initialEventId ?? widget.event?.id;
-      final slug = (widget.companySlug ?? widget.event?.companySlug ?? 'almarai').trim().toLowerCase();
+      final slug = (widget.companySlug ?? widget.event?.companySlug ?? '').trim().toLowerCase();
+
+      if (slug.isEmpty && (targetEventId == null || targetEventId.isEmpty)) {
+        setState(() {
+          _activeEvent = null;
+          _errorMessage = 'رابط الحملة غير متوفر أو غير مكتمل.';
+          _isLoadingEvent = false;
+        });
+        return;
+      }
 
       // 1. If explicit eventId is provided, listen directly to that specific event document
       if (targetEventId != null && targetEventId.isNotEmpty) {
@@ -132,6 +142,15 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
 
   void _fallbackToSlugStream(String slug) {
     _eventSubscription?.cancel();
+    if (slug.isEmpty) {
+      setState(() {
+        _activeEvent = null;
+        _errorMessage = 'يرجى استخدام الرابط المخصص للحملة للبدء.';
+        _isLoadingEvent = false;
+      });
+      return;
+    }
+
     try {
       final firestore = ref.read(firestoreProvider);
 
@@ -142,7 +161,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           if (docs.isEmpty) {
             setState(() {
               _activeEvent = null;
-              _errorMessage = 'لا يوجد أي حملات مسجلة في النظام حالياً.';
+              _errorMessage = 'لا يوجد أي فعاليات مسجلة حالياً.';
               _isLoadingEvent = false;
             });
             return;
@@ -163,9 +182,11 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           orElse: () => null,
         );
 
-        // 2. Try match by companySlug == slug
+        // 2. Try match by companySlug == slug or targetCompany slug == slug
         if (matched == null) {
-          final slugMatches = events.where((e) => e.companySlug.trim().toLowerCase() == slug).toList();
+          final slugMatches = events.where((e) =>
+              e.companySlug.trim().toLowerCase() == slug ||
+              SlugUtils.toSlug(e.targetCompany).toLowerCase() == slug).toList();
           if (slugMatches.isNotEmpty) {
             slugMatches.sort((a, b) {
               if (a.isActive != b.isActive) {
@@ -1199,8 +1220,8 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                             child: _receiptImage == null
                                 ? Padding(
                                     padding: EdgeInsets.symmetric(
-                                      horizontal: isMobile ? 16 : 24,
-                                      vertical: isMobile ? 22 : 28,
+                                      horizontal: isMobile ? 18 : 28,
+                                      vertical: isMobile ? 24 : 32,
                                     ),
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,
@@ -1218,7 +1239,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                             color: colorScheme.primary,
                                           ),
                                         ),
-                                        const SizedBox(height: 12),
+                                        const SizedBox(height: 14),
                                         Text(
                                           strings.receiptAuditSubtitle,
                                           textAlign: TextAlign.center,
@@ -1229,61 +1250,32 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                             height: 1.3,
                                           ),
                                         ),
-                                        const SizedBox(height: 20),
-                                        // 1. Primary Action: Camera Capture
+                                        const SizedBox(height: 22),
+                                        // Primary Action: Camera Capture Only (Prominent & Wide)
                                         SizedBox(
                                           width: double.infinity,
                                           child: AnimatedPressable(
                                             onTap: () => _pickImage(ImageSource.camera),
                                             child: FilledButton.icon(
                                               onPressed: () => _pickImage(ImageSource.camera),
-                                              icon: const Icon(Icons.camera_alt_rounded, size: 20),
+                                              icon: const Icon(Icons.camera_alt_rounded, size: 24),
                                               label: Text(
                                                 strings.captureReceiptAction,
                                                 textAlign: TextAlign.center,
                                                 style: GoogleFonts.cairo(
                                                   fontWeight: FontWeight.bold,
-                                                  fontSize: isMobile ? 13.5 : 14.5,
+                                                  fontSize: isMobile ? 15 : 16.5,
                                                 ),
                                               ),
                                               style: FilledButton.styleFrom(
                                                 padding: EdgeInsets.symmetric(
-                                                  horizontal: 16,
-                                                  vertical: isMobile ? 14 : 16,
+                                                  horizontal: 20,
+                                                  vertical: isMobile ? 16 : 18,
                                                 ),
                                                 shape: RoundedRectangleBorder(
-                                                  borderRadius: BorderRadius.circular(16),
+                                                  borderRadius: BorderRadius.circular(18),
                                                 ),
-                                                elevation: 1,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 12),
-                                        // 2. Secondary Action: Pick from Gallery / Files
-                                        SizedBox(
-                                          width: double.infinity,
-                                          child: AnimatedPressable(
-                                            onTap: () => _pickImage(ImageSource.gallery),
-                                            child: FilledButton.tonalIcon(
-                                              onPressed: () => _pickImage(ImageSource.gallery),
-                                              icon: const Icon(Icons.photo_library_rounded, size: 20),
-                                              label: Text(
-                                                strings.pickFromGalleryAction,
-                                                textAlign: TextAlign.center,
-                                                style: GoogleFonts.cairo(
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: isMobile ? 13.5 : 14.5,
-                                                ),
-                                              ),
-                                              style: FilledButton.styleFrom(
-                                                padding: EdgeInsets.symmetric(
-                                                  horizontal: 16,
-                                                  vertical: isMobile ? 13 : 15,
-                                                ),
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius: BorderRadius.circular(16),
-                                                ),
+                                                elevation: 2,
                                               ),
                                             ),
                                           ),

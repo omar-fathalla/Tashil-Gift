@@ -14,6 +14,7 @@ import '../../../core/widgets/m3_button_groups.dart';
 import '../../../core/services/company_gifts_service.dart';
 import '../../admin/domain/event_model.dart';
 import '../../admin/domain/company_gift_model.dart';
+import '../domain/campaign_stock_settlement_model.dart';
 
 /// Branch Stock Balances Screen (شاشة تغذية وإدارة أرصدة الفروع)
 /// Central hub where Company Manager sets, bulk distributes, increases, and syncs
@@ -48,12 +49,15 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
   String? _selectedEventId;
   bool _isSaving = false;
   bool _isExporting = false;
+  bool _isSettling = false;
+  CampaignStockSettlementModel? _selectedSettlement;
   String _searchQuery = '';
 
   // In-memory cache for instant 0ms tab switching
   List<EventModel>? _cachedAllEvents;
   List<CompanyGiftModel>? _cachedMasterGifts;
   List<QueryDocumentSnapshot>? _cachedTxDocs;
+  List<CampaignStockSettlementModel>? _cachedSettlements;
 
   // Controllers map: key = "${eventId}_${branchName}_${giftKey}"
   final Map<String, TextEditingController> _controllers = {};
@@ -215,7 +219,9 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
         excel.delete(defaultSheet);
       }
 
-      final sheetName = isAr ? 'مصفوفة أرصدة الفروع' : 'Branch Balances Matrix';
+      final sheetName = _selectedSettlement != null
+          ? (isAr ? 'تقرير تسوية ${_selectedSettlement!.cycleTitle}' : 'Settlement ${_selectedSettlement!.cycleTitle}')
+          : (isAr ? 'مصفوفة أرصدة الفروع' : 'Branch Balances Matrix');
       final sheet = excel[sheetName];
 
       // Header row
@@ -226,13 +232,13 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
       for (final g in masterGifts) {
         headers.add(xl.TextCellValue('${g.giftName} (${isAr ? 'المخصص' : 'Alloc'})'));
         headers.add(xl.TextCellValue('${g.giftName} (${isAr ? 'المنصرف' : 'Claimed'})'));
-        headers.add(xl.TextCellValue('${g.giftName} (${isAr ? 'المتبقي' : 'Left'})'));
+        headers.add(xl.TextCellValue('${g.giftName} (${_selectedSettlement != null ? (isAr ? 'المرتجع' : 'Returned') : (isAr ? 'المتبقي' : 'Left')})'));
       }
 
       headers.addAll([
         xl.TextCellValue(isAr ? 'إجمالي المخصص' : 'Total Quota'),
         xl.TextCellValue(isAr ? 'إجمالي المنصرف' : 'Total Claimed'),
-        xl.TextCellValue(isAr ? 'إجمالي المتبقي' : 'Total Remaining'),
+        xl.TextCellValue(_selectedSettlement != null ? (isAr ? 'إجمالي المرتجع' : 'Total Returned') : (isAr ? 'إجمالي المتبقي' : 'Total Remaining')),
         xl.TextCellValue(isAr ? 'نسبة السحب' : 'Depletion %'),
       ]);
       sheet.appendRow(headers);
@@ -247,13 +253,28 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
           xl.TextCellValue(branch),
         ];
 
+        final branchSnapshot = _selectedSettlement != null
+            ? (_selectedSettlement!.branchSnapshots[branch] as Map<String, dynamic>?)
+            : null;
+
         for (final gift in masterGifts) {
           final giftKey = gift.id.isNotEmpty ? gift.id : gift.giftName;
-          final eventId = primaryEvent?.id ?? '';
-          final cellKey = '${eventId}_${branch}_$giftKey';
-          final alloc = _controllers[cellKey]?.text.trim().toIntOrNull() ?? 0;
-          final claimed = _claimedCache[cellKey] ?? 0;
-          final remaining = (alloc - claimed).clamp(0, alloc);
+          int alloc = 0;
+          int claimed = 0;
+          int remaining = 0;
+
+          if (_selectedSettlement != null) {
+            final giftData = (branchSnapshot?['gifts'] as Map<String, dynamic>?)?[giftKey];
+            alloc = (giftData?['allocated'] as num?)?.toInt() ?? 0;
+            claimed = (giftData?['claimed'] as num?)?.toInt() ?? 0;
+            remaining = (giftData?['returned'] as num?)?.toInt() ?? 0;
+          } else {
+            final eventId = primaryEvent?.id ?? '';
+            final cellKey = '${eventId}_${branch}_$giftKey';
+            alloc = _controllers[cellKey]?.text.trim().toIntOrNull() ?? 0;
+            claimed = _claimedCache[cellKey] ?? 0;
+            remaining = (alloc - claimed).clamp(0, alloc);
+          }
 
           branchAllocSum += alloc;
           branchClaimSum += claimed;
@@ -281,7 +302,8 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
         final now = DateTime.now();
         final timestamp = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
         final slug = widget.lockedCompanySlug ?? 'company';
-        final fileName = 'Tashil_Branch_Balances_${slug}_$timestamp.xlsx';
+        final prefix = _selectedSettlement != null ? 'Settlement' : 'Balances';
+        final fileName = 'Tashil_${prefix}_${slug}_$timestamp.xlsx';
 
         downloadFileBytes(
           bytes: fileBytes,
@@ -327,6 +349,362 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
         setState(() {
           _isExporting = false;
         });
+      }
+    }
+  }
+
+  String _formatDateShort(DateTime dt) {
+    return '${dt.day}/${dt.month}/${dt.year}';
+  }
+
+  Widget _buildSettlementStat({
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          style: GoogleFonts.cairo(
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+            color: color,
+          ),
+        ),
+        Text(
+          label,
+          style: GoogleFonts.cairo(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey.shade700,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showWeekendSettlementDialog({
+    required BuildContext context,
+    required EventModel event,
+    required List<CompanyGiftModel> masterGifts,
+    required List<String> branches,
+    required int totalAllocated,
+    required int totalClaimed,
+    required int totalRemaining,
+    required bool isAr,
+  }) async {
+    final colorScheme = Theme.of(context).colorScheme;
+    final now = DateTime.now();
+    final cycleTitleController = TextEditingController(
+      text: isAr
+          ? 'تسوية دورة الويك إند - ${_formatDateShort(now)}'
+          : 'Weekend Settlement Cycle - ${_formatDateShort(now)}',
+    );
+    final newQuotaController = TextEditingController(text: '0');
+
+    await showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              backgroundColor: colorScheme.surfaceContainerHigh,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+                side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+              ),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD97706).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(Icons.published_with_changes_rounded, color: Color(0xFFD97706), size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isAr ? 'تسوية وإغلاق دورة الويك إند' : 'Settle & Close Weekend Cycle',
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        Text(
+                          '${event.eventName} (${event.targetCompany})',
+                          style: GoogleFonts.cairo(fontSize: 11.5, color: colorScheme.primary, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Summary of current cycle
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _buildSettlementStat(
+                            label: isAr ? 'المخصص السابق' : 'Prev Quota',
+                            value: '$totalAllocated',
+                            color: colorScheme.primary,
+                          ),
+                          _buildSettlementStat(
+                            label: isAr ? 'المنصرف المعتمد' : 'Claimed',
+                            value: '$totalClaimed',
+                            color: const Color(0xFFD97706),
+                          ),
+                          _buildSettlementStat(
+                            label: isAr ? 'المرتجع للمستودع' : 'Returned',
+                            value: '$totalRemaining',
+                            color: const Color(0xFF006C50),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Title of settlement
+                    TextField(
+                      controller: cycleTitleController,
+                      style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                      decoration: InputDecoration(
+                        labelText: isAr ? 'عنوان ومسمى التسوية للأرشيف' : 'Settlement Archive Title',
+                        labelStyle: GoogleFonts.cairo(fontSize: 11),
+                        filled: true,
+                        fillColor: colorScheme.surface,
+                        prefixIcon: const Icon(Icons.bookmark_outline_rounded, size: 20),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    // New quota input
+                    TextField(
+                      controller: newQuotaController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
+                      style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.bold),
+                      decoration: InputDecoration(
+                        labelText: isAr ? 'الرصيد الجديد لكل صنف في الفروع (للدورة القادمة)' : 'New Quota per Item for Upcoming Wave',
+                        labelStyle: GoogleFonts.cairo(fontSize: 11),
+                        hintText: '0',
+                        helperText: isAr ? 'ضع (0) للتصفير الكامل والبدء من الصفر لإدخال بيانات جديدة' : 'Set (0) for fresh zeroed start to enter new data',
+                        helperStyle: GoogleFonts.cairo(fontSize: 10, color: const Color(0xFF006C50), fontWeight: FontWeight.w600),
+                        filled: true,
+                        fillColor: colorScheme.surface,
+                        prefixIcon: const Icon(Icons.add_shopping_cart_rounded, size: 20),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // Quick quota preset chips
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        ActionChip(
+                          avatar: const Icon(Icons.refresh_rounded, size: 14, color: Colors.teal),
+                          label: Text(
+                            isAr ? '0 (تصفير كامل للبدء من جديد)' : '0 (Zero & fresh start)',
+                            style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.teal.shade900),
+                          ),
+                          backgroundColor: Colors.teal.shade50,
+                          side: BorderSide(color: Colors.teal.shade200),
+                          onPressed: () => setDialogState(() => newQuotaController.text = '0'),
+                        ),
+                        ActionChip(
+                          label: Text('100', style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold)),
+                          onPressed: () => setDialogState(() => newQuotaController.text = '100'),
+                        ),
+                        ActionChip(
+                          label: Text('200', style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold)),
+                          onPressed: () => setDialogState(() => newQuotaController.text = '200'),
+                        ),
+                        ActionChip(
+                          label: Text('400', style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold)),
+                          onPressed: () => setDialogState(() => newQuotaController.text = '400'),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.amber.shade200),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.info_outline_rounded, size: 18, color: Colors.amber.shade900),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              isAr
+                                  ? 'سيتم ترحيل وحفظ أرقام هذا الأسبوع كأرشيف تاريخي دائم، وتصفير البواقي، وتغذية الفروع بالرصيد الجديد لتبدأ فوراً بنسبة سحب 0% مع حفظ كافة الفواتير السابقة.'
+                                  : 'This wave will be permanently archived. Remaining stock will be settled as returned, and new quota applied at 0% depletion rate while preserving all invoices.',
+                              style: GoogleFonts.cairo(fontSize: 11, color: Colors.amber.shade900, height: 1.3),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(isAr ? 'إلغاء' : 'Cancel', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                ),
+                FilledButton.icon(
+                  onPressed: _isSettling
+                      ? null
+                      : () async {
+                          final title = cycleTitleController.text.trim();
+                          final newQuota = newQuotaController.text.trim().toIntOrNull() ?? 400;
+
+                          Navigator.of(dialogContext).pop();
+                          await _executeSettlement(
+                            event: event,
+                            cycleTitle: title,
+                            newQuota: newQuota,
+                            branches: branches,
+                            masterGifts: masterGifts,
+                            isAr: isAr,
+                          );
+                        },
+                  icon: const Icon(Icons.check_circle_rounded, size: 18),
+                  label: Text(
+                    isAr ? 'تأكيد التسوية والأرشفة' : 'Confirm Settlement',
+                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF006C50),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _executeSettlement({
+    required EventModel event,
+    required String cycleTitle,
+    required int newQuota,
+    required List<String> branches,
+    required List<CompanyGiftModel> masterGifts,
+    required bool isAr,
+  }) async {
+    setState(() => _isSettling = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final effectiveSlug = widget.lockedCompanySlug ?? event.companySlug;
+
+    try {
+      final cellAllocations = <String, int>{};
+      for (final entry in _controllers.entries) {
+        final val = entry.value.text.trim().toIntOrNull();
+        if (val != null) {
+          cellAllocations[entry.key] = val;
+        }
+      }
+
+      final giftsService = ref.read(companyGiftsServiceProvider);
+      await giftsService.recordWeekendSettlement(
+        companySlug: effectiveSlug,
+        event: event,
+        cycleTitle: cycleTitle,
+        branches: branches,
+        masterGifts: masterGifts,
+        cellAllocations: cellAllocations,
+        claimedCache: _claimedCache,
+        newAllocatedQuota: newQuota,
+        performedBy: 'مدير الشركة',
+      );
+
+      // Update local controllers with the new quota
+      for (final branch in branches) {
+        for (final gift in masterGifts) {
+          final giftKey = gift.id.isNotEmpty ? gift.id : gift.giftName;
+          final cellKey = '${event.id}_${branch}_$giftKey';
+          if (_controllers.containsKey(cellKey)) {
+            _controllers[cellKey]!.text = '$newQuota';
+          }
+          _claimedCache[cellKey] = 0;
+        }
+      }
+
+      HapticFeedback.mediumImpact();
+
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.verified_rounded, color: Colors.white, size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    isAr
+                        ? 'تمت تسوية وأرشفة دورة الويك إند بنجاح وتغذية الفروع بالرصيد الجديد ($newQuota لكل صنف)'
+                        : 'Weekend settlement archived successfully and new quotas assigned ($newQuota each)',
+                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF006C50),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              '${isAr ? '⚠️ خطأ أثناء إجراء التسوية:' : '⚠️ Error executing settlement:'} ${AppErrorHandler.getFriendlyMessage(e)}',
+              style: GoogleFonts.cairo(),
+            ),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSettling = false);
       }
     }
   }
@@ -462,6 +840,11 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
               txQuery = txQuery.where('companySlug', isEqualTo: targetSlug);
             }
 
+            Query settlementsQuery = db.collection('campaign_stock_settlements');
+            if (targetSlug.isNotEmpty) {
+              settlementsQuery = settlementsQuery.where('companySlug', isEqualTo: targetSlug);
+            }
+
             return StreamBuilder<QuerySnapshot>(
               stream: targetSlug.isNotEmpty
                   ? db.collection('company_gifts').where('companySlug', isEqualTo: targetSlug).snapshots()
@@ -490,23 +873,48 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                 }
 
                 return StreamBuilder<QuerySnapshot>(
-                  stream: txQuery.snapshots(),
-                  builder: (context, txSnapshot) {
-                    final txDocs = txSnapshot.data?.docs ?? _cachedTxDocs ?? [];
-                    if (txSnapshot.hasData && txSnapshot.data!.docs.isNotEmpty) {
-                      _cachedTxDocs = txSnapshot.data!.docs;
+                  stream: settlementsQuery.snapshots(),
+                  builder: (context, settleSnapshot) {
+                    final settleDocs = settleSnapshot.data?.docs ?? [];
+                    final settlements = settleDocs.isNotEmpty
+                        ? settleDocs
+                            .map((d) {
+                              try {
+                                return CampaignStockSettlementModel.fromFirestore(d);
+                              } catch (_) {
+                                return null;
+                              }
+                            })
+                            .whereType<CampaignStockSettlementModel>()
+                            .toList()
+                        : (_cachedSettlements ?? []);
+
+                    settlements.sort((a, b) => b.settledAt.compareTo(a.settledAt));
+                    if (settlements.isNotEmpty) {
+                      _cachedSettlements = settlements;
                     }
 
-                    return _buildBalancesContent(
-                      context: context,
-                      colorScheme: colorScheme,
-                      strings: strings,
-                      isAr: isAr,
-                      isHi: isHi,
-                      events: events,
-                      allEvents: allEvents,
-                      masterGifts: masterGifts,
-                      txDocs: txDocs,
+                    return StreamBuilder<QuerySnapshot>(
+                      stream: txQuery.snapshots(),
+                      builder: (context, txSnapshot) {
+                        final txDocs = txSnapshot.data?.docs ?? _cachedTxDocs ?? [];
+                        if (txSnapshot.hasData && txSnapshot.data!.docs.isNotEmpty) {
+                          _cachedTxDocs = txSnapshot.data!.docs;
+                        }
+
+                        return _buildBalancesContent(
+                          context: context,
+                          colorScheme: colorScheme,
+                          strings: strings,
+                          isAr: isAr,
+                          isHi: isHi,
+                          events: events,
+                          allEvents: allEvents,
+                          masterGifts: masterGifts,
+                          txDocs: txDocs,
+                          settlements: settlements,
+                        );
+                      },
                     );
                   },
                 );
@@ -535,6 +943,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
     required List<EventModel> allEvents,
     required List<CompanyGiftModel> masterGifts,
     required List<DocumentSnapshot> txDocs,
+    List<CampaignStockSettlementModel> settlements = const [],
   }) {
     // 1. Gather all unique canonical branches
     final List<String> allBranches = [];
@@ -565,10 +974,32 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
       return b.toLowerCase().contains(_searchQuery);
     }).toList();
 
+    // For the active wave, determine the latest settlement date cutoff
+    final DateTime? activeWaveCutoff = settlements.isNotEmpty ? settlements.first.settledAt : null;
+
     // Build quick transaction disbursed map: branchName -> (giftKey / normGiftName / normGiftId -> int count)
     final Map<String, Map<String, int>> txBranchDisbursedMap = {};
     for (final doc in txDocs) {
       final data = doc.data() as Map<String, dynamic>;
+
+      // Filter out transactions created on or before the latest settlement cutoff
+      if (activeWaveCutoff != null) {
+        DateTime? docDate;
+        if (data['timestamp'] is Timestamp) {
+          docDate = (data['timestamp'] as Timestamp).toDate();
+        } else if (data['created_at'] is Timestamp) {
+          docDate = (data['created_at'] as Timestamp).toDate();
+        } else if (data['createdAt'] is Timestamp) {
+          docDate = (data['createdAt'] as Timestamp).toDate();
+        } else if (data['timestamp'] is String) {
+          docDate = DateTime.tryParse(data['timestamp']);
+        }
+        if (docDate != null && !docDate.isAfter(activeWaveCutoff)) {
+          // This receipt belongs to an archived previous settlement wave, skip it for the active wave
+          continue;
+        }
+      }
+
       final rawBranch = (data['canonical_branch'] ?? data['branch_detected'] ?? data['branchName'] ?? data['branch'] ?? '').toString().trim();
       if (rawBranch.isEmpty) continue;
 
@@ -696,7 +1127,9 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
 
           final allocated = matchedPrize?.allocatedQuantity ?? 0;
           final remaining = matchedPrize?.remainingQuantity ?? 0;
-          final rawClaimed = matchedPrize != null ? (allocated - remaining).clamp(0, allocated) : 0;
+          final rawClaimed = (activeWaveCutoff == null && matchedPrize != null)
+              ? (allocated - remaining).clamp(0, allocated)
+              : (matchedPrize != null ? (allocated - remaining).clamp(0, allocated) : 0);
           final claimed = txClaimed > rawClaimed ? txClaimed : rawClaimed;
 
           _claimedCache[cellKey] = claimed;
@@ -708,7 +1141,14 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
       }
     }
 
-    final totalRemainingStock = (totalAllocatedStock - totalClaimedStock).clamp(0, totalAllocatedStock);
+    if (_selectedSettlement != null) {
+      totalAllocatedStock = _selectedSettlement!.totalAllocatedBefore;
+      totalClaimedStock = _selectedSettlement!.totalClaimed;
+    }
+
+    final totalRemainingStock = _selectedSettlement != null
+        ? _selectedSettlement!.totalReturned
+        : (totalAllocatedStock - totalClaimedStock).clamp(0, totalAllocatedStock);
 
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(12, 12, 12, 96),
@@ -730,12 +1170,87 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
             totalAllocated: totalAllocatedStock,
             totalClaimed: totalClaimedStock,
             totalRemaining: totalRemainingStock,
+            settlements: settlements,
           ),
 
           const SizedBox(height: 16),
 
-          // 2. Quick Bulk Distribution Toolbar
-          if (masterGifts.isNotEmpty)
+          // Archive Information Banner (when reviewing past settlement)
+          if (_selectedSettlement != null)
+            LayoutBuilder(
+              builder: (context, bannerConstraints) {
+                final isNarrowBanner = bannerConstraints.maxWidth < 600;
+                return Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.amber.shade300, width: 1.2),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.shade100,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(Icons.history_edu_rounded, color: Colors.amber.shade900, size: 22),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  isAr
+                                      ? '📜 أرشيف تسوية معتمد: ${_selectedSettlement!.cycleTitle}'
+                                      : '📜 Archived Settlement: ${_selectedSettlement!.cycleTitle}',
+                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13.5, color: Colors.amber.shade900),
+                                ),
+                                Text(
+                                  isAr
+                                      ? 'تاريخ الاعتماد: ${_formatDateShort(_selectedSettlement!.settledAt)} • المعتمد بواسطة: ${_selectedSettlement!.settledBy}'
+                                      : 'Settled At: ${_formatDateShort(_selectedSettlement!.settledAt)} • By: ${_selectedSettlement!.settledBy}',
+                                  style: GoogleFonts.cairo(fontSize: 11, color: Colors.amber.shade900),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (!isNarrowBanner) ...[
+                            const SizedBox(width: 8),
+                            FilledButton.tonalIcon(
+                              onPressed: () => setState(() => _selectedSettlement = null),
+                              icon: const Icon(Icons.arrow_back_rounded, size: 16),
+                              label: Text(isAr ? 'العودة للدورة النشطة' : 'Back to Active', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 11.5)),
+                            ),
+                          ],
+                        ],
+                      ),
+                      if (isNarrowBanner) ...[
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.tonalIcon(
+                            onPressed: () => setState(() => _selectedSettlement = null),
+                            icon: const Icon(Icons.arrow_back_rounded, size: 16),
+                            label: Text(isAr ? 'العودة للدورة النشطة' : 'Back to Active', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 11.5)),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
+            ),
+
+          // 2. Quick Bulk Distribution Toolbar (active mode only)
+          if (_selectedSettlement == null && masterGifts.isNotEmpty)
             _buildBulkDistributionBar(
               colorScheme: colorScheme,
               strings: strings,
@@ -745,7 +1260,8 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
               events: events,
             ),
 
-          const SizedBox(height: 16),
+          if (_selectedSettlement == null && masterGifts.isNotEmpty)
+            const SizedBox(height: 16),
 
           // 3. Search & View Mode Switcher
           LayoutBuilder(
@@ -918,6 +1434,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
     required int totalAllocated,
     required int totalClaimed,
     required int totalRemaining,
+    List<CampaignStockSettlementModel> settlements = const [],
   }) {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -968,7 +1485,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                 )
               : const Icon(Icons.save_rounded, size: 16),
           label: Text(
-            _isSaving ? (isAr ? 'جاري الحفظ...' : 'Saving...') : (isAr ? 'حفظ وتثبيت كافة الأرصدة' : strings.saveAllBalancesBtn),
+            _isSaving ? (isAr ? 'جاري الحفظ...' : 'Saving...') : (isAr ? 'حفظ وتثبيت الأرصدة' : strings.saveAllBalancesBtn),
             style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
           ),
           style: FilledButton.styleFrom(
@@ -977,6 +1494,54 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             elevation: 2,
+          ),
+        );
+
+        final settleWeekendBtn = FilledButton.icon(
+          onPressed: _isSettling || events.isEmpty
+              ? null
+              : () => _showWeekendSettlementDialog(
+                    context: context,
+                    event: events.first,
+                    masterGifts: masterGifts,
+                    branches: branches,
+                    totalAllocated: totalAllocated,
+                    totalClaimed: totalClaimed,
+                    totalRemaining: totalRemaining,
+                    isAr: isAr,
+                  ),
+          icon: _isSettling
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : const Icon(Icons.published_with_changes_rounded, size: 16),
+          label: Text(
+            isAr ? 'تسوية الويك إند وبدء دفعة جديدة' : 'Settle Wave & Start New',
+            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
+          ),
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFFD97706),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            elevation: 2,
+          ),
+        );
+
+        final backToLiveBtn = FilledButton.icon(
+          onPressed: () => setState(() => _selectedSettlement = null),
+          icon: const Icon(Icons.arrow_back_rounded, size: 16),
+          label: Text(
+            isAr ? 'العودة للدورة الحالية النشطة' : 'Back to Active Quota',
+            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
+          ),
+          style: FilledButton.styleFrom(
+            backgroundColor: colorScheme.primary,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
 
@@ -1046,27 +1611,180 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
               if (isCompact) ...[
                 headerTitleWidget,
                 const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(child: saveAllBtn),
-                    const SizedBox(width: 8),
-                    Expanded(child: exportExcelBtn),
-                  ],
-                ),
+                if (_selectedSettlement == null) ...[
+                  Row(
+                    children: [
+                      Expanded(child: saveAllBtn),
+                      const SizedBox(width: 8),
+                      Expanded(child: exportExcelBtn),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(width: double.infinity, child: settleWeekendBtn),
+                ] else ...[
+                  Row(
+                    children: [
+                      Expanded(child: backToLiveBtn),
+                      const SizedBox(width: 8),
+                      Expanded(child: exportExcelBtn),
+                    ],
+                  ),
+                ],
               ] else ...[
                 Row(
                   children: [
                     Expanded(child: headerTitleWidget),
                     exportExcelBtn,
-                    const SizedBox(width: 10),
-                    saveAllBtn,
+                    const SizedBox(width: 8),
+                    if (_selectedSettlement == null) ...[
+                      saveAllBtn,
+                      const SizedBox(width: 8),
+                      settleWeekendBtn,
+                    ] else ...[
+                      backToLiveBtn,
+                    ],
                   ],
                 ),
               ],
 
+              // Wave / Settlement Archive Dropdown Selector
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _selectedSettlement != null
+                      ? Colors.amber.shade50
+                      : colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _selectedSettlement != null
+                        ? Colors.amber.shade300
+                        : colorScheme.outlineVariant.withValues(alpha: 0.5),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _selectedSettlement != null ? Icons.history_edu_rounded : Icons.radar_rounded,
+                      size: 20,
+                      color: _selectedSettlement != null ? Colors.amber.shade900 : const Color(0xFF006C50),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      isAr ? 'الدورة / التسوية:' : 'Wave / Cycle:',
+                      style: GoogleFonts.cairo(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                        color: _selectedSettlement != null ? Colors.amber.shade900 : colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String?>(
+                          value: _selectedSettlement?.id,
+                          isExpanded: true,
+                          hint: Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF006C50),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  isAr
+                                      ? '📌 الدورة الحالية النشطة'
+                                      : '📌 Current Active Wave',
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: const Color(0xFF006C50),
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          items: [
+                            DropdownMenuItem<String?>(
+                              value: null,
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF006C50),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      isAr
+                                          ? '📌 الدورة الحالية النشطة'
+                                          : '📌 Current Active Wave',
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFF006C50),
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            ...settlements.map((s) {
+                              return DropdownMenuItem<String?>(
+                                value: s.id,
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.archive_outlined, size: 16, color: Color(0xFFD97706)),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        '${s.cycleTitle} (${_formatDateShort(s.settledAt)} • منصرف: ${s.totalClaimed} • مرتجع: ${s.totalReturned})',
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: colorScheme.onSurface,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
+                          ],
+                          onChanged: (val) {
+                            setState(() {
+                              if (val == null) {
+                                _selectedSettlement = null;
+                              } else {
+                                _selectedSettlement = settlements.firstWhere(
+                                  (s) => s.id == val,
+                                  orElse: () => settlements.first,
+                                );
+                              }
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
               // Campaign Filter Dropdown (when multiple campaigns exist)
               if (allEvents.length > 1) ...[
-                const SizedBox(height: 14),
+                const SizedBox(height: 10),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
@@ -1164,8 +1882,10 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                       title: strings.totalAllocatedGifts,
                       value: '$totalAllocated',
                       unit: isAr ? 'قطعة' : 'Pcs',
-                      subtitle: isAr ? 'إجمالي الحصة الموزعة للفروع' : 'Total branch allocated quota',
-                      badgeText: isAr ? 'حصة مخصصة' : 'Allocated',
+                      subtitle: _selectedSettlement != null
+                          ? (isAr ? 'الحصة المخصصة بهذه الدورة' : 'Allocated quota this cycle')
+                          : (isAr ? 'إجمالي الحصة الموزعة للفروع' : 'Total branch allocated quota'),
+                      badgeText: _selectedSettlement != null ? (isAr ? 'حصة مؤرشفة' : 'Archived') : (isAr ? 'حصة مخصصة' : 'Allocated'),
                       icon: Icons.inventory_2_rounded,
                       color: const Color(0xFF006C50),
                       colorScheme: colorScheme,
@@ -1176,7 +1896,9 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                       title: strings.awardedGiftsCount,
                       value: '$totalClaimed',
                       unit: isAr ? 'قطعة' : 'Pcs',
-                      subtitle: isAr ? 'الهدايا المسلمة للمستهلكين' : 'Delivered promotional gifts',
+                      subtitle: _selectedSettlement != null
+                          ? (isAr ? 'المنصرف المسجل بالتسوية' : 'Settled claims')
+                          : (isAr ? 'الهدايا المسلمة للمستهلكين' : 'Delivered promotional gifts'),
                       badgeText: isAr ? 'هدايا مصروفة' : 'Claimed',
                       icon: Icons.card_giftcard_rounded,
                       color: const Color(0xFFD97706),
@@ -1185,15 +1907,19 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                       isMobile: isMobile,
                     ),
                     _buildExecutiveKpiCard(
-                      title: strings.remainingStockBalance,
+                      title: _selectedSettlement != null ? (isAr ? 'المرتجع للمستودع' : 'Returned Stock') : strings.remainingStockBalance,
                       value: '$totalRemaining',
                       unit: isAr ? 'قطعة' : 'Pcs',
-                      subtitle: isAr ? 'الرصيد المتبقي بمخزون الفروع' : 'Remaining stock at branches',
-                      badgeText: isAr ? 'مخزون متبقي' : 'In Stock',
-                      icon: Icons.savings_rounded,
-                      color: const Color(0xFF7C3AED),
+                      subtitle: _selectedSettlement != null
+                          ? (isAr ? 'الرصيد المرتجع عند إغلاق الدورة' : 'Returned at cycle close')
+                          : (isAr ? 'الرصيد المتبقي بمخزون الفروع' : 'Remaining stock at branches'),
+                      badgeText: _selectedSettlement != null ? (isAr ? 'مرتجع للمستودع' : 'Returned') : (isAr ? 'مخزون متبقي' : 'In Stock'),
+                      icon: _selectedSettlement != null ? Icons.assignment_return_rounded : Icons.savings_rounded,
+                      color: _selectedSettlement != null ? const Color(0xFF006C50) : const Color(0xFF7C3AED),
                       colorScheme: colorScheme,
-                      tooltip: isAr ? 'رصيد الهدايا المتبقي بالمنافذ والمتاح للصرف' : 'Remaining stock balance',
+                      tooltip: _selectedSettlement != null
+                          ? (isAr ? 'إجمالي الرصيد الذي تم إغلاقه وإرجاعه لمستودع الشركة' : 'Stock returned to warehouse')
+                          : (isAr ? 'رصيد الهدايا المتبقي بالمنافذ والمتاح للصرف' : 'Remaining stock balance'),
                       isMobile: isMobile,
                     ),
                   ];
@@ -1466,6 +2192,37 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
           ),
         );
 
+        final zeroAllBtn = OutlinedButton.icon(
+          onPressed: () {
+            setState(() {
+              for (final entry in _controllers.entries) {
+                entry.value.text = '0';
+              }
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  isAr ? 'تم تصفير كافة أرصدة الفروع (0) بنجاح - يمكنك إدخال الكميات الجديدة وحفظها' : 'All branch quotas reset to 0',
+                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                ),
+                backgroundColor: Colors.red[800],
+                behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          },
+          icon: const Icon(Icons.delete_sweep_rounded, size: 16, color: Colors.red),
+          label: Text(
+            isAr ? 'تصفير كل الأرصدة (0)' : 'Zero All Quotas',
+            style: GoogleFonts.cairo(color: Colors.red[800], fontWeight: FontWeight.bold, fontSize: 12),
+          ),
+          style: OutlinedButton.styleFrom(
+            side: BorderSide(color: Colors.red.withValues(alpha: 0.4), width: 1.2),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+
         if (isMobile) {
           return Container(
             width: double.infinity,
@@ -1506,7 +2263,13 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                   ],
                 ),
                 const SizedBox(height: 8),
-                zeroBtn,
+                Row(
+                  children: [
+                    Expanded(child: zeroBtn),
+                    const SizedBox(width: 8),
+                    Expanded(child: zeroAllBtn),
+                  ],
+                ),
               ],
             ),
           );
@@ -1547,6 +2310,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
               SizedBox(width: 110, child: qtyField),
               applyBtn,
               zeroBtn,
+              zeroAllBtn,
             ],
           ),
         );
@@ -1803,102 +2567,184 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
     // 2. Gift Cells
     for (final gift in masterGifts) {
       final giftKey = gift.id.isNotEmpty ? gift.id : gift.giftName;
-      final eventId = primaryEvent?.id ?? '';
-      final cellKey = '${eventId}_${branchName}_$giftKey';
 
-      final controller = _controllers[cellKey] ?? TextEditingController(text: '0');
-      final claimed = _claimedCache[cellKey] ?? 0;
-      final currentAlloc = controller.text.trim().toIntOrNull() ?? 0;
-      final remaining = (currentAlloc - claimed).clamp(0, currentAlloc);
+      if (_selectedSettlement != null) {
+        final branchSnapshot = _selectedSettlement!.branchSnapshots[branchName] as Map<String, dynamic>?;
+        final giftData = (branchSnapshot?['gifts'] as Map<String, dynamic>?)?[giftKey];
+        final alloc = (giftData?['allocated'] as num?)?.toInt() ?? 0;
+        final claimed = (giftData?['claimed'] as num?)?.toInt() ?? 0;
+        final returned = (giftData?['returned'] as num?)?.toInt() ?? 0;
 
-      branchAllocatedSum += currentAlloc;
-      branchClaimedSum += claimed;
+        branchAllocatedSum += alloc;
+        branchClaimedSum += claimed;
 
-      cells.add(
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              SizedBox(
-                width: 92,
-                height: 38,
-                child: TextField(
-                  controller: controller,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
-                  onChanged: (_) => setState(() {}),
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.cairo(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13.5,
-                    color: colorScheme.onSurface,
+        cells.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  width: 92,
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.amber.shade200),
                   ),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                    filled: true,
-                    fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: colorScheme.outlineVariant),
+                  child: Center(
+                    child: Text(
+                      '$alloc',
+                      style: GoogleFonts.cairo(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: Colors.amber.shade900,
+                      ),
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.7)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: colorScheme.primary, width: 2),
-                    ),
-                    hoverColor: colorScheme.primary.withValues(alpha: 0.04),
                   ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${isAr ? 'صرف:' : 'out:'} $claimed',
+                        style: GoogleFonts.cairo(
+                          fontSize: 10,
+                          color: const Color(0xFFD97706),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 5),
+                        width: 3,
+                        height: 3,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: colorScheme.outlineVariant,
+                        ),
+                      ),
+                      Text(
+                        '${isAr ? 'مرتجع:' : 'ret:'} $returned',
+                        style: GoogleFonts.cairo(
+                          fontSize: 10,
+                          color: const Color(0xFF006C50),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '${isAr ? 'صرف:' : 'out:'} $claimed',
-                      style: GoogleFonts.cairo(
-                        fontSize: 10,
-                        color: const Color(0xFFD97706),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 5),
-                      width: 3,
-                      height: 3,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: colorScheme.outlineVariant,
-                      ),
-                    ),
-                    Text(
-                      '${isAr ? 'باقي:' : 'rem:'} $remaining',
-                      style: GoogleFonts.cairo(
-                        fontSize: 10,
-                        color: remaining > 0 ? const Color(0xFF006C50) : Colors.red[700],
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      );
+        );
+      } else {
+        final eventId = primaryEvent?.id ?? '';
+        final cellKey = '${eventId}_${branchName}_$giftKey';
+
+        final controller = _controllers[cellKey] ?? TextEditingController(text: '0');
+        final claimed = _claimedCache[cellKey] ?? 0;
+        final currentAlloc = controller.text.trim().toIntOrNull() ?? 0;
+        final remaining = (currentAlloc - claimed).clamp(0, currentAlloc);
+
+        branchAllocatedSum += currentAlloc;
+        branchClaimedSum += claimed;
+
+        cells.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 92,
+                  height: 38,
+                  child: TextField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
+                    onChanged: (_) => setState(() {}),
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.cairo(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13.5,
+                      color: colorScheme.onSurface,
+                    ),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      filled: true,
+                      fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: colorScheme.outlineVariant),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.7)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: colorScheme.primary, width: 2),
+                      ),
+                      hoverColor: colorScheme.primary.withValues(alpha: 0.04),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${isAr ? 'صرف:' : 'out:'} $claimed',
+                        style: GoogleFonts.cairo(
+                          fontSize: 10,
+                          color: const Color(0xFFD97706),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 5),
+                        width: 3,
+                        height: 3,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: colorScheme.outlineVariant,
+                        ),
+                      ),
+                      Text(
+                        '${isAr ? 'باقي:' : 'rem:'} $remaining',
+                        style: GoogleFonts.cairo(
+                          fontSize: 10,
+                          color: remaining > 0 ? const Color(0xFF006C50) : Colors.red[700],
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
     }
 
     final branchRemainingSum = (branchAllocatedSum - branchClaimedSum).clamp(0, branchAllocatedSum);
@@ -2046,18 +2892,29 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
         int branchAllocatedSum = 0;
         int branchClaimedSum = 0;
 
-        for (final gift in masterGifts) {
-          final giftKey = gift.id.isNotEmpty ? gift.id : gift.giftName;
-          final eventId = primaryEvent?.id ?? '';
-          final cellKey = '${eventId}_${branchName}_$giftKey';
-          final controller = _controllers[cellKey];
-          final alloc = controller?.text.trim().toIntOrNull() ?? 0;
-          final claimed = _claimedCache[cellKey] ?? 0;
-          branchAllocatedSum += alloc;
-          branchClaimedSum += claimed;
+        final branchSnapshot = _selectedSettlement != null
+            ? (_selectedSettlement!.branchSnapshots[branchName] as Map<String, dynamic>?)
+            : null;
+
+        if (_selectedSettlement != null) {
+          branchAllocatedSum = (branchSnapshot?['totalAllocated'] as num?)?.toInt() ?? 0;
+          branchClaimedSum = (branchSnapshot?['totalClaimed'] as num?)?.toInt() ?? 0;
+        } else {
+          for (final gift in masterGifts) {
+            final giftKey = gift.id.isNotEmpty ? gift.id : gift.giftName;
+            final eventId = primaryEvent?.id ?? '';
+            final cellKey = '${eventId}_${branchName}_$giftKey';
+            final controller = _controllers[cellKey];
+            final alloc = controller?.text.trim().toIntOrNull() ?? 0;
+            final claimed = _claimedCache[cellKey] ?? 0;
+            branchAllocatedSum += alloc;
+            branchClaimedSum += claimed;
+          }
         }
 
-        final branchRemainingSum = (branchAllocatedSum - branchClaimedSum).clamp(0, branchAllocatedSum);
+        final branchRemainingSum = _selectedSettlement != null
+            ? ((branchSnapshot?['totalReturned'] as num?)?.toInt() ?? (branchAllocatedSum - branchClaimedSum).clamp(0, branchAllocatedSum))
+            : (branchAllocatedSum - branchClaimedSum).clamp(0, branchAllocatedSum);
         final depletionRate = branchAllocatedSum > 0 ? (branchClaimedSum / branchAllocatedSum).clamp(0.0, 1.0) : 0.0;
 
         return Container(
@@ -2096,7 +2953,9 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      '${isAr ? 'المتبقي:' : 'Rem:'} $branchRemainingSum / $branchAllocatedSum (${(depletionRate * 100).toStringAsFixed(0)}%)',
+                      _selectedSettlement != null
+                          ? '${isAr ? 'المرتجع:' : 'Ret:'} $branchRemainingSum / $branchAllocatedSum (${(depletionRate * 100).toStringAsFixed(0)}%)'
+                          : '${isAr ? 'المتبقي:' : 'Rem:'} $branchRemainingSum / $branchAllocatedSum (${(depletionRate * 100).toStringAsFixed(0)}%)',
                       style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -2127,11 +2986,58 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
               // Gifts allocation list inside this branch
               ...masterGifts.map((gift) {
                 final giftKey = gift.id.isNotEmpty ? gift.id : gift.giftName;
+                final isVoucher = gift.isVoucher;
+
+                if (_selectedSettlement != null) {
+                  final giftData = (branchSnapshot?['gifts'] as Map<String, dynamic>?)?[giftKey];
+                  final alloc = (giftData?['allocated'] as num?)?.toInt() ?? 0;
+                  final claimed = (giftData?['claimed'] as num?)?.toInt() ?? 0;
+                  final returned = (giftData?['returned'] as num?)?.toInt() ?? 0;
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
+                          size: 18,
+                          color: isVoucher ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            gift.giftName,
+                            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.amber.shade200),
+                          ),
+                          child: Text(
+                            '${isAr ? 'مخصص:' : 'Alloc:'} $alloc  •  ${isAr ? 'صرف:' : 'Out:'} $claimed  •  ${isAr ? 'مرتجع:' : 'Ret:'} $returned',
+                            style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
                 final eventId = primaryEvent?.id ?? '';
                 final cellKey = '${eventId}_${branchName}_$giftKey';
                 final controller = _controllers[cellKey] ?? TextEditingController(text: '0');
                 final claimed = _claimedCache[cellKey] ?? 0;
-                final isVoucher = gift.isVoucher;
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),

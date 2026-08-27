@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:al_mraay/core/localization/app_strings.dart';
 import 'package:al_mraay/features/company_portal/presentation/branch_stock_balances_screen.dart';
+import 'package:al_mraay/features/company_portal/domain/campaign_stock_settlement_model.dart';
 
 void main() {
   group('BranchStockBalancesScreen Tests (Branch Stock Feeding & Allocation Hub)', () {
@@ -139,6 +140,48 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
+    });
+
+    test('CampaignStockSettlementModel serializes and parses properly from Firestore snapshot', () {
+      final now = DateTime.now();
+      final model = CampaignStockSettlementModel(
+        id: 'settle_101',
+        campaignId: 'camp_512',
+        campaignName: 'مهرجان الصيف',
+        companySlug: 'almarai',
+        cycleTitle: 'تسوية الويك إند #1',
+        settledAt: now,
+        settledBy: 'مدير الشركة',
+        totalAllocatedBefore: 18301,
+        totalClaimed: 1644,
+        totalReturned: 16657,
+        newAllocatedStock: 400,
+        branchSnapshots: {
+          'المنتزه': {
+            'branchName': 'المنتزه',
+            'totalAllocated': 400,
+            'totalClaimed': 258,
+            'totalReturned': 142,
+            'gifts': {
+              'gift_1': {
+                'giftName': 'قسيمة 50 جنيه',
+                'allocated': 400,
+                'claimed': 258,
+                'returned': 142,
+              }
+            }
+          }
+        },
+      );
+
+      final map = model.toMap();
+      expect(map['campaignId'], equals('camp_512'));
+      expect(map['totalAllocatedBefore'], equals(18301));
+      expect(map['totalClaimed'], equals(1644));
+      expect(map['totalReturned'], equals(16657));
+      expect(map['newAllocatedStock'], equals(400));
+      expect(map['branchSnapshots'], isNotEmpty);
+      expect(map['branchSnapshots']['المنتزه']['totalReturned'], equals(142));
     });
   });
 }

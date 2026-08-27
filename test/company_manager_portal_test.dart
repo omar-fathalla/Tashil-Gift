@@ -8,6 +8,7 @@ import 'package:al_mraay/features/company_portal/presentation/company_vouchers_r
 import 'package:al_mraay/features/company_portal/presentation/company_prizes_stock_report_screen.dart';
 import 'package:al_mraay/features/admin/presentation/campaign_reports_screen.dart';
 import 'package:al_mraay/features/validation/presentation/invoices_log_screen.dart';
+import 'package:al_mraay/features/auth/presentation/auth_screen.dart';
 import 'package:al_mraay/core/utils/slug_utils.dart';
 
 void main() {
@@ -302,6 +303,21 @@ void main() {
       expect(SlugUtils.toSlug('يوني ليفر'), equals('unilever'));
       expect(SlugUtils.toSlug('ادكو'), equals('adco'));
       expect(SlugUtils.toSlug('أدكو'), equals('adco'));
+    });
+
+    testWidgets('CompanyManagerPortalScreen with empty slug and null event renders AuthScreen instead of arbitrary fallback', (tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: CompanyManagerPortalScreen(
+              companySlug: '',
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      expect(find.byType(AuthScreen), findsOneWidget);
     });
   });
 }

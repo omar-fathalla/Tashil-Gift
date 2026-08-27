@@ -17,6 +17,7 @@ import 'daily_branch_sales_screen.dart';
 import '../../../core/utils/url_builder.dart';
 import '../../../core/utils/slug_utils.dart';
 import '../../../core/widgets/campaign_suspended_screen.dart';
+import '../../auth/presentation/auth_screen.dart';
 
 /// Navigation destination model for Partner Portal Dashboard
 class _PortalNavItem {
@@ -222,12 +223,17 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     // 2. Resolve true effectiveSlug and companyDisplayName
     final String effectiveSlug = initialEvent?.companySlug.isNotEmpty == true
         ? initialEvent!.companySlug
-        : (widget.companySlug.isNotEmpty ? widget.companySlug : 'almarai');
+        : widget.companySlug.trim();
+
+    if (effectiveSlug.isEmpty && initialEvent == null) {
+      return const AuthScreen();
+    }
 
     String companyDisplayName = initialEvent?.targetCompany ?? '';
     if (companyDisplayName.isEmpty) {
       final matchedEvents = allEvents.where((e) =>
           e.companySlug.toLowerCase() == effectiveSlug.toLowerCase() ||
+          SlugUtils.toSlug(e.targetCompany).toLowerCase() == effectiveSlug.toLowerCase() ||
           e.targetCompany.toLowerCase().contains(effectiveSlug.toLowerCase())).toList();
       if (matchedEvents.isNotEmpty) {
         companyDisplayName = matchedEvents.first.targetCompany;
@@ -240,7 +246,8 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     // 3. Resolve all scoped events for this company
     final List<EventModel> companyEvents = allEvents.where((e) {
       if (initialEvent != null && e.id == initialEvent.id) return true;
-      final matchSlug = e.companySlug.toLowerCase() == effectiveSlug.toLowerCase();
+      final matchSlug = e.companySlug.toLowerCase() == effectiveSlug.toLowerCase() ||
+          SlugUtils.toSlug(e.targetCompany).toLowerCase() == effectiveSlug.toLowerCase();
       final matchName = companyDisplayName.isNotEmpty &&
           e.targetCompany.toLowerCase() == companyDisplayName.toLowerCase();
       return matchSlug || matchName;

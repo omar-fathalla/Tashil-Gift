@@ -92,6 +92,143 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     }
   }
 
+  static String _cleanBranchForComparison(String branch) {
+    var s = branch.trim().toLowerCase().toEnglishDigits();
+    s = s.replaceAll(RegExp(r'[\u064B-\u065F\u0670]'), '');
+    s = s.replaceAll(RegExp(r'[أإآ]'), 'ا');
+    s = s.replaceAll('ة', 'ه').replaceAll('ى', 'ي');
+    s = s.replaceAll(RegExp(r'\((القاهرة|الإسكندرية|الاسكندرية|الجيزة|الغربية|الدقهلية|المنوفية|الشرقية|البحيرة|كفر الشيخ|دمياط|بورسعيد|السويس|الإسماعيلية|الفيوم|بني سويف|المنيا|أسيوط|سوهاج|قنا|الأقصر|أسوان|مطروح|cairo|alexandria|giza)\)', caseSensitive: false), ' ');
+    s = s.replaceAll(RegExp(r'[\(\)\[\]\{\}\-\_\,\.\:\/]'), ' ');
+    s = s.replaceAll(RegExp(r'\b(فرع|سلسلة|store|branch|مفرع|pos|كود|محافظة|مدينة)\b', caseSensitive: false), ' ');
+    s = s.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return s;
+  }
+
+  static String _normalizeBranchName(
+    String rawBranch,
+    List<String> canonicalBranches,
+    bool isAr,
+  ) {
+    final clean = rawBranch.trim();
+    if (clean.isEmpty) return isAr ? 'فرع غير محدد' : 'Unspecified Branch';
+    if (canonicalBranches.isEmpty) return clean;
+
+    // 1. Direct case-insensitive match
+    for (final canonical in canonicalBranches) {
+      if (canonical.trim().toLowerCase() == clean.toLowerCase()) {
+        return canonical;
+      }
+    }
+
+    // 2. Cleaned exact match
+    final cleanComp = _cleanBranchForComparison(clean);
+    for (final canonical in canonicalBranches) {
+      final canonComp = _cleanBranchForComparison(canonical);
+      if (cleanComp == canonComp && cleanComp.isNotEmpty) {
+        return canonical;
+      }
+    }
+
+    // 3. Precision Area matching
+    if (clean.contains('418') || cleanComp.contains('منتزه') || cleanComp.contains('montazah')) {
+      for (final canonical in canonicalBranches) {
+        final c = _cleanBranchForComparison(canonical);
+        if (c.contains('منتزه') || c.contains('montazah') || canonical.contains('418')) return canonical;
+      }
+    }
+    if (cleanComp.contains('سموح') || cleanComp.contains('smouha')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('سموح')) return canonical;
+      }
+    }
+    if (cleanComp.contains('سيوف') || cleanComp.contains('siouf') || cleanComp.contains('seyouf')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('سيوف')) return canonical;
+      }
+    }
+    if (cleanComp.contains('ميام') || cleanComp.contains('miami')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('ميام')) return canonical;
+      }
+    }
+    if (cleanComp.contains('عجم') || cleanComp.contains('agamy') || cleanComp.contains('agami')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('عجم')) return canonical;
+      }
+    }
+    if (cleanComp.contains('جناكليس') || cleanComp.contains('janaklis')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('جناكليس')) return canonical;
+      }
+    }
+    if (cleanComp.contains('لوران') || cleanComp.contains('loran')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('لوران')) return canonical;
+      }
+    }
+    if (cleanComp.contains('تجمع') || cleanComp.contains('tagmoo') || cleanComp.contains('park mall') || cleanComp.contains('fifth')) {
+      for (final canonical in canonicalBranches) {
+        final c = _cleanBranchForComparison(canonical);
+        if (c.contains('تجمع') || c.contains('tagmoo')) return canonical;
+      }
+    }
+    if (cleanComp.contains('اكتوبر') || cleanComp.contains('أكتوبر') || cleanComp.contains('october') || cleanComp.contains('سادس')) {
+      for (final canonical in canonicalBranches) {
+        final c = _cleanBranchForComparison(canonical);
+        if (c.contains('اكتوبر') || c.contains('أكتوبر') || c.contains('october')) return canonical;
+      }
+    }
+    if (cleanComp.contains('صلاح سالم') || cleanComp.contains('عبور') || cleanComp.contains('obour')) {
+      for (final canonical in canonicalBranches) {
+        final c = _cleanBranchForComparison(canonical);
+        if (c.contains('صلاح سالم') || c.contains('عبور')) return canonical;
+      }
+    }
+    if (cleanComp.contains('منصور') || cleanComp.contains('mansoura')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('منصور')) return canonical;
+      }
+    }
+    if (cleanComp.contains('شين') || cleanComp.contains('شبين') || cleanComp.contains('shebin')) {
+      for (final canonical in canonicalBranches) {
+        final c = _cleanBranchForComparison(canonical);
+        if (c.contains('شبين') || c.contains('شين')) return canonical;
+      }
+    }
+    if (cleanComp.contains('محله') || cleanComp.contains('mahalla')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('محله')) return canonical;
+      }
+    }
+    if (cleanComp.contains('جاردينيا') || cleanComp.contains('gardenia')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('جاردينيا')) return canonical;
+      }
+    }
+
+    // 4. Store Code Match (e.g. "Store: 418" / "418")
+    final rawDigits = RegExp(r'\b\d+\b').allMatches(clean.toEnglishDigits()).map((m) => m.group(0)!).toSet();
+    if (rawDigits.isNotEmpty) {
+      for (final canonical in canonicalBranches) {
+        final canonDigits = RegExp(r'\b\d+\b').allMatches(canonical.toEnglishDigits()).map((m) => m.group(0)!).toSet();
+        if (rawDigits.intersection(canonDigits).isNotEmpty) {
+          return canonical;
+        }
+      }
+    }
+
+    // 5. Containment match
+    for (final canonical in canonicalBranches) {
+      final canonComp = _cleanBranchForComparison(canonical);
+      if (canonComp.isNotEmpty && (cleanComp.contains(canonComp) || canonComp.contains(cleanComp))) {
+        return canonical;
+      }
+    }
+
+    // Default to first canonical branch
+    return canonicalBranches.first;
+  }
+
   Future<void> _loadPinnedBranch() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -101,11 +238,23 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
           ? savedForEvent
           : savedGlobal;
 
+      final canonicalBranches = widget.event.branchNames
+          .map((b) => b.trim())
+          .where((b) => b.isNotEmpty)
+          .toList();
+
       if (mounted && effective != null && effective.isNotEmpty) {
-        setState(() {
-          _pinnedBranch = effective;
-          _selectedBranch = effective;
-        });
+        // Only accept pinned branch if it exists in canonical branches
+        if (canonicalBranches.isEmpty || canonicalBranches.contains(effective)) {
+          setState(() {
+            _pinnedBranch = effective;
+            _selectedBranch = effective;
+          });
+        } else {
+          // Clean legacy/invalid pin
+          await prefs.remove('pinned_branch_event_${widget.event.id}');
+          await prefs.remove('pinned_branch_global');
+        }
       }
     } catch (_) {}
   }
@@ -263,8 +412,15 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
 
               final allDocs = snapshot.data?.docs ?? [];
 
-              // Filter transactions related to this campaign / company
-              final campaignInvoices = allDocs.where((doc) {
+              // 1. Strictly Canonical Branches from Event definition
+              final List<String> canonicalBranches = widget.event.branchNames
+                  .map((b) => b.trim())
+                  .where((b) => b.isNotEmpty)
+                  .toList();
+
+              // 2. Filter transactions related to this campaign / company & only ACCEPTED / VALID invoices
+              final List<Map<String, dynamic>> validCampaignInvoices = [];
+              for (final doc in allDocs) {
                 final data = doc.data();
                 final cId = (data['campaignId'] ?? data['event_id'] ?? data['eventId'] ?? '').toString().trim();
                 final cSlug = (data['companySlug'] ?? data['company_slug'] ?? '').toString().trim().toLowerCase();
@@ -273,41 +429,60 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                 final eventSlug = widget.event.companySlug.trim().toLowerCase();
                 final eventTarget = widget.event.targetCompany.trim().toLowerCase();
 
-                if (widget.event.id.isNotEmpty && cId == widget.event.id) return true;
-                if (eventSlug.isNotEmpty && cSlug == eventSlug) return true;
-                if (eventTarget.isNotEmpty && targetComp.contains(eventTarget)) return true;
-                return false;
-              }).toList();
+                final bool matchesCampaign = (widget.event.id.isNotEmpty && cId == widget.event.id) ||
+                    (eventSlug.isNotEmpty && cSlug == eventSlug) ||
+                    (eventTarget.isNotEmpty && targetComp.contains(eventTarget));
 
-              // Collect all available branches (from event + discovered from receipts)
-              final Set<String> branchSet = <String>{};
-              branchSet.addAll(widget.event.branchNames.where((b) => b.trim().isNotEmpty));
-              for (final doc in campaignInvoices) {
-                final data = doc.data();
-                final bDetected = (data['branch_detected'] ?? data['branch_name'] ?? '').toString().trim();
-                if (bDetected.isNotEmpty) {
-                  branchSet.add(bDetected);
+                if (!matchesCampaign) continue;
+
+                // Explicit check for valid invoices (exclude rejected as requested)
+                final bool isExplicitlyValid = data['is_valid'] == true || data['status'] == 'accepted' || data['isValid'] == true;
+                final bool isExplicitlyRejected = data['is_valid'] == false || data['status'] == 'rejected' || data['isValid'] == false || ((data['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
+                final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((data['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
+
+                if (!isValid) continue;
+
+                final rawBranch = (data['branch_detected'] ?? data['branch_name'] ?? data['branch'] ?? '').toString().trim();
+                final canonicalBranch = _normalizeBranchName(rawBranch, canonicalBranches, isAr);
+
+                validCampaignInvoices.add({
+                  'docId': doc.id,
+                  ...data,
+                  'canonical_branch': canonicalBranch,
+                  'raw_branch': rawBranch,
+                });
+              }
+
+              // 3. Compute Invoice Counts per Canonical Branch
+              final Map<String, int> branchInvoiceCounts = {};
+              for (final b in canonicalBranches) {
+                branchInvoiceCounts[b] = 0;
+              }
+              for (final inv in validCampaignInvoices) {
+                final b = inv['canonical_branch'] as String;
+                if (branchInvoiceCounts.containsKey(b)) {
+                  branchInvoiceCounts[b] = (branchInvoiceCounts[b] ?? 0) + 1;
                 }
               }
-              final List<String> availableBranches = branchSet.toList()..sort();
 
-              // Apply Search & Filters
+              final int totalAcceptedInvoices = validCampaignInvoices.length;
+
+              // 4. Apply Search & Filters
               final searchQuery = _searchController.text.trim().toLowerCase().toEnglishDigits();
 
-              final filteredInvoices = campaignInvoices.where((doc) {
-                final data = doc.data();
-                final branch = (data['branch_detected'] ?? data['branch_name'] ?? '').toString().trim();
-                final storeChain = (data['store_chain_detected'] ?? data['retail_chain_name'] ?? '').toString().trim();
-                final receiptNumber = (data['receipt_number'] ?? '').toString().trim().toLowerCase();
-                final customerPhone = (data['customerPhone'] ?? data['customer_phone'] ?? '').toString().trim();
-                final customerName = (data['customerName'] ?? data['customer_name'] ?? '').toString().trim().toLowerCase();
-                final receiptDate = (data['receipt_date'] ?? '').toString().trim().toLowerCase();
-                final dt = _parseDateTime(data['timestamp'], data['receipt_date']);
+              final filteredInvoices = validCampaignInvoices.where((inv) {
+                final canonicalBranch = (inv['canonical_branch'] ?? '').toString();
+                final rawBranch = (inv['raw_branch'] ?? '').toString();
+                final storeChain = (inv['store_chain_detected'] ?? inv['retail_chain_name'] ?? '').toString().trim();
+                final receiptNumber = (inv['receipt_number'] ?? '').toString().trim().toLowerCase();
+                final customerPhone = (inv['customerPhone'] ?? inv['customer_phone'] ?? '').toString().trim();
+                final customerName = (inv['customerName'] ?? inv['customer_name'] ?? '').toString().trim().toLowerCase();
+                final receiptDate = (inv['receipt_date'] ?? '').toString().trim().toLowerCase();
+                final dt = _parseDateTime(inv['timestamp'], inv['receipt_date']);
 
-                // 1. Branch Filter
+                // 1. Strict Branch Filter (Exact Canonical Match)
                 if (_selectedBranch != null && _selectedBranch!.isNotEmpty) {
-                  final sel = _selectedBranch!.trim().toLowerCase();
-                  if (!branch.toLowerCase().contains(sel) && !sel.contains(branch.toLowerCase())) {
+                  if (canonicalBranch != _selectedBranch) {
                     return false;
                   }
                 }
@@ -323,7 +498,8 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   final matchesPhone = customerPhone.toEnglishDigits().contains(searchQuery);
                   final matchesName = customerName.contains(searchQuery);
                   final matchesDate = receiptDate.contains(searchQuery);
-                  final matchesBranch = branch.toLowerCase().contains(searchQuery);
+                  final matchesBranch = canonicalBranch.toLowerCase().contains(searchQuery) ||
+                      rawBranch.toLowerCase().contains(searchQuery);
                   final matchesStore = storeChain.toLowerCase().contains(searchQuery);
 
                   if (!matchesReceipt &&
@@ -341,27 +517,18 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
 
               // Sort by timestamp descending (newest first)
               filteredInvoices.sort((a, b) {
-                final dataA = a.data();
-                final dataB = b.data();
-                final dtA = _parseDateTime(dataA['timestamp'], dataA['receipt_date']) ??
+                final dtA = _parseDateTime(a['timestamp'], a['receipt_date']) ??
                     DateTime.fromMillisecondsSinceEpoch(0);
-                final dtB = _parseDateTime(dataB['timestamp'], dataB['receipt_date']) ??
+                final dtB = _parseDateTime(b['timestamp'], b['receipt_date']) ??
                     DateTime.fromMillisecondsSinceEpoch(0);
                 return dtB.compareTo(dtA);
               });
 
-              // Compute Summary Stats (Accepted Only)
+              // Compute Summary Stats
               double totalSales = 0.0;
-              for (final doc in filteredInvoices) {
-                final data = doc.data();
-                final bool isExplicitlyValid = data['is_valid'] == true || data['status'] == 'accepted' || data['isValid'] == true;
-                final bool isExplicitlyRejected = data['is_valid'] == false || data['status'] == 'rejected' || data['isValid'] == false || ((data['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
-                final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((data['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
-
-                if (isValid) {
-                  final val = (data['target_company_total'] ?? data['total_value'] as num?)?.toDouble() ?? 0.0;
-                  totalSales += val;
-                }
+              for (final inv in filteredInvoices) {
+                final val = (inv['target_company_total'] ?? inv['total_value'] as num?)?.toDouble() ?? 0.0;
+                totalSales += val;
               }
 
               return Column(
@@ -385,7 +552,9 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                     colorScheme: colorScheme,
                     strings: strings,
                     isMobile: isMobile,
-                    availableBranches: availableBranches,
+                    availableBranches: canonicalBranches,
+                    branchCounts: branchInvoiceCounts,
+                    totalCount: totalAcceptedInvoices,
                   ),
 
                   const Divider(height: 1, thickness: 1),
@@ -440,16 +609,12 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [colorScheme.primary, colorScheme.tertiary],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+              gradient: themeGradient(colorScheme),
               borderRadius: BorderRadius.circular(14),
               boxShadow: [
                 BoxShadow(
-                  color: colorScheme.primary.withValues(alpha: 0.3),
-                  blurRadius: 10,
+                  color: colorScheme.primary.withValues(alpha: 0.25),
+                  blurRadius: 8,
                   offset: const Offset(0, 3),
                 ),
               ],
@@ -580,12 +745,22 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     );
   }
 
+  LinearGradient themeGradient(ColorScheme colorScheme) {
+    return LinearGradient(
+      colors: [colorScheme.primary, colorScheme.tertiary],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    );
+  }
+
   Widget _buildFilterControls({
     required BuildContext context,
     required ColorScheme colorScheme,
     required AppStrings strings,
     required bool isMobile,
     required List<String> availableBranches,
+    required Map<String, int> branchCounts,
+    required int totalCount,
   }) {
     return Container(
       padding: EdgeInsets.symmetric(
@@ -673,9 +848,9 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                // "All Branches" Chip
+                // "All Branches" Chip with total count
                 ChoiceChip(
-                  label: Text(strings.promoterAllBranchesOption),
+                  label: Text('${strings.promoterAllBranchesOption} ($totalCount)'),
                   labelStyle: GoogleFonts.cairo(
                     fontWeight: _selectedBranch == null || _selectedBranch!.isEmpty
                         ? FontWeight.bold
@@ -694,10 +869,11 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                 ),
                 const SizedBox(width: 8),
 
-                // Individual Branch Chips
+                // Individual Canonical Branch Chips with count
                 ...availableBranches.map((branchName) {
                   final isSelected = _selectedBranch == branchName;
                   final isPinned = _pinnedBranch == branchName;
+                  final count = branchCounts[branchName] ?? 0;
 
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
@@ -709,7 +885,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                             const Icon(Icons.push_pin_rounded, size: 12, color: Colors.teal),
                             const SizedBox(width: 4),
                           ],
-                          Text(branchName),
+                          Text('$branchName ($count)'),
                         ],
                       ),
                       labelStyle: GoogleFonts.cairo(
@@ -840,7 +1016,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     required ColorScheme colorScheme,
     required AppStrings strings,
     required bool isMobile,
-    required List<QueryDocumentSnapshot<Map<String, dynamic>>> invoices,
+    required List<Map<String, dynamic>> invoices,
     required String currencySymbol,
   }) {
     final visibleInvoices = invoices.take(_displayedCount).toList();
@@ -866,9 +1042,8 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
           );
         }
 
-        final doc = visibleInvoices[index];
-        final data = doc.data();
-        final docId = doc.id;
+        final data = visibleInvoices[index];
+        final docId = (data['docId'] ?? data['id'] ?? 'inv-$index').toString();
         final isExpanded = _expandedDocIds.contains(docId);
 
         return _buildInvoiceCard(
@@ -898,7 +1073,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     final receiptNumber = (data['receipt_number'] ?? 'INV-N/A').toString().trim();
     final totalVal = (data['target_company_total'] ?? data['total_value'] as num?)?.toDouble() ?? 0.0;
     final storeChain = (data['store_chain_detected'] ?? data['retail_chain_name'] ?? '').toString().trim();
-    final branch = (data['branch_detected'] ?? data['branch_name'] ?? '').toString().trim();
+    final branch = (data['canonical_branch'] ?? data['branch_detected'] ?? data['branch_name'] ?? '').toString().trim();
     final customerPhone = (data['customerPhone'] ?? data['customer_phone'] ?? '').toString().trim();
     final customerName = (data['customerName'] ?? data['customer_name'] ?? '').toString().trim();
     final receiptDate = (data['receipt_date'] ?? '').toString().trim();

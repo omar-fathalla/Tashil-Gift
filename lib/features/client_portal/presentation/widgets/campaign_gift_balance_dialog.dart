@@ -76,11 +76,19 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
           ? savedForEvent
           : savedGlobal;
 
+      final canonicalBranches = widget.event.branchNames
+          .map((b) => b.trim())
+          .where((b) => b.isNotEmpty)
+          .toList();
+
       if (mounted && effectiveSaved != null && effectiveSaved.isNotEmpty) {
-        setState(() {
-          _selectedBranchKey = effectiveSaved;
-          _pinnedBranchKey = effectiveSaved;
-        });
+        final normalized = _normalizeBranchName(effectiveSaved, canonicalBranches, true);
+        if (canonicalBranches.contains(normalized)) {
+          setState(() {
+            _selectedBranchKey = normalized;
+            _pinnedBranchKey = normalized;
+          });
+        }
       }
     } catch (_) {}
   }
@@ -109,6 +117,199 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
         });
       }
     } catch (_) {}
+  }
+
+  static String _cleanBranchForComparison(String branch) {
+    var s = branch.trim().toLowerCase();
+    s = s.replaceAll(RegExp(r'[\u064B-\u065F\u0670]'), '');
+    s = s.replaceAll(RegExp(r'[أإآ]'), 'ا');
+    s = s.replaceAll('ة', 'ه').replaceAll('ى', 'ي');
+    s = s.replaceAll(RegExp(r'[\u0660-\u0669]'), '');
+    s = s.replaceAll(RegExp(r'\((القاهرة|الإسكندرية|الاسكندرية|الجيزة|الغربية|الدقهلية|المنوفية|الشرقية|البحيرة|كفر الشيخ|دمياط|بورسعيد|السويس|الإسماعيلية|الفيوم|بني سويف|المنيا|أسيوط|سوهاج|قنا|الأقصر|أسوان|مطروح|cairo|alexandria|giza)\)', caseSensitive: false), ' ');
+    s = s.replaceAll(RegExp(r'[\(\)\[\]\{\}\-\_\,\.\:\/]'), ' ');
+    s = s.replaceAll(RegExp(r'\b(فرع|سلسلة|store|branch|مفرع|pos|كود|محافظة|مدينة)\b', caseSensitive: false), ' ');
+    s = s.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return s;
+  }
+
+  static String _normalizeBranchName(
+    String rawBranch,
+    List<String> canonicalBranches,
+    bool isAr,
+  ) {
+    final clean = rawBranch.trim();
+    if (clean.isEmpty) return isAr ? 'فرع غير محدد' : 'Unspecified Branch';
+    if (canonicalBranches.isEmpty) return clean;
+
+    // 1. Direct case-insensitive match
+    for (final canonical in canonicalBranches) {
+      if (canonical.trim().toLowerCase() == clean.toLowerCase()) {
+        return canonical;
+      }
+    }
+
+    // 2. Cleaned exact match
+    final cleanComp = _cleanBranchForComparison(clean);
+    for (final canonical in canonicalBranches) {
+      final canonComp = _cleanBranchForComparison(canonical);
+      if (cleanComp == canonComp && cleanComp.isNotEmpty) {
+        return canonical;
+      }
+    }
+
+    // 3. Precision Area matching
+    if (clean.contains('418') || cleanComp.contains('منتزه') || cleanComp.contains('montazah')) {
+      for (final canonical in canonicalBranches) {
+        final c = _cleanBranchForComparison(canonical);
+        if (c.contains('منتزه') || c.contains('montazah') || canonical.contains('418')) return canonical;
+      }
+    }
+    if (cleanComp.contains('سموح') || cleanComp.contains('smouha')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('سموح')) return canonical;
+      }
+    }
+    if (cleanComp.contains('سيوف') || cleanComp.contains('siouf') || cleanComp.contains('seyouf')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('سيوف')) return canonical;
+      }
+    }
+    if (cleanComp.contains('ميام') || cleanComp.contains('miami')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('ميام')) return canonical;
+      }
+    }
+    if (cleanComp.contains('عجم') || cleanComp.contains('agamy') || cleanComp.contains('agami')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('عجم')) return canonical;
+      }
+    }
+    if (cleanComp.contains('جناكليس') || cleanComp.contains('janaklis')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('جناكليس')) return canonical;
+      }
+    }
+    if (cleanComp.contains('لوران') || cleanComp.contains('loran')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('لوران')) return canonical;
+      }
+    }
+    if (cleanComp.contains('تجمع') || cleanComp.contains('tagmoo') || cleanComp.contains('park mall') || cleanComp.contains('fifth')) {
+      for (final canonical in canonicalBranches) {
+        final c = _cleanBranchForComparison(canonical);
+        if (c.contains('تجمع') || c.contains('tagmoo')) return canonical;
+      }
+    }
+    if (cleanComp.contains('اكتوبر') || cleanComp.contains('أكتوبر') || cleanComp.contains('october') || cleanComp.contains('سادس')) {
+      for (final canonical in canonicalBranches) {
+        final c = _cleanBranchForComparison(canonical);
+        if (c.contains('اكتوبر') || c.contains('أكتوبر') || c.contains('october')) return canonical;
+      }
+    }
+    if (cleanComp.contains('صلاح سالم') || cleanComp.contains('عبور') || cleanComp.contains('obour')) {
+      for (final canonical in canonicalBranches) {
+        final c = _cleanBranchForComparison(canonical);
+        if (c.contains('صلاح سالم') || c.contains('عبور')) return canonical;
+      }
+    }
+    if (cleanComp.contains('منصور') || cleanComp.contains('mansoura')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('منصور')) return canonical;
+      }
+    }
+    if (cleanComp.contains('شين') || cleanComp.contains('شبين') || cleanComp.contains('shebin')) {
+      for (final canonical in canonicalBranches) {
+        final c = _cleanBranchForComparison(canonical);
+        if (c.contains('شبين') || c.contains('شين')) return canonical;
+      }
+    }
+    if (cleanComp.contains('محله') || cleanComp.contains('mahalla')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('محله')) return canonical;
+      }
+    }
+    if (cleanComp.contains('جاردينيا') || cleanComp.contains('gardenia')) {
+      for (final canonical in canonicalBranches) {
+        if (_cleanBranchForComparison(canonical).contains('جاردينيا')) return canonical;
+      }
+    }
+
+    // 4. Store Code Match (e.g. "Store: 418" / "418")
+    final rawDigits = RegExp(r'\b\d+\b').allMatches(clean).map((m) => m.group(0)!).toSet();
+    if (rawDigits.isNotEmpty) {
+      for (final canonical in canonicalBranches) {
+        final canonDigits = RegExp(r'\b\d+\b').allMatches(canonical).map((m) => m.group(0)!).toSet();
+        if (rawDigits.intersection(canonDigits).isNotEmpty) {
+          return canonical;
+        }
+      }
+    }
+
+    // 5. Containment match
+    for (final canonical in canonicalBranches) {
+      final canonComp = _cleanBranchForComparison(canonical);
+      if (canonComp.isNotEmpty && (cleanComp.contains(canonComp) || canonComp.contains(cleanComp))) {
+        return canonical;
+      }
+    }
+
+    return canonicalBranches.first;
+  }
+
+  static DateTime? _parseDate(dynamic val1, [dynamic val2, dynamic val3, dynamic val4]) {
+    for (final val in [val1, val2, val3, val4]) {
+      if (val == null) continue;
+      if (val is Timestamp) return val.toDate();
+      if (val is DateTime) return val;
+      if (val is String && val.trim().isNotEmpty) {
+        final raw = val.trim();
+        final dt = DateTime.tryParse(raw);
+        if (dt != null) return dt;
+        final parts = raw.split(RegExp(r'[/.-]'));
+        if (parts.length == 3) {
+          final p0 = int.tryParse(parts[0]) ?? 1;
+          final p1 = int.tryParse(parts[1]) ?? 1;
+          final p2 = int.tryParse(parts[2]) ?? 2026;
+          if (p2 > 1000) {
+            if (p0 > 1000) return DateTime(p0, p1, p2);
+            return DateTime(p2, p1, p0);
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  static List<AllocatedPrize> _aggregatePrizes(List<AllocatedPrize> prizes) {
+    final Map<String, AllocatedPrize> aggMap = {};
+    for (final p in prizes) {
+      final key = '${p.giftId}_${p.name}_${p.unitValue}_${p.giftType}';
+      if (!aggMap.containsKey(key)) {
+        aggMap[key] = AllocatedPrize(
+          giftId: p.giftId,
+          name: p.name,
+          allocatedQuantity: p.allocatedQuantity,
+          remainingQuantity: p.remainingQuantity,
+          unitValue: p.unitValue,
+          giftType: p.giftType,
+          branchId: 'all',
+          branchName: 'كافة الفروع',
+        );
+      } else {
+        final existing = aggMap[key]!;
+        aggMap[key] = AllocatedPrize(
+          giftId: existing.giftId,
+          name: existing.name,
+          allocatedQuantity: existing.allocatedQuantity + p.allocatedQuantity,
+          remainingQuantity: existing.remainingQuantity + p.remainingQuantity,
+          unitValue: existing.unitValue,
+          giftType: existing.giftType,
+          branchId: 'all',
+          branchName: 'كافة الفروع',
+        );
+      }
+    }
+    return aggMap.values.toList();
   }
 
   static String _normalizeKey(String text) {
@@ -141,7 +342,7 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
       return true;
     }
 
-    final gName = (cg['giftName'] ?? cg['gift_name'] ?? '').toString().trim();
+    final gName = (cg['giftName'] ?? cg['gift_name'] ?? cg['name'] ?? '').toString().trim();
     final normG = _normalizeKey(gName);
     final normP = _normalizeKey(prize.name);
 
@@ -167,29 +368,6 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
     final isTresemmeP = normP.contains('تريزيمي') || normP.contains('تريزمي') || normP.contains('tresemme');
     final isTresemmeG = normG.contains('تريزيمي') || normG.contains('تريزمي') || normG.contains('tresemme');
     if (isTresemmeP && isTresemmeG) return true;
-
-    return false;
-  }
-
-  static bool _matchesBranch(String selectedBranchKey, String selectedBranchName, Map<String, dynamic> data) {
-    if (selectedBranchKey == 'all' || selectedBranchKey == 'general') {
-      return true;
-    }
-
-    final docBranchId = (data['branch_id'] ?? data['branchId'] ?? '').toString().trim();
-    if (docBranchId.isNotEmpty && docBranchId == selectedBranchKey) {
-      return true;
-    }
-
-    final docBranchName = (data['branch_detected'] ?? data['branch'] ?? data['branchName'] ?? '').toString().trim();
-    final normDoc = _normalizeKey(docBranchName);
-    final normSelected = _normalizeKey(selectedBranchName);
-
-    if (normDoc.isNotEmpty && normSelected.isNotEmpty) {
-      if (normDoc.contains(normSelected) || normSelected.contains(normDoc)) {
-        return true;
-      }
-    }
 
     return false;
   }
@@ -314,60 +492,42 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
                 builder: (context, txSnap) {
                   final txDocs = txSnap.data?.docs ?? [];
 
-                  // Group prizes by branch & build canonical branch list
+                  // 1. Strictly Canonical Branches from Event definition
+                  final List<String> canonicalBranches = liveEvent.branchNames
+                      .map((b) => b.trim())
+                      .where((b) => b.isNotEmpty)
+                      .toList();
+
                   final allPrizes = liveEvent.allocatedPrizes;
                   final Map<String, List<AllocatedPrize>> branchPrizesMap = {};
                   final Map<String, String> branchDisplayNames = {};
 
-                  // 1. Add "All Branches" Option
+                  // A. Add "All Branches" Scope
                   branchDisplayNames['all'] = strings.allBranchesScope;
                   branchPrizesMap['all'] = allPrizes;
 
-                  // 2. Add individual campaign branches
-                  if (liveEvent.branchIds.isNotEmpty) {
-                    for (int i = 0; i < liveEvent.branchIds.length; i++) {
-                      final bId = liveEvent.branchIds[i];
-                      final bName = i < liveEvent.branchNames.length ? liveEvent.branchNames[i] : bId;
-                      branchPrizesMap.putIfAbsent(bId, () => []);
-                      branchDisplayNames[bId] = bName;
-                    }
+                  // B. Initialize entry for each canonical branch
+                  for (final b in canonicalBranches) {
+                    branchDisplayNames[b] = b;
+                    branchPrizesMap[b] = [];
                   }
 
-                  // 3. Add allocated prize specific branches
+                  // C. Map allocated prizes to their canonical branch
                   for (final prize in allPrizes) {
-                    if (prize.branchId.isNotEmpty) {
-                      branchPrizesMap.putIfAbsent(prize.branchId, () => []).add(prize);
-                      if (!branchDisplayNames.containsKey(prize.branchId)) {
-                        branchDisplayNames[prize.branchId] = prize.branchName.isNotEmpty ? prize.branchName : prize.branchId;
-                      }
-                    } else if (prize.branchName.isNotEmpty) {
-                      branchPrizesMap.putIfAbsent(prize.branchName, () => []).add(prize);
-                      branchDisplayNames[prize.branchName] = prize.branchName;
-                    }
+                    final rawPrizeBranch = (prize.branchName.isNotEmpty ? prize.branchName : prize.branchId).trim();
+                    if (rawPrizeBranch.isEmpty) continue;
+                    final canonBranch = _normalizeBranchName(rawPrizeBranch, canonicalBranches, isAr);
+                    branchPrizesMap.putIfAbsent(canonBranch, () => []).add(prize);
                   }
 
-                  // 4. Auto-detect branches from transaction logs if any
-                  for (final doc in txDocs) {
-                    final data = doc.data();
-                    final bDetected = (data['branch_detected'] ?? '').toString().trim();
-                    final bId = (data['branch_id'] ?? data['branchId'] ?? '').toString().trim();
-                    if (bDetected.isNotEmpty) {
-                      final key = bId.isNotEmpty ? bId : bDetected;
-                      if (!branchDisplayNames.containsKey(key)) {
-                        branchDisplayNames[key] = bDetected;
-                        branchPrizesMap.putIfAbsent(key, () => []);
-                      }
-                    }
-                  }
-
-                  final branchKeys = branchDisplayNames.keys.toList();
+                  // D. Branch Keys: Strictly 'all' + canonicalBranches ONLY (Zero Rogue Branches)
+                  final List<String> branchKeys = ['all', ...canonicalBranches];
 
                   // Auto-select pinned branch or fallback
-                  if (_selectedBranchKey == null || !branchDisplayNames.containsKey(_selectedBranchKey)) {
-                    if (_pinnedBranchKey != null && branchDisplayNames.containsKey(_pinnedBranchKey)) {
+                  if (_selectedBranchKey == null || !branchKeys.contains(_selectedBranchKey)) {
+                    if (_pinnedBranchKey != null && branchKeys.contains(_pinnedBranchKey)) {
                       _selectedBranchKey = _pinnedBranchKey;
                     } else if (branchKeys.length > 1) {
-                      // Prefer the first actual branch over 'all' if available
                       _selectedBranchKey = branchKeys.firstWhere((k) => k != 'all', orElse: () => 'all');
                     } else {
                       _selectedBranchKey = 'all';
@@ -375,11 +535,11 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
                   }
 
                   final currentBranchKey = _selectedBranchKey ?? 'all';
-                  final currentBranchName = branchDisplayNames[currentBranchKey] ?? '';
+                  final currentBranchName = branchDisplayNames[currentBranchKey] ?? currentBranchKey;
 
                   final activeBranchPrizes = (currentBranchKey != 'all' && (branchPrizesMap[currentBranchKey]?.isNotEmpty ?? false))
                       ? branchPrizesMap[currentBranchKey]!
-                      : allPrizes;
+                      : _aggregatePrizes(allPrizes);
 
                   // Stock calculations
                   int totalAllocatedInBranch = 0;
@@ -401,27 +561,35 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
                   for (final doc in txDocs) {
                     final data = doc.data();
                     final eventId = (data['event_id'] ?? data['campaignId'] ?? data['campaign_id'] ?? '').toString();
-                    if (eventId.isNotEmpty && eventId != liveEvent.id) {
+                    final companySlug = (data['companySlug'] ?? data['company_slug'] ?? '').toString().toLowerCase();
+                    final targetCompany = (data['targetCompany'] ?? data['target_company'] ?? '').toString().toLowerCase();
+
+                    final eventTarget = liveEvent.targetCompany.toLowerCase();
+                    final eventSlug = liveEvent.companySlug.toLowerCase();
+
+                    final bool matchesEvent = (eventId.isNotEmpty && eventId == liveEvent.id) ||
+                        (eventSlug.isNotEmpty && companySlug == eventSlug) ||
+                        (eventTarget.isNotEmpty && targetCompany.contains(eventTarget));
+
+                    if (!matchesEvent) {
                       continue;
                     }
 
-                    final status = data['status']?.toString();
-                    final isValid = data['is_valid'];
-                    if (status == 'rejected' || isValid == false) {
-                      continue;
+                    final bool isExplicitlyValid = data['is_valid'] == true || data['status'] == 'accepted' || data['isValid'] == true;
+                    final bool isExplicitlyRejected = data['is_valid'] == false || data['status'] == 'rejected' || data['isValid'] == false || ((data['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
+                    final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((data['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
+
+                    if (!isValid) {
+                      continue; // Strictly exclude rejected invoices
                     }
 
-                    // Date parsing
-                    final rawDate = data['claimed_at'] ??
-                        data['created_at'] ??
-                        data['timestamp'] ??
-                        data['date'];
-                    DateTime? docDate;
-                    if (rawDate is Timestamp) {
-                      docDate = rawDate.toDate();
-                    } else if (rawDate is String && rawDate.isNotEmpty) {
-                      docDate = DateTime.tryParse(rawDate);
-                    }
+                    // Date parsing across all possible timestamp & date fields
+                    final docDate = _parseDate(
+                      data['claimed_at'],
+                      data['created_at'],
+                      data['timestamp'],
+                      data['receipt_date'] ?? data['date'],
+                    );
 
                     if (!_isAllTime) {
                       if (docDate == null) continue;
@@ -432,8 +600,15 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
                     }
 
                     // Strict Branch Filtering
-                    if (!_matchesBranch(currentBranchKey, currentBranchName, data)) {
-                      continue;
+                    if (currentBranchKey != 'all') {
+                      final rawBranch = (data['branch_detected'] ?? data['branch_name'] ?? data['branch'] ?? data['branchName'] ?? '').toString().trim();
+                      final txCanonBranch = _normalizeBranchName(rawBranch, canonicalBranches, isAr);
+                      final normSel = _cleanBranchForComparison(currentBranchName);
+                      final normTx = _cleanBranchForComparison(txCanonBranch);
+
+                      if (txCanonBranch != currentBranchName && normTx != normSel && !normTx.contains(normSel) && !normSel.contains(normTx)) {
+                        continue;
+                      }
                     }
 
                     totalInvoicesOnDate++;
@@ -467,7 +642,7 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
                       }
                     } else {
                       final prizesWon = (data['prizes_won'] as List?)?.map((p) => p.toString()).toList() ??
-                          [(data['prize_won'] ?? '').toString()];
+                          [(data['prize_won'] ?? data['prizeWon'] ?? data['prize'] ?? '').toString()];
                       for (final p in prizesWon) {
                         if (p.trim().isNotEmpty) {
                           totalGiftsDisbursedOnDate += 1;

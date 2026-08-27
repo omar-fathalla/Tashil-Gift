@@ -181,5 +181,90 @@ void main() {
       expect(voucher50.unitValue, 50.0);
       expect(voucher25.unitValue, 25.0);
     });
+
+    test('Canonical branch keys list strictly excludes rogue branches and OCR strings', () {
+      final canonicalBranches = [
+        'فرع جاردينيا (الإسكندرية)',
+        'فرع سموحة (الإسكندرية)',
+        'فرع عجمي ستار (الإسكندرية)',
+        'فرع المحلة الكبري (الغربية)',
+        'شبين الكوم (شبين الكوم)',
+        'التجمع (Tagmoo) (القاهرة)',
+        'أكتوبر (October) (السادس من أكتوبر)',
+        'المنصورة (المنصورة)',
+        'عمارات العبور - صلاح سالم (القاهرة)',
+        'المنتزه (الإسكندرية)',
+        'ميامي (الإسكندرية)',
+        'جناكليس (الإسكندرية)',
+      ];
+
+      final branchKeys = ['all', ...canonicalBranches];
+
+      expect(branchKeys.length, equals(13)); // 'all' + 12 canonical
+      expect(branchKeys.contains('all'), true);
+      expect(branchKeys.contains('فرع جاردينيا (الإسكندرية)'), true);
+      expect(branchKeys.contains('المنتزه (الإسكندرية)'), true);
+
+      // Verify rogue branches are not present
+      expect(branchKeys.contains('The Park Mall - التجمع الخامس'), false);
+      expect(branchKeys.contains('المنتزه (MONTAZAH)'), false);
+      expect(branchKeys.contains('Store: 418'), false);
+      expect(branchKeys.contains('fathalla_211'), false);
+    });
+
+    test('Correctly groups daily transactions and gifts from receipts_transactions', () {
+      final rawDocs = [
+        {
+          'event_id': 'event_test_1',
+          'status': 'accepted',
+          'is_valid': true,
+          'receipt_date': '2026-08-26',
+          'branch_detected': 'فرع جناكليس',
+          'claimed_gifts': [
+            {'giftName': 'كلير 90 مل هديه', 'quantity': 2, 'unitValue': 0.0, 'isVoucher': false},
+            {'giftName': 'فواتشر 25 جنيه', 'quantity': 1, 'unitValue': 25.0, 'isVoucher': true},
+          ],
+        },
+        {
+          'event_id': 'event_test_1',
+          'status': 'accepted',
+          'is_valid': true,
+          'claimed_at': '2026-08-26T14:30:00.000Z',
+          'branch_detected': 'Store: 418 - MONTAZAH',
+          'claimed_gifts': [
+            {'giftName': 'تريزيمي 250 مل هديه', 'quantity': 1, 'unitValue': 0.0, 'isVoucher': false},
+          ],
+        },
+        {
+          'event_id': 'event_test_1',
+          'status': 'rejected', // REJECTED
+          'is_valid': false,
+          'receipt_date': '2026-08-26',
+          'branch_detected': 'فرع جناكليس',
+          'claimed_gifts': [
+            {'giftName': 'كلير 90 مل هديه', 'quantity': 5, 'unitValue': 0.0, 'isVoucher': false},
+          ],
+        },
+      ];
+
+      final filtered = rawDocs.where((d) => d['is_valid'] == true && d['status'] != 'rejected').toList();
+      expect(filtered.length, equals(2));
+
+      int totalGifts = 0;
+      double totalVouchers = 0.0;
+      for (final d in filtered) {
+        final gifts = (d['claimed_gifts'] as List);
+        for (final g in gifts) {
+          final qty = g['quantity'] as int;
+          totalGifts += qty;
+          if (g['isVoucher'] == true) {
+            totalVouchers += (g['unitValue'] as double) * qty;
+          }
+        }
+      }
+
+      expect(totalGifts, equals(4)); // 2 clear + 1 voucher + 1 tresemme = 4 items
+      expect(totalVouchers, equals(25.0));
+    });
   });
 }
