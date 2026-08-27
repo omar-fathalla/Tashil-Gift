@@ -392,11 +392,15 @@ class AiReceiptService {
         '2. الفواتير المقبولة حصراً هي بونات الكاشير الإلكترونية المطبوعة آلياً عبر طابعات نقاط البيع الرسمية (Printed Thermal / Electronic POS Receipts).\n'
         '3. إذا كانت الفاتورة مكتوبة باليد، يجب تعيين: isHandwritten = true، isThermalPosReceipt = false، isValid = false، وإضافة "الفاتورة محررة يدوياً وغير مطبوعة إلكترونياً من الكاشير" إلى fraudReasons وقائمة unfulfilledConditions.\n'
         '4. إذا وجد أي شطب أو تعديل يدوي في أرقام الفاتورة، عيّن: isTampered = true، isValid = false.\n'
-        '5. إذا كانت الصورة ملتقطة لشاشة هاتف أو حاسوب، عيّن: isScreenCapture = true، isValid = false.',
+        '5. إذا كانت الصورة ملتقطة لشاشة هاتف أو حاسوب، عيّن: isScreenCapture = true، isValid = false.\n\n'
+        '🛑 معيار الصرامة الفائقة ومنع التخمين (Zero-Hallucination & Exact Extraction Policy):\n'
+        '1. استخرج فقط الأسماء والأصناف والكميات المطبوعة نصاً وحرفياً في الفاتورة.\n'
+        '2. يُمنع منعاً باتاً تخمين أو افتراض أي منتج أو علامة تجارية أو كمية غير ظاهرة بوضوح تام.\n'
+        '3. إذا كانت الفاتورة أو سطر المنتج مطموساً أو غير واضح أو مقطوعاً أو يصعب قراءته بيقين، يجب تعيين: isValid = false، وإضافة "صورة الفاتورة غير واضحة أو اسم المنتج غير مقروء بدقة، برجاء إعادة تصوير الفاتورة بوضوح وإظهار سطر المنتج والكمية" إلى unfulfilledConditions.',
       ),
       generationConfig: GenerationConfig(
         responseMimeType: 'application/json',
-        temperature: 0.1,
+        temperature: 0.0,
         maxOutputTokens: 4096,
         responseSchema: Schema.object(
           properties: {
@@ -595,7 +599,9 @@ $rulesListFormatted
    - قم بتعيين (matchedRuleId) بمعرف القاعدة الأولى المطابقة.
 3. في حال وجود أكثر من قاعدة لنفس المنتج بمستويات كميات مختلفة (مثل: شراء 1 اسبراي ريكسونا -> 50 ج.م، وشراء 2 اسبراي ريكسونا -> 125 ج.م)، يجب عليك اختيار القاعدة ذات الكمية المشروطة الأعلى التي حققها العميل (مثال: إذا اشترى 2 أو أكثر، اختر قاعدة الـ 125 ج.م).
 4. [حزم البندل وعروض الشرنك المزدوجة (Twin Bundles & Shrink)]: إذا احتوت الفاتورة على صنف حزمة مزدوجة أو شرنك (مثل عبوة أكس 2 قطعة أو سعر 335 ج.م مع خصم ~65 ج.م بصافي 270 ج.م، أو احتوى الاسم على كلمات شرنك/مزدوج/2ق)، يُعامل الصنف كـ (2 قطعة) ويطابق فوراً قاعدة الـ 2 قطعة (عرض الـ 125 ج.م).
-5. [عروض تريزيمي Tresemme]: أصناف تريزيمي (شامبو أو بلسم 400 مل، مثل 'تريزيمى شامبو + بلسم 400 ملى' أو باركود 6221155612168) تتبع شركة يونيليفر، وشراء قطعتين (الكمية = 2) يحقق شرط الـ 2 قطعة لقاعدة تريزيمي (rule_2) ويمنح هدية واحدة معتمدة من تريزيمي 250 مل (كمنتج مجاني free_product).
+5. [عروض وبكجات تريزيمي Tresemme المزدوجة (Shampoo + Conditioner Bundles)]:
+   - عبوات وبكجات تريزيمي التي تجمع (شامبو + بلسم) في باك واحد (مثل 'تريزيمى شامبو + بلسم 400 ملى' أو باركود 6221155612199 أو 6221155612168 بسعر 299 ج.م أو 378 ج.م) هي حزمة مزدوجة تحتوي على قطعتين (عبوة شامبو + عبوة بلسم بخصم 50%).
+   - عند شراء عبوة واحدة من هذا البكج (الكمية في البون = 1)، يُعامل الصنف كـ (2 قطعة) ويحقق فوراً شرط الـ 2 قطعة لقاعدة تريزيمي (rule_2) ويمنح هدية تريزيمي 250 مل معتمدة (free_product).
 6. [مضاعفة الجوائز والفرص]: إذا كانت القاعدة تتيح المضاعفة، وكان العميل قد اشترى مضاعفات الكمية المشروطة:
    - احسب عدد مرات تكرار العرض واضرب قيمة المكافأة بعدد المرات.
 7. قم بتعبئة حقل (matchedRuleId) بمعرف القاعدة المطابقة (مثل "rule_2" أو "rule_4" أو "rule_3").
@@ -1502,6 +1508,47 @@ class PromotionalRuleMatcher {
     return allMatchedResults;
   }
 
+  /// Analyzes why a receipt did not qualify for promotional rules and returns detailed human-readable reasons
+  static List<String> getUnfulfilledPromotionReasons({
+    AiReceiptAnalysisResult? result,
+    List<ExtractedProductItem>? extractedProducts,
+    required List<PromotionalRuleItem> promotionalRules,
+  }) {
+    if (promotionalRules.isEmpty) return [];
+
+    final reasons = <String>[];
+    final products = extractedProducts ?? result?.extractedProducts ?? const <ExtractedProductItem>[];
+
+    // Check if any product partially matched a rule but didn't reach minQuantity
+    for (final rule in promotionalRules) {
+      int count = 0;
+      for (final p in products) {
+        if (_matchesProduct(p, rule.triggerProduct)) {
+          count += getEffectiveProductQuantity(p);
+        }
+      }
+      if (count > 0 && count < rule.minQuantity) {
+        reasons.add(
+          '${rule.ruleTitle}: تم رصد ($count) قطعة في الفاتورة، والحد الأدنى المطلوب للحصول على الهدية هو (${rule.minQuantity}) قطعة.',
+        );
+      }
+    }
+
+    if (reasons.isEmpty) {
+      if (products.any((p) => p.isTargetCompany)) {
+        reasons.add(
+          'المنتجات المشتراة تابعة للشركة لكنها غير مشمولة في شروط العروض الترويجية الحالية.',
+        );
+      } else {
+        reasons.add(
+          'الفاتورة لا تحتوي على أي من المنتجات المؤهلة لعروض الحملة الحالية.',
+        );
+      }
+    }
+
+    return reasons;
+  }
+
   /// Resolves the effective physical piece count of an item, taking into account twin bundles / shrink packs
   /// where POS registers 1 quantity for a 2-piece physical promotional pack.
   static int getEffectiveProductQuantity(ExtractedProductItem p) {
@@ -1512,13 +1559,19 @@ class PromotionalRuleMatcher {
     final hasBundleName = RegExp(r'\b(شرنك|دبل|مزدوج|باندل|بندل|توين|2\s*قطعة|2\s*قطع|2\s*ق|2x|2\*)\b')
         .hasMatch(nameLower);
 
-    // 2. Price heuristic for deodorant bodyspray twin bundles (Axe / Rexona)
+    // 2. Hair care twin combo (Shampoo + Conditioner / شامبو + بلسم)
+    // E.g. "تريزيمى شامبو + بلسم 400 ملى" is physically 2 bottles (Shampoo + Conditioner @ 50% discount)
+    final bool isShampooAndConditionerCombo =
+        (nameLower.contains('شامبو') || nameLower.contains('shampoo')) &&
+        (nameLower.contains('بلسم') || nameLower.contains('conditioner'));
+
+    // 3. Price heuristic for deodorant bodyspray twin bundles (Axe / Rexona)
     // In retail, a single 150ml can is ~150-185 EGP. A twin bundle is 300+ EGP (e.g. 335 EGP gross, ~270 EGP net).
     final bool isSpray = nameLower.contains('اسبراي') || nameLower.contains('اكس') || nameLower.contains('ريكسونا');
     final double grossPrice = p.originalPrice ?? p.price;
     final bool hasBundlePrice = isSpray && (grossPrice >= 280.0 || (p.price >= 250.0 && p.discountAmount >= 40.0));
 
-    if (hasBundleName || hasBundlePrice) {
+    if (hasBundleName || hasBundlePrice || isShampooAndConditionerCombo) {
       return qty * 2;
     }
 

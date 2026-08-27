@@ -569,6 +569,63 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
 
       final receiptNumber = result.receiptNumber.trim();
 
+      // Strict Zero-Fallback Rule: If campaign has promotional rules and none are met, reject receipt
+      final matchedRulesList = PromotionalRuleMatcher.matchAllWithMultipliers(
+        result: result,
+        promotionalRules: _activeEvent!.promotionalRules,
+        allowCampaignMultipliers: _activeEvent!.allowMultipleChances,
+      );
+
+      if (_activeEvent!.promotionalRules.isNotEmpty && matchedRulesList.isEmpty) {
+        if (!mounted) return;
+        final activeCountry = ref.read(activeCountryProvider);
+        final unfulfilledPromoList = PromotionalRuleMatcher.getUnfulfilledPromotionReasons(
+          result: result,
+          promotionalRules: _activeEvent!.promotionalRules,
+        );
+
+        final conditions = [
+          ValidationConditionItem(
+            title: 'شروط العروض والمنتجات الترويجية',
+            description: unfulfilledPromoList.isNotEmpty
+                ? unfulfilledPromoList.join('\n')
+                : 'الفاتورة لا تستوفي شروط الكميات المطلوبة لعروض الحملة الحالية.',
+            icon: Icons.inventory_2_outlined,
+            isMet: false,
+          ),
+        ];
+
+        // Asynchronously persist rejected transaction to Firestore & Storage for audit
+        _recordRejectedReceipt(
+          result: result,
+          bytes: bytes,
+          mimeType: mimeType,
+          activeEvent: _activeEvent!,
+          rejectionReason: unfulfilledPromoList.isNotEmpty
+              ? unfulfilledPromoList.join(' • ')
+              : 'شروط العروض الترويجية غير مستوفاة في الفاتورة',
+          unfulfilledConditions: unfulfilledPromoList,
+          totalValue: totalValue,
+        );
+
+        showReceiptValidationReportDialog(
+          context: context,
+          title: 'عفواً، شروط العرض غير مستوفاة',
+          subtitle: 'تم فحص الفاتورة بالذكاء الاصطناعي وتبيّن عدم استيفاء الشروط الترويجية التالية:',
+          conditions: conditions,
+          receiptNumber: result.receiptNumber,
+          storeChain: result.storeChainDetected,
+          branch: result.branchDetected,
+          receiptDate: result.receiptDate,
+          totalValue: totalValue,
+          requiredMinimum: _activeEvent!.minimumSpend,
+          currencySymbol: activeCountry.currencySymbol,
+          imageUrl: previewImgUrl,
+        );
+        _resetFormForNextCustomer();
+        return;
+      }
+
       // Check for existing receipt to update/upsert
       DocumentSnapshot<Map<String, dynamic>>? existingDoc;
       if (receiptNumber.isNotEmpty) {
@@ -736,12 +793,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           .map((p) => p.name)
           .toList() ?? <String>[];
 
-      // Evaluate promotional rules using our robust multi-offer AI & NLP PromotionalRuleMatcher
-      final matchedRulesList = PromotionalRuleMatcher.matchAllWithMultipliers(
-        result: result,
-        promotionalRules: currentEvent?.promotionalRules ?? const [],
-        allowCampaignMultipliers: currentEvent?.allowMultipleChances ?? true,
-      );
+      // Composite promotional bundle from matched rules evaluated earlier
       final compositeBundle = CompositePromotionalBundle.fromMatchedRules(
         matchedRulesList,
         fallbackTitle: result.matchedRewardValue.trim().isNotEmpty

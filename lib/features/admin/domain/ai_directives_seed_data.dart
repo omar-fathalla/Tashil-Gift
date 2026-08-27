@@ -407,19 +407,40 @@ class AiDirectivesSeedData {
           code: 'PROMOTIONAL_TWIN_BUNDLE_HEURISTIC',
           orderIndex: 19,
           category: AiDirectiveCategory.promotionalRules,
-          titleAr: 'معاملة حزم وعروض الشرنك المزدوجة كقطعتين (Twin Bundles & Shrink Packs)',
+          titleAr: 'معاملة حزم وعروض الشرنك وبكجات الشامبو+البلسم كقطعتين (Twin Bundles & Shampoo+Conditioner Packs)',
           titleEn: 'Promotional Twin-Pack Bundles & Multi-Piece POS Resolution',
           descriptionAr:
-              'عند شراء حزمة أو شرنك مزدوج (مثل عبوة أكس 2 قطعة بعرض خصم 35% على العبوة الثانية بسعر 335 ج.م)، يتم معاملة الصنف كـ (2 قطعة) ومطابقته فوراً مع شريحة العرض الأعلى (125 ج.م) حتى لو طبع الكاشير الكمية = 1 في البون.',
+              'عند شراء حزمة مزدوجة أو شرنك (مثل عبوة أكس 2 قطعة بسعر 335 ج.م، أو بكج تريزيمي شامبو + بلسم 400 مل بخصم 50% على البلسم بسعر 299 أو 378 ج.م)، يتم معاملة الصنف كـ (2 قطعة) ومطابقته فوراً مع شريحة العرض المناسبة (125 ج.م لأكس، أو هدية تريزيمي 250 مل) حتى لو طبع الكاشير الكمية = 1 في البون.',
           descriptionEn:
-              'When purchasing promotional twin packs (such as 2x Axe sprays with 35% discount bundle priced at 335 EGP), the AI engine treats the line item as 2 pieces and matches the higher promotion tier (125 EGP) even if the POS receipt prints quantity as 1.',
+              'When purchasing promotional twin packs (such as 2x Axe sprays or Tresemme Shampoo + Conditioner 400ml combo with 50% discount on conditioner), the AI engine treats the line item as 2 pieces and matches the higher promotion tier even if the POS receipt prints quantity as 1.',
           logicAr:
-              '1. استكشاف الحزم المزدوجة عبر السعر (سعر الصنف 280+ ج.م لبخاخات أكس/ريكسونا أو الخصم ~65 ج.م) أو الكلمات الدلالية (شرنك، دبل، مزدوج، 2ق، bundle).\n2. احتساب الكمية الفعلية للصنف = 2 قطعة.\n3. مطابقة الشريحة الترويجية للقطعتين (قسيمة 125 ج.م) تلقائياً.',
+              '1. استكشاف الحزم المزدوجة عبر الكلمات الدلالية (شرنك، دبل، مزدوج، 2ق، bundle) أو بكجات العناية المزدوجة التي تحتوي على (شامبو + بلسم) في نفس السطر، أو عبر السعر (سعر الصنف 280+ ج.م لبخاخات أكس/ريكسونا).\n2. احتساب الكمية الفعلية للصنف = 2 قطعة.\n3. مطابقة الشريحة الترويجية فورياً ومنح الهدية المخصصة لذلك العرض.',
           logicEn:
-              '1. Detects twin bundles via price heuristic (gross price >= 280 EGP for sprays) or name tokens (shrink, double, twin, 2pcs).\n2. Resolves effective physical piece quantity to 2.\n3. Automatically qualifies and awards the 2-pieces tier (125 EGP voucher).',
-          exampleInput: 'بون كاشير بسطر واحد: "اكس اسبراى 150مل" الكمية 1 والسعر 335 ج.م بعد خصم 65 ج.م',
-          exampleOutput: 'معاملة البندل كـ 2 قطعة ➔ مطابقة فورية لعرض قطعتين اسبراي (فواتشر بقيمة 125 جنيه)',
-          tags: ['twin-bundle', 'shrink', 'axe', 'rexona', 'bundle-heuristics', 'promotional-rules'],
+              '1. Detects twin bundles via name tokens (shrink, double, twin, 2pcs), shampoo+conditioner hair combos, or spray price heuristics (>= 280 EGP).\n2. Resolves effective physical piece quantity to 2.\n3. Automatically qualifies and awards the corresponding promotional prize.',
+          exampleInput: 'بون كاشير بسطر: "تريزيمى شامبو + بلسم 400 ملى لشعر املس ك" الكمية 1 والسعر 299 ج.م',
+          exampleOutput: 'معاملة البكج كـ 2 قطعة ➔ مطابقة فورية لعرض تريزيمي (منح هدية تريزيمي 250 مل معتمدة بدقة)',
+          tags: ['twin-bundle', 'shrink', 'axe', 'rexona', 'tresemme', 'shampoo-conditioner', 'bundle-heuristics', 'promotional-rules'],
+          lastUpdated: '2026-08-27',
+        ),
+
+        const AiDirectiveModel(
+          id: 'AIR-20',
+          code: 'ZERO_FALLBACK_STRICT_QUALIFICATION',
+          orderIndex: 20,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'إلغاء الهدية الافتراضية وحظر منح أي هدية غير مستحقة (Zero-Fallback Qualification)',
+          titleEn: 'Zero-Fallback Invariant & Strict Promotional Qualification',
+          descriptionAr:
+              'عند وجود شروط أو عروض ترويجية للحملة، يُمنع منعاً باتاً منح أي هدية بديلة أو افتراضية (Fallback) عند عدم استيفاء شروط العرض (مثل شراء عبوة واحدة من تريزيمي 400 مل بينما العرض يتطلب عبوتين للحصول على الهدية)، ويتم رفض الفاتورة وتوضيح سبب عدم الاستحقاق بدقة.',
+          descriptionEn:
+              'Strictly enforces that when a campaign has promotional rules, no default fallback prize is ever awarded if the customer fails to meet the specific rule criteria (e.g. buying 1 Tresemme bottle when 2 are required). The receipt is cleanly rejected with explicit diagnostic reasons.',
+          logicAr:
+              '1. إذا كانت الحملة تحتوي على قواعد ترويجية (promotionalRules.isNotEmpty) وكانت قائمة القواعد المطابقة فارغة (matchedRulesList.isEmpty)، يُلغى الاستحقاق فوراً.\n2. إيقاف المسار الافتراضي القديم الذي كان يمنح أول جائزة مسجلة في الحملة.\n3. توليد تقرير تدقيق يوضح للبروموتر والعميل الشرط غير المستوفى بالتفصيل (مثل: تم رصد 1 قطعة تريزيمي، والمطلوب 2 قطعة للحصول على الهدية).\n4. ضبط درجة حرارة الذكاء الاصطناعي على 0.0 لمنع أي تخمين.',
+          logicEn:
+              '1. When promotionalRules.isNotEmpty and matchedRulesList.isEmpty, qualification is strictly denied.\n2. Completely disables legacy fallback to the campaign default first prize.\n3. Generates clear diagnostic report specifying the unmet condition (e.g. 1 Tresemme detected vs 2 required).\n4. Sets AI vision temperature to 0.0 for zero hallucination.',
+          exampleInput: 'فاتورة مشتريات تحتوي على عبوة واحدة تريزيمي 400 مل لشعر أملس (الكمية: 1) بمبلغ 299 ج.م',
+          exampleOutput: 'رفض منح الهدية مع رسالة تدقيق: "عرض تريزيمي 400 مل: تم رصد (1) قطعة في الفاتورة، والحد الأدنى المطلوب للحصول على الهدية هو (2) قطعة" وعدم صرف كلير 90 مل إطلاقاً.',
+          tags: ['zero-fallback', 'strict-qualification', 'tresemme', 'clear', 'promotional-governance', 'temperature-zero'],
           lastUpdated: '2026-08-27',
         ),
       ];

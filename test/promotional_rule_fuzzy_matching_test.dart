@@ -369,19 +369,19 @@ void main() {
       expect(v25Gift.quantity, 1);
     });
 
-    test('Customer Receipt from Rehab with 2x Tresemme 400ml matches Rule 2 and yields EXACTLY 1 Tresemme 250ml gift', () {
-      final rehabItems = [
+    test('Customer Receipt from Rehab with 1x Tresemme Shampoo+Conditioner Bundle Box (299 EGP) is a 2-piece combo and yields EXACTLY 1 Tresemme 250ml gift', () {
+      final rehabComboItem = [
         ExtractedProductItem(
           name: 'تريزيمى شامبو + بلسم 400 ملى لشعر املس ك',
           price: 299.0,
-          quantity: 2,
-          barcode: '6221155612168',
+          quantity: 1, // 1 bundle box scanned by cashier
+          barcode: '6221155612199',
           isTargetCompany: true,
         ),
       ];
 
       final matchedResults = PromotionalRuleMatcher.matchAllWithMultipliers(
-        extractedProducts: rehabItems,
+        extractedProducts: rehabComboItem,
         promotionalRules: rules,
         allowCampaignMultipliers: true,
       );
@@ -389,9 +389,41 @@ void main() {
       expect(matchedResults.length, 1);
       final tresemmeMatch = matchedResults.first;
       expect(tresemmeMatch.rule.id, 'rule_2');
-      expect(tresemmeMatch.multiplier, 1); // 2 bottles / 2 minQuantity = 1 gift
+      expect(tresemmeMatch.multiplier, 1); // 2 physical pieces (shampoo + conditioner) / 2 minQuantity = 1 gift
       expect(tresemmeMatch.multipliedLinkedGifts.first.quantity, 1); // exactly 1 gift of Tresemme 250ml
       expect(tresemmeMatch.multipliedLinkedGifts.first.giftName, contains('تريزيمي 250 مل'));
+    });
+
+    test('Customer buying ONLY 1x Single Standalone Tresemme Shampoo Bottle (Quantity 1) fails Rule 2, yields 0 gifts, and NEVER awards Clear', () {
+      final singleStandaloneShampoo = [
+        ExtractedProductItem(
+          name: 'تريزيمى شامبو 400 ملى لشعر جاف',
+          price: 170.0,
+          quantity: 1, // Only 1 standalone shampoo bottle (no conditioner)
+          barcode: '6221155612199',
+          isTargetCompany: true,
+        ),
+      ];
+
+      final matchedResults = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: singleStandaloneShampoo,
+        promotionalRules: rules,
+        allowCampaignMultipliers: true,
+      );
+
+      // Must be completely empty: 0 rules matched
+      expect(matchedResults, isEmpty);
+
+      // Unfulfilled reasons must pinpoint that 1 bottle was bought and 2 are required
+      final reasons = PromotionalRuleMatcher.getUnfulfilledPromotionReasons(
+        extractedProducts: singleStandaloneShampoo,
+        promotionalRules: rules,
+      );
+
+      expect(reasons.isNotEmpty, true);
+      expect(reasons.first, contains('تريزيمي'));
+      expect(reasons.first, contains('تم رصد (1) قطعة'));
+      expect(reasons.first, contains('(2) قطعة'));
     });
   });
 }

@@ -328,6 +328,57 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         promotionalRules: activeEvent.promotionalRules,
         allowCampaignMultipliers: activeEvent.allowMultipleChances,
       );
+
+      // Strict Zero-Fallback Rule: If campaign has promotional rules and none are met, reject receipt
+      if (activeEvent.promotionalRules.isNotEmpty && matchedRulesList.isEmpty) {
+        if (!mounted) return;
+        final activeCountry = ref.read(activeCountryProvider);
+        final unfulfilledPromoList = PromotionalRuleMatcher.getUnfulfilledPromotionReasons(
+          result: result,
+          promotionalRules: activeEvent.promotionalRules,
+        );
+
+        final conditions = [
+          ValidationConditionItem(
+            title: 'شروط العروض والمنتجات الترويجية',
+            description: unfulfilledPromoList.isNotEmpty
+                ? unfulfilledPromoList.join('\n')
+                : 'الفاتورة لا تستوفي شروط الكميات المطلوبة لعروض الحملة الحالية.',
+            icon: Icons.inventory_2_outlined,
+            isMet: false,
+          ),
+        ];
+
+        // Asynchronously persist rejected transaction to Firestore & Storage for audit
+        _recordRejectedReceipt(
+          result: result,
+          bytes: bytes,
+          mimeType: mimeType,
+          activeEvent: activeEvent,
+          rejectionReason: unfulfilledPromoList.isNotEmpty
+              ? unfulfilledPromoList.join(' • ')
+              : 'شروط العروض الترويجية غير مستوفاة في الفاتورة',
+          unfulfilledConditions: unfulfilledPromoList,
+          totalValue: totalValue,
+        );
+
+        showReceiptValidationReportDialog(
+          context: context,
+          title: 'عفواً، شروط العرض غير مستوفاة',
+          subtitle: 'تم فحص الفاتورة بالذكاء الاصطناعي وتبيّن عدم استيفاء الشروط الترويجية التالية:',
+          conditions: conditions,
+          receiptNumber: result.receiptNumber,
+          storeChain: result.storeChainDetected,
+          branch: result.branchDetected,
+          receiptDate: result.receiptDate,
+          totalValue: totalValue,
+          requiredMinimum: activeEvent.minimumSpend,
+          currencySymbol: activeCountry.currencySymbol,
+          imageUrl: previewImgUrl,
+        );
+        return;
+      }
+
       final compositeBundle = CompositePromotionalBundle.fromMatchedRules(
         matchedRulesList,
         fallbackTitle: result.matchedRewardValue.trim().isNotEmpty

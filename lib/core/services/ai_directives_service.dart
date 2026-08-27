@@ -44,18 +44,24 @@ class AiDirectivesService {
     }
   }
 
-  /// Sync seed directives to Firestore if collection is empty
+  /// Sync seed directives to Firestore if collection is empty or missing new directives (e.g. AIR-19, AIR-20)
   Future<void> seedDirectivesIfEmpty() async {
     try {
-      final snapshot = await _firestore.collection('ai_brain_directives').limit(1).get();
-      if (snapshot.docs.isEmpty) {
+      final snapshot = await _firestore.collection('ai_brain_directives').get();
+      final existingIds = snapshot.docs.map((d) => d.id).toSet();
+
+      final missingDirectives = AiDirectivesSeedData.initialDirectives
+          .where((d) => !existingIds.contains(d.id))
+          .toList();
+
+      if (missingDirectives.isNotEmpty) {
         final batch = _firestore.batch();
-        for (final directive in AiDirectivesSeedData.initialDirectives) {
+        for (final directive in missingDirectives) {
           final docRef = _firestore.collection('ai_brain_directives').doc(directive.id);
           batch.set(docRef, directive.toMap());
         }
         await batch.commit();
-        debugPrint('Successfully seeded 18 AI Brain Directives into Firestore');
+        debugPrint('Successfully synced ${missingDirectives.length} new AI Brain Directives into Firestore');
       }
     } catch (e) {
       debugPrint('Error seeding AI directives to Firestore: $e');
