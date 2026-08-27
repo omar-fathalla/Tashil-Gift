@@ -67,10 +67,10 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
+  Future<void> _pickImage([ImageSource source = ImageSource.camera]) async {
     try {
       final pickedFile = await _picker.pickImage(
-        source: ImageSource.camera,
+        source: source,
         maxWidth: 1200,
         maxHeight: 1200,
         imageQuality: 80,
@@ -785,17 +785,36 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
                             ),
                             child: _receiptImage == null 
                                 ? Center(
-                                    child: FilledButton.icon(
-                                      onPressed: _pickImage,
-                                      icon: const Icon(Icons.camera_alt_rounded),
-                                      label: Text(
-                                        strings.captureReceiptBtn,
-                                        style: GoogleFonts.cairo(fontSize: 15, fontWeight: FontWeight.bold),
-                                      ),
-                                      style: FilledButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                      ),
+                                    child: Wrap(
+                                      alignment: WrapAlignment.center,
+                                      spacing: 12,
+                                      runSpacing: 12,
+                                      children: [
+                                        FilledButton.icon(
+                                          onPressed: () => _pickImage(ImageSource.camera),
+                                          icon: const Icon(Icons.camera_alt_rounded),
+                                          label: Text(
+                                            strings.captureReceiptBtn,
+                                            style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.bold),
+                                          ),
+                                          style: FilledButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                          ),
+                                        ),
+                                        FilledButton.tonalIcon(
+                                          onPressed: () => _pickImage(ImageSource.gallery),
+                                          icon: const Icon(Icons.photo_library_rounded),
+                                          label: Text(
+                                            strings.pickFromGalleryAction,
+                                            style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.bold),
+                                          ),
+                                          style: FilledButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   )
                                 : Stack(

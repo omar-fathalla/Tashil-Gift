@@ -285,6 +285,90 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
     }
   }
 
+  void _showImageSourcePicker() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final strings = AppStrings.of(ref);
+    final isMobile = MediaQuery.sizeOf(context).width < 600;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  strings.isAr ? 'تغيير صورة الفاتورة' : 'Change Receipt Photo',
+                  style: GoogleFonts.cairo(
+                    fontWeight: FontWeight.bold,
+                    fontSize: isMobile ? 15 : 16.5,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primaryContainer.withValues(alpha: 0.6),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.camera_alt_rounded, color: colorScheme.primary),
+                  ),
+                  title: Text(
+                    strings.captureReceiptAction,
+                    style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _pickImage(ImageSource.camera);
+                  },
+                ),
+                const SizedBox(height: 8),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: colorScheme.secondaryContainer.withValues(alpha: 0.6),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.photo_library_rounded, color: colorScheme.secondary),
+                  ),
+                  title: Text(
+                    strings.pickFromGalleryAction,
+                    style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _pickImage(ImageSource.gallery);
+                  },
+                ),
+                const SizedBox(height: 10),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _submitAndValidateReceipt() async {
     if (_receiptImage == null) {
       _showPopupMessage('تنبيه', 'يرجى التقاط أو اختيار صورة الفاتورة أولاً.');
@@ -1251,31 +1335,65 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                           ),
                                         ),
                                         const SizedBox(height: 22),
-                                        // Primary Action: Camera Capture Only (Prominent & Wide)
+                                        // 1. Primary Action: Camera Capture
                                         SizedBox(
                                           width: double.infinity,
                                           child: AnimatedPressable(
                                             onTap: () => _pickImage(ImageSource.camera),
                                             child: FilledButton.icon(
                                               onPressed: () => _pickImage(ImageSource.camera),
-                                              icon: const Icon(Icons.camera_alt_rounded, size: 24),
+                                              icon: const Icon(Icons.camera_alt_rounded, size: 22),
                                               label: Text(
                                                 strings.captureReceiptAction,
                                                 textAlign: TextAlign.center,
                                                 style: GoogleFonts.cairo(
                                                   fontWeight: FontWeight.bold,
-                                                  fontSize: isMobile ? 15 : 16.5,
+                                                  fontSize: isMobile ? 14.5 : 16,
                                                 ),
                                               ),
                                               style: FilledButton.styleFrom(
                                                 padding: EdgeInsets.symmetric(
                                                   horizontal: 20,
-                                                  vertical: isMobile ? 16 : 18,
+                                                  vertical: isMobile ? 15 : 17,
                                                 ),
                                                 shape: RoundedRectangleBorder(
                                                   borderRadius: BorderRadius.circular(18),
                                                 ),
                                                 elevation: 2,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        // 2. Secondary Action: Pick from Gallery / Files
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: AnimatedPressable(
+                                            onTap: () => _pickImage(ImageSource.gallery),
+                                            child: FilledButton.tonalIcon(
+                                              onPressed: () => _pickImage(ImageSource.gallery),
+                                              icon: const Icon(Icons.photo_library_rounded, size: 22),
+                                              label: Text(
+                                                strings.pickFromGalleryAction,
+                                                textAlign: TextAlign.center,
+                                                style: GoogleFonts.cairo(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: isMobile ? 14.5 : 16,
+                                                ),
+                                              ),
+                                              style: FilledButton.styleFrom(
+                                                backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.85),
+                                                foregroundColor: colorScheme.primary,
+                                                padding: EdgeInsets.symmetric(
+                                                  horizontal: 20,
+                                                  vertical: isMobile ? 15 : 17,
+                                                ),
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius: BorderRadius.circular(18),
+                                                  side: BorderSide(
+                                                    color: colorScheme.primary.withValues(alpha: 0.25),
+                                                  ),
+                                                ),
                                               ),
                                             ),
                                           ),
@@ -1355,7 +1473,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                       Positioned(
                                         bottom: 10,
                                         child: InkWell(
-                                          onTap: () => _pickImage(ImageSource.camera),
+                                          onTap: _showImageSourcePicker,
                                           borderRadius: BorderRadius.circular(20),
                                           child: Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
