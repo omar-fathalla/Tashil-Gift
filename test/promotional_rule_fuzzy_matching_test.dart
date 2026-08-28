@@ -483,8 +483,51 @@ void main() {
       expect(match.multipliedLinkedGifts.length, 1);
       expect(match.multipliedLinkedGifts.first.giftName, contains('فواتشر 50'));
       expect(match.multipliedLinkedGifts.first.quantity, 3);
+    });
 
-      // Verify zero Tresemme gifts
+    test('Customer in Gomla Market Montazah buying 6x Rexona Roll-on + 1x Tresemme 600ml Conditioner (225 EGP) + 1x Axe Stick matches ONLY Rexona (3x 50 EGP) and REJECTS Tresemme 600ml', () {
+      final montazahReceiptItems = [
+        ExtractedProductItem(
+          name: 'ريكسونا رول اون حريمي خوخ وعشب الليمون 5',
+          price: 69.0,
+          quantity: 6,
+          barcode: '6221155611529',
+          isTargetCompany: true,
+        ),
+        ExtractedProductItem(
+          name: 'تريزيمى بلسم جوز هند و صبار 600 مل (خصم',
+          price: 225.0,
+          quantity: 1,
+          barcode: '6221155086228',
+          isTargetCompany: true,
+        ),
+        ExtractedProductItem(
+          name: 'اكس ستيك 85مل Scent',
+          price: 225.0,
+          quantity: 1,
+          barcode: '079400534309',
+          isTargetCompany: true,
+        ),
+      ];
+
+      final matchedResults = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: montazahReceiptItems,
+        promotionalRules: rules,
+        allowCampaignMultipliers: true,
+      );
+
+      // Must strictly match ONLY Rule 5 (Rexona Roll-on 2pcs -> 50 EGP Voucher)
+      expect(matchedResults.length, 1);
+      final match = matchedResults.first;
+      expect(match.rule.id, 'rule_5');
+      expect(match.multiplier, 3); // 6 pcs / 2 = 3
+      expect(match.totalRewardAmount, 150.0);
+      expect(match.multipliedLinkedGifts.length, 1);
+      expect(match.multipliedLinkedGifts.first.giftName, contains('فواتشر 50'));
+      expect(match.multipliedLinkedGifts.first.quantity, 3);
+
+      // Verify zero Tresemme gifts because 600ml is rejected
+      expect(matchedResults.any((m) => m.rule.id == 'rule_2'), isFalse);
       expect(match.multipliedLinkedGifts.any((g) => g.giftName.contains('تريزيمي')), isFalse);
     });
   });

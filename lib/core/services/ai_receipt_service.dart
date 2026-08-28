@@ -640,9 +640,11 @@ $rulesListFormatted
    - قم بتعيين (matchedRuleId) بمعرف القاعدة الأولى المطابقة.
 3. في حال وجود أكثر من قاعدة لنفس المنتج بمستويات كميات مختلفة (مثل: شراء 1 اسبراي ريكسونا -> 50 ج.م، وشراء 2 اسبراي ريكسونا -> 125 ج.م)، يجب عليك اختيار القاعدة ذات الكمية المشروطة الأعلى التي حققها العميل (مثال: إذا اشترى 2 أو أكثر، اختر قاعدة الـ 125 ج.م).
 4. [حزم البندل وعروض الشرنك المزدوجة (Twin Bundles & Shrink)]: إذا احتوت الفاتورة على صنف حزمة مزدوجة أو شرنك (مثل عبوة أكس 2 قطعة أو سعر 335 ج.م مع خصم ~65 ج.م بصافي 270 ج.م، أو احتوى الاسم على كلمات شرنك/مزدوج/2ق)، يُعامل الصنف كـ (2 قطعة) ويطابق فوراً قاعدة الـ 2 قطعة (عرض الـ 125 ج.م).
-5. [عروض وبكجات تريزيمي Tresemme المزدوجة (Shampoo + Conditioner Bundles)]:
-   - عبوات وبكجات تريزيمي التي تجمع (شامبو + بلسم) في باك واحد (مثل 'تريزيمى شامبو + بلسم 400 ملى' أو باركود 6221155612199 أو 6221155612168 بسعر 299 ج.م أو 378 ج.م) هي حزمة مزدوجة تحتوي على قطعتين (عبوة شامبو + عبوة بلسم بخصم 50%).
-   - عند شراء عبوة واحدة من هذا البكج (الكمية في البون = 1)، يُعامل الصنف كـ (2 قطعة) ويحقق فوراً شرط الـ 2 قطعة لقاعدة تريزيمي (rule_2) ويمنح هدية تريزيمي 250 مل معتمدة (free_product).
+5. [عروض تريزيمي Tresemme المعتمدة والحجم الصارم 400 مل]:
+   - عروض تريزيمي مخصصة حصراً لعبوات (تريزيمي 400 مل) أو بكجات الشامبو والبلسم المزدوجة الترويجية بحجم 400 مل (مثل 'تريزيمى شامبو + بلسم 400 ملى' أو باركود 6221155612199 أو 6221155612168 بسعر 299 ج.م أو 378 ج.م).
+   - عبوات تريزيمي الفردية بحجم 600 مل أو 900 مل أو 200 مل (مثل 'تريزيمى بلسم 600 مل' أو باركود 6221155086228) ليست مدرجة في عرض الـ 400 مل وتُستبعد تماماً وتمنح 0 هدية تريزيمي.
+   - شراء عبوة فردية واحدة (الكمية = 1) من شامبو أو بلسم تريزيمي 400 مل لا يستحق الهدية، حيث يشترط العرض شراء قطعتين (2 قطعة).
+   - عند شراء عبوة واحدة من البكج المزدوج 400 مل (الكمية في البون = 1)، يُعامل الصنف كـ (2 قطعة) ويحقق فوراً شرط الـ 2 قطعة لقاعدة تريزيمي (rule_2) ويمنح هدية تريزيمي 250 مل معتمدة (free_product).
 6. [مضاعفة الجوائز والفرص]: إذا كانت القاعدة تتيح المضاعفة، وكان العميل قد اشترى مضاعفات الكمية المشروطة:
    - احسب عدد مرات تكرار العرض واضرب قيمة المكافأة بعدد المرات.
 7. قم بتعبئة حقل (matchedRuleId) بمعرف القاعدة المطابقة (مثل "rule_2" أو "rule_4" أو "rule_3").
@@ -1654,6 +1656,15 @@ class PromotionalRuleMatcher {
     'تريزيمي', 'ريكسونا', 'اكس', 'كلير', 'صنسيلك', 'دوف', 'لوكس', 'لايفبوي', 'سيجنال', 'فازلين'
   };
 
+  static int? _extractSizeMl(String text) {
+    final norm = _normalize(text);
+    final match = RegExp(r'(\d{2,4})\s*(مل|ml)\b').firstMatch(norm);
+    if (match != null) {
+      return int.tryParse(match.group(1)!);
+    }
+    return null;
+  }
+
   static bool _matchesProduct(ExtractedProductItem product, String triggerProduct) {
     if (triggerProduct.trim().isEmpty) return false;
 
@@ -1665,11 +1676,26 @@ class PromotionalRuleMatcher {
     }
 
     final pNorm = _normalize(product.name);
+    final int? productSize = _extractSizeMl(pNorm);
+
     final parts = triggerProduct.split(RegExp(r'[,،/\+\n]|(\s+أو\s+)|(\s+or\s+)', caseSensitive: false));
 
     for (final part in parts) {
       final partNorm = _normalize(part);
       if (partNorm.isEmpty) continue;
+
+      final int? partSize = _extractSizeMl(partNorm);
+      // Volume/size conflict guard: If part specifies volume (e.g. 400ml) and product specifies a different volume (e.g. 600ml), reject!
+      if (partSize != null && productSize != null && partSize != productSize) {
+        continue;
+      }
+      // If the trigger explicitly specifies a volume (e.g. 400ml) anywhere in the rule, but the product has a conflicting volume (e.g. 600ml), reject generic parts
+      if (partSize == null && productSize != null) {
+        final int? triggerTotalSize = _extractSizeMl(_normalize(triggerProduct));
+        if (triggerTotalSize != null && triggerTotalSize != productSize) {
+          continue;
+        }
+      }
 
       // 1. Direct substring match (product name must contain the trigger phrase)
       if (pNorm.contains(partNorm)) return true;

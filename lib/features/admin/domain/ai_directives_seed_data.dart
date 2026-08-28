@@ -527,5 +527,26 @@ class AiDirectivesSeedData {
           tags: ['consumed-quantity', 'brand-isolation', 'zero-double-multiplication', 'promotional-rules', 'rexona', 'tresemme', 'unilever'],
           lastUpdated: '2026-08-28',
         ),
+
+        const AiDirectiveModel(
+          id: 'AIR-25',
+          code: 'STRICT_PRODUCT_PACKAGE_SIZE_AND_EXPLICIT_BARCODE_GOVERNANCE',
+          orderIndex: 25,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'حوكمة الأحجام الصارمة والباركودات المعتمدة (Strict Size & Barcode Whitelist Governance)',
+          titleEn: 'Strict Package Size & Barcode Whitelist Promotion Governance',
+          descriptionAr:
+              'حوكمة مطابقة شروط العروض الترويجية الصارمة وفقاً لحجم العبوة والملليترات وقائمة الباركودات المعتمدة فقط؛ حيث يتم استبعاد أي أحجام غير مشمولة في العرض تلقائياً (مثل استبعاد عبوات تريزيمي 600 مل أو 900 مل عند اشتراط عرض تريزيمي 400 مل)، ورفض الباركودات غير المسجلة في قائمة العرض، مع اشتراط شراء 2 قطعة للعبوات الفردية.',
+          descriptionEn:
+              'Strictly enforces package size (ml/g) and explicit barcode whitelists for promotional rule qualification. When a promotional rule specifies a target volume (e.g. Tresemme 400ml), non-qualifying package sizes (e.g. 600ml or 900ml conditioner) are strictly rejected even if sharing the brand name. Also enforces a 2-piece minimum for standalone individual bottles.',
+          logicAr:
+              '1. التحقق الصارم من الحجم والملليترات (_extractSizeMl): إذا كان العرض يحدد 400 مل والصنف في البون 600 مل، يُستبعد فوراً.\n2. التحقق من أولوية الباركود الذهبي: مطابقة الباركود الدولي المستخرج من البون بقائمة باركودات العرض المعتمدة ورفض أي باركود غير مدرج.\n3. اشتراط الحد الأدنى للكميات: العبوة الفردية الواحدة من بلسم/شامبو تريزيمي 400 مل لا تمنح هدية إلا عند شراء قطعتين (2 قطعة).\n4. تجاهل عبارة "(خصم)" المطبوعة في البون إذا كان الصنف عبوة فردية عادية بحجم غير مؤهل.',
+          logicEn:
+              '1. Enforces strict volume parsing via _extractSizeMl: if the rule targets 400ml and the receipt has 600ml, it is rejected immediately.\n2. Golden barcode whitelist verification: matches GTIN/EAN-13 against campaign authorized SKUs, rejecting unlisted barcodes.\n3. Enforces minQuantity = 2 for standalone single bottles (quantity 1 yields 0 gifts).\n4. Ignores trailing "(discount)" POS tags on standalone non-qualifying sizes.',
+          exampleInput: 'بون جملة ماركت يحتوي على 6 قطع رول أون ريكسونا + 1 قطعة "تريزيمى بلسم جوز هند و صبار 600 مل (خصم" باركود 6221155086228 + 1 قطعة اكس ستيك',
+          exampleOutput: 'منح 3 × فواتشر 50 جنيه فقط لعرض ريكسونا، واستبعاد بلسم تريزيمي 600 مل تماماً ومنح 0 هدية تريزيمي لعدم تطابق الحجم والباركود.',
+          tags: ['strict-size', 'barcode-whitelist', 'tresemme-400ml-only', 'unilever', 'gomla-market', 'size-guard'],
+          lastUpdated: '2026-08-28',
+        ),
       ];
 }
