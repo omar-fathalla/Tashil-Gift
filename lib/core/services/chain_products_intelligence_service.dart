@@ -123,21 +123,29 @@ class ChainProductsIntelligenceService {
         final double? totalLinePrice = (p['totalPrice'] as num?)?.toDouble() ?? (p['totalLinePrice'] as num?)?.toDouble();
         final bool isTargetCompany = p['isTargetCompany'] == true;
 
+        final bool isAlreadyNormalized = p['isUnitNormalized'] == true;
+
         // Auto-heal line total vs unit price math anomalies:
-        if (quantity > 1) {
-          if (originalPrice != null && originalPrice > 0) {
-            if (price >= originalPrice * 1.5) {
+        if (quantity > 1 && !isAlreadyNormalized) {
+          final bool isAlreadyUnitPrice = totalLinePrice != null &&
+              totalLinePrice > 0 &&
+              (price * quantity - totalLinePrice).abs() < 1.5;
+
+          if (!isAlreadyUnitPrice) {
+            if (originalPrice != null && originalPrice > 0) {
+              if (price >= originalPrice * 1.5) {
+                price = price / quantity;
+              }
+              if (originalPrice >= 1.8 * price && originalPrice > 50) {
+                originalPrice = originalPrice / quantity;
+              }
+            } else if (totalLinePrice != null && totalLinePrice > 0 && (price == totalLinePrice || price >= totalLinePrice * 0.95)) {
               price = price / quantity;
             }
-            if (originalPrice >= 1.8 * price && originalPrice > 50) {
-              originalPrice = originalPrice / quantity;
-            }
-          } else if (totalLinePrice != null && totalLinePrice > 0 && (price == totalLinePrice || price >= totalLinePrice * 0.95)) {
-            price = price / quantity;
-          }
 
-          if (discountAmount >= price && discountAmount > 0) {
-            discountAmount = discountAmount / quantity;
+            if (discountAmount >= price && discountAmount > 0) {
+              discountAmount = discountAmount / quantity;
+            }
           }
         }
 
@@ -185,6 +193,41 @@ class ChainProductsIntelligenceService {
         final tsB = b.timestamp ?? DateTime.fromMillisecondsSinceEpoch(0);
         return tsB.compareTo(tsA);
       });
+
+      // Statistical Outlier & Unit Price Auto-Healing Pass:
+      // Detect and heal artificially divided prices (e.g. 11.50 or 34.50 instead of 69.0 for Rexona Roll-on)
+      final validPrices = occurrences
+          .map((o) => o.originalPrice ?? o.price)
+          .where((pr) => pr > 20.0)
+          .toList();
+
+      double? referenceSkuPrice;
+      if (validPrices.isNotEmpty) {
+        validPrices.sort();
+        referenceSkuPrice = validPrices[validPrices.length ~/ 2];
+      }
+
+      if (referenceSkuPrice != null && referenceSkuPrice > 30.0) {
+        for (int i = 0; i < occurrences.length; i++) {
+          final occ = occurrences[i];
+          if (occ.price < referenceSkuPrice * 0.6) {
+            // Check if multiplying by quantity or factors (2, 3, 4, 6, 12) restores reference price
+            for (final mult in [occ.quantity, 2, 3, 4, 6, 12]) {
+              if (mult > 1) {
+                final candidate = occ.price * mult;
+                if ((candidate - referenceSkuPrice).abs() / referenceSkuPrice < 0.15) {
+                  occurrences[i] = occ.copyWith(
+                    price: candidate,
+                    originalPrice: occ.originalPrice != null ? occ.originalPrice! * mult : candidate,
+                    discountAmount: occ.discountAmount > 0 ? occ.discountAmount * mult : 0.0,
+                  );
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
 
       final primaryName = occurrences.first.name;
       final barcode = occurrences.firstWhere((o) => o.barcode.isNotEmpty, orElse: () => occurrences.first).barcode;
@@ -421,28 +464,36 @@ class ChainProductsIntelligenceService {
         double discountAmount = (map['discountAmount'] as num?)?.toDouble() ?? 0.0;
         final double? totalLinePrice = (map['totalPrice'] as num?)?.toDouble() ?? (map['totalLinePrice'] as num?)?.toDouble();
 
-        if (quantity > 1) {
-          if (originalPrice != null && originalPrice > 0) {
-            if ((price + discountAmount - originalPrice).abs() < 1.5 && price > 50) {
+        final bool isAlreadyNormalized = map['isUnitNormalized'] == true;
+
+        if (quantity > 1 && !isAlreadyNormalized) {
+          final bool isAlreadyUnitPrice = totalLinePrice != null &&
+              totalLinePrice > 0 &&
+              (price * quantity - totalLinePrice).abs() < 1.5;
+
+          if (!isAlreadyUnitPrice) {
+            if (originalPrice != null && originalPrice > 0) {
+              if ((price + discountAmount - originalPrice).abs() < 1.5 && price > 50) {
+                price = price / quantity;
+                originalPrice = originalPrice / quantity;
+                if (discountAmount > 0) discountAmount = discountAmount / quantity;
+                modified = true;
+              } else if (price >= originalPrice * 1.5) {
+                price = price / quantity;
+                modified = true;
+              } else if (originalPrice >= 1.8 * price && originalPrice > 50) {
+                originalPrice = originalPrice / quantity;
+                modified = true;
+              }
+            } else if (totalLinePrice != null && totalLinePrice > 0 && (price == totalLinePrice || price >= totalLinePrice * 0.95)) {
               price = price / quantity;
-              originalPrice = originalPrice / quantity;
-              if (discountAmount > 0) discountAmount = discountAmount / quantity;
-              modified = true;
-            } else if (price >= originalPrice * 1.5) {
-              price = price / quantity;
-              modified = true;
-            } else if (originalPrice >= 1.8 * price && originalPrice > 50) {
-              originalPrice = originalPrice / quantity;
               modified = true;
             }
-          } else if (totalLinePrice != null && totalLinePrice > 0 && (price == totalLinePrice || price >= totalLinePrice * 0.95)) {
-            price = price / quantity;
-            modified = true;
-          }
 
-          if (discountAmount >= price && discountAmount > 0) {
-            discountAmount = discountAmount / quantity;
-            modified = true;
+            if (discountAmount >= price && discountAmount > 0) {
+              discountAmount = discountAmount / quantity;
+              modified = true;
+            }
           }
         }
 
@@ -453,6 +504,7 @@ class ChainProductsIntelligenceService {
         }
         map['discountAmount'] = discountAmount;
         map['totalPrice'] = price * quantity;
+        map['isUnitNormalized'] = true;
 
         sanitizedProducts.add(map);
       }
@@ -514,4 +566,44 @@ class _RawProductOccurrence {
     required this.companySlug,
     this.isAutoLinked = false,
   });
+
+  _RawProductOccurrence copyWith({
+    String? skuKey,
+    String? name,
+    String? barcode,
+    double? price,
+    double? originalPrice,
+    double? discountAmount,
+    double? discountPercent,
+    int? quantity,
+    bool? isTargetCompany,
+    String? receiptNumber,
+    String? receiptDate,
+    DateTime? timestamp,
+    String? storeChain,
+    String? branchName,
+    String? receiptImageUrl,
+    String? companySlug,
+    bool? isAutoLinked,
+  }) {
+    return _RawProductOccurrence(
+      skuKey: skuKey ?? this.skuKey,
+      name: name ?? this.name,
+      barcode: barcode ?? this.barcode,
+      price: price ?? this.price,
+      originalPrice: originalPrice ?? this.originalPrice,
+      discountAmount: discountAmount ?? this.discountAmount,
+      discountPercent: discountPercent ?? this.discountPercent,
+      quantity: quantity ?? this.quantity,
+      isTargetCompany: isTargetCompany ?? this.isTargetCompany,
+      receiptNumber: receiptNumber ?? this.receiptNumber,
+      receiptDate: receiptDate ?? this.receiptDate,
+      timestamp: timestamp ?? this.timestamp,
+      storeChain: storeChain ?? this.storeChain,
+      branchName: branchName ?? this.branchName,
+      receiptImageUrl: receiptImageUrl ?? this.receiptImageUrl,
+      companySlug: companySlug ?? this.companySlug,
+      isAutoLinked: isAutoLinked ?? this.isAutoLinked,
+    );
+  }
 }

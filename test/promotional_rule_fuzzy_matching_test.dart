@@ -456,6 +456,37 @@ void main() {
       expect(reasons.first, contains('تم رصد (1) قطعة'));
       expect(reasons.first, contains('(2) قطعة'));
     });
+
+    test('Customer in Gomla Market Janaklees buying 6x Rexona Roll-on Women Peach matches ONLY Rule 5 (3x 50 EGP vouchers) and NEVER matches Tresemme', () {
+      final rexonaWomenRollOn = [
+        ExtractedProductItem(
+          name: 'ريكسونا رول اون حريمي خوخ وعشب الليمون 5',
+          price: 69.0,
+          quantity: 6,
+          barcode: '6221155611529',
+          isTargetCompany: true,
+        ),
+      ];
+
+      final matchedResults = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: rexonaWomenRollOn,
+        promotionalRules: rules,
+        allowCampaignMultipliers: true,
+      );
+
+      // Must strictly match ONLY Rule 5 (Rexona Roll-on 2pcs -> 50 EGP Voucher)
+      expect(matchedResults.length, 1);
+      final match = matchedResults.first;
+      expect(match.rule.id, 'rule_5');
+      expect(match.multiplier, 3); // 6 pcs / 2 = 3
+      expect(match.totalRewardAmount, 150.0);
+      expect(match.multipliedLinkedGifts.length, 1);
+      expect(match.multipliedLinkedGifts.first.giftName, contains('فواتشر 50'));
+      expect(match.multipliedLinkedGifts.first.quantity, 3);
+
+      // Verify zero Tresemme gifts
+      expect(match.multipliedLinkedGifts.any((g) => g.giftName.contains('تريزيمي')), isFalse);
+    });
   });
 }
 

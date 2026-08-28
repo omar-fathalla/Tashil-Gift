@@ -242,5 +242,26 @@ void main() {
       expect(restored.latestPosNameByChain['أسواق فتح الله'], 'اكس اسبراي بلاك نايت 150 مل خصم 15%');
       expect(restored.chainAliases['كارفور'], contains('اكس بخاخ بلاك'));
     });
+
+    test('ExtractedProductItem preserves unit price when price is already per piece (6 pcs Rexona @ 69 EGP = 414 EGP)', () {
+      final json = {
+        'name': 'ريكسونا رول اون حريمي خوخ وعشب الليمون 5',
+        'price': 69.0,
+        'quantity': 6,
+        'totalPrice': 414.0,
+        'barcode': '6221155611529',
+        'isTargetCompany': true,
+      };
+
+      final item = ExtractedProductItem.fromJson(json);
+      expect(item.quantity, 6);
+      expect(item.price, 69.0); // Must remain 69.0, NEVER divided to 11.50
+      expect(item.totalPrice, 414.0);
+
+      final exported = item.toJson();
+      expect(exported['isUnitNormalized'], isTrue);
+      expect(exported['price'], 69.0);
+      expect(exported['totalPrice'], 414.0);
+    });
   });
 }

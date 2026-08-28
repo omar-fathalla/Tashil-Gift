@@ -47,26 +47,34 @@ class ExtractedProductItem {
     double rawDiscountPercent = (json['discountPercent'] as num?)?.toDouble() ?? 0.0;
     final double? rawTotalLine = (json['totalPrice'] as num?)?.toDouble() ?? (json['totalLinePrice'] as num?)?.toDouble();
 
-    // Auto-heal / enforce per-unit price:
-    if (quantity > 1) {
-      // 1. If rawPrice & rawOriginalPrice were both returned as total line amounts (e.g. 198 and 230 for 2 units)
-      if (rawOriginalPrice != null && rawOriginalPrice > 0) {
-        if ((rawPrice + rawDiscount - rawOriginalPrice).abs() < 1.5 && rawPrice > 50) {
-          rawPrice = rawPrice / quantity;
-          rawOriginalPrice = rawOriginalPrice / quantity;
-          if (rawDiscount > 0) rawDiscount = rawDiscount / quantity;
-        } else if (rawPrice >= rawOriginalPrice * 1.5) {
-          rawPrice = rawPrice / quantity;
-        } else if (rawOriginalPrice >= 1.8 * rawPrice && rawOriginalPrice > 50) {
-          rawOriginalPrice = rawOriginalPrice / quantity;
-        }
-      } else if (rawTotalLine != null && rawTotalLine > 0 && (rawPrice == rawTotalLine || rawPrice >= rawTotalLine * 0.95)) {
-        rawPrice = rawPrice / quantity;
-      }
+    final bool isAlreadyNormalized = json['isUnitNormalized'] == true;
 
-      // 2. If discountAmount was returned as total line discount (e.g. 32 EGP for 2 items)
-      if (rawDiscount >= rawPrice && rawDiscount > 0) {
-        rawDiscount = rawDiscount / quantity;
+    // Auto-heal / enforce per-unit price:
+    if (quantity > 1 && !isAlreadyNormalized) {
+      final bool isAlreadyUnitPrice = rawTotalLine != null &&
+          rawTotalLine > 0 &&
+          (rawPrice * quantity - rawTotalLine).abs() < 1.5;
+
+      if (!isAlreadyUnitPrice) {
+        // 1. If rawPrice & rawOriginalPrice were both returned as total line amounts (e.g. 198 and 230 for 2 units)
+        if (rawOriginalPrice != null && rawOriginalPrice > 0) {
+          if ((rawPrice + rawDiscount - rawOriginalPrice).abs() < 1.5 && rawPrice > 50) {
+            rawPrice = rawPrice / quantity;
+            rawOriginalPrice = rawOriginalPrice / quantity;
+            if (rawDiscount > 0) rawDiscount = rawDiscount / quantity;
+          } else if (rawPrice >= rawOriginalPrice * 1.5) {
+            rawPrice = rawPrice / quantity;
+          } else if (rawOriginalPrice >= 1.8 * rawPrice && rawOriginalPrice > 50) {
+            rawOriginalPrice = rawOriginalPrice / quantity;
+          }
+        } else if (rawTotalLine != null && rawTotalLine > 0 && (rawPrice == rawTotalLine || rawPrice >= rawTotalLine * 0.95)) {
+          rawPrice = rawPrice / quantity;
+        }
+
+        // 2. If discountAmount was returned as total line discount (e.g. 32 EGP for 2 items)
+        if (rawDiscount >= rawPrice && rawDiscount > 0) {
+          rawDiscount = rawDiscount / quantity;
+        }
       }
     }
 
@@ -129,6 +137,7 @@ class ExtractedProductItem {
       'discountAmount': discountAmount,
       'discountPercent': discountPercent,
       'totalPrice': totalPrice,
+      'isUnitNormalized': true,
     };
   }
 
@@ -1637,7 +1646,12 @@ class PromotionalRuleMatcher {
 
   static const Set<String> _noiseWords = {
     'شراء', 'عرض', 'من', 'قطعة', 'قطع', 'علبة', 'عبوة', 'عدد', 'مع', 'على', 'في', 'او', 'or', 'and',
-    'مل', 'ml', 'جرام', 'جم', 'g', 'gm', 'كيلو', 'كجم', 'kg'
+    'مل', 'ml', 'جرام', 'جم', 'g', 'gm', 'كيلو', 'كجم', 'kg',
+    'حريمي', 'حريمى', 'رجالي', 'رجال', 'نسائي', 'نسائى', 'بناتي', 'اطفال', 'أطفال', 'جديد', 'قديم', 'شكل'
+  };
+
+  static const Set<String> _brandRoots = {
+    'تريزيمي', 'ريكسونا', 'اكس', 'كلير', 'صنسيلك', 'دوف', 'لوكس', 'لايفبوي', 'سيجنال', 'فازلين'
   };
 
   static bool _matchesProduct(ExtractedProductItem product, String triggerProduct) {
@@ -1673,17 +1687,23 @@ class PromotionalRuleMatcher {
     if (w1 == w2) return true;
     if (w1.isEmpty || w2.isEmpty) return false;
 
-    // Substring contains for prefix/suffix
-    if (w1.length >= 3 && w2.length >= 3) {
-      if (w1.startsWith(w2) || w2.startsWith(w1)) return true;
-      if (w1.endsWith(w2) || w2.endsWith(w1)) return true;
+    // Brand words require exact canonical root match
+    if (_brandRoots.contains(w1) || _brandRoots.contains(w2)) {
+      return false;
     }
 
-    // Levenshtein edit distance check (allow 1 edit for <= 5 chars, 2 edits for > 5 chars)
+    // Both words must share the same first character to prevent false phonetic matches (e.g. حريمي vs تريزيمي)
+    if (w1[0] != w2[0]) return false;
+
+    // Substring contains for prefix/suffix
+    if (w1.length >= 4 && w2.length >= 4) {
+      if (w1.startsWith(w2) || w2.startsWith(w1)) return true;
+    }
+
+    // Levenshtein edit distance check (allow 1 single character edit only for words of length >= 5)
     final distance = _levenshtein(w1, w2);
     final maxLen = math.max(w1.length, w2.length);
-    if (maxLen <= 5 && distance <= 1) return true;
-    if (maxLen > 5 && distance <= 2) return true;
+    if (maxLen >= 5 && distance <= 1) return true;
 
     return false;
   }
