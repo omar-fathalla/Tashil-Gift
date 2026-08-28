@@ -79,6 +79,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
   bool _isClaiming = false;
   bool _isClaimed = false;
   int? _remainingStock;
+  String? _resolvedBranchName;
 
   String? _resolvedPrizeName;
   double? _resolvedUnitValue;
@@ -302,6 +303,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
         final prizes = List<Map<String, dynamic>>.from(prizesRaw ?? []);
         int foundRemaining = -1;
 
+        String? branchNameFound;
         for (final p in prizes) {
           final matches = p['giftId'] == widget.prizeName ||
               p['name'] == widget.prizeName ||
@@ -311,9 +313,11 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                 widget.branchId!.isNotEmpty &&
                 p['branchId'] == widget.branchId) {
               foundRemaining = (p['remainingQuantity'] as num?)?.toInt() ?? 0;
+              branchNameFound = p['branchName']?.toString();
               break;
             } else if (foundRemaining == -1) {
               foundRemaining = (p['remainingQuantity'] as num?)?.toInt() ?? 0;
+              branchNameFound = p['branchName']?.toString();
             }
           }
         }
@@ -322,6 +326,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
           setState(() {
             _requireVoucherSerials = data['requireVoucherSerials'] == true || data['require_voucher_serials'] == true;
             _remainingStock = foundRemaining >= 0 ? foundRemaining : null;
+            _resolvedBranchName = branchNameFound;
             final isPlaceholder = widget.prizeName.isEmpty ||
                 widget.prizeName == 'هدية ترويجية مميزة' ||
                 widget.prizeName == 'هدية فورية مميزة' ||
@@ -1192,7 +1197,11 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                       const SizedBox(width: 10),
                                       Expanded(
                                         child: Text(
-                                          strings.directGiftOutOfStock,
+                                          _resolvedBranchName != null && _resolvedBranchName!.isNotEmpty
+                                              ? (isAr
+                                                  ? 'تم نفاد مخزون هذه الهدية في ($_resolvedBranchName)، يرجى مراجعة المشرف لتغذية رصيد الفرع.'
+                                                  : 'Stock for this gift is depleted at ($_resolvedBranchName). Please contact supervisor.')
+                                              : strings.directGiftOutOfStock,
                                           style: GoogleFonts.cairo(
                                             fontSize: 13,
                                             fontWeight: FontWeight.bold,
