@@ -950,11 +950,17 @@ class _AiSpeedBenchmarkScreenState extends ConsumerState<AiSpeedBenchmarkScreen>
                                 DataCell(Text(h.receiptNumber.isNotEmpty ? h.receiptNumber : 'N/A')),
                                 DataCell(Text('${h.targetTotal} ${activeCountry.currencySymbol}')),
                                 DataCell(
-                                  Text(
-                                    '${h.timestamp.hour.toString().padLeft(2, '0')}:${h.timestamp.minute.toString().padLeft(2, '0')}:${h.timestamp.second.toString().padLeft(2, '0')}',
-                                    style: const TextStyle(fontSize: 11),
-                                  ),
-                                ),
+                                   Builder(
+                                     builder: (context) {
+                                       final hour = h.timestamp.hour == 0 ? 12 : (h.timestamp.hour > 12 ? h.timestamp.hour - 12 : h.timestamp.hour);
+                                       final period = h.timestamp.hour >= 12 ? 'PM' : 'AM';
+                                       return Text(
+                                         '${hour.toString().padLeft(2, '0')}:${h.timestamp.minute.toString().padLeft(2, '0')}:${h.timestamp.second.toString().padLeft(2, '0')} $period',
+                                         style: const TextStyle(fontSize: 11),
+                                       );
+                                     },
+                                   ),
+                                 ),
                               ],
                             );
                           }).toList(),

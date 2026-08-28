@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +11,7 @@ import '../../../../core/localization/app_strings.dart';
 import '../../../../core/constants/country_currency_config.dart';
 import '../../../../core/utils/arabic_numbers_utils.dart';
 import '../../../../core/utils/error_handler.dart';
+import '../../../../core/widgets/interactive_receipt_viewer_dialog.dart';
 import '../../../admin/domain/event_model.dart';
 
 enum PromoterDateFilter { all, today, last7Days, thisMonth }
@@ -1081,7 +1081,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     final prizeWon = (data['prize_won'] ?? '').toString().trim();
     final gamePlayed = data['game_played'] == true;
     final dt = _parseDateTime(data['timestamp'], receiptDate);
-    final formattedTime = dt != null ? DateFormat('yyyy/MM/dd - hh:mm a', 'ar').format(dt) : receiptDate;
+    final formattedTime = dt != null ? DateFormat('yyyy-MM-dd hh:mm a').format(dt) : receiptDate;
 
     final bool isExplicitlyValid = data['is_valid'] == true || data['status'] == 'accepted' || data['isValid'] == true;
     final bool isExplicitlyRejected = data['is_valid'] == false || data['status'] == 'rejected' || data['isValid'] == false || ((data['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
@@ -1501,66 +1501,10 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
   }
 
   void _showReceiptImageZoomDialog(BuildContext context, String imageUrl, String receiptNumber) {
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return Dialog(
-          backgroundColor: Colors.black,
-          insetPadding: const EdgeInsets.all(16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AppBar(
-                backgroundColor: Colors.black,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                title: Text(
-                  'صورة الفاتورة: $receiptNumber',
-                  style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.bold),
-                ),
-                actions: [
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => Navigator.of(ctx).pop(),
-                  ),
-                ],
-              ),
-              InteractiveViewer(
-                minScale: 0.5,
-                maxScale: 4.0,
-                child: Container(
-                  constraints: const BoxConstraints(maxHeight: 650),
-                  child: imageUrl.startsWith('data:image')
-                      ? Image.memory(
-                          base64Decode(imageUrl.split(',').last),
-                          fit: BoxFit.contain,
-                        )
-                      : Image.network(
-                          imageUrl,
-                          fit: BoxFit.contain,
-                          loadingBuilder: (context, child, progress) {
-                            if (progress == null) return child;
-                            return const Center(
-                              child: Padding(
-                                padding: EdgeInsets.all(40),
-                                child: CircularProgressIndicator(color: Colors.white),
-                              ),
-                            );
-                          },
-                          errorBuilder: (context, error, stackTrace) => const Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(40),
-                              child: Text('فشل تحميل الصورة', style: TextStyle(color: Colors.white)),
-                            ),
-                          ),
-                        ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+    InteractiveReceiptViewerDialog.show(
+      context,
+      imageUrl: imageUrl,
+      receiptNumber: receiptNumber,
     );
   }
 

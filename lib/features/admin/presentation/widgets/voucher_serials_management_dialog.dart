@@ -617,14 +617,22 @@ class _VoucherSerialsManagementDialogState extends ConsumerState<VoucherSerialsM
                                     const SizedBox(width: 8),
 
                                     // Date
-                                    if (item.claimedAt != null)
-                                      Text(
-                                        '${item.claimedAt!.day}/${item.claimedAt!.month} ${item.claimedAt!.hour.toString().padLeft(2, '0')}:${item.claimedAt!.minute.toString().padLeft(2, '0')}',
-                                        style: GoogleFonts.cairo(
-                                          fontSize: 10.5,
-                                          color: colorScheme.onSurfaceVariant,
-                                        ),
+                                    if (item.claimedAt != null) ...[
+                                      Builder(
+                                        builder: (context) {
+                                          final dt = item.claimedAt!;
+                                          final hour = dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
+                                          final period = dt.hour >= 12 ? 'PM' : 'AM';
+                                          return Text(
+                                            '${dt.day}/${dt.month} ${hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')} $period',
+                                            style: GoogleFonts.cairo(
+                                              fontSize: 10.5,
+                                              color: colorScheme.onSurfaceVariant,
+                                            ),
+                                          );
+                                        },
                                       ),
+                                    ],
                                   ],
                                 ),
                               );

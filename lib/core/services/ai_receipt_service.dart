@@ -453,7 +453,12 @@ class AiReceiptService {
         '🛑 معيار الصرامة الفائقة ومنع التخمين (Zero-Hallucination & Exact Extraction Policy):\n'
         '1. استخرج فقط الأسماء والأصناف والكميات المطبوعة نصاً وحرفياً في الفاتورة.\n'
         '2. يُمنع منعاً باتاً تخمين أو افتراض أي منتج أو علامة تجارية أو كمية غير ظاهرة بوضوح تام.\n'
-        '3. إذا كانت الفاتورة أو سطر المنتج مطموساً أو غير واضح أو مقطوعاً أو يصعب قراءته بيقين، يجب تعيين: isValid = false، وإضافة "صورة الفاتورة غير واضحة أو اسم المنتج غير مقروء بدقة، برجاء إعادة تصوير الفاتورة بوضوح وإظهار سطر المنتج والكمية" إلى unfulfilledConditions.',
+        '3. إذا كانت الفاتورة أو سطر المنتج مطموساً أو غير واضح أو مقطوعاً أو يصعب قراءته بيقين، يجب تعيين: isValid = false، وإضافة "صورة الفاتورة غير واضحة أو اسم المنتج غير مقروء بدقة، برجاء إعادة تصوير الفاتورة بوضوح وإظهار سطر المنتج والكمية" إلى unfulfilledConditions.\n\n'
+        '🛑 قاعدة تسعير أعمدة الكاشير المزدوجة (Dual-Column POS Unit Price Rule):\n'
+        'في فواتير السلاسل المطبوعة بأعمدة تفصيلية (مثل: جملة ماركت، سبينس، كارفور، هايبر وان):\n'
+        '- عمود "السعر" المطبوع (مثل 69.00) يمثل سعر بيع القطعة الواحدة بالفعل (Single Unit Price).\n'
+        '- عمود "القيمة" المطبوع (مثل 138.00) يمثل إجمالي السطر (Line Total = السعر × الكمية).\n'
+        '- يُمنع منعاً باتاً قسمة عمود "السعر" على الكمية مرة أخرى (فإذا كان السعر 69.00 والكمية 2 والقيمة 138.00، يكون price = 69.00 و totalLinePrice = 138.00 وليس 34.50).',
       ),
       generationConfig: GenerationConfig(
         responseMimeType: 'application/json',
@@ -514,7 +519,7 @@ class AiReceiptService {
               items: Schema.object(
                 properties: {
                   'name': Schema.string(description: 'Product name as printed on receipt.'),
-                  'price': Schema.number(description: 'Net selling unit price per single piece in EGP/AED (MUST be divided by quantity if line total is shown).'),
+                  'price': Schema.number(description: 'Net selling unit price per single piece in EGP/AED. In dual-column receipts with "السعر" and "القيمة", use the "السعر" column directly without re-dividing.'),
                   'quantity': Schema.integer(description: 'Quantity purchased (e.g. 1, 2, 3).'),
                   'isTargetCompany': Schema.boolean(
                     description: 'True if this product belongs to the target company being promoted.',

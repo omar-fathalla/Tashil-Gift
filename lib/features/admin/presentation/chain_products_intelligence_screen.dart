@@ -1,11 +1,14 @@
-import 'package:flutter/foundation.dart';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:excel/excel.dart' as xl;
 import '../../../core/localization/app_strings.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/constants/country_currency_config.dart';
 import '../../../core/services/chain_products_intelligence_service.dart';
+import '../../../core/widgets/m3_progress_indicators.dart';
+import '../../../core/utils/file_download_helper.dart';
 import '../../admin/domain/chain_product_model.dart';
 import 'widgets/chain_product_card.dart';
 import 'widgets/chain_products_matrix_table.dart';
@@ -30,6 +33,73 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
   String _sortBy = 'LATEST'; // 'LATEST', 'THREAT_DIFF', 'PRICE_ASC', 'PRICE_DESC', 'VARIANCE'
   bool _isMatrixView = true; // Default view is the Table Matrix
   bool _isHealingData = false;
+  double _healingProgress = 0.0;
+  int _healingCurrent = 0;
+  int _healingTotal = 0;
+  String _healingStatus = '';
+  bool _isExporting = false;
+
+  Future<void> _startHealingProcess({required bool incrementalOnly}) async {
+    setState(() {
+      _isHealingData = true;
+      _healingProgress = 0.0;
+      _healingCurrent = 0;
+      _healingTotal = 0;
+      _healingStatus = ref.isArabic ? 'جاري بدء الاتصال بقاعدة البيانات...' : 'Connecting to database...';
+    });
+
+    try {
+      final service = ref.read(chainProductsIntelligenceServiceProvider);
+      final count = await service.reAnalyzeAndHealAllReceiptsInFirestore(
+        incrementalOnly: incrementalOnly,
+        onProgress: (processed, total, status) {
+          if (mounted) {
+            setState(() {
+              _healingCurrent = processed;
+              _healingTotal = total;
+              _healingProgress = total > 0 ? (processed / total).clamp(0.0, 1.0) : 0.0;
+              _healingStatus = status;
+            });
+          }
+        },
+      );
+
+      if (mounted) {
+        final isAr = ref.isArabic;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isAr
+                  ? (incrementalOnly
+                      ? 'تم تدقيق الفواتير الجديدة وتحديث $count فاتورة بنجاح!'
+                      : 'تمت إعادة التدقيق الشامل وتصحيح $count فاتورة في قاعدة البيانات بنجاح!')
+                  : 'Successfully audited and updated $count receipts in database!',
+              style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+            ),
+            backgroundColor: Colors.green.shade800,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('فشل التدقيق: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isHealingData = false;
+          _healingProgress = 0.0;
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -251,69 +321,67 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                                             ],
                                           ),
                                         ),
-                                        FilledButton.tonalIcon(
-                                          onPressed: _isHealingData
-                                              ? null
-                                              : () async {
-                                                  setState(() => _isHealingData = true);
-                                                  try {
-                                                    final service = ref.read(chainProductsIntelligenceServiceProvider);
-                                                    final count = await service.reAnalyzeAndHealAllReceiptsInFirestore();
-                                                    if (context.mounted) {
-                                                      ScaffoldMessenger.of(context).showSnackBar(
-                                                        SnackBar(
-                                                          content: Text(
-                                                            isAr
-                                                                ? 'تمت إعادة تحليل وتدقيق وتصحيح $count فاتورة في قاعدة البيانات بنجاح!'
-                                                                : 'Successfully re-analyzed and healed $count receipts in database!',
-                                                            style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
-                                                          ),
-                                                          backgroundColor: Colors.green.shade800,
-                                                          behavior: SnackBarBehavior.floating,
-                                                        ),
-                                                      );
-                                                    }
-                                                  } catch (e) {
-                                                    if (context.mounted) {
-                                                      ScaffoldMessenger.of(context).showSnackBar(
-                                                        SnackBar(
-                                                          content: Text('فشل التدقيق: $e'),
-                                                          backgroundColor: cs.error,
-                                                          behavior: SnackBarBehavior.floating,
-                                                        ),
-                                                      );
-                                                    }
-                                                  } finally {
-                                                    if (mounted) setState(() => _isHealingData = false);
-                                                  }
-                                                },
-                                          icon: _isHealingData
-                                              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                                              : const Icon(Icons.auto_fix_high_rounded, size: 16),
-                                          label: Text(
-                                            _isHealingData
-                                                ? (isAr ? 'جاري التدقيق بالـ AI...' : 'Healing Receipts...')
-                                                : (isAr ? 'إعادة تحليل وتصحيح الفواتير بالـ AI' : 'Re-Analyze & Heal Receipts'),
-                                            style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
-                                          ),
-                                        ),
                                       ],
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  strings.productsIntelligenceSubtitle,
-                                  style: GoogleFonts.cairo(
-                                    fontSize: isMobile ? 12 : 13,
-                                    color: cs.onSurfaceVariant,
-                                  ),
+                                const SizedBox(height: 12),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    Tooltip(
+                                      message: isAr
+                                          ? 'فحص وتدقيق الفواتير الجديدة المضافة فقط لتوفير الوقت والبيانات'
+                                          : 'Audit new/unscanned receipts only to save time',
+                                      child: FilledButton.tonalIcon(
+                                        onPressed: _isHealingData
+                                            ? null
+                                            : () => _startHealingProcess(incrementalOnly: true),
+                                        icon: const Icon(Icons.bolt_rounded, size: 16),
+                                        label: Text(
+                                          isAr ? 'تدقيق الجديد (سريع)' : 'Audit New (Fast)',
+                                          style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                    ),
+                                    Tooltip(
+                                      message: isAr
+                                          ? 'إعادة فحص كافة الفواتير من البداية وتصحيح أي أخطاء بالأسعار واقتصاديات القطعة'
+                                          : 'Full recalculation and healing for all receipts in database',
+                                      child: FilledButton.icon(
+                                        onPressed: _isHealingData
+                                            ? null
+                                            : () => _startHealingProcess(incrementalOnly: false),
+                                        icon: const Icon(Icons.auto_fix_high_rounded, size: 16),
+                                        label: Text(
+                                          isAr ? 'إعادة تدقيق شامل لكافة الفواتير' : 'Full Deep Rescan',
+                                          style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
                           ),
                         ],
                       ),
+                      if (_isHealingData) ...[
+                        const SizedBox(height: 14),
+                        M3ProgressCard(
+                          title: _healingStatus.isNotEmpty
+                              ? _healingStatus
+                              : (isAr ? 'جاري فحص وتدقيق الفواتير بالذكاء الاصطناعي...' : 'Auditing receipts with AI...'),
+                          subtitle: isAr
+                              ? 'يتم فحص وتصحيح اقتصاديات القطعة الواحدة وكشف تكرار الفواتير وحوكمة الأسعار...'
+                              : 'Verifying unit economics and price governance across all chains...',
+                          progress: _healingProgress > 0 ? _healingProgress : null,
+                          currentCount: _healingCurrent,
+                          totalCount: _healingTotal,
+                          icon: Icons.auto_fix_high_rounded,
+                        ),
+                      ],
                       const SizedBox(height: 16),
 
                       // Executive Fathalla Defense KPI Cards Row
@@ -481,11 +549,76 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
 
                                 const SizedBox(width: 10),
 
-                                // Export CSV Button
-                                IconButton.filledTonal(
-                                  icon: const Icon(Icons.file_download_outlined, size: 20),
-                                  tooltip: strings.exportPriceIntelligenceCsv,
-                                  onPressed: () => _exportToCsv(filteredProducts, distinctChains, currency),
+                                // Export Excel (.xlsx) & CSV (.csv) Menu Button
+                                PopupMenuButton<String>(
+                                  tooltip: isAr ? 'تصدير تقرير الأسعار (Excel / CSV)' : 'Export Price Matrix Report',
+                                  onSelected: (choice) {
+                                    if (choice == 'EXCEL') {
+                                      _exportToExcel(filteredProducts, distinctChains, currency);
+                                    } else if (choice == 'CSV') {
+                                      _exportToCsv(filteredProducts, distinctChains, currency);
+                                    }
+                                  },
+                                  itemBuilder: (ctx) => [
+                                    PopupMenuItem(
+                                      value: 'EXCEL',
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.table_chart_rounded, color: Colors.green, size: 20),
+                                          const SizedBox(width: 10),
+                                          Text(
+                                            isAr ? 'تصدير تقرير إكسيل كامل (.xlsx)' : 'Export Excel Workbook (.xlsx)',
+                                            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12.5),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'CSV',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.description_outlined, color: cs.primary, size: 20),
+                                          const SizedBox(width: 10),
+                                          Text(
+                                            isAr ? 'تصدير ملف بيانات (.csv)' : 'Export CSV Data (.csv)',
+                                            style: GoogleFonts.cairo(fontSize: 12.5),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                  child: Container(
+                                    height: 38,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                                    decoration: BoxDecoration(
+                                      color: cs.primaryContainer.withValues(alpha: 0.6),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: cs.primary.withValues(alpha: 0.3)),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        _isExporting
+                                            ? const SizedBox(
+                                                width: 16,
+                                                height: 16,
+                                                child: CircularProgressIndicator(strokeWidth: 2),
+                                              )
+                                            : const Icon(Icons.file_download_outlined, size: 18),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          isAr ? 'تصدير التقرير' : 'Export',
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: cs.onPrimaryContainer,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Icon(Icons.arrow_drop_down_rounded, size: 18, color: cs.onPrimaryContainer),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
@@ -928,17 +1061,154 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
     );
   }
 
-  void _exportToCsv(List<ChainProductItem> items, List<String> chains, String currency) {
+  Future<void> _exportToExcel(
+    List<ChainProductItem> items,
+    List<String> chains,
+    String currency,
+  ) async {
+    if (_isExporting) return;
+    setState(() => _isExporting = true);
+
+    final isAr = ref.isArabic;
+
+    try {
+      final excel = xl.Excel.createExcel();
+      final sheetName = isAr ? 'مصفوفة الأسعار والمنافسين' : 'Price Matrix Intelligence';
+      final defaultSheet = excel.getDefaultSheet();
+      if (defaultSheet != null) {
+        excel.rename(defaultSheet, sheetName);
+      }
+
+      final sheet = excel[sheetName];
+      sheet.isRTL = isAr;
+
+      // Headers
+      final headers = [
+        isAr ? 'الباركود' : 'Barcode',
+        isAr ? 'اسم المنتج' : 'Product Name',
+        isAr ? 'العلامة التجارية' : 'Brand',
+        isAr ? 'التصنيف' : 'Category',
+        ...chains.map((c) => isAr ? 'سعر $c ($currency)' : 'Price in $c ($currency)'),
+        isAr ? 'السلسلة الأرخص' : 'Cheapest Chain',
+        isAr ? 'أقل سعر ($currency)' : 'Min Price ($currency)',
+        isAr ? 'السلسلة الأغلى' : 'Highest Chain',
+        isAr ? 'أعلى سعر ($currency)' : 'Max Price ($currency)',
+        isAr ? 'فارق السعر %' : 'Price Gap %',
+        isAr ? 'موقف فتح الله التنافسي' : 'Fathalla Defense Status',
+        isAr ? 'المنافس الأرخص' : 'Cheapest Competitor',
+        isAr ? 'فارق السعر عن فتح الله ($currency)' : 'Competitor Price Diff ($currency)',
+        isAr ? 'حالة العرض / الخصم' : 'Promotion Active',
+        isAr ? 'إجمالي الرصد بالفواتير' : 'Total Invoice Scans',
+      ];
+
+      for (var col = 0; col < headers.length; col++) {
+        final cell = sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: 0));
+        cell.value = xl.TextCellValue(headers[col]);
+        cell.cellStyle = xl.CellStyle(
+          bold: true,
+          horizontalAlign: xl.HorizontalAlign.Center,
+          backgroundColorHex: xl.ExcelColor.fromHexString('#006C50'),
+          fontColorHex: xl.ExcelColor.fromHexString('#FFFFFF'),
+        );
+      }
+
+      int rowIndex = 1;
+      for (final item in items) {
+        int colIndex = 0;
+        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(item.barcode);
+        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(item.name);
+        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(item.brand);
+        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(item.category);
+
+        for (final c in chains) {
+          final p = item.latestPricesByChain[c];
+          if (p != null) {
+            sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.DoubleCellValue(p);
+          } else {
+            sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue('-');
+          }
+        }
+
+        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(item.cheapestChain);
+        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.DoubleCellValue(item.minPrice);
+        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(item.mostExpensiveChain);
+        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.DoubleCellValue(item.maxPrice);
+        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.DoubleCellValue(double.tryParse(item.priceVariancePercent.toStringAsFixed(1)) ?? 0.0);
+
+        final defenseStatus = item.isUnderpricedByCompetitors
+            ? (isAr ? '🚨 خطر: ${item.cheapestCompetitorName} أرخص' : 'THREAT: ${item.cheapestCompetitorName} cheaper')
+            : (item.isFathallaCheapest
+                ? (isAr ? '🏆 تفوق: فتح الله الأرخص بالسوق' : 'BEST: Fathalla Cheapest')
+                : (isAr ? 'متطابق / عادي' : 'NORMAL'));
+
+        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(defenseStatus);
+        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(item.cheapestCompetitorName.isNotEmpty ? item.cheapestCompetitorName : '-');
+        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.DoubleCellValue(item.competitorUnderpricedDiff);
+        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(item.isCurrentlyOnPromotion ? (isAr ? 'نعم' : 'Yes') : (isAr ? 'لا' : 'No'));
+        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.IntCellValue(item.totalScansCount);
+
+        rowIndex++;
+      }
+
+      final fileBytes = excel.save();
+      if (fileBytes != null) {
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final fileName = 'price_intelligence_matrix_$timestamp.xlsx';
+        downloadFileBytes(
+          bytes: fileBytes,
+          fileName: fileName,
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                isAr
+                    ? 'تم تحميل وتنزيل تقرير الإكسيل بنجاح ($fileName)'
+                    : 'Excel report downloaded successfully ($fileName)',
+                style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+              ),
+              backgroundColor: Colors.green.shade800,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('فشل تصدير ملف الإكسيل: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  Future<void> _exportToCsv(
+    List<ChainProductItem> items,
+    List<String> chains,
+    String currency,
+  ) async {
+    final isAr = ref.isArabic;
     final buffer = StringBuffer();
+    // Add UTF-8 BOM for Arabic text compatibility in Excel
+    buffer.write('\uFEFF');
+
     // Headers
-    buffer.write('ID,Barcode,Product Name,Brand,Category,');
+    buffer.write('Barcode,Product Name,Brand,Category,');
     for (final c in chains) {
       buffer.write('Price in $c ($currency),');
     }
     buffer.writeln('Cheapest Store,Min Price,Highest Store,Max Price,Price Gap %,Fathalla Defense Status,Cheapest Competitor,Price Underpriced Diff,Is Promoted,Total Scans');
 
     for (final item in items) {
-      buffer.write('"${item.id}","${item.barcode}","${item.name}","${item.brand}","${item.category}",');
+      buffer.write('"${item.barcode}","${item.name}","${item.brand}","${item.category}",');
       for (final c in chains) {
         final p = item.latestPricesByChain[c];
         buffer.write('${p != null ? p.toStringAsFixed(2) : ""},');
@@ -952,10 +1222,26 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
       );
     }
 
-    if (kIsWeb) {
+    final bytes = utf8.encode(buffer.toString());
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final fileName = 'price_intelligence_$timestamp.csv';
+
+    downloadFileBytes(
+      bytes: bytes,
+      fileName: fileName,
+      mimeType: 'text/csv;charset=utf-8',
+    );
+
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(ref.isArabic ? 'تم تجهيز وتصدير التقرير السعري بنجاح' : 'Price report exported successfully'),
+          content: Text(
+            isAr
+                ? 'تم تحميل وتنزيل ملف CSV بنجاح ($fileName)'
+                : 'CSV file downloaded successfully ($fileName)',
+            style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+          ),
+          backgroundColor: Colors.green.shade800,
           behavior: SnackBarBehavior.floating,
         ),
       );

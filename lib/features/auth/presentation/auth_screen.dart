@@ -34,6 +34,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final savedEmail = prefs.getString('saved_admin_email');
+      final savedPassword = prefs.getString('saved_admin_password');
       final rememberMePref = prefs.getBool('remember_admin_me') ?? true;
       if (mounted) {
         setState(() {
@@ -42,6 +43,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             _emailController.text = savedEmail;
           } else {
             _emailController.text = kPrimaryAdminEmail;
+          }
+          if (_rememberMe && savedPassword != null && savedPassword.isNotEmpty) {
+            _passwordController.text = savedPassword;
           }
         });
       }
@@ -73,9 +77,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         await prefs.setBool('remember_admin_me', _rememberMe);
         if (_rememberMe) {
           await prefs.setString('saved_admin_email', email);
+          await prefs.setString('saved_admin_password', password);
           await prefs.setString('active_admin_session', email.toLowerCase());
         } else {
           await prefs.remove('saved_admin_email');
+          await prefs.remove('saved_admin_password');
           await prefs.remove('active_admin_session');
         }
       } catch (_) {}

@@ -636,6 +636,69 @@ void main() {
       expect(match.multipliedLinkedGifts.first.giftName, contains('فواتشر 50'));
       expect(match.multipliedLinkedGifts.first.quantity, 1);
     });
+
+    test('Mega-Basket with ALL 5 campaign rules matches all 5 rules simultaneously with 100% precision', () {
+      final megaBasket = [
+        // Rule 1: Clear 360ml
+        ExtractedProductItem(name: 'كلير شامبو ضد القشرة رجالي 360 مل', price: 134.0, quantity: 1, isTargetCompany: true),
+        // Rule 2: Tresemme 400ml x 2
+        ExtractedProductItem(name: 'تريزيمي شامبو كيراتين سموث 400 مل', price: 175.0, quantity: 1, isTargetCompany: true),
+        ExtractedProductItem(name: 'تريزيمي بلسم كيراتين سموث 400 مل', price: 175.0, quantity: 1, isTargetCompany: true),
+        // Rule 4: Axe Spray x 2
+        ExtractedProductItem(name: 'أكس اسبراي جولد 150 مل', price: 140.0, quantity: 2, isTargetCompany: true),
+        // Rule 5: Rexona Roll-on x 2
+        ExtractedProductItem(name: 'ريكسونا رول أون كوتون دراي 50 مل', price: 70.0, quantity: 2, isTargetCompany: true),
+      ];
+
+      final matches = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: megaBasket,
+        promotionalRules: rules,
+        allowCampaignMultipliers: true,
+      );
+
+      // Must match Rule 1, Rule 2, Rule 4, Rule 5
+      expect(matches.length, 4);
+
+      final rule1Match = matches.firstWhere((m) => m.rule.id == 'rule_1');
+      expect(rule1Match.multipliedLinkedGifts.first.giftName, contains('كلير 90'));
+      expect(rule1Match.multipliedLinkedGifts.first.quantity, 1);
+
+      final rule2Match = matches.firstWhere((m) => m.rule.id == 'rule_2');
+      expect(rule2Match.multipliedLinkedGifts.first.giftName, contains('تريزيمي 250'));
+      expect(rule2Match.multipliedLinkedGifts.first.quantity, 1);
+
+      final rule4Match = matches.firstWhere((m) => m.rule.id == 'rule_4');
+      expect(rule4Match.totalRewardAmount, 125.0);
+      expect(rule4Match.multipliedLinkedGifts.length, 2); // 2x 50 + 1x 25
+
+      final rule5Match = matches.firstWhere((m) => m.rule.id == 'rule_5');
+      expect(rule5Match.totalRewardAmount, 50.0);
+      expect(rule5Match.multipliedLinkedGifts.first.quantity, 1);
+    });
+
+    test('AIR-29 & Rule 5: Gomla Market dual-column POS receipt (Rexona 2x 69.00 = 138.00 EGP) correctly preserves 69.00 unit price and awards 50 EGP voucher', () {
+      // Simulating Gomla Market POS line:
+      // Barcode: 6221155611529, Qty: 2, Price Column: 69.00, Total Column: 138.00
+      final gomlaReceiptItem = ExtractedProductItem(
+        name: 'ريكسونا رول اون حريمي خوخ وعشب الليمون 5',
+        price: 69.0, // Strictly 69.00 unit price (NEVER 34.50)
+        quantity: 2,
+        barcode: '6221155611529',
+        isTargetCompany: true,
+      );
+
+      final matches = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: [gomlaReceiptItem],
+        promotionalRules: rules,
+        allowCampaignMultipliers: true,
+      );
+
+      expect(matches.length, 1);
+      final rule5Match = matches.first;
+      expect(rule5Match.rule.id, 'rule_5');
+      expect(rule5Match.totalRewardAmount, 50.0);
+      expect(rule5Match.multipliedLinkedGifts.first.giftName, contains('50'));
+    });
   });
 }
 

@@ -1,9 +1,9 @@
-import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/animations/m3_motion.dart';
 import '../../../../core/localization/app_strings.dart';
+import '../../../../core/widgets/interactive_receipt_viewer_dialog.dart';
 
 class ValidationConditionItem {
   final String title;
@@ -703,42 +703,9 @@ class ReceiptValidationReportDialog extends StatelessWidget {
   }
 
   void _showFullImagePreview(BuildContext context, String imgUrl) {
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        clipBehavior: Clip.antiAlias,
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 550, maxHeight: 650),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AppBar(
-                title: const Text('معاينة صورة الفاتورة'),
-                automaticallyImplyLeading: false,
-                actions: [
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-              Flexible(
-                child: InteractiveViewer(
-                  minScale: 0.5,
-                  maxScale: 4.0,
-                  child: imgUrl.startsWith('data:image') || imgUrl.contains(';base64,')
-                      ? Image.memory(
-                          base64Decode(imgUrl.contains(',') ? imgUrl.split(',').last : imgUrl),
-                          fit: BoxFit.contain,
-                        )
-                      : Image.network(imgUrl, fit: BoxFit.contain),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    InteractiveReceiptViewerDialog.show(
+      context,
+      imageUrl: imgUrl,
     );
   }
 }

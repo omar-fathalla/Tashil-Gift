@@ -330,6 +330,38 @@ class AiProductDiscoveryService {
         final inferredCategory = _inferCategory(rawName);
         final canonicalName = _cleanCanonicalName(rawName);
 
+        final bool isHighConfidence = rawBarcode.isNotEmpty &&
+            rawBarcode.length >= 8 &&
+            _isProbableCompanyProduct(rawName, slug) &&
+            p.price > 0 &&
+            p.price < 5000;
+
+        // If high confidence, auto-inject directly into company_products catalog (AIR-28)
+        if (isHighConfidence) {
+          final prodData = {
+            'productName': canonicalName.isNotEmpty ? canonicalName : rawName,
+            'barcode': rawBarcode,
+            'category': inferredCategory,
+            'unitSize': _extractUnitSize(rawName),
+            'referencePrice': p.price,
+          };
+
+          await _effectiveProductsService.batchSaveProducts(
+            companySlug: slug,
+            companyName: companyName.isNotEmpty ? companyName : slug,
+            products: [prodData],
+          );
+
+          if (retailChain.isNotEmpty && rawName.isNotEmpty) {
+            await _effectiveProductsService.registerChainAlias(
+              companySlug: slug,
+              barcode: rawBarcode,
+              chainName: retailChain,
+              rawPosName: rawName,
+            );
+          }
+        }
+
         await _effectiveFirestore.runTransaction((tx) async {
           final snap = await tx.get(docRef);
           if (snap.exists) {
@@ -350,6 +382,7 @@ class AiProductDiscoveryService {
               'averagePrice': avgPrice,
               'latestPrice': p.price > 0 ? p.price : (data['latestPrice'] ?? 0.0),
               'barcode': (rawBarcode.isNotEmpty) ? rawBarcode : (data['barcode'] ?? ''),
+              'status': isHighConfidence ? 'auto_approved' : (data['status'] ?? 'pending'),
               'lastReceiptNumber': receiptNumber,
               'updatedAt': FieldValue.serverTimestamp(),
             });
@@ -368,9 +401,11 @@ class AiProductDiscoveryService {
               'observedPrices': [if (p.price > 0) p.price],
               'retailChains': [if (retailChain.isNotEmpty) retailChain],
               'invoiceFrequency': 1,
-              'status': 'pending',
-              'confidenceScore': 0.96,
-              'relevanceReason': 'تم رصده في فاتورة معتمدة لشركة $companyName',
+              'status': isHighConfidence ? 'auto_approved' : 'pending',
+              'confidenceScore': isHighConfidence ? 0.99 : 0.96,
+              'relevanceReason': isHighConfidence
+                  ? 'تم اعتماده وحقنه تلقائياً في كتالوج الشركة (AIR-28)'
+                  : 'تم رصده في فاتورة معتمدة لشركة $companyName',
               'lastReceiptNumber': receiptNumber,
               'createdAt': FieldValue.serverTimestamp(),
               'updatedAt': FieldValue.serverTimestamp(),

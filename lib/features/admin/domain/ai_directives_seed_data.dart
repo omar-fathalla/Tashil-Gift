@@ -589,6 +589,46 @@ class AiDirectivesSeedData {
           tags: ['axe-pos-clipping', 'barcode-catalog-enrichment', 'voucher-50egp', 'unilever', 'gomla-market', 'pos-quirks'],
           lastUpdated: '2026-08-28',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-28',
+          code: 'HIGH_CONFIDENCE_AUTO_CATALOG_ENRICHMENT_WITH_PROMOTIONAL_GOVERNANCE',
+          orderIndex: 28,
+          category: AiDirectiveCategory.nlpMatching,
+          titleAr: 'الحقن التلقائي الذكي للأصناف عالية الثقة في الكتالوج مع حوكمة عروض الحملات (Auto-Catalog Injection & Rule Governance)',
+          titleEn: 'High-Confidence Auto-Catalog Injection with Campaign Rule Governance',
+          descriptionAr:
+              'الأتمتة الكاملة لاكتشاف وتسجيل الأصناف الجديدة المؤكدة تلقائياً في كتالوج أصناف الشركة فور فحص الفواتير، بشرط استيفاء الثقة العالية (باركود دولي >= 8 أرقام + اسم صريح لإحدى علامات الحملة + سعر تجزئة منطقي)، مع فرض الحوكمة الصارمة لمنع دخول الأصناف المستبعدة أو ذات الأحجام غير المشمولة في هدايا العروض الترويجية المخصصة.',
+          descriptionEn:
+              'Fully automated continuous catalog injection for high-confidence uncataloged products discovered on receipts (valid barcode >= 8 digits + explicit company brand + reasonable price), paired with strict promotional rule isolation to prevent ineligible SKUs or sizes from claiming specialized campaign gifts.',
+          logicAr:
+              '1. رصد الأصناف المستخرجة في الفواتير غير المسجلة مسبقاً في كتالوج الشركة.\n2. التحقق من صمام الأمان ثلاثي الشروط: باركود دولي صحيح + علامة تجارية معتمدة للشركة + سعر منطقي.\n3. الحقن التلقائي المباشر في كتالوج أصناف الشركة (company_products) وتحديث خريطة الباركود اللحظية دون انتظار تدخل بشري.\n4. الحوكمة المستقلة للعروض: فصل الكتالوج العام عن محرك شروط العروض (PromotionalRuleMatcher)؛ فالصنف المكتشف يدخل العرض الترويجي فقط إذا استوفى نوع المنتج وحجمه المطلوب بدقة (مثل: اسبراي أكس أو شامبو تريزيمي 400 مل).',
+          logicEn:
+              '1. Detects uncataloged items extracted from receipts.\n2. Verifies high-confidence safety triad: valid barcode >= 8 digits + verified company brand + reasonable price.\n3. Auto-injects product into company catalog (company_products) and updates in-memory barcode map with zero manual intervention.\n4. Strict Promotional Governance: isolates general catalog recognition from promotional rule qualification, ensuring gifts are only awarded if item strictly matches rule product type and size.',
+          exampleInput: 'ظهور صنف جديد غير مسجل مسبقاً في فاتورة: "أكس اسبراي جولد تيمبتيشن 150 مل" بسعر 140 ج.م وباركود جديد 6221155699999',
+          exampleOutput: 'تسجيل الصنف فورياً في كتالوج يونيليفر المعتمد، وتأهيله التلقائي لعرض اسبراي أكس (فواتشر 50 ج.م) وفق قواعد العائلة الدلالية دون الحاجة لتحديث يدوي.',
+          tags: ['auto-catalog-injection', 'product-discovery', 'promotional-governance', 'high-confidence-learning', 'air-28', 'unilever'],
+          lastUpdated: '2026-08-28',
+        ),
+        const AiDirectiveModel(
+          id: 'AIR-29',
+          code: 'DUAL_COLUMN_POS_UNIT_PRICE_GOVERNANCE_AND_REVERSE_DOUBLE_DIVISION_HEALING',
+          orderIndex: 29,
+          category: AiDirectiveCategory.unitEconomics,
+          titleAr: 'حوكمة تسعير أعمدة الكاشير المزدوجة وعلاج القسمة المزدوجة (Dual-Column POS Unit Price Governance)',
+          titleEn: 'Dual-Column POS Unit Price Governance & Reverse Double Division Healing',
+          descriptionAr:
+              'معالجة الفواتير ذات الأعمدة المزدوجة (مثل جملة ماركت وسبينس وكارفور) حيث يُطبع عمود "السعر" كقيمة القطعة الواحدة بالفعل، وعمود "القيمة" كإجمالي السطر؛ ومنع قسمة عمود "السعر" على الكمية مرة أخرى (منع هبوط السعر من 69 إلى 34.5 ج.م)، مع المعالجة الاسترجاعية التلقائية لكافة الفواتير المسجلة.',
+          descriptionEn:
+              'Governs dual-column POS receipts (Gomla Market, Spinneys, Carrefour, HyperOne) where the "Price" column is already the single unit price and "Amount/Value" is the line total, strictly prohibiting re-dividing the unit price by quantity and auto-healing all historical observations in the database.',
+          logicAr:
+              '1. في بونات الكاشير المطبوعة بأعمدة (الصنف | الباركود | الكمية | السعر | القيمة)، يمثل عمود "السعر" سعر القطعة الواحدة الصافي بالفعل (Single Unit Price)، وعمود "القيمة" إجمالي السطر (Line Total).\n2. يُمنع منعاً باتاً قسمة عمود "السعر" (مثل 69.00) على الكمية (مثل 2) لتفادي خطأ القسمة المزدوجة (34.50 ج.م).\n3. محرك التصحيح الذاتي (Price Auto-Healing Engine): يفحص كافة الأصناف المستخرجة ويقارن السعر بالكتالوج المعتمد وبمتوسط السوق؛ وإذا كان السعر مقسوماً على الكمية (مثل ريكسونا رول أون بسعر 34.5 بدلاً من 69.0)، يتم ضربه فورياً في الكمية وتصحيح قاعدة البيانات وسجلات الفواتير ومصفوفة الأسعار.',
+          logicEn:
+              '1. For multi-column POS receipts (Item | Barcode | Qty | Price | Total Value), the "Price" column represents the single unit net price and "Total Value" represents the line total.\n2. Strictly prohibits dividing the "Price" column (e.g. 69.00) by quantity (e.g. 2) to eliminate double-division anomalies (34.50 EGP).\n3. Autonomous Price Healing Engine: compares extracted prices with catalog benchmarks and market medians; if a unit price was artificially halved/divided, it automatically restores the single unit price (34.50 -> 69.00 EGP) across all Firestore invoices and matrix catalogs.',
+          exampleInput: 'فاتورة جملة ماركت المنتزة: سطر ريكسونا رول اون حريمي | باركود 6221155611529 | كمية 2 | السعر 69.00 | القيمة 138.00',
+          exampleOutput: 'سعر القطعة المعتمد: 69.00 ج.م | إجمالي السطر: 138.00 ج.م | حماية السعر من القسمة المزدوجة الخاطئة (34.50 ج.م)',
+          tags: ['unit-economics', 'dual-column-pos', 'gomla-market', 'price-healing', 'double-division-prevention', 'air-29'],
+          lastUpdated: '2026-08-28',
+        ),
       ];
 }
 

@@ -4,10 +4,10 @@ import 'package:al_mraay/features/admin/domain/ai_directives_seed_data.dart';
 
 void main() {
   group('AI Brain Directives & Continuous Heuristics Registry Tests', () {
-    test('AiDirectivesSeedData contains all directives from AIR-01 to AIR-27 with strict integrity', () {
+    test('AiDirectivesSeedData contains all directives from AIR-01 to AIR-29 with strict integrity', () {
       final directives = AiDirectivesSeedData.initialDirectives;
 
-      expect(directives.length, greaterThanOrEqualTo(27));
+      expect(directives.length, greaterThanOrEqualTo(29));
 
       // Verify all IDs are unique
       final ids = directives.map((d) => d.id).toSet();
@@ -21,6 +21,24 @@ void main() {
       expect(air27.titleAr, contains('معالجة الحروف المقطوعة'));
       expect(air27.tags, contains('axe-pos-clipping'));
       expect(air27.tags, contains('barcode-catalog-enrichment'));
+
+      // Verify AIR-28 is present
+      final air28 = directives.firstWhere((d) => d.id == 'AIR-28');
+      expect(air28.code, 'HIGH_CONFIDENCE_AUTO_CATALOG_ENRICHMENT_WITH_PROMOTIONAL_GOVERNANCE');
+      expect(air28.orderIndex, 28);
+      expect(air28.category, AiDirectiveCategory.nlpMatching);
+      expect(air28.titleAr, contains('الحقن التلقائي الذكي للأصناف'));
+      expect(air28.tags, contains('auto-catalog-injection'));
+      expect(air28.tags, contains('promotional-governance'));
+
+      // Verify AIR-29 is present
+      final air29 = directives.firstWhere((d) => d.id == 'AIR-29');
+      expect(air29.code, 'DUAL_COLUMN_POS_UNIT_PRICE_GOVERNANCE_AND_REVERSE_DOUBLE_DIVISION_HEALING');
+      expect(air29.orderIndex, 29);
+      expect(air29.category, AiDirectiveCategory.unitEconomics);
+      expect(air29.titleAr, contains('أعمدة الكاشير المزدوجة'));
+      expect(air29.tags, contains('gomla-market'));
+      expect(air29.tags, contains('dual-column-pos'));
     });
 
     test('AIR-22 (Fathalla Price Defense) and AIR-21 (POS Concatenation) are active', () {

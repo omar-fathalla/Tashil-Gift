@@ -17,6 +17,7 @@ import '../../../core/localization/app_strings.dart';
 import '../../admin/domain/event_model.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
 import '../../../core/widgets/portal_screen_header_card.dart';
+import '../../../core/widgets/interactive_receipt_viewer_dialog.dart';
 
 enum DateFilterType { all, today, last7Days, thisMonth, custom }
 
@@ -834,280 +835,30 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     String? storagePath,
     bool canDelete = false,
   }) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        clipBehavior: Clip.antiAlias,
-        backgroundColor: colorScheme.surface,
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 640, maxHeight: 780),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 1. Header Bar
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceContainerLow,
-                  border: Border(bottom: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5))),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(Icons.receipt_long_rounded, color: colorScheme.onPrimaryContainer, size: 22),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  '#$receiptNumber',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.3,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              InkWell(
-                                onTap: () => _copyToClipboard(receiptNumber, context, strings),
-                                borderRadius: BorderRadius.circular(6),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(4.0),
-                                  child: Icon(Icons.copy_rounded, size: 14, color: colorScheme.primary),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            store.isNotEmpty ? '$store • $date' : date,
-                            style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: colorScheme.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3)),
-                      ),
-                      child: Text(
-                        '$totalValue $currencySymbol',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.primary,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    if (canDelete && docId != null) ...[
-                      IconButton.filledTonal(
-                        icon: Icon(Icons.delete_outline_rounded, size: 20, color: colorScheme.error),
-                        style: IconButton.styleFrom(
-                          backgroundColor: colorScheme.errorContainer.withValues(alpha: 0.35),
-                          foregroundColor: colorScheme.error,
-                        ),
-                        onPressed: () {
-                          Navigator.pop(dialogContext);
-                          _confirmAndDeleteInvoice(
-                            context: context,
-                            docId: docId,
-                            receiptNumber: receiptNumber,
-                            totalValue: totalValue,
-                            currencySymbol: currencySymbol,
-                            storagePath: storagePath,
-                            imageUrl: imageUrl,
-                            strings: strings,
-                            colorScheme: colorScheme,
-                          );
-                        },
-                        tooltip: strings.deleteInvoiceTooltip,
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    IconButton.filledTonal(
-                      icon: const Icon(Icons.close_rounded, size: 20),
-                      onPressed: () => Navigator.pop(dialogContext),
-                      tooltip: strings.cancelBtn,
-                    ),
-                  ],
-                ),
-              ),
-
-              // 2. Body: Interactive Image Viewer or No-Image Fallback
-              Flexible(
-                child: imageUrl.isNotEmpty
-                    ? Container(
-                        color: Colors.black.withValues(alpha: 0.04),
-                        child: Stack(
-                          children: [
-                            InteractiveViewer(
-                              panEnabled: true,
-                              boundaryMargin: const EdgeInsets.all(20),
-                              minScale: 0.5,
-                              maxScale: 5.0,
-                              child: Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12.0),
-                                  child: _buildReceiptImage(
-                                    imageUrl,
-                                    fit: BoxFit.contain,
-                                    errorBuilder: (context, error, stack) => Center(
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(32.0),
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.broken_image_rounded, size: 56, color: colorScheme.error),
-                                            const SizedBox(height: 12),
-                                            Text(
-                                              'تعذر تحميل الصورة الأصلية',
-                                              style: TextStyle(fontSize: 14, color: colorScheme.error, fontWeight: FontWeight.bold),
-                                            ),
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              'قد يكون السبب قيود المتصفح أو انقطاع الاتصال',
-                                              style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
-                                              textAlign: TextAlign.center,
-                                            ),
-                                            if (imageUrl.startsWith('http')) ...[
-                                              const SizedBox(height: 14),
-                                              FilledButton.tonalIcon(
-                                                onPressed: () => launchUrl(Uri.parse(imageUrl)),
-                                                icon: const Icon(Icons.open_in_new_rounded, size: 16),
-                                                label: const Text('فتح رابط الصورة مباشرة في المتصفح', style: TextStyle(fontSize: 12)),
-                                              ),
-                                            ],
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            // Zoom Tip Badge
-                            Positioned(
-                              bottom: 12,
-                              left: 12,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withValues(alpha: 0.65),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.pinch_rounded, size: 14, color: Colors.white),
-                                    SizedBox(width: 6),
-                                    Text(
-                                      'يمكنك التكبير والتحريك (Pinch / Pan to zoom)',
-                                      style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w500),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : Container(
-                        padding: const EdgeInsets.all(40),
-                        child: Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(20),
-                                decoration: BoxDecoration(
-                                  color: colorScheme.surfaceContainerHighest,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(Icons.no_photography_outlined, size: 48, color: colorScheme.onSurfaceVariant),
-                              ),
-                              const SizedBox(height: 16),
-                              const Text(
-                                'لا توجد صورة مسجلة لهذه الفاتورة',
-                                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                'تم تسجيل المعاملة بنجاح، ولكن لم يتم إرفاق ملف صورة في هذا السجل.',
-                                style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-              ),
-
-              // 3. Footer Action Bar
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceContainerLow,
-                  border: Border(top: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5))),
-                ),
-                child: Row(
-                  children: [
-                    if (imageUrl.startsWith('http')) ...[
-                      FilledButton.tonalIcon(
-                        onPressed: () => launchUrl(Uri.parse(imageUrl)),
-                        icon: const Icon(Icons.open_in_new_rounded, size: 16),
-                        label: const Text('فتح بالحجم الكامل', style: TextStyle(fontSize: 12)),
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    OutlinedButton.icon(
-                      onPressed: () => _copyToClipboard(receiptNumber, context, strings),
-                      icon: const Icon(Icons.copy_rounded, size: 16),
-                      label: Text(strings.copyCodeBtn, style: const TextStyle(fontSize: 12)),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                    ),
-                    const Spacer(),
-                    FilledButton(
-                      onPressed: () => Navigator.pop(dialogContext),
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      child: Text(strings.cancelBtn, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    InteractiveReceiptViewerDialog.show(
+      context,
+      imageUrl: imageUrl,
+      receiptNumber: receiptNumber,
+      storeName: store,
+      totalValue: totalValue,
+      date: date,
+      currencySymbol: currencySymbol,
+      docId: docId,
+      storagePath: storagePath,
+      canDelete: canDelete,
+      onDelete: (canDelete && docId != null)
+          ? () => _confirmAndDeleteInvoice(
+                context: context,
+                docId: docId,
+                receiptNumber: receiptNumber,
+                totalValue: totalValue,
+                currencySymbol: currencySymbol,
+                storagePath: storagePath,
+                imageUrl: imageUrl,
+                strings: strings,
+                colorScheme: colorScheme,
+              )
+          : null,
     );
   }
 
@@ -1258,7 +1009,18 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
         date = DateTime.tryParse(data['timestamp']);
       }
 
-      final formattedDate = date != null ? DateFormat('yyyy-MM-dd HH:mm').format(date) : (data['receipt_date']?.toString() ?? 'N/A');
+      String formattedDate = 'N/A';
+      if (date != null) {
+        formattedDate = DateFormat('yyyy-MM-dd hh:mm a').format(date);
+      } else if (data['receipt_date'] != null) {
+        final rawStr = data['receipt_date'].toString().trim();
+        final parsed = DateTime.tryParse(rawStr);
+        if (parsed != null) {
+          formattedDate = DateFormat('yyyy-MM-dd hh:mm a').format(parsed);
+        } else {
+          formattedDate = rawStr;
+        }
+      }
 
       return {
         'id': doc.id,

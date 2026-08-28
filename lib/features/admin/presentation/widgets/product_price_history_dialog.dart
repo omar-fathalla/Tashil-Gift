@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/constants/country_currency_config.dart';
+import '../../../../core/widgets/interactive_receipt_viewer_dialog.dart';
 import '../../domain/chain_product_model.dart';
 
 void showProductPriceHistoryDialog({
@@ -682,33 +683,15 @@ class _ProductPriceHistoryDialogState extends ConsumerState<ProductPriceHistoryD
                   tooltip: strings.viewReceiptPhoto,
                   color: cs.primary,
                   onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (iCtx) => Dialog(
-                        backgroundColor: Colors.transparent,
-                        insetPadding: const EdgeInsets.all(16),
-                        child: Stack(
-                          alignment: Alignment.topRight,
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
-                              child: Image.network(
-                                entry.receiptImageUrl,
-                                fit: BoxFit.contain,
-                                errorBuilder: (context, error, stackTrace) => Container(
-                                  color: cs.surface,
-                                  padding: const EdgeInsets.all(32),
-                                  child: Text(isAr ? 'تعذر تحميل صورة الفاتورة' : 'Image load failed'),
-                                ),
-                              ),
-                            ),
-                            IconButton.filled(
-                              icon: const Icon(Icons.close),
-                              onPressed: () => Navigator.of(iCtx).pop(),
-                            ),
-                          ],
-                        ),
-                      ),
+                    InteractiveReceiptViewerDialog.show(
+                      context,
+                      imageUrl: entry.receiptImageUrl,
+                      receiptNumber: entry.receiptNumber,
+                      storeName: entry.storeChain,
+                      branchName: entry.branchName,
+                      totalValue: entry.price.toStringAsFixed(entry.price == entry.price.roundToDouble() ? 0 : 2),
+                      date: entry.receiptDate,
+                      currencySymbol: currency,
                     );
                   },
                 ),
