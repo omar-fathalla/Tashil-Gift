@@ -1657,6 +1657,13 @@ class PromotionalRuleMatcher {
   static bool _matchesProduct(ExtractedProductItem product, String triggerProduct) {
     if (triggerProduct.trim().isEmpty) return false;
 
+    // 0. Golden Barcode Priority Match:
+    // If the receipt item has a barcode, and the trigger product contains this barcode, match immediately!
+    final cleanBarcode = product.barcode.trim();
+    if (cleanBarcode.isNotEmpty && cleanBarcode.length >= 6 && triggerProduct.contains(cleanBarcode)) {
+      return true;
+    }
+
     final pNorm = _normalize(product.name);
     final parts = triggerProduct.split(RegExp(r'[,،/\+\n]|(\s+أو\s+)|(\s+or\s+)', caseSensitive: false));
 
