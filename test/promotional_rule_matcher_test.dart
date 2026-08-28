@@ -237,5 +237,37 @@ void main() {
       expect(reasons.first, contains('تم رصد (1) قطعة'));
       expect(reasons.first, contains('الحد الأدنى المطلوب للحصول على الهدية هو (2) قطعة'));
     });
+
+    test('Case 9: Exact Gomla Market receipt 6pcs Rexona Roll-on -> Strictly 3 × Voucher 50 EGP and ZERO Tresemme gifts', () {
+      final rexonaRollOnItem = ExtractedProductItem(
+        name: 'ريكسونا رول اون حريمي خوخ وعشب الليمون 5',
+        price: 69.0,
+        quantity: 6,
+        barcode: '6221155611529',
+        isTargetCompany: true,
+      );
+
+      final matchedList = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: [rexonaRollOnItem],
+        promotionalRules: unileverRules,
+        allowCampaignMultipliers: true,
+      );
+
+      // Must strictly match ONLY 1 promotional rule (Rule 5: Rexona Roll-on 2pcs -> 50 EGP Voucher)
+      expect(matchedList.length, equals(1));
+      final matchedRule = matchedList.first;
+      expect(matchedRule.rule.id, equals('rule_5'));
+      expect(matchedRule.multiplier, equals(3));
+      expect(matchedRule.totalRewardAmount, equals(150.0));
+      expect(matchedRule.formattedPrizeSummary, contains('3 × فواتشر 50 جنيه'));
+
+      // Check composite bundle
+      final bundle = CompositePromotionalBundle.fromMatchedRules(matchedList);
+      expect(bundle.totalVoucherValue, equals(150.0));
+      expect(bundle.combinedLinkedGifts.length, equals(1));
+      expect(bundle.combinedLinkedGifts.first.giftName, equals('فواتشر 50 جنيه'));
+      expect(bundle.combinedLinkedGifts.first.quantity, equals(3));
+      expect(bundle.combinedLinkedGifts.any((g) => g.giftName.contains('تريزيمي')), isFalse);
+    });
   });
 }

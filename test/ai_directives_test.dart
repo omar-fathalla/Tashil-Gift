@@ -4,24 +4,23 @@ import 'package:al_mraay/features/admin/domain/ai_directives_seed_data.dart';
 
 void main() {
   group('AI Brain Directives & Continuous Heuristics Registry Tests', () {
-    test('AiDirectivesSeedData contains all directives from AIR-01 to AIR-23 with strict integrity', () {
+    test('AiDirectivesSeedData contains all directives from AIR-01 to AIR-24 with strict integrity', () {
       final directives = AiDirectivesSeedData.initialDirectives;
 
-      expect(directives.length, greaterThanOrEqualTo(23));
+      expect(directives.length, greaterThanOrEqualTo(24));
 
       // Verify all IDs are unique
       final ids = directives.map((d) => d.id).toSet();
       expect(ids.length, directives.length);
 
-      // Verify AIR-23 is present
-      final air23 = directives.firstWhere((d) => d.id == 'AIR-23');
-      expect(air23.code, 'MULTI_CHAIN_POS_ALIAS_AUTO_HARVESTING_AND_GOLDEN_BARCODE_ANCHOR');
-      expect(air23.orderIndex, 23);
-      expect(air23.category, AiDirectiveCategory.nlpMatching);
-      expect(air23.titleAr, contains('الباركود الذهبي'));
-      expect(air23.descriptionAr, contains('chainAliases'));
-      expect(air23.tags, contains('barcode-anchor'));
-      expect(air23.tags, contains('pos-aliases'));
+      // Verify AIR-24 is present
+      final air24 = directives.firstWhere((d) => d.id == 'AIR-24');
+      expect(air24.code, 'STRICT_CONSUMED_QUANTITY_AND_BRAND_ISOLATION_INVARIANT');
+      expect(air24.orderIndex, 24);
+      expect(air24.category, AiDirectiveCategory.promotionalRules);
+      expect(air24.titleAr, contains('استهلاك كميات السلة'));
+      expect(air24.tags, contains('consumed-quantity'));
+      expect(air24.tags, contains('brand-isolation'));
     });
 
     test('AIR-22 (Fathalla Price Defense) and AIR-21 (POS Concatenation) are active', () {

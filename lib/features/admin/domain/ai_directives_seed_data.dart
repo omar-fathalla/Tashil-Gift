@@ -506,5 +506,26 @@ class AiDirectivesSeedData {
           tags: ['barcode-anchor', 'pos-aliases', 'multi-chain', 'unilever', 'carrefour', 'fathalla', 'auto-harvesting'],
           lastUpdated: '2026-08-28',
         ),
+
+        const AiDirectiveModel(
+          id: 'AIR-24',
+          code: 'STRICT_CONSUMED_QUANTITY_AND_BRAND_ISOLATION_INVARIANT',
+          orderIndex: 24,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'حوكمة استهلاك كميات السلة والعزل الصارم بين عروض العلامات التجارية (Strict Consumed Quantity & Brand Isolation Invariant)',
+          titleEn: 'Consumed Quantity Governance & Strict Multi-Brand Promotion Isolation',
+          descriptionAr:
+              'حوكمة احتساب هدايا وعروض الفواتير الرياضية الصارمة بحيث يتم خصم الكميات المستهلكة من السلة فور استيفاء شروط عرض معين (Consumed Quantity Tracking)، ومنع إعادة استخدام نفس القطع المشتراة في عروض أخرى للعلامات التجارية المختلفة (مثل منع احتساب 6 قطع رول أون ريكسونا في عرض فواتشرات ريكسونا ثم إعادة احتسابها بالخطأ في عرض هدايا تريزيمي). كما يتم فرض عزل صارم للأصناف لمنع المطابقة العكسية الفضفاضة.',
+          descriptionEn:
+              'Strictly tracks remaining unconsumed product quantities in the customer receipt during promotional rule evaluation. Once items are consumed by a qualifying promotion (e.g. 6 Rexona Roll-ons qualifying for 3x 50 EGP Vouchers), their available quantity drops to 0, preventing double-allocation in unrelated brand rules (e.g. Tresemme or Clear). Also enforces strict brand token isolation.',
+          logicAr:
+              '1. تتبع رصيد الكميات المتبقية لكل صنف في الفاتورة عبر remainingItemQuantities.\n2. عند مطابقة صنف مع شريحة عرض محددة (مثل رول أون ريكسونا)، يتم خصم الكمية المستهلكة (usedQty) فوراً من رصيد الصنف.\n3. منع أي قاعدة عرض تالية من استخدام الأصناف التي أصبح رصيدها = 0.\n4. فرض مطابقة صريحة لاسم الصنف في _matchesProduct ومنع القواعد ذات المدخلات العامة من مطابقة أصناف غير مقصودة.\n5. ضمان حصول العميل على الهدايا المستحقة حسابياً بدقة 100% (مثل 3 فواتشرات فقط دون أي هدايا تريزيمي دخيلة).',
+          logicEn:
+              '1. Tracks real-time remaining item quantities via remainingItemQuantities during receipt rule matching.\n2. When a rule consumes items, usedQty is deducted immediately from the matching line items.\n3. Subsequent promotional rules cannot claim items with 0 remaining quantity.\n4. Enforces strict brand keyword matching in _matchesProduct, rejecting broad reverse substring matches.\n5. Guarantees 100% deterministic reward allocation without ghost gifts.',
+          exampleInput: 'بون جملة ماركت يحتوي على 6 قطع "ريكسونا رول اون حريمي خوخ وعشب الليمون 50 مل" بسعر 69.00 ج.م للقطعة (الإجمالي 414.00 ج.م)',
+          exampleOutput: 'منح 3 × فواتشر 50 جنيه (إجمالي 150 ج.م) فقط لا غير، وتصفير هدايا تريزيمي وكلير لعدم وجودها في البون.',
+          tags: ['consumed-quantity', 'brand-isolation', 'zero-double-multiplication', 'promotional-rules', 'rexona', 'tresemme', 'unilever'],
+          lastUpdated: '2026-08-28',
+        ),
       ];
 }

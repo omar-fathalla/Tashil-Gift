@@ -12,7 +12,6 @@ import '../../../core/animations/m3_motion.dart';
 import '../../../core/utils/error_handler.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
 import '../../../core/constants/country_currency_config.dart';
-import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../core/widgets/m3_button_groups.dart';
 import '../../../core/widgets/m3_progress_indicators.dart';
@@ -62,7 +61,6 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
   String _selectedGlobalFilter = 'ALL';
   int _catalogDisplayLimit = 20;
 
-  bool _isSeeding = false;
   List<CompanyModel> _existingCompanies = [];
 
   CompanyModel? _findCompanyByCode(String code) {
@@ -1087,38 +1085,6 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
     }
   }
 
-  Future<void> _seedDefaultSampleData() async {
-    setState(() => _isSeeding = true);
-    final service = ref.read(companyProductsServiceProvider);
-    final messenger = ScaffoldMessenger.of(context);
-
-    try {
-      await service.seedDefaultCompanyProducts();
-      setState(() {
-        _selectedProductCompanySlug = 'almarai';
-        _selectedGlobalFilter = 'almarai';
-      });
-      if (mounted) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text('تم تحميل وتكويد نموذج منتجات المراعي بنجاح!')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(AppErrorHandler.getFriendlyMessage(e, defaultMessage: 'خطأ في تحميل النموذج التجريبي')),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isSeeding = false);
-      }
-    }
-  }
-
   void _copySampleCsvTemplate() {
     const sample = "اسم المنتج,البار كود\nحليب كامل الدسم 1 لتر,6281007001001\nحليب قليل الدسم 1 لتر,6281007001002\nزبادي طبيعي 170 جم,6281007002001\nعصير برتقال 1 لتر,6281007003001";
     Clipboard.setData(const ClipboardData(text: sample));
@@ -1132,7 +1098,6 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final firestore = ref.watch(firestoreProvider);
-    final isAr = ref.isArabic;
     final strings = AppStrings.of(ref);
 
     return Container(
@@ -1175,14 +1140,6 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                       ),
                     ],
                   ),
-                ),
-                M3MorphingActionButton(
-                  onPressed: _seedDefaultSampleData,
-                  icon: Icons.bolt_rounded,
-                  label: _isSeeding ? strings.loading : (isAr ? 'تحميل نموذج المراعي' : 'Load Almarai Demo'),
-                  isSelected: true,
-                  customColor: colorScheme.primary,
-                  tooltip: isAr ? 'توليد شركة ومنتجات المراعي كبيانات تجريبية' : 'Generate Almarai demo products & company',
                 ),
               ],
             ),
@@ -2744,6 +2701,177 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
     );
   }
 
+  Widget _buildCompanyActionsM3ButtonGroup(
+    ColorScheme colorScheme,
+    CompanyModel selectedCompany,
+    AppStrings strings,
+  ) {
+    return Container(
+      height: 38,
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.8),
+          width: 1.0,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(11),
+        child: IntrinsicHeight(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 1. AI Product Discovery
+              _buildM3GroupActionItem(
+                colorScheme: colorScheme,
+                icon: _isAiAnalyzing ? null : Icons.auto_awesome_rounded,
+                customIcon: _isAiAnalyzing
+                    ? SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary),
+                      )
+                    : null,
+                label: _isAiAnalyzing ? 'جاري الفحص...' : 'فحص واكتشاف الأصناف',
+                tooltip: 'فحص فواتير المشتريات تلقائياً لاكتشاف أي أصناف جديدة لم تسجل بعد لـ (${selectedCompany.name}) ومراجعتها واعتمادها',
+                iconColor: Colors.amber.shade800,
+                onPressed: _isAiAnalyzing ? null : () => _scanAndReviewDiscoveredProductsForCompany(selectedCompany),
+              ),
+              _buildM3GroupDivider(colorScheme),
+
+              // 2. Edit Company
+              _buildM3GroupActionItem(
+                colorScheme: colorScheme,
+                icon: Icons.edit_note_rounded,
+                label: 'تعديل',
+                tooltip: 'تعديل الاسم التجاري أو الكود الرقمي المعرف لـ (${selectedCompany.name})',
+                iconColor: colorScheme.primary,
+                onPressed: () => _showEditCompanyDialog(selectedCompany),
+              ),
+              _buildM3GroupDivider(colorScheme),
+
+              // 3. Add Products
+              _buildM3GroupActionItem(
+                colorScheme: colorScheme,
+                icon: Icons.add_box_rounded,
+                label: 'إضافة منتجات',
+                tooltip: 'الانتقال المباشر لقسم إضافة وتكويد أصناف جديدة لـ (${selectedCompany.name})',
+                iconColor: colorScheme.primary,
+                onPressed: () {
+                  setState(() {
+                    _selectedProductCompanySlug = selectedCompany.slug;
+                    _activeMode = CatalogInputMode.manual;
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('تم تفعيل شركة "${selectedCompany.name}" في كارت إضافة المنتجات بالأعلى.'),
+                      duration: const Duration(seconds: 3),
+                    ),
+                  );
+                },
+              ),
+              _buildM3GroupDivider(colorScheme),
+
+              // 4. Audit & Deduplicate
+              _buildM3GroupActionItem(
+                colorScheme: colorScheme,
+                icon: Icons.cleaning_services_rounded,
+                label: 'تدقيق ومنع التكرار',
+                tooltip: 'تدقيق وفحص كافة أصناف (${selectedCompany.name}) المسجلة وحذف أي أصناف مكررة فوراً وتصحيح العداد',
+                iconColor: Colors.teal.shade700,
+                textColor: Colors.teal.shade900,
+                onPressed: () => _auditAndDeduplicateCompany(selectedCompany),
+              ),
+              _buildM3GroupDivider(colorScheme),
+
+              // 5. Delete All Products (Destructive)
+              _buildM3GroupActionItem(
+                colorScheme: colorScheme,
+                icon: Icons.delete_sweep_rounded,
+                label: 'مسح كل المنتجات',
+                tooltip: 'مسح وحذف كافة المنتجات والأصناف المسجلة لـ (${selectedCompany.name}) من الـ Firebase دفعة واحدة',
+                iconColor: Colors.red.shade700,
+                textColor: Colors.red.shade700,
+                hoverColor: Colors.red.shade50,
+                onPressed: () => _deleteAllProductsForCompany(selectedCompany.slug, selectedCompany.name),
+              ),
+              _buildM3GroupDivider(colorScheme),
+
+              // 6. Delete Entire Company (Icon Action)
+              _buildM3GroupActionItem(
+                colorScheme: colorScheme,
+                icon: Icons.delete_outline_rounded,
+                tooltip: 'حذف شركة (${selectedCompany.name}) وجميع أصنافها الموثقة من النظام نهائياً',
+                iconColor: Colors.red.shade700,
+                hoverColor: Colors.red.shade50,
+                onPressed: () => _deleteCompanyFromFirebase(selectedCompany.slug, selectedCompany.name),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildM3GroupActionItem({
+    required ColorScheme colorScheme,
+    IconData? icon,
+    Widget? customIcon,
+    String? label,
+    required String tooltip,
+    Color? iconColor,
+    Color? textColor,
+    Color? hoverColor,
+    required VoidCallback? onPressed,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 300),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          hoverColor: hoverColor ?? colorScheme.primary.withValues(alpha: 0.08),
+          splashColor: colorScheme.primary.withValues(alpha: 0.12),
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: label != null ? 10 : 8, vertical: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (customIcon != null)
+                  customIcon
+                else if (icon != null)
+                  Icon(icon, size: 16, color: iconColor ?? colorScheme.onSurfaceVariant),
+                if (label != null) ...[
+                  const SizedBox(width: 5),
+                  Text(
+                    label,
+                    style: GoogleFonts.cairo(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: textColor ?? colorScheme.onSurface,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildM3GroupDivider(ColorScheme colorScheme) {
+    return VerticalDivider(
+      width: 1,
+      thickness: 1,
+      color: colorScheme.outlineVariant.withValues(alpha: 0.7),
+      indent: 4,
+      endIndent: 4,
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // MODE B: استعراض منتجات الشركة المحددة (Paginated 20 Products View)
   // ---------------------------------------------------------------------------
@@ -2756,119 +2884,70 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Company Information Banner
+        // Company Information & M3 Action Button Group Banner
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
-            borderRadius: BorderRadius.circular(14),
+            color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
           ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(Icons.business_rounded, color: colorScheme.onPrimaryContainer, size: 20),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth > 850;
+              final companyInfo = Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.business_rounded, color: colorScheme.onPrimaryContainer, size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${selectedCompany.name} (كود: ${selectedCompany.slug})',
+                        style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      Text(
+                        'إجمالي الأصناف الموثقة: ${selectedCompany.productsCount} صنف',
+                        style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+
+              final actionGroup = _buildCompanyActionsM3ButtonGroup(colorScheme, selectedCompany, strings);
+
+              if (isWide) {
+                return Row(
+                  children: [
+                    Expanded(child: companyInfo),
+                    const SizedBox(width: 12),
+                    actionGroup,
+                  ],
+                );
+              } else {
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '${selectedCompany.name} (كود: ${selectedCompany.slug})',
-                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 14),
-                    ),
-                    Text(
-                      'إجمالي الأصناف الموثقة: ${selectedCompany.productsCount} صنف',
-                      style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                    companyInfo,
+                    const SizedBox(height: 12),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: actionGroup,
                     ),
                   ],
-                ),
-              ),
-              Tooltip(
-                message: 'فحص فواتير المشتريات تلقائياً لاكتشاف أي أصناف جديدة لم تسجل بعد لـ (${selectedCompany.name}) ومراجعتها واعتمادها',
-                child: FilledButton.tonalIcon(
-                  onPressed: _isAiAnalyzing ? null : () => _scanAndReviewDiscoveredProductsForCompany(selectedCompany),
-                  icon: const Icon(Icons.auto_awesome_rounded, size: 16, color: Colors.amber),
-                  label: Text('فحص واكتشاف الأصناف', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Tooltip(
-                message: 'تعديل الاسم التجاري أو الكود الرقمي المعرف لـ (${selectedCompany.name})',
-                child: FilledButton.tonalIcon(
-                  onPressed: () => _showEditCompanyDialog(selectedCompany),
-                  icon: const Icon(Icons.edit_note_rounded, size: 16),
-                  label: const Text('تعديل'),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Tooltip(
-                message: 'الانتقال المباشر لقسم إضافة وتكويد أصناف جديدة لـ (${selectedCompany.name})',
-                child: FilledButton.tonalIcon(
-                  onPressed: () {
-                    setState(() {
-                      _selectedProductCompanySlug = selectedCompany.slug;
-                      _activeMode = CatalogInputMode.manual;
-                    });
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('تم تفعيل شركة "${selectedCompany.name}" في كارت إضافة المنتجات بالأعلى.'),
-                        duration: const Duration(seconds: 3),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.add_box_rounded, size: 16),
-                  label: const Text('إضافة منتجات'),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Tooltip(
-                message: 'تدقيق وفحص كافة أصناف (${selectedCompany.name}) المسجلة وحذف أي أصناف مكررة فوراً وتصحيح العداد',
-                child: FilledButton.tonalIcon(
-                  onPressed: () => _auditAndDeduplicateCompany(selectedCompany),
-                  icon: const Icon(Icons.cleaning_services_rounded, size: 16, color: Colors.teal),
-                  label: Text('تدقيق ومنع التكرار', style: GoogleFonts.cairo(color: Colors.teal.shade800, fontWeight: FontWeight.bold)),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.teal.shade50,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Tooltip(
-                message: 'مسح وحذف كافة المنتجات والأصناف المسجلة لـ (${selectedCompany.name}) من الـ Firebase دفعة واحدة',
-                child: FilledButton.tonalIcon(
-                  onPressed: () => _deleteAllProductsForCompany(selectedCompany.slug, selectedCompany.name),
-                  icon: const Icon(Icons.delete_sweep_rounded, size: 16, color: Colors.red),
-                  label: Text('مسح كل المنتجات', style: GoogleFonts.cairo(color: Colors.red.shade700, fontWeight: FontWeight.bold)),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.red.shade50,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              IconButton(
-                icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
-                tooltip: 'حذف شركة (${selectedCompany.name}) وجميع أصنافها الموثقة من النظام نهائياً',
-                onPressed: () => _deleteCompanyFromFirebase(selectedCompany.slug, selectedCompany.name),
-              ),
-            ],
+                );
+              }
+            },
           ),
         ),
         const SizedBox(height: 14),

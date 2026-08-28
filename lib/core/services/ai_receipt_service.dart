@@ -639,7 +639,8 @@ $rulesListFormatted
 7. قم بتعبئة حقل (matchedRuleId) بمعرف القاعدة المطابقة (مثل "rule_2" أو "rule_4" أو "rule_3").
 8. قم بتعبئة حقل (matchedRuleTitle) بعنوان القاعدة المطابقة.
 9. قم بتعبئة حقل (matchedRewardType) بنوع المكافأة ("voucher" أو "free_product").
-10. إذا لم تنطبق أي من هذه القواعد الخاصة، اترك حقل (matchedRuleId) فارغاً "" وحقل (matchedRuleIds) كقائمة فارغة [].
+10. [العزل الصارم للأصناف واستهلاك الكميات]: كل صنف يطابق قاعدة علامته التجارية فقط (مثال: رول أون ريكسونا يطابق قاعدة رول أون ريكسونا فقط، ولا يجوز إطلاقاً احتسابه في عروض تريزيمي أو كلير). تُخصم الكمية المستهلكة فوراً من السلة لمنع احتساب نفس القطعة في أكثر من عرض.
+11. إذا لم تنطبق أي من هذه القواعد الخاصة، اترك حقل (matchedRuleId) فارغاً "" وحقل (matchedRuleIds) كقائمة فارغة [].
 ''';
       }
 
@@ -1477,16 +1478,26 @@ class PromotionalRuleMatcher {
     final List<MatchedPromotionalRuleResult> allMatchedResults = [];
     final Set<String> matchedRuleIds = {};
 
+    // Track remaining unconsumed quantities per product item to guarantee Zero Double-Multiplication Invariant
+    final Map<int, int> remainingItemQuantities = {};
+    for (int i = 0; i < effectiveProducts.length; i++) {
+      remainingItemQuantities[i] = getEffectiveProductQuantity(effectiveProducts[i]);
+    }
+
     for (final group in rulesByProductGroup.values) {
       // Sort rules within the family descending by minQuantity (highest tier first: e.g. 2 pcs before 1 pc)
       final sortedGroup = List<PromotionalRuleItem>.from(group)
         ..sort((a, b) => b.minQuantity.compareTo(a.minQuantity));
 
-      // Calculate total available quantity of qualifying products in the customer's receipt for this family
+      // Calculate total available unconsumed quantity in the receipt for this family
       int totalAvailableQty = 0;
-      for (final p in effectiveProducts) {
-        if (sortedGroup.any((r) => _matchesProduct(p, r.triggerProduct))) {
-          totalAvailableQty += getEffectiveProductQuantity(p);
+      final List<int> matchingProductIndices = [];
+      for (int i = 0; i < effectiveProducts.length; i++) {
+        final p = effectiveProducts[i];
+        final remaining = remainingItemQuantities[i] ?? 0;
+        if (remaining > 0 && sortedGroup.any((r) => _matchesProduct(p, r.triggerProduct))) {
+          totalAvailableQty += remaining;
+          matchingProductIndices.add(i);
         }
       }
 
@@ -1494,8 +1505,6 @@ class PromotionalRuleMatcher {
 
       for (final rule in sortedGroup) {
         if (remainingQty <= 0) break;
-
-        final bool isAiExplicitMatch = aiMatchedRuleIds.contains(rule.id);
 
         if (rule.minQuantity > 0 && remainingQty >= rule.minQuantity) {
           int count = 1;
@@ -1506,6 +1515,16 @@ class PromotionalRuleMatcher {
 
           final int usedQty = count * rule.minQuantity;
           remainingQty -= usedQty;
+
+          // Deduct consumed quantity from the matching product items
+          int qtyToDeduct = usedQty;
+          for (final idx in matchingProductIndices) {
+            if (qtyToDeduct <= 0) break;
+            final curr = remainingItemQuantities[idx] ?? 0;
+            final take = math.min(curr, qtyToDeduct);
+            remainingItemQuantities[idx] = curr - take;
+            qtyToDeduct -= take;
+          }
 
           final double baseAmount = rule.totalVoucherValue > 0
               ? rule.totalVoucherValue
@@ -1537,42 +1556,6 @@ class PromotionalRuleMatcher {
               totalRewardAmount: totalAmount,
               formattedPrizeSummary: prizeSummary,
               multipliedLinkedGifts: multipliedLinkedGifts,
-            ),
-          );
-        } else if (isAiExplicitMatch && !matchedRuleIds.contains(rule.id)) {
-          final double baseAmount = rule.totalVoucherValue > 0
-              ? rule.totalVoucherValue
-              : (rule.rewardAmount > 0 ? rule.rewardAmount : 0.0);
-          matchedRuleIds.add(rule.id);
-          allMatchedResults.add(
-            MatchedPromotionalRuleResult(
-              rule: rule,
-              multiplier: 1,
-              totalTriggerQuantity: rule.minQuantity,
-              totalRewardAmount: baseAmount,
-              formattedPrizeSummary: rule.rewardValue,
-              multipliedLinkedGifts: rule.linkedGifts,
-            ),
-          );
-        }
-      }
-    }
-
-    // 2. Include any remaining AI matched rules that weren't captured by the product group loop
-    for (final aiRuleId in aiMatchedRuleIds) {
-      if (!matchedRuleIds.contains(aiRuleId)) {
-        final rule = promotionalRules.where((r) => r.id == aiRuleId).firstOrNull;
-        if (rule != null) {
-          final baseAmount = rule.totalVoucherValue > 0 ? rule.totalVoucherValue : rule.rewardAmount;
-          matchedRuleIds.add(rule.id);
-          allMatchedResults.add(
-            MatchedPromotionalRuleResult(
-              rule: rule,
-              multiplier: 1,
-              totalTriggerQuantity: rule.minQuantity,
-              totalRewardAmount: baseAmount,
-              formattedPrizeSummary: rule.rewardValue,
-              multipliedLinkedGifts: rule.linkedGifts,
             ),
           );
         }
@@ -1658,7 +1641,7 @@ class PromotionalRuleMatcher {
   };
 
   static bool _matchesProduct(ExtractedProductItem product, String triggerProduct) {
-    if (triggerProduct.trim().isEmpty) return product.isTargetCompany;
+    if (triggerProduct.trim().isEmpty) return false;
 
     final pNorm = _normalize(product.name);
     final parts = triggerProduct.split(RegExp(r'[,،/\+\n]|(\s+أو\s+)|(\s+or\s+)', caseSensitive: false));
@@ -1667,8 +1650,8 @@ class PromotionalRuleMatcher {
       final partNorm = _normalize(part);
       if (partNorm.isEmpty) continue;
 
-      // 1. Direct substring match of whole phrase
-      if (pNorm.contains(partNorm) || partNorm.contains(pNorm)) return true;
+      // 1. Direct substring match (product name must contain the trigger phrase)
+      if (pNorm.contains(partNorm)) return true;
 
       // 2. Phrase matching (all non-noise words in phrase must be present or fuzzy matched)
       final phraseWords = partNorm.split(' ').where((w) => w.length >= 2 && !_noiseWords.contains(w)).toList();
