@@ -15,6 +15,9 @@ void main() {
         rewardValue: 'كلير 90 مل هدية',
         rewardAmount: 0.0,
         allowMultipliers: true,
+        linkedGifts: [
+          LinkedGiftAllocation(giftId: 'g_clear', giftName: 'كلير 90 مل هديه', quantity: 1, unitValue: 0.0, giftType: 'product'),
+        ],
       ),
       PromotionalRuleItem(
         id: 'rule_2',
@@ -573,6 +576,39 @@ void main() {
       // Verify zero Tresemme gifts because Sherosa is not Tresemme
       expect(matchedResults.any((m) => m.rule.id == 'rule_2'), isFalse);
       expect(composite.combinedLinkedGifts.any((g) => g.giftName.contains('تريزيمي')), isFalse);
+    });
+
+    test('Customer in Gomla Market with Clear Shampoo 360ml (134 EGP, Barcode 6221155210517) auto-heals quantity to 1 and yields EXACTLY 1x Clear 90ml gift (never 3)', () {
+      // Simulating raw OCR JSON where quantity was mistakenly extracted as 3 due to vertical column bleed
+      final rawItemJson = {
+        'name': '(كلير شامبو رجالى 360مل (وفر JR)',
+        'price': 134.0,
+        'quantity': 3, // Bleed from previous line
+        'totalLinePrice': 134.0,
+        'barcode': '6221155210517',
+        'isTargetCompany': true,
+      };
+
+      final autoHealedItem = ExtractedProductItem.fromJson(rawItemJson);
+
+      // Verify mathematical auto-healing to 1 piece
+      expect(autoHealedItem.quantity, 1);
+      expect(autoHealedItem.price, 134.0);
+
+      final matchedResults = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: [autoHealedItem],
+        promotionalRules: rules,
+        allowCampaignMultipliers: true,
+      );
+
+      // Must strictly match ONLY Rule 1 (Clear 360ml -> 1x Clear 90ml gift)
+      expect(matchedResults.length, 1);
+      final match = matchedResults.first;
+      expect(match.rule.id, 'rule_1');
+      expect(match.multiplier, 1);
+      expect(match.multipliedLinkedGifts.length, 1);
+      expect(match.multipliedLinkedGifts.first.giftName, contains('كلير 90'));
+      expect(match.multipliedLinkedGifts.first.quantity, 1); // EXACTLY 1 gift!
     });
   });
 }

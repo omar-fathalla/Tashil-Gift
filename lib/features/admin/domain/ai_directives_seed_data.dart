@@ -548,5 +548,27 @@ class AiDirectivesSeedData {
           tags: ['strict-size', 'barcode-whitelist', 'tresemme-400ml-only', 'unilever', 'gomla-market', 'size-guard'],
           lastUpdated: '2026-08-28',
         ),
+
+        const AiDirectiveModel(
+          id: 'AIR-26',
+          code: 'POS_HORIZONTAL_ROW_ALIGNMENT_AND_MATHEMATICAL_QUANTITY_GOVERNANCE',
+          orderIndex: 26,
+          category: AiDirectiveCategory.unitEconomics,
+          titleAr: 'حوكمة المحاذاة الأفقية لسطور الفاتورة واستنتاج الكمية الرياضي الصارم (POS Row Alignment & Mathematical Quantity Defense)',
+          titleEn: 'POS Horizontal Row Alignment & Deterministic Mathematical Quantity Defense',
+          descriptionAr:
+              'حوكمة استخراج كميات وأسعار الأصناف في بونات الكاشير (خاصة جملة ماركت وفتح الله وكارفور) لضمان ربط كل صنف وباركوده بالكمية والسعر المطبوعين في نفس السطر الأفقي تماماً، ومنع خطأ الإزاحة الرأسية (Vertical Column Shift) الذي قد يلتقط كمية الصنف من السطر الذي يعلوه، مع فرض التحقق الرياضي الحتمي: الكمية = إجمالي السطر ÷ سعر الوحدة.',
+          descriptionEn:
+              'Guarantees strict horizontal row alignment between item names, barcodes, unit prices, and quantities in supermarket receipts. Prevents vertical column shift bugs where an item accidentally inherits the quantity column of an adjacent row. Enforces mathematical consistency: Quantity = Line Total / Unit Price.',
+          logicAr:
+              '1. قراءة أعمدة البون أفقياً: [القيمة] [السعر] [الكمية] [الصنف والباركود]، وربط الكمية المطبوعة بنفس سطر الصنف والباركود دون انحراف.\n2. التحقق الرياضي: إذا كان إجمالي السطر = سعر الوحدة (مثلاً: 134.00 ج.م و 134.00 ج.م)، تكون الكمية حتماً 1 قطعة فقط.\n3. التصحيح الذاتي في الكود: إذا تم استخراج كمية > 1 مع تساوي إجمالي السطر وسعر الوحدة، يتم تصحيح الكمية فورياً إلى 1 قطعة.\n4. منح الهدية المستحقة بالضبط (مثلاً: 1 شامبو كلير 360 مل يمنح 1 هدية كلير 90 مل، وليس 3 هدايا).',
+          logicEn:
+              '1. Reads POS receipt columns strictly along the same horizontal baseline: [Line Total] [Unit Price] [Quantity] [Item & Barcode].\n2. Mathematical validation: if Line Total == Unit Price (e.g. 134.00 and 134.00), quantity is strictly 1 piece.\n3. Automated code auto-healing: corrects quantity to 1 if Line Total == Unit Price, eliminating vertical bleed.\n4. Accurately awards 1 gift per 1 purchased qualifying unit (e.g. 1 Clear 90ml gift for 1 Clear 360ml shampoo).',
+          exampleInput: 'بون جملة ماركت يحتوي على سطر: "10.00 3.33 3 6223010040628" ويليه سطر: "(كلير شامبو رجالى 360مل (وفر JR) 134.00 134.00 1 6221155210517"',
+          exampleOutput: 'استخراج صنف كلير بالكمية الصحيحة 1 قطعة وسعر 134.00 ج.م وباركود 6221155210517، ومنح 1 × كلير 90 مل هدية فقط لا غير وتجاهل الرقم 3 من السطر السابق.',
+          tags: ['pos-row-alignment', 'mathematical-quantity', 'clear-shampoo', 'vertical-shift-defense', 'unilever', 'gomla-market'],
+          lastUpdated: '2026-08-28',
+        ),
       ];
 }
+

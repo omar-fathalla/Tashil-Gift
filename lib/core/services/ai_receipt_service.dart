@@ -49,6 +49,22 @@ class ExtractedProductItem {
 
     final bool isAlreadyNormalized = json['isUnitNormalized'] == true;
 
+    // Mathematical Consistency & Vertical Column Shift Auto-Healing (AIR-26):
+    // If rawTotalLine is provided and equals rawPrice (e.g. Total 134.00 and Price 134.00),
+    // but quantity was extracted as > 1 (e.g. quantity = 3 due to reading row above 10.00 / 3.33 / 3):
+    // The physical quantity MUST be 1 piece!
+    if (quantity > 1 && rawTotalLine != null && rawTotalLine > 0 && rawPrice > 0) {
+      if ((rawTotalLine - rawPrice).abs() < 1.5 && (rawOriginalPrice == null || rawOriginalPrice <= rawPrice * 1.25)) {
+        quantity = 1;
+      } else {
+        final double ratio = rawTotalLine / rawPrice;
+        final int calculatedQty = ratio.round();
+        if (calculatedQty >= 1 && (calculatedQty * rawPrice - rawTotalLine).abs() < 1.5 && calculatedQty != quantity) {
+          quantity = calculatedQty;
+        }
+      }
+    }
+
     // Auto-heal / enforce per-unit price:
     if (quantity > 1 && !isAlreadyNormalized) {
       final bool isAlreadyUnitPrice = rawTotalLine != null &&
@@ -756,6 +772,10 @@ $chancesCondition
 
 ⚠️ تعليمات استخراج أسعار الأصناف والكميات والخصومات بدقة (Strict Unit Price & Discount Rules):
 - يجب أن يحتوي حقل (price) دائماً على سعر بيع القطعة الواحدة فقط (Unit Price).
+- [محاذاة السطور والباركود والكمية الحسابية - POS Row Alignment & AIR-26]:
+  * في بونات السوبرماركت (خاصة جملة ماركت وفتح الله وكارفور)، تقع الكمية وسعر الوحدة والباركود على نفس السطر الأفقي للصنف تماماً: [القيمة] [السعر] [الكمية] [الصنف والباركود].
+  * احذر بشدة من قراءة كمية من السطر الذي يعلو أو يلي سطر الصنف! (مثلاً: إذا كان السطر السابق يحتوي على كمية 3 وسعر 3.33 وإجمالي 10.00، والسطر الحالي هو "(كلير شامبو رجالى 360مل (وفر JR)" بسعر 134.00 وإجمالي 134.00 وكمية 1 وباركود 6221155210517، فالكمية حتماً 1 قطعة فقط).
+  * تحقق دائماً من المعادلة: الكمية = إجمالي السطر ÷ سعر الوحدة. إذا كان الإجمالي 134.00 والسعر 134.00 فالكمية = 1 وتمنح 1 هدية كلير 90 مل.
 - إذا اشترى العميل كمية (quantity = 2 أو أكثر)، وكان المطبوع في الفاتورة هو إجمالي السطر (مثل 2 × 115 = 230 أو 198 بعد الخصم)، فيجب وضع سعر القطعة الصافي في (price) = 99.0 ج.م، وسعر القطعة الأصلي في (originalPrice) = 115.0 ج.م، وقيمة الخصم للقطعة الواحدة في (discountAmount) = 16.0 ج.م، وإجمالي السطر في (totalLinePrice) = 198.0 ج.م.
 - إياك أن تضع إجمالي السطر كسعر للقطعة في حقل price عند وجود كمية أكبر من 1!
 
@@ -786,6 +806,10 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         
         ⚠️ تعليمات استخراج أسعار الأصناف والكميات والخصومات بدقة (Strict Unit Price & Discount Rules):
         - يجب أن يحتوي حقل (price) دائماً على سعر بيع القطعة الواحدة فقط (Unit Price).
+        - [محاذاة السطور والباركود والكمية الحسابية - POS Row Alignment & AIR-26]:
+          * في بونات السوبرماركت (خاصة جملة ماركت وفتح الله وكارفور)، تقع الكمية وسعر الوحدة والباركود على نفس السطر الأفقي للصنف تماماً: [القيمة] [السعر] [الكمية] [الصنف والباركود].
+          * احذر بشدة من قراءة كمية من السطر الذي يعلو أو يلي سطر الصنف! (مثلاً: إذا كان السطر السابق يحتوي على كمية 3 وسعر 3.33 وإجمالي 10.00، والسطر الحالي هو "(كلير شامبو رجالى 360مل (وفر JR)" بسعر 134.00 وإجمالي 134.00 وكمية 1 وباركود 6221155210517، فالكمية حتماً 1 قطعة فقط).
+          * تحقق دائماً من المعادلة: الكمية = إجمالي السطر ÷ سعر الوحدة. إذا كان الإجمالي 134.00 والسعر 134.00 فالكمية = 1 وتمنح 1 هدية كلير 90 مل.
         - إذا اشترى العميل كمية (quantity = 2 أو أكثر)، وكان المطبوع في الفاتورة هو إجمالي السطر (مثل 2 × 115 = 230 أو 198 بعد الخصم)، فيجب:
           * وضع سعر القطعة الواحدة الصافي في (price) = 99.0 ج.م (وليس 198).
           * وضع سعر القطعة الأصلي قبل الخصم في (originalPrice) = 115.0 ج.م (وليس 230).
