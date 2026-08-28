@@ -1520,21 +1520,11 @@ class PromotionalRuleMatcher {
         if (rule.minQuantity > 0 && remainingQty >= rule.minQuantity) {
           int count = 1;
           if (rule.allowMultipliers || allowCampaignMultipliers) {
-            if (rule.minQuantity == 1) {
-              int rawPackCount = 0;
-              for (final idx in matchingProductIndices) {
-                if ((remainingItemQuantities[idx] ?? 0) > 0) {
-                  rawPackCount += effectiveProducts[idx].quantity > 0 ? effectiveProducts[idx].quantity : 1;
-                }
-              }
-              count = rawPackCount > 0 ? rawPackCount : (remainingQty ~/ rule.minQuantity);
-            } else {
-              count = remainingQty ~/ rule.minQuantity;
-            }
+            count = remainingQty ~/ rule.minQuantity;
             if (count < 1) count = 1;
           }
 
-          final int usedQty = rule.minQuantity == 1 ? remainingQty : (count * rule.minQuantity);
+          final int usedQty = count * rule.minQuantity;
           remainingQty -= usedQty;
 
           // Deduct consumed quantity from the matching product items
@@ -1675,6 +1665,15 @@ class PromotionalRuleMatcher {
     return null;
   }
 
+  static Set<String> _getBrandRootsInText(String text) {
+    final norm = _normalize(text);
+    final brands = <String>{};
+    for (final brand in _brandRoots) {
+      if (norm.contains(brand)) brands.add(brand);
+    }
+    return brands;
+  }
+
   static bool _matchesProduct(ExtractedProductItem product, String triggerProduct) {
     if (triggerProduct.trim().isEmpty) return false;
 
@@ -1686,6 +1685,19 @@ class PromotionalRuleMatcher {
     }
 
     final pNorm = _normalize(product.name);
+
+    // 0.1 Strict Brand Root Anchor Guard:
+    // If the trigger rule explicitly targets specific brands (e.g. Tresemme, Rexona, Axe, Clear),
+    // the product MUST contain at least one of those brand roots to prevent cross-brand false positives (e.g. Sherosa vs Tresemme).
+    final Set<String> triggerBrands = _getBrandRootsInText(triggerProduct);
+    if (triggerBrands.isNotEmpty) {
+      final Set<String> productBrands = _getBrandRootsInText(pNorm);
+      final bool hasMatchingBrand = triggerBrands.any((tb) => productBrands.contains(tb));
+      if (!hasMatchingBrand) {
+        return false;
+      }
+    }
+
     final int? productSize = _extractSizeMl(pNorm);
 
     final parts = triggerProduct.split(RegExp(r'[,،/\+\n]|(\s+أو\s+)|(\s+or\s+)', caseSensitive: false));

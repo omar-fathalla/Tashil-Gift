@@ -530,6 +530,50 @@ void main() {
       expect(matchedResults.any((m) => m.rule.id == 'rule_2'), isFalse);
       expect(match.multipliedLinkedGifts.any((g) => g.giftName.contains('تريزيمي')), isFalse);
     });
+
+    test('Customer in Gomla Montazah buying Sherosa Shampoo+Conditioner + 3x Axe Spray yields strictly 175 EGP Vouchers for Axe and 0 Tresemme gifts for Sherosa', () {
+      final sherosaAndAxeItems = [
+        ExtractedProductItem(
+          name: 'شيروزا شامبو للشعر الجاف 250 مل + شامبو 1',
+          price: 82.0,
+          quantity: 1,
+          barcode: '6221009009427',
+          isTargetCompany: false,
+        ),
+        ExtractedProductItem(
+          name: 'شيروزا شامبو و بلسم للشعر الشديد الجفاف 60',
+          price: 109.0,
+          quantity: 1,
+          barcode: '6221009005474',
+          isTargetCompany: false,
+        ),
+        ExtractedProductItem(
+          name: 'اكس اسبراى بلاك 150 مل (خصم 15%) (شكل جد',
+          price: 140.0,
+          quantity: 3,
+          barcode: '6221155611772',
+          isTargetCompany: true,
+        ),
+      ];
+
+      final matchedResults = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: sherosaAndAxeItems,
+        promotionalRules: rules,
+        allowCampaignMultipliers: true,
+      );
+
+      // Must strictly match Axe Spray (2 cans -> Rule 4 for 125 EGP + 1 can -> Rule 3 for 50 EGP = 175 EGP)
+      expect(matchedResults.length, 2);
+      expect(matchedResults.any((m) => m.rule.id == 'rule_4'), isTrue);
+      expect(matchedResults.any((m) => m.rule.id == 'rule_3'), isTrue);
+
+      final composite = CompositePromotionalBundle.fromMatchedRules(matchedResults);
+
+      expect(composite.totalVoucherValue, 175.0);
+      // Verify zero Tresemme gifts because Sherosa is not Tresemme
+      expect(matchedResults.any((m) => m.rule.id == 'rule_2'), isFalse);
+      expect(composite.combinedLinkedGifts.any((g) => g.giftName.contains('تريزيمي')), isFalse);
+    });
   });
 }
 
