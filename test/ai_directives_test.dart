@@ -4,23 +4,23 @@ import 'package:al_mraay/features/admin/domain/ai_directives_seed_data.dart';
 
 void main() {
   group('AI Brain Directives & Continuous Heuristics Registry Tests', () {
-    test('AiDirectivesSeedData contains all directives from AIR-01 to AIR-26 with strict integrity', () {
+    test('AiDirectivesSeedData contains all directives from AIR-01 to AIR-27 with strict integrity', () {
       final directives = AiDirectivesSeedData.initialDirectives;
 
-      expect(directives.length, greaterThanOrEqualTo(26));
+      expect(directives.length, greaterThanOrEqualTo(27));
 
       // Verify all IDs are unique
       final ids = directives.map((d) => d.id).toSet();
       expect(ids.length, directives.length);
 
-      // Verify AIR-26 is present
-      final air26 = directives.firstWhere((d) => d.id == 'AIR-26');
-      expect(air26.code, 'POS_HORIZONTAL_ROW_ALIGNMENT_AND_MATHEMATICAL_QUANTITY_GOVERNANCE');
-      expect(air26.orderIndex, 26);
-      expect(air26.category, AiDirectiveCategory.unitEconomics);
-      expect(air26.titleAr, contains('المحاذاة الأفقية لسطور الفاتورة'));
-      expect(air26.tags, contains('pos-row-alignment'));
-      expect(air26.tags, contains('mathematical-quantity'));
+      // Verify AIR-27 is present
+      final air27 = directives.firstWhere((d) => d.id == 'AIR-27');
+      expect(air27.code, 'POS_TRUNCATED_BRAND_NORMALIZATION_AND_BIDIRECTIONAL_CATALOG_BARCODE_ENRICHMENT');
+      expect(air27.orderIndex, 27);
+      expect(air27.category, AiDirectiveCategory.promotionalRules);
+      expect(air27.titleAr, contains('معالجة الحروف المقطوعة'));
+      expect(air27.tags, contains('axe-pos-clipping'));
+      expect(air27.tags, contains('barcode-catalog-enrichment'));
     });
 
     test('AIR-22 (Fathalla Price Defense) and AIR-21 (POS Concatenation) are active', () {

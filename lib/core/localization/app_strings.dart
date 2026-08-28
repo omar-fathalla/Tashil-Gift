@@ -494,6 +494,11 @@ class AppStrings {
     en: 'This gift is currently out of stock at the branch. Please check with supervisor.',
     hi: 'यह उपहार वर्तमान में शाखा में समाप्त हो गया है। कृपया पर्यवेक्षक से संपर्क करें।',
   );
+  String directGiftOutOfStockAtBranch(String branchName) => _t(
+    ar: 'تم نفاد مخزون هذه الهدية من ($branchName)، يرجى مراجعة المشرف.',
+    en: 'This gift is out of stock at ($branchName). Please check with supervisor.',
+    hi: '($branchName) में यह उपहार समाप्त हो गया है। कृपया पर्यवेक्षक से संपर्क करें।',
+  );
 
   // ---------------------------------------------------------------------------
   // 12. Client Portal / Promoter Flow

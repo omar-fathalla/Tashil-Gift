@@ -304,6 +304,22 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
         int foundRemaining = -1;
 
         String? branchNameFound;
+        final branchNamesList = (data['branchNames'] as List?)?.map((e) => e.toString()).toList() ?? [];
+        final branchIdsList = (data['branchIds'] as List?)?.map((e) => e.toString()).toList() ?? [];
+        if (widget.branchId != null && widget.branchId!.isNotEmpty) {
+          final idx = branchIdsList.indexOf(widget.branchId!);
+          if (idx != -1 && idx < branchNamesList.length) {
+            branchNameFound = branchNamesList[idx];
+          } else {
+            for (final bn in branchNamesList) {
+              if (bn == widget.branchId || bn.contains(widget.branchId!) || widget.branchId!.contains(bn)) {
+                branchNameFound = bn;
+                break;
+              }
+            }
+          }
+        }
+
         for (final p in prizes) {
           final matches = p['giftId'] == widget.prizeName ||
               p['name'] == widget.prizeName ||
@@ -313,14 +329,19 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                 widget.branchId!.isNotEmpty &&
                 p['branchId'] == widget.branchId) {
               foundRemaining = (p['remainingQuantity'] as num?)?.toInt() ?? 0;
-              branchNameFound = p['branchName']?.toString();
+              if (p['branchName'] != null && p['branchName'].toString().isNotEmpty) {
+                branchNameFound = p['branchName'].toString();
+              }
               break;
             } else if (foundRemaining == -1) {
               foundRemaining = (p['remainingQuantity'] as num?)?.toInt() ?? 0;
-              branchNameFound = p['branchName']?.toString();
+              if (p['branchName'] != null && p['branchName'].toString().isNotEmpty) {
+                branchNameFound = p['branchName'].toString();
+              }
             }
           }
         }
+        branchNameFound ??= widget.branchId;
 
         if (mounted) {
           setState(() {
@@ -369,9 +390,14 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
     if (_isClaiming || _isClaimed) return;
 
     if (_remainingStock != null && _remainingStock! <= 0 && !widget.isDemo) {
+      final strings = AppStrings.of(ref);
+      final branch = _resolvedBranchName ?? widget.branchId ?? '';
+      final msg = branch.isNotEmpty
+          ? strings.directGiftOutOfStockAtBranch(branch)
+          : strings.directGiftOutOfStock;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(AppStrings.of(ref).directGiftOutOfStock),
+          content: Text(msg),
           backgroundColor: Theme.of(context).colorScheme.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -1197,11 +1223,11 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                       const SizedBox(width: 10),
                                       Expanded(
                                         child: Text(
-                                          _resolvedBranchName != null && _resolvedBranchName!.isNotEmpty
-                                              ? (isAr
-                                                  ? 'تم نفاد مخزون هذه الهدية في ($_resolvedBranchName)، يرجى مراجعة المشرف لتغذية رصيد الفرع.'
-                                                  : 'Stock for this gift is depleted at ($_resolvedBranchName). Please contact supervisor.')
-                                              : strings.directGiftOutOfStock,
+                                          (_resolvedBranchName != null && _resolvedBranchName!.isNotEmpty)
+                                              ? strings.directGiftOutOfStockAtBranch(_resolvedBranchName!)
+                                              : ((widget.branchId != null && widget.branchId!.isNotEmpty)
+                                                  ? strings.directGiftOutOfStockAtBranch(widget.branchId!)
+                                                  : strings.directGiftOutOfStock),
                                           style: GoogleFonts.cairo(
                                             fontSize: 13,
                                             fontWeight: FontWeight.bold,

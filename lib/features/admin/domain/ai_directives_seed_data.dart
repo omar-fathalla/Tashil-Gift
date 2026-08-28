@@ -569,6 +569,26 @@ class AiDirectivesSeedData {
           tags: ['pos-row-alignment', 'mathematical-quantity', 'clear-shampoo', 'vertical-shift-defense', 'unilever', 'gomla-market'],
           lastUpdated: '2026-08-28',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-27',
+          code: 'POS_TRUNCATED_BRAND_NORMALIZATION_AND_BIDIRECTIONAL_CATALOG_BARCODE_ENRICHMENT',
+          orderIndex: 27,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معالجة الحروف المقطوعة في أسماء العلامات التجارية والتطابق التبادلي المزدوج للباركود المعتمد (Truncated Brands & Barcode Catalog Sync)',
+          titleEn: 'POS Truncated Brand Normalization & Bidirectional Barcode Catalog Sync',
+          descriptionAr:
+              'معالجة مشكلة قطع أو اختصار الحرف الأول من اسم العلامة التجارية في طابعات الكاشير الحرارية (مثل طباعة "كس اسبراى" أو "كس رول" أو "ايس شيل" بدلاً من "أكس اسبراي آيس شيل 150 مل")، مع التفعيل التبادلي المزدوج للباركود المعتمد المسجل في كتالوج الحملة (6221155611819) لترقية وتصحيح اسم الصنف والعلامة التجارية آلياً وتأهيله الفوري لعروض الفواتشرات والهدايا الترويجية.',
+          descriptionEn:
+              'Handles POS thermal print clipping where leading letters of brand names are omitted (e.g. "كس اسبراى" instead of "اكس اسبراي"). Also establishes bidirectional barcode-catalog enrichment where receipt barcode (e.g. 6221155611819) deterministically resolves the canonical brand and product name, guaranteeing 100% promotion qualification.',
+          logicAr:
+              '1. معالجة وتطبيع الحروف المبتورة في _normalize: تحويل "كس اسبراي" و "كس رول" و "ايس شيل" إلى العلامة القياسية "اكس".\n2. التطابق التبادلي المزدوج للباركود (Bidirectional Barcode Enrichment): إذا التقط الذكاء الاصطناعي باركود المنتج من البون (مثل 6221155611819)، يتم البحث في كتالوج باركودات الحملة واسترداد المسمى القياسي الكامل للصنف والعلامة التجارية ودمجهما معاً.\n3. مطابقة شروط العرض الترويجي (_matchesProduct): تفعيل المطابقة الفورية لصنف أكس اسبراي المؤهل ومنح الهدية المقررة (فواتشر 50 ج.م لشراء قطعة واحدة).\n4. منع رسالة "المنتجات غير مشمولة" غير الصحيحة.',
+          logicEn:
+              '1. Normalizes clipped POS brand prefixes in _normalize, mapping "كس اسبراي" and "ايس شيل" to canonical "اكس".\n2. Bidirectional Barcode Enrichment: queries the campaign product catalog by receipt barcode (e.g. 6221155611819) to inject canonical product names into extracted items.\n3. Enables immediate qualification in _matchesProduct for single-unit Axe offers (e.g. 50 EGP Voucher).\n4. Eliminates false "products not included in current promotions" rejections.',
+          exampleInput: 'بون جملة ماركت يحتوي على: "كس اسبراى ايس شيل 150مل (خصم 15%)" السعر 140.00 ج.م والكمية 1 والباركود 6221155611819',
+          exampleOutput: 'التعرف الفوري على الصنف كـ "أكس اسبراي آيس شيل 150 مل" وربطه بكتالوج يونيليفر بالباركود، ومنح 1 × فواتشر بقيمة 50 جنيه بنجاح.',
+          tags: ['axe-pos-clipping', 'barcode-catalog-enrichment', 'voucher-50egp', 'unilever', 'gomla-market', 'pos-quirks'],
+          lastUpdated: '2026-08-28',
+        ),
       ];
 }
 

@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:al_mraay/features/admin/domain/event_model.dart';
@@ -974,16 +974,32 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         }
         result = result.copyWith(chancesEarned: calculatedChances);
 
-        // Enrich extractedProducts with matched barcodes from catalog if missing or empty
+        // Enrich extractedProducts with matched barcodes and canonical names from catalog bidirectionally
         if (catalogBarcodeMap.isNotEmpty && result.extractedProducts.isNotEmpty) {
           final enrichedProducts = result.extractedProducts.map((item) {
-            if (item.barcode.trim().isNotEmpty) return item;
+            final itemBarcode = item.barcode.trim();
             
+            // 1. If barcode is present from receipt OCR, resolve canonical catalog name
+            if (itemBarcode.isNotEmpty) {
+              for (final entry in catalogBarcodeMap.entries) {
+                final catBarcode = entry.value.trim();
+                if (catBarcode == itemBarcode || (catBarcode.length >= 6 && itemBarcode.contains(catBarcode))) {
+                  final canonicalName = entry.key.trim();
+                  return item.copyWith(
+                    name: '${item.name} $canonicalName',
+                    isTargetCompany: true,
+                  );
+                }
+              }
+              return item;
+            }
+            
+            // 2. If barcode is empty, match name to get barcode from catalog
             final itemNameLower = item.name.toLowerCase().trim();
             for (final entry in catalogBarcodeMap.entries) {
               final catName = entry.key.toLowerCase().trim();
               if (catName.isNotEmpty && (itemNameLower.contains(catName) || catName.contains(itemNameLower))) {
-                return item.copyWith(barcode: entry.value);
+                return item.copyWith(barcode: entry.value, isTargetCompany: true);
               }
             }
             return item;
@@ -1824,21 +1840,26 @@ class PromotionalRuleMatcher {
     str = str.replaceAll('ئ', 'ي');
 
     // Separate number from unit size (e.g. 400مل -> 400 مل, 150ml -> 150 ml)
-    str = str.replaceAll(RegExp(r'(\d+)\s*(ملى|مل|جرام|جم|لتر|كجم|g|ml|kg|l)\b'), r'$1 $2');
+    str = str.replaceAllMapped(RegExp(r'(\d+)\s*(ملى|مل|جرام|جم|لتر|كجم|g|ml|kg|l)'), (m) => '${m.group(1)} ${m.group(2)}');
+
+    // POS Truncated & Clipped Brand Handler (e.g. "كس اسبراى", "كس رول", "ايس شيل" -> "اكس اسبراي")
+    str = str.replaceAllMapped(RegExp(r'(^|\s)كس\s+(اسبراي|اسبرى|اسبري|اسبراى|سبراي|سبراى|رول|بخاخ|ايس|بلاك|دارك|افريكان|مارين|ابولو|شيل|شارج|جولد|كولد|تيمبتيشن)'), (m) => '${m.group(1)}اكس ${m.group(2)}');
+    str = str.replaceAllMapped(RegExp(r'(^|\s)(اسبراي|اسبرى|اسبري|اسبراى|سبراي|سبراى|رول|بخاخ)\s+كس($|\s)'), (m) => '${m.group(1)}${m.group(2)} اكس${m.group(3)}');
+    str = str.replaceAllMapped(RegExp(r'(^|\s)(ايس\s*شيل|ايس\s*تشيل|ice\s*chill|بلاك\s*تيمبتيشن|black\s*temptation|دارك\s*تيمبتيشن|dark\s*temptation|افريكان\s*كول)'), (m) => '${m.group(1)}اكس ${m.group(2)}');
 
     // POS & transliteration dictionary normalization
-    str = str.replaceAll(RegExp(r'شامبوزيت'), 'شامبو زيت');
-    str = str.replaceAll(RegExp(r'بلسمزيت'), 'بلسم زيت');
-    str = str.replaceAll(RegExp(r'\b(روول|رووول|roll\s*on|roll-on|rollon)\b'), 'رول اون');
-    str = str.replaceAll(RegExp(r'\b(اسبرى|اسبري|اسبراى|سبراي|سبراى|بخاخ|body\s*spray)\b'), 'اسبراي');
-    str = str.replaceAll(RegExp(r'\b(شمبو|شامبوا|shampoo)\b'), 'شامبو');
-    str = str.replaceAll(RegExp(r'\b(صنسلك|sunsilk)\b'), 'صنسيلك');
-    str = str.replaceAll(RegExp(r'\b(تريزيمى|تريزمى|تريزمي|تريزميه|تريسمي|تريسمى|tresemme|treseme)\b'), 'تريزيمي');
-    str = str.replaceAll(RegExp(r'\b(ركسونا|rexona)\b'), 'ريكسونا');
-    str = str.replaceAll(RegExp(r'\b(axe)\b'), 'اكس');
-    str = str.replaceAll(RegExp(r'\b(clear)\b'), 'كلير');
-    str = str.replaceAll(RegExp(r'\b(dove)\b'), 'دوف');
-    str = str.replaceAll(RegExp(r'\b(سيجنال|سجنال|signal)\b'), 'سيجنال');
+    str = str.replaceAll('شامبوزيت', 'شامبو زيت');
+    str = str.replaceAll('بلسمزيت', 'بلسم زيت');
+    str = str.replaceAll(RegExp(r'روول|رووول|roll\s*on|roll-on|rollon'), 'رول اون');
+    str = str.replaceAll(RegExp(r'اسبرى|اسبري|اسبراى|سبراي|سبراى|بخاخ|body\s*spray'), 'اسبراي');
+    str = str.replaceAll(RegExp(r'شمبو|شامبوا|shampoo'), 'شامبو');
+    str = str.replaceAll(RegExp(r'صنسلك|sunsilk'), 'صنسيلك');
+    str = str.replaceAll(RegExp(r'تريزيمى|تريزمى|تريزمي|تريزميه|تريسمي|تريسمى|tresemme|treseme'), 'تريزيمي');
+    str = str.replaceAll(RegExp(r'ركسونا|rexona'), 'ريكسونا');
+    str = str.replaceAll(RegExp(r'\baxe\b'), 'اكس');
+    str = str.replaceAll(RegExp(r'\bclear\b'), 'كلير');
+    str = str.replaceAll(RegExp(r'\bdove\b'), 'دوف');
+    str = str.replaceAll(RegExp(r'سيجنال|سجنال|\bsignal\b'), 'سيجنال');
 
     // Compress repeated Arabic long vowels (e.g. روول -> رول, شوكلييت -> شوكليت)
     str = str.replaceAll(RegExp(r'([و])\1+'), 'و');
@@ -1848,6 +1869,12 @@ class PromotionalRuleMatcher {
     str = str.replaceAll(RegExp(r'[^\w\s\u0600-\u06FF]'), ' ');
     return str.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
+
+  @visibleForTesting
+  static String normalize(String s) => _normalize(s);
+
+  @visibleForTesting
+  static bool matchesProduct(ExtractedProductItem p, String trigger) => _matchesProduct(p, trigger);
 
   static List<String> _extractTokens(String trigger) {
     final parts = trigger.split(RegExp(r'[,،/\+\n]|(\s+أو\s+)|(\s+or\s+)', caseSensitive: false));

@@ -610,6 +610,32 @@ void main() {
       expect(match.multipliedLinkedGifts.first.giftName, contains('كلير 90'));
       expect(match.multipliedLinkedGifts.first.quantity, 1); // EXACTLY 1 gift!
     });
+
+    test('Customer in Gomla Market with Axe Ice Chill 150ml clipped name "كس اسبراى ايس شيل 150مل" and barcode 6221155611819 matches 50 EGP Voucher (Rule 3)', () {
+      final axeItem = ExtractedProductItem(
+        name: 'كس اسبراى ايس شيل 150مل (خصم 15%) (شكل ج',
+        price: 140.0,
+        quantity: 1,
+        barcode: '6221155611819',
+        isTargetCompany: true,
+      );
+
+      final matchedResults = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: [axeItem],
+        promotionalRules: rules,
+        allowCampaignMultipliers: true,
+      );
+
+      // Must strictly match Rule 3 (Axe Spray 1pc -> 50 EGP Voucher)
+      expect(matchedResults.length, 1);
+      final match = matchedResults.first;
+      expect(match.rule.id, 'rule_3');
+      expect(match.multiplier, 1);
+      expect(match.totalRewardAmount, 50.0);
+      expect(match.multipliedLinkedGifts.length, 1);
+      expect(match.multipliedLinkedGifts.first.giftName, contains('فواتشر 50'));
+      expect(match.multipliedLinkedGifts.first.quantity, 1);
+    });
   });
 }
 
