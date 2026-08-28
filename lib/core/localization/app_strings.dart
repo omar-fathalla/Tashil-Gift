@@ -2228,17 +2228,92 @@ class AppStrings {
   );
 
   // ---------------------------------------------------------------------------
-  // 26. Chain Products & Price Intelligence (رصد ومقارنة أسعار المنتجات عبر السلاسل)
+  // 26. Chain Products & Price Intelligence (رادار حماية ودفاع أسعار أسواق فتح الله)
   // ---------------------------------------------------------------------------
   String get productsIntelligenceTitle => _t(
-    ar: 'رصد ومراقبة أسعار المنتجات عبر السلاسل',
-    en: 'Cross-Chain Products & Price Intelligence',
-    hi: 'क्रॉस-चेन उत्पाद और मूल्य खुफिया',
+    ar: 'رادار مراقبة وحماية الأسعار عبر السلاسل',
+    en: 'Cross-Chain Price Defense & Intelligence',
+    hi: 'क्रॉस-चेन मूल्य रक्षा और खुफिया',
   );
   String get productsIntelligenceSubtitle => _t(
-    ar: 'مراقبة حية وشاملة لأسعار وتخفيضات وتاريخ تعديل المنتجات عبر كافة السلاسل والمتاجر',
-    en: 'Real-time comprehensive tracking of product prices, promotions & modification history across all retail chains',
-    hi: 'सभी खुदरा श्रृंखलाओं में उत्पाद की कीमतों, प्रचारों और संशोधन इतिहास की रीयल-टाइम ट्रैकिंग',
+    ar: 'رصد فوري لأسعار المنافسين، إنذار مبكر لكسر الأسعار، ومقارنة حية لأسواق فتح الله',
+    en: 'Real-time competitor price tracking, threat alerts & live comparison against Fathalla Markets',
+    hi: 'रीयल-टाइम प्रतियोगी मूल्य ट्रैकिंग, खतरा अलर्ट और फथल्ला मार्केट्स के खिलाफ लाइव तुलना',
+  );
+  String get fathallaBaselineTag => _t(
+    ar: 'المرجع الأساسي: أسواق فتح الله 🏛️',
+    en: 'Baseline Chain: Fathalla Markets 🏛️',
+    hi: 'आधारभूत श्रृंखला: फथल्ला मार्केट्स 🏛️',
+  );
+  String get metricPriceThreats => _t(
+    ar: 'تنبيهات كسر الأسعار (المنافس أرخص 🚨)',
+    en: 'Price Threat Alerts (Competitor Cheaper 🚨)',
+    hi: 'मूल्य खतरा अलर्ट (प्रतियोगी सस्ता 🚨)',
+  );
+  String get metricFathallaWinning => _t(
+    ar: 'أصناف تفوق فتح الله (أنت الأرخص 🏆)',
+    en: 'Fathalla Best Price (Winning 🏆)',
+    hi: 'फथल्ला सर्वोत्तम मूल्य (विजेता 🏆)',
+  );
+  String get metricSharedSkus => _t(
+    ar: 'الأصناف المشتركة بالمقارنة',
+    en: 'Shared Compared SKUs',
+    hi: 'तुलना किए गए उत्पाद',
+  );
+  String get metricArchivedSkus => _t(
+    ar: 'كافة الأصناف بالأرشيف',
+    en: 'All Archived SKUs',
+    hi: 'सभी संग्रहीत उत्पाद',
+  );
+  String get filterSegmentThreatsOnly => _t(
+    ar: 'الأصناف الأرخص عند المنافسين 🚨',
+    en: 'Cheaper at Competitors 🚨',
+    hi: 'प्रतियोगियों पर सस्ता 🚨',
+  );
+  String get filterSegmentFathallaWinning => _t(
+    ar: 'أصناف تفوق فتح الله 🏆',
+    en: 'Fathalla Best Price 🏆',
+    hi: 'फथल्ला सर्वोत्तम मूल्य 🏆',
+  );
+  String get filterSegmentSharedOnly => _t(
+    ar: 'الأصناف المشتركة (سلسلتين فأكثر) 📊',
+    en: 'Shared SKUs (2+ Chains) 📊',
+    hi: 'साझा उत्पाद (2+ श्रृंखलाएं) 📊',
+  );
+  String get filterSegmentAllArchive => _t(
+    ar: 'جميع الأصناف بالأرشيف (بحث شامل) 🗄️',
+    en: 'All Archived SKUs (Full Search) 🗄️',
+    hi: 'संग्रह में सभी उत्पाद (पूर्ण खोज) 🗄️',
+  );
+  String get fathallaMarketPositionLabel => _t(
+    ar: 'موقف فتح الله التنافسي 🎯',
+    en: 'Fathalla Market Position 🎯',
+    hi: 'फथल्ला बाजार स्थिति 🎯',
+  );
+  String get competitorCheaperWarningBadge => _t(
+    ar: 'المنافس أرخص منك',
+    en: 'Competitor Cheaper',
+    hi: 'प्रतियोगी सस्ता है',
+  );
+  String get fathallaBestInMarketBadge => _t(
+    ar: 'فتح الله الأرخص في السوق 🌟',
+    en: 'Fathalla Best in Market 🌟',
+    hi: 'बाजार में फथल्ला सबसे सस्ता 🌟',
+  );
+  String get marketPricesMatchedBadge => _t(
+    ar: 'سعر متطابق مع المنافسين ⚪',
+    en: 'Matched Competitor Price ⚪',
+    hi: 'प्रतियोगी के समान मूल्य ⚪',
+  );
+  String get fathallaPriceMissingBadge => _t(
+    ar: 'غير مسجل بفتح الله 🏷️',
+    en: 'Not in Fathalla 🏷️',
+    hi: 'फथल्ला में नहीं 🏷️',
+  );
+  String get proofOfReceiptLabel => _t(
+    ar: 'معاينة البون والإثبات 🧾',
+    en: 'Proof of Receipt 🧾',
+    hi: 'रसीद का प्रमाण 🧾',
   );
   String get allChainsTab => _t(
     ar: 'جميع السلاسل (مقارنة شاملة)',
@@ -2395,6 +2470,11 @@ class AppStrings {
     en: 'Highest Price Variance',
     hi: 'उच्चतम मूल्य भिन्नता',
   );
+  String get sortByThreatDiff => _t(
+    ar: 'فارق كسر السعر (الأكبر أولاً)',
+    en: 'Price Threat Gap (Highest First)',
+    hi: 'मूल्य अंतर (सबसे अधिक पहले)',
+  );
   String get viewReceiptPhoto => _t(
     ar: 'معاينة صورة الفاتورة',
     en: 'View Receipt Image',
@@ -2435,9 +2515,9 @@ class AppStrings {
     hi: 'रसीदों से एआई खोज',
   );
   String get approveAndSaveToCatalog => _t(
-    ar: 'موافقة وحفظ في كتالوج الشركة (Firebase)',
-    en: 'Approve & Save to Company Catalog (Firebase)',
-    hi: 'स्वीकार करें और कंपनी सूची में सहेजें (Firebase)',
+    ar: 'موافقة وحفظ في كتالوج الشركة',
+    en: 'Approve & Save to Company Catalog',
+    hi: 'स्वीकार करें और कंपनी सूची में सहेजें',
   );
   String get selectAllProducts => _t(
     ar: 'تحديد الكل',

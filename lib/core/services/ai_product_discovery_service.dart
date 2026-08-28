@@ -193,22 +193,26 @@ class DiscoveredProductItem {
 }
 
 final aiProductDiscoveryServiceProvider = Provider<AiProductDiscoveryService>((ref) {
-  final productsService = ref.watch(companyProductsServiceProvider);
-  return AiProductDiscoveryService(
-    productsService: productsService,
-  );
+  try {
+    final productsService = ref.watch(companyProductsServiceProvider);
+    return AiProductDiscoveryService(
+      productsService: productsService,
+    );
+  } catch (_) {
+    return AiProductDiscoveryService();
+  }
 });
 
 class AiProductDiscoveryService {
-  final CompanyProductsService _productsService;
-  final FirebaseFirestore _firestore;
+  final CompanyProductsService? _productsService;
+  final FirebaseFirestore? _firestore;
   final GenerativeModel _model;
 
   AiProductDiscoveryService({
-    required CompanyProductsService productsService,
+    CompanyProductsService? productsService,
     FirebaseFirestore? firestore,
   })  : _productsService = productsService,
-        _firestore = firestore ?? FirebaseFirestore.instance,
+        _firestore = firestore,
         _model = GenerativeModel(
           model: 'gemini-3.7-flash',
           apiKey: AiConfig.geminiApiKey,
@@ -219,39 +223,52 @@ class AiProductDiscoveryService {
           ),
         );
 
+  FirebaseFirestore get _effectiveFirestore => _firestore ?? FirebaseFirestore.instance;
+  CompanyProductsService get _effectiveProductsService =>
+      _productsService ?? CompanyProductsService(_effectiveFirestore);
+
   /// Collection reference for the discovery inbox
   CollectionReference<Map<String, dynamic>> get _inboxCollection =>
-      _firestore.collection('discovered_products_inbox');
+      _effectiveFirestore.collection('discovered_products_inbox');
 
   /// Streams pending/active discovered products with optional company and status filters
   Stream<List<DiscoveredProductDocument>> streamDiscoveredProducts({
     String? companySlug,
     String? status = 'pending',
   }) {
-    Query<Map<String, dynamic>> query = _inboxCollection;
+    try {
+      Query<Map<String, dynamic>> query = _inboxCollection;
 
-    if (companySlug != null && companySlug.trim().isNotEmpty && companySlug.trim() != 'all') {
-      query = query.where('companySlug', isEqualTo: companySlug.trim().toLowerCase());
+      if (companySlug != null && companySlug.trim().isNotEmpty && companySlug.trim() != 'all') {
+        query = query.where('companySlug', isEqualTo: companySlug.trim().toLowerCase());
+      }
+
+      if (status != null && status.isNotEmpty && status != 'all') {
+        query = query.where('status', isEqualTo: status);
+      }
+
+      return query.snapshots().map((snapshot) {
+        final list = snapshot.docs.map((d) => DiscoveredProductDocument.fromFirestore(d)).toList();
+        // Sort by frequency descending, then date
+        list.sort((a, b) => b.invoiceFrequency.compareTo(a.invoiceFrequency));
+        return list;
+      }).handleError((_) => <DiscoveredProductDocument>[]);
+    } catch (_) {
+      return Stream.value(<DiscoveredProductDocument>[]);
     }
-
-    if (status != null && status.isNotEmpty && status != 'all') {
-      query = query.where('status', isEqualTo: status);
-    }
-
-    return query.snapshots().map((snapshot) {
-      final list = snapshot.docs.map((d) => DiscoveredProductDocument.fromFirestore(d)).toList();
-      // Sort by frequency descending, then date
-      list.sort((a, b) => b.invoiceFrequency.compareTo(a.invoiceFrequency));
-      return list;
-    });
   }
 
   /// Streams the real-time count of pending discovered products across all companies
   Stream<int> streamPendingCount() {
-    return _inboxCollection
-        .where('status', isEqualTo: 'pending')
-        .snapshots()
-        .map((snapshot) => snapshot.docs.length);
+    try {
+      return _inboxCollection
+          .where('status', isEqualTo: 'pending')
+          .snapshots()
+          .map((snapshot) => snapshot.docs.length)
+          .handleError((_) => 0);
+    } catch (_) {
+      return Stream.value(0);
+    }
   }
 
   /// Background Auto-Harvester: Invoked automatically after receipt validation
@@ -269,7 +286,7 @@ class AiProductDiscoveryService {
 
     try {
       // 1. Fetch current catalog registered barcodes and names
-      final catalog = await _productsService.getProductsForCompany(slug);
+      final catalog = await _effectiveProductsService.getProductsForCompany(slug);
       final registeredBarcodes = catalog
           .map((p) => p.barcode.trim().toEnglishDigits())
           .where((b) => b.isNotEmpty)
@@ -288,10 +305,22 @@ class AiProductDiscoveryService {
         final rawBarcode = p.barcode.trim().toEnglishDigits();
         final normName = _normalizeForComparison(rawName);
 
-        // If already in catalog, skip
-        final bool isAlreadyInCatalog = (rawBarcode.isNotEmpty && registeredBarcodes.contains(rawBarcode)) ||
-            registeredNames.contains(normName);
-        if (isAlreadyInCatalog) continue;
+        // If already in catalog with barcode, auto-register raw POS string as chain alias
+        if (rawBarcode.isNotEmpty && registeredBarcodes.contains(rawBarcode)) {
+          if (retailChain.isNotEmpty && rawName.isNotEmpty) {
+            _effectiveProductsService.registerChainAlias(
+              companySlug: slug,
+              barcode: rawBarcode,
+              chainName: retailChain,
+              rawPosName: rawName,
+            );
+          }
+          continue;
+        }
+
+        if (registeredNames.contains(normName)) {
+          continue;
+        }
 
         // Generate deterministic document ID
         final docId = _generateDiscoveryDocId(slug, rawBarcode, rawName);
@@ -301,7 +330,7 @@ class AiProductDiscoveryService {
         final inferredCategory = _inferCategory(rawName);
         final canonicalName = _cleanCanonicalName(rawName);
 
-        await _firestore.runTransaction((tx) async {
+        await _effectiveFirestore.runTransaction((tx) async {
           final snap = await tx.get(docRef);
           if (snap.exists) {
             final data = snap.data() ?? {};
@@ -382,7 +411,7 @@ class AiProductDiscoveryService {
         };
       }).toList();
 
-      final saved = await _productsService.batchSaveProducts(
+      final saved = await _effectiveProductsService.batchSaveProducts(
         companySlug: slug,
         companyName: companyName,
         products: productsToSave,
@@ -390,7 +419,7 @@ class AiProductDiscoveryService {
       totalSaved += saved;
 
       // Update status in inbox
-      final batch = _firestore.batch();
+      final batch = _effectiveFirestore.batch();
       for (final doc in items) {
         final docRef = _inboxCollection.doc(doc.id);
         batch.update(docRef, {
@@ -411,7 +440,7 @@ class AiProductDiscoveryService {
   /// Rejects/dismisses discovered items from the inbox
   Future<void> rejectDiscoveredDocuments(List<String> docIds) async {
     if (docIds.isEmpty) return;
-    final batch = _firestore.batch();
+    final batch = _effectiveFirestore.batch();
     for (final id in docIds) {
       batch.update(_inboxCollection.doc(id), {
         'status': 'rejected',
@@ -430,7 +459,7 @@ class AiProductDiscoveryService {
     final slug = companySlug.trim().toLowerCase();
     if (slug.isEmpty) return 0;
 
-    final query = await _firestore
+    final query = await _effectiveFirestore
         .collection('receipts_transactions')
         .where('is_valid', isEqualTo: true)
         .limit(200)
@@ -491,7 +520,7 @@ class AiProductDiscoveryService {
     final slug = companySlug.trim().toLowerCase();
     if (slug.isEmpty || transactions.isEmpty) return [];
 
-    final catalog = preloadedCatalog ?? await _productsService.getProductsForCompany(slug);
+    final catalog = preloadedCatalog ?? await _effectiveProductsService.getProductsForCompany(slug);
     final Set<String> registeredBarcodes = catalog
         .map((p) => p.barcode.trim().toEnglishDigits())
         .where((b) => b.isNotEmpty)
@@ -500,6 +529,18 @@ class AiProductDiscoveryService {
         .map((p) => _normalizeForComparison(p.productName))
         .where((n) => n.isNotEmpty)
         .toSet();
+
+    // Also populate all known chain aliases into registeredNames
+    for (final p in catalog) {
+      for (final aliasList in p.chainAliases.values) {
+        for (final alias in aliasList) {
+          final normAlias = _normalizeForComparison(alias);
+          if (normAlias.isNotEmpty) {
+            registeredNames.add(normAlias);
+          }
+        }
+      }
+    }
 
     final Map<String, _RawCandidateGroup> candidatesMap = {};
 
@@ -685,7 +726,8 @@ $encodedCandidates
     final slug = companySlug.trim().toLowerCase();
     if (slug.isEmpty || approvedItems.isEmpty) return 0;
 
-    final productsToSave = approvedItems.where((p) => p.isSelected).map((p) {
+    final selected = approvedItems.where((p) => p.isSelected).toList();
+    final productsToSave = selected.map((p) {
       return {
         'productName': p.productName.trim(),
         'barcode': p.barcode.trim(),
@@ -697,12 +739,38 @@ $encodedCandidates
 
     if (productsToSave.isEmpty) return 0;
 
-    return await _productsService.batchSaveProducts(
+    final savedCount = await _effectiveProductsService.batchSaveProducts(
       companySlug: slug,
       companyName: companyName,
       products: productsToSave,
       onProgress: onProgress,
     );
+
+    // Mark approved items as 'approved' in discovered_products_inbox
+    try {
+      final batch = _effectiveFirestore.batch();
+      for (final p in selected) {
+        final docId = _generateDiscoveryDocId(slug, p.barcode.trim(), p.productName.trim());
+        final docRef = _inboxCollection.doc(docId);
+        batch.set(
+          docRef,
+          {
+            'companySlug': slug,
+            'companyName': companyName,
+            'canonicalName': p.productName.trim(),
+            'barcode': p.barcode.trim(),
+            'status': 'approved',
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+      }
+      await batch.commit();
+    } catch (e) {
+      debugPrint('Error updating discovered_products_inbox status: $e');
+    }
+
+    return savedCount;
   }
 
   // --- Helper Methods ---

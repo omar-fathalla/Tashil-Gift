@@ -22,11 +22,12 @@ class ChainProductsIntelligenceScreen extends ConsumerStatefulWidget {
 class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsIntelligenceScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  String _viewFilterMode = 'SHARED_ONLY'; // 'THREATS_ONLY', 'FATHALLA_WINNING', 'SHARED_ONLY', 'ALL_ARCHIVED'
   String _selectedChain = 'ALL'; // 'ALL' or specific chain name
   String _selectedBrand = 'ALL';
   bool _promotionsOnly = false;
   bool _fluctuationsOnly = false;
-  String _sortBy = 'LATEST'; // 'LATEST', 'PRICE_ASC', 'PRICE_DESC', 'VARIANCE'
+  String _sortBy = 'LATEST'; // 'LATEST', 'THREAT_DIFF', 'PRICE_ASC', 'PRICE_DESC', 'VARIANCE'
   bool _isMatrixView = true; // Default view is the Table Matrix
   bool _isHealingData = false;
 
@@ -63,25 +64,46 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
           ),
         ),
         data: (allProducts) {
-          // Extract all distinct chains from data
+          // Extract all distinct chains and dynamic metrics
           final Set<String> chainsSet = {};
           final Set<String> brandsSet = {};
           int totalPromotionsCount = 0;
           int totalFluctuationsCount = 0;
+          int threatsCount = 0;
+          int fathallaWinningCount = 0;
+          int sharedSkusCount = 0;
 
           for (final item in allProducts) {
             chainsSet.addAll(item.latestPricesByChain.keys);
             if (item.brand.isNotEmpty) brandsSet.add(item.brand);
             if (item.isCurrentlyOnPromotion) totalPromotionsCount++;
             if (item.hasPriceFluctuation) totalFluctuationsCount++;
+            if (item.isUnderpricedByCompetitors) threatsCount++;
+            if (item.isFathallaCheapest && item.isMultiChain) fathallaWinningCount++;
+            if (item.isMultiChain) sharedSkusCount++;
           }
 
           final distinctChains = chainsSet.toList()..sort();
+          if (distinctChains.contains('أسواق فتح الله')) {
+            distinctChains.remove('أسواق فتح الله');
+            distinctChains.insert(0, 'أسواق فتح الله');
+          }
           final distinctBrands = brandsSet.toList()..sort();
 
-          // Filter products
+          // Filter products based on Fathalla Defense & View Mode
           final filteredProducts = allProducts.where((p) {
-            // Search Query
+            // 1. View Filter Mode (Default: SHARED_ONLY to hide single-chain clutter)
+            if (_viewFilterMode == 'THREATS_ONLY') {
+              if (!p.isUnderpricedByCompetitors) return false;
+            } else if (_viewFilterMode == 'FATHALLA_WINNING') {
+              if (!p.isFathallaCheapest || !p.isMultiChain) return false;
+            } else if (_viewFilterMode == 'SHARED_ONLY') {
+              if (!p.isMultiChain) return false;
+            } else if (_viewFilterMode == 'ALL_ARCHIVED') {
+              // Show complete database archive
+            }
+
+            // 2. Search Query
             if (_searchQuery.isNotEmpty) {
               final q = _searchQuery.toLowerCase().trim();
               final matchesName = p.name.toLowerCase().contains(q);
@@ -90,22 +112,22 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
               if (!matchesName && !matchesBarcode && !matchesBrand) return false;
             }
 
-            // Chain Filter
+            // 3. Chain Filter
             if (_selectedChain != 'ALL') {
               if (!p.latestPricesByChain.containsKey(_selectedChain)) return false;
             }
 
-            // Brand Filter
+            // 4. Brand Filter
             if (_selectedBrand != 'ALL') {
               if (p.brand != _selectedBrand) return false;
             }
 
-            // Promotions Only
+            // 5. Promotions Only
             if (_promotionsOnly && !p.isCurrentlyOnPromotion) {
               return false;
             }
 
-            // Fluctuations Only
+            // 6. Fluctuations Only
             if (_fluctuationsOnly && !p.hasPriceFluctuation) {
               return false;
             }
@@ -114,7 +136,9 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
           }).toList();
 
           // Sort products
-          if (_sortBy == 'PRICE_ASC') {
+          if (_sortBy == 'THREAT_DIFF') {
+            filteredProducts.sort((a, b) => b.competitorUnderpricedDiff.compareTo(a.competitorUnderpricedDiff));
+          } else if (_sortBy == 'PRICE_ASC') {
             filteredProducts.sort((a, b) => a.minPrice.compareTo(b.minPrice));
           } else if (_sortBy == 'PRICE_DESC') {
             filteredProducts.sort((a, b) => b.maxPrice.compareTo(a.maxPrice));
@@ -148,7 +172,7 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                               color: cs.primaryContainer,
                               borderRadius: BorderRadius.circular(16),
                             ),
-                            child: Icon(Icons.inventory_2_rounded, size: 28, color: cs.primary),
+                            child: Icon(Icons.shield_rounded, size: 28, color: cs.primary),
                           ),
                           const SizedBox(width: 16),
                           Expanded(
@@ -172,6 +196,31 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                                       runSpacing: 6,
                                       crossAxisAlignment: WrapCrossAlignment.center,
                                       children: [
+                                        // Fathalla Baseline Tag
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.indigo.shade50,
+                                            borderRadius: BorderRadius.circular(20),
+                                            border: Border.all(color: Colors.indigo.shade200, width: 1),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(Icons.account_balance_rounded, size: 14, color: Colors.indigo),
+                                              const SizedBox(width: 5),
+                                              Text(
+                                                strings.fathallaBaselineTag,
+                                                style: GoogleFonts.cairo(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: Colors.indigo.shade900,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        // Live AI Tracking Pill
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                           decoration: BoxDecoration(
@@ -267,18 +316,78 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                       ),
                       const SizedBox(height: 16),
 
-                      // KPI Cards Row
+                      // Executive Fathalla Defense KPI Cards Row
                       _buildKpiRow(
                         context: context,
                         cs: cs,
                         strings: strings,
-                        totalSkus: allProducts.length,
-                        activeChainsCount: distinctChains.length,
+                        threatsCount: threatsCount,
+                        fathallaWinningCount: fathallaWinningCount,
+                        sharedSkusCount: sharedSkusCount,
                         promotedItemsCount: totalPromotionsCount,
-                        fluctuationsCount: totalFluctuationsCount,
                         isMobile: isMobile,
                       ),
                       const SizedBox(height: 16),
+
+                      // Fathalla Defense & Presence Segment Filter Bar
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            // 1. Threat Radar Mode (🚨 كسر الأسعار - المنافس أرخص)
+                            _buildDefenseModeChip(
+                              label: strings.filterSegmentThreatsOnly,
+                              count: threatsCount,
+                              icon: Icons.warning_amber_rounded,
+                              activeColor: Colors.red.shade700,
+                              activeBgColor: Colors.red.shade50,
+                              isSelected: _viewFilterMode == 'THREATS_ONLY',
+                              onSelected: () => setState(() => _viewFilterMode = 'THREATS_ONLY'),
+                              cs: cs,
+                            ),
+                            const SizedBox(width: 8),
+
+                            // 2. Fathalla Winning Mode (🏆 تفوق فتح الله - الأرخص)
+                            _buildDefenseModeChip(
+                              label: strings.filterSegmentFathallaWinning,
+                              count: fathallaWinningCount,
+                              icon: Icons.stars_rounded,
+                              activeColor: Colors.green.shade800,
+                              activeBgColor: Colors.green.shade50,
+                              isSelected: _viewFilterMode == 'FATHALLA_WINNING',
+                              onSelected: () => setState(() => _viewFilterMode = 'FATHALLA_WINNING'),
+                              cs: cs,
+                            ),
+                            const SizedBox(width: 8),
+
+                            // 3. Shared SKUs Mode (📊 الأصناف المشتركة - 2+ chains) [DEFAULT]
+                            _buildDefenseModeChip(
+                              label: strings.filterSegmentSharedOnly,
+                              count: sharedSkusCount,
+                              icon: Icons.compare_arrows_rounded,
+                              activeColor: cs.primary,
+                              activeBgColor: cs.primaryContainer.withValues(alpha: 0.3),
+                              isSelected: _viewFilterMode == 'SHARED_ONLY',
+                              onSelected: () => setState(() => _viewFilterMode = 'SHARED_ONLY'),
+                              cs: cs,
+                            ),
+                            const SizedBox(width: 8),
+
+                            // 4. All Database Archive Mode (🗄️ الأرشيف الشامل)
+                            _buildDefenseModeChip(
+                              label: strings.filterSegmentAllArchive,
+                              count: allProducts.length,
+                              icon: Icons.inventory_2_outlined,
+                              activeColor: cs.secondary,
+                              activeBgColor: cs.secondaryContainer.withValues(alpha: 0.3),
+                              isSelected: _viewFilterMode == 'ALL_ARCHIVED',
+                              onSelected: () => setState(() => _viewFilterMode = 'ALL_ARCHIVED'),
+                              cs: cs,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
 
                       // Chain Tabs Switcher
                       SingleChildScrollView(
@@ -433,6 +542,10 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                                           child: Text(strings.sortByLatest),
                                         ),
                                         DropdownMenuItem(
+                                          value: 'THREAT_DIFF',
+                                          child: Text(strings.sortByThreatDiff),
+                                        ),
+                                        DropdownMenuItem(
                                           value: 'PRICE_ASC',
                                           child: Text(strings.sortByPriceLow),
                                         ),
@@ -461,7 +574,10 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
 
                                 // Filter Fluctuations Chip
                                 FilterChip(
-                                  label: Text(isAr ? 'تغيرات الأسعار فقط' : 'Price Changes Only', style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: _fluctuationsOnly ? FontWeight.w700 : FontWeight.normal)),
+                                  label: Text(
+                                    isAr ? 'تغيرات الأسعار ($totalFluctuationsCount)' : 'Price Shifts ($totalFluctuationsCount)',
+                                    style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: _fluctuationsOnly ? FontWeight.w700 : FontWeight.normal),
+                                  ),
                                   selected: _fluctuationsOnly,
                                   onSelected: (val) => setState(() => _fluctuationsOnly = val),
                                   avatar: Icon(Icons.change_circle_rounded, size: 14, color: _fluctuationsOnly ? cs.onPrimary : cs.tertiary),
@@ -500,7 +616,12 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                           const SizedBox(height: 12),
                           Text(
                             strings.noProductsFound,
-                            style: GoogleFonts.cairo(fontSize: 15, color: cs.onSurfaceVariant),
+                            style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurfaceVariant),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            isAr ? 'جرب البحث باسم صنف أو باركود أو تغيير خيارات الفلترة' : 'Try searching another product name or adjusting filters',
+                            style: GoogleFonts.cairo(fontSize: 12.5, color: cs.outlineVariant),
                           ),
                         ],
                       ),
@@ -511,29 +632,85 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                 SliverPadding(
                   padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24, vertical: 8),
                   sliver: SliverGrid(
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: isMobile ? 1 : (size.width < 950 ? 2 : (size.width < 1400 ? 3 : 4)),
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      mainAxisExtent: isMobile ? 218 : 215,
+                    gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 380,
+                      mainAxisExtent: 275,
+                      crossAxisSpacing: 14,
+                      mainAxisSpacing: 14,
                     ),
                     delegate: SliverChildBuilderDelegate(
                       (context, index) {
-                        final item = filteredProducts[index];
-                        return ChainProductCard(
-                          product: item,
-                          selectedChainFilter: _selectedChain == 'ALL' ? null : _selectedChain,
-                        );
+                        final product = filteredProducts[index];
+                        return ChainProductCard(product: product);
                       },
                       childCount: filteredProducts.length,
                     ),
                   ),
                 ),
 
-              const SliverToBoxAdapter(child: SizedBox(height: 32)),
+              const SliverToBoxAdapter(child: SizedBox(height: 40)),
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildDefenseModeChip({
+    required String label,
+    required int count,
+    required IconData icon,
+    required Color activeColor,
+    required Color activeBgColor,
+    required bool isSelected,
+    required VoidCallback onSelected,
+    required ColorScheme cs,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onSelected,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: isSelected ? activeBgColor : cs.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? activeColor : cs.outlineVariant.withValues(alpha: 0.5),
+            width: isSelected ? 1.5 : 0.8,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: isSelected ? activeColor : cs.onSurfaceVariant),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.cairo(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                color: isSelected ? activeColor : cs.onSurface,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(
+                color: isSelected ? activeColor : cs.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$count',
+                style: GoogleFonts.cairo(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  color: isSelected ? Colors.white : cs.onSurfaceVariant,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -587,51 +764,67 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
     required BuildContext context,
     required ColorScheme cs,
     required AppStrings strings,
-    required int totalSkus,
-    required int activeChainsCount,
+    required int threatsCount,
+    required int fathallaWinningCount,
+    required int sharedSkusCount,
     required int promotedItemsCount,
-    required int fluctuationsCount,
     required bool isMobile,
   }) {
     final cards = [
       _buildKpiCard(
-        title: strings.metricTotalSkus,
-        value: '$totalSkus',
-        icon: Icons.inventory_2_rounded,
-        color: cs.primary,
+        title: strings.metricPriceThreats,
+        value: '$threatsCount',
+        subtitle: ref.isArabic ? 'أصناف أرخص من فتح الله' : 'Cheaper than Fathalla',
+        icon: Icons.warning_amber_rounded,
+        color: Colors.red.shade700,
+        bgColor: Colors.red.shade50,
+        isSelected: _viewFilterMode == 'THREATS_ONLY',
+        onTap: () => setState(() => _viewFilterMode = 'THREATS_ONLY'),
         cs: cs,
       ),
       _buildKpiCard(
-        title: strings.metricActiveChains,
-        value: '$activeChainsCount',
-        icon: Icons.storefront_rounded,
-        color: cs.secondary,
+        title: strings.metricFathallaWinning,
+        value: '$fathallaWinningCount',
+        subtitle: ref.isArabic ? 'أنت الأرخص في السوق' : 'Fathalla Best Price',
+        icon: Icons.stars_rounded,
+        color: Colors.green.shade800,
+        bgColor: Colors.green.shade50,
+        isSelected: _viewFilterMode == 'FATHALLA_WINNING',
+        onTap: () => setState(() => _viewFilterMode = 'FATHALLA_WINNING'),
+        cs: cs,
+      ),
+      _buildKpiCard(
+        title: strings.metricSharedSkus,
+        value: '$sharedSkusCount',
+        subtitle: ref.isArabic ? 'سلسلتين فأكثر' : '2+ Stores Compared',
+        icon: Icons.compare_arrows_rounded,
+        color: cs.primary,
+        bgColor: cs.primaryContainer.withValues(alpha: 0.35),
+        isSelected: _viewFilterMode == 'SHARED_ONLY',
+        onTap: () => setState(() => _viewFilterMode = 'SHARED_ONLY'),
         cs: cs,
       ),
       _buildKpiCard(
         title: strings.metricPromotedItems,
         value: '$promotedItemsCount',
+        subtitle: ref.isArabic ? 'عروض ترويجية نشطة' : 'Active Discounts',
         icon: Icons.local_offer_rounded,
         color: cs.tertiary,
-        cs: cs,
-      ),
-      _buildKpiCard(
-        title: strings.metricPriceFluctuations,
-        value: '$fluctuationsCount',
-        icon: Icons.change_circle_rounded,
-        color: cs.error,
+        bgColor: cs.tertiaryContainer.withValues(alpha: 0.35),
+        isSelected: _promotionsOnly,
+        onTap: () => setState(() => _promotionsOnly = !_promotionsOnly),
         cs: cs,
       ),
     ];
 
     if (isMobile) {
       return SizedBox(
-        height: 76,
+        height: 82,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           itemCount: cards.length,
           separatorBuilder: (context, index) => const SizedBox(width: 8),
-          itemBuilder: (ctx, idx) => SizedBox(width: 165, child: cards[idx]),
+          itemBuilder: (ctx, idx) => SizedBox(width: 175, child: cards[idx]),
         ),
       );
     }
@@ -644,53 +837,93 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
   Widget _buildKpiCard({
     required String title,
     required String value,
+    String? subtitle,
     required IconData icon,
     required Color color,
+    Color? bgColor,
+    bool isSelected = false,
+    VoidCallback? onTap,
     required ColorScheme cs,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.22), width: 1),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(7),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: Icon(icon, color: color, size: 18),
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: bgColor ?? color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? color : color.withValues(alpha: 0.22),
+            width: isSelected ? 2 : 1,
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  style: GoogleFonts.cairo(fontSize: 10.5, color: cs.onSurfaceVariant),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  value,
-                  style: GoogleFonts.cairo(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: color,
-                    fontFeatures: const [FontFeature.tabularFigures()],
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.18),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  )
+                ]
+              : null,
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Icon(icon, color: color, size: 18),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.cairo(
+                      fontSize: 10.5,
+                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                      color: cs.onSurface,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-              ],
+                  Row(
+                    children: [
+                      Text(
+                        value,
+                        style: GoogleFonts.cairo(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          color: color,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      if (subtitle != null) ...[
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            subtitle,
+                            style: GoogleFonts.cairo(fontSize: 8.5, color: cs.onSurfaceVariant),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -702,7 +935,7 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
     for (final c in chains) {
       buffer.write('Price in $c ($currency),');
     }
-    buffer.writeln('Cheapest Store,Min Price,Highest Store,Max Price,Price Gap %,Is Promoted,Total Scans');
+    buffer.writeln('Cheapest Store,Min Price,Highest Store,Max Price,Price Gap %,Fathalla Defense Status,Cheapest Competitor,Price Underpriced Diff,Is Promoted,Total Scans');
 
     for (final item in items) {
       buffer.write('"${item.id}","${item.barcode}","${item.name}","${item.brand}","${item.category}",');
@@ -710,8 +943,12 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
         final p = item.latestPricesByChain[c];
         buffer.write('${p != null ? p.toStringAsFixed(2) : ""},');
       }
+      final defenseStatus = item.isUnderpricedByCompetitors
+          ? 'THREAT (${item.cheapestCompetitorName} cheaper)'
+          : (item.isFathallaCheapest ? 'FATHALLA BEST PRICE' : 'NORMAL');
+
       buffer.writeln(
-        '"${item.cheapestChain}",${item.minPrice.toStringAsFixed(2)},"${item.mostExpensiveChain}",${item.maxPrice.toStringAsFixed(2)},${item.priceVariancePercent.toStringAsFixed(1)},${item.isCurrentlyOnPromotion ? "YES" : "NO"},${item.totalScansCount}',
+        '"${item.cheapestChain}",${item.minPrice.toStringAsFixed(2)},"${item.mostExpensiveChain}",${item.maxPrice.toStringAsFixed(2)},${item.priceVariancePercent.toStringAsFixed(1)},"$defenseStatus","${item.cheapestCompetitorName}",${item.competitorUnderpricedDiff.toStringAsFixed(2)},${item.isCurrentlyOnPromotion ? "YES" : "NO"},${item.totalScansCount}',
       );
     }
 

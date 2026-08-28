@@ -145,6 +145,107 @@ class _ProductPriceHistoryDialogState extends ConsumerState<ProductPriceHistoryD
               ),
             ),
 
+            // Fathalla Defense Alert Banner
+            if (product.isUnderpricedByCompetitors) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.red.shade300, width: 1.2),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade100,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isAr ? '🚨 إنذار كسر سعر لمنافس (سعر أرخص من أسواق فتح الله)' : '🚨 Competitor Price Threat Detected',
+                              style: GoogleFonts.cairo(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red.shade900,
+                              ),
+                            ),
+                            Text(
+                              isAr
+                                  ? 'سلسلة «${product.cheapestCompetitorName}» تبيع هذا الصنف بسعر ${product.minPrice.toStringAsFixed(product.minPrice == product.minPrice.roundToDouble() ? 0 : 2)} $currency (أرخص من فتح الله بـ ${product.competitorUnderpricedDiff.toStringAsFixed(1)} $currency بنسبة -${product.competitorUnderpricedPercent.toStringAsFixed(0)}%)'
+                                  : '«${product.cheapestCompetitorName}» is selling at ${product.minPrice.toStringAsFixed(2)} $currency (Cheaper than Fathalla by ${product.competitorUnderpricedDiff.toStringAsFixed(1)} $currency, -${product.competitorUnderpricedPercent.toStringAsFixed(0)}%)',
+                              style: GoogleFonts.cairo(
+                                fontSize: 11.5,
+                                color: Colors.red.shade800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ] else if (product.isFathallaCheapest && product.isMultiChain) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.green.shade300, width: 1.2),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade100,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.stars_rounded, color: Colors.amber, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isAr ? '🏆 أسواق فتح الله هي الأرخص في السوق لهذا الصنف!' : '🏆 Fathalla Markets has the Best Price in Market!',
+                              style: GoogleFonts.cairo(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green.shade900,
+                              ),
+                            ),
+                            Text(
+                              isAr
+                                  ? 'سعر فتح الله (${(product.fathallaPrice ?? 0.0).toStringAsFixed((product.fathallaPrice ?? 0.0) == (product.fathallaPrice ?? 0.0).roundToDouble() ? 0 : 2)} $currency) يتفوق على كافة السلاسل المنافسة.'
+                                  : 'Fathalla price (${(product.fathallaPrice ?? 0.0).toStringAsFixed(2)} $currency) outperforms all competitor chains.',
+                              style: GoogleFonts.cairo(
+                                fontSize: 11.5,
+                                color: Colors.green.shade800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+
             // Intelligence Summary Banner (4 KPIs)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
@@ -249,15 +350,32 @@ class _ProductPriceHistoryDialogState extends ConsumerState<ProductPriceHistoryD
                                     Icon(Icons.storefront_rounded, size: 16, color: isCheapest ? cs.primary : cs.onSurfaceVariant),
                                     const SizedBox(width: 6),
                                     Expanded(
-                                      child: Text(
-                                        chainSum.chainName,
-                                        style: GoogleFonts.cairo(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 12,
-                                          color: cs.onSurface,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            chainSum.chainName,
+                                            style: GoogleFonts.cairo(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 12,
+                                              color: cs.onSurface,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          if (product.latestPosNameByChain.containsKey(chainSum.chainName) &&
+                                              product.latestPosNameByChain[chainSum.chainName]!.isNotEmpty) ...[
+                                            Text(
+                                              product.latestPosNameByChain[chainSum.chainName]!,
+                                              style: GoogleFonts.cairo(
+                                                fontSize: 9.5,
+                                                color: cs.onSurfaceVariant.withValues(alpha: 0.8),
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ],
                                       ),
                                     ),
                                     if (isCheapest)

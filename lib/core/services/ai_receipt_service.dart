@@ -1349,11 +1349,6 @@ class PromotionalRuleMatcher {
       }
     }
 
-    // 5. If only 1 rule exists in total in the campaign, fallback to it
-    if (promotionalRules.length == 1) {
-      return promotionalRules.first;
-    }
-
     return null;
   }
 
@@ -1746,6 +1741,9 @@ class PromotionalRuleMatcher {
     str = str.replaceAll('ؤ', 'و');
     str = str.replaceAll('ئ', 'ي');
 
+    // Separate number from unit size (e.g. 400مل -> 400 مل, 150ml -> 150 ml)
+    str = str.replaceAll(RegExp(r'(\d+)\s*(ملى|مل|جرام|جم|لتر|كجم|g|ml|kg|l)\b'), r'$1 $2');
+
     // POS & transliteration dictionary normalization
     str = str.replaceAll(RegExp(r'شامبوزيت'), 'شامبو زيت');
     str = str.replaceAll(RegExp(r'بلسمزيت'), 'بلسم زيت');
@@ -1753,11 +1751,12 @@ class PromotionalRuleMatcher {
     str = str.replaceAll(RegExp(r'\b(اسبرى|اسبري|اسبراى|سبراي|سبراى|بخاخ|body\s*spray)\b'), 'اسبراي');
     str = str.replaceAll(RegExp(r'\b(شمبو|شامبوا|shampoo)\b'), 'شامبو');
     str = str.replaceAll(RegExp(r'\b(صنسلك|sunsilk)\b'), 'صنسيلك');
-    str = str.replaceAll(RegExp(r'\b(تريزمي|تريزميه|تريسمي|tresemme|treseme)\b'), 'تريزيمي');
+    str = str.replaceAll(RegExp(r'\b(تريزيمى|تريزمى|تريزمي|تريزميه|تريسمي|تريسمى|tresemme|treseme)\b'), 'تريزيمي');
     str = str.replaceAll(RegExp(r'\b(ركسونا|rexona)\b'), 'ريكسونا');
     str = str.replaceAll(RegExp(r'\b(axe)\b'), 'اكس');
     str = str.replaceAll(RegExp(r'\b(clear)\b'), 'كلير');
     str = str.replaceAll(RegExp(r'\b(dove)\b'), 'دوف');
+    str = str.replaceAll(RegExp(r'\b(سيجنال|سجنال|signal)\b'), 'سيجنال');
 
     // Compress repeated Arabic long vowels (e.g. روول -> رول, شوكلييت -> شوكليت)
     str = str.replaceAll(RegExp(r'([و])\1+'), 'و');

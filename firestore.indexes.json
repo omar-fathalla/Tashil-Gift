@@ -48,6 +48,23 @@
         { "fieldPath": "companySlug", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "discovered_products_inbox",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "companySlug", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "invoiceFrequency", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "chain_products_catalog",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "companySlug", "order": "ASCENDING" },
+        { "fieldPath": "totalScansCount", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -152,6 +152,8 @@ class ChainProductItem {
   final Map<String, double> latestPricesByChain; // Latest Net Unit Price in each enterprise chain
   final Map<String, double> latestRegularPricesByChain; // Latest Regular Unit Price before discount
   final Map<String, String> latestDatesByChain; // Latest receipt date in each chain
+  final Map<String, String> latestPosNameByChain; // Latest detected raw POS name in each chain
+  final Map<String, List<String>> chainAliases; // All observed aliases per retail chain
   final Map<String, ChainPricingSummary> chainSummaries; // Structured Enterprise Chain Summaries
   final Map<String, ProductPriceHistoryEntry> latestEntryByChain; // Latest full entry per chain
   final List<ProductPriceHistoryEntry> priceHistory; // Full history sorted newest to oldest
@@ -169,6 +171,8 @@ class ChainProductItem {
     this.latestPricesByChain = const {},
     this.latestRegularPricesByChain = const {},
     this.latestDatesByChain = const {},
+    this.latestPosNameByChain = const {},
+    this.chainAliases = const {},
     this.chainSummaries = const {},
     this.latestEntryByChain = const {},
     this.priceHistory = const [],
@@ -260,6 +264,87 @@ class ChainProductItem {
     return priceHistory.first.hasDiscount;
   }
 
+  /// -------------------------------------------------------------------------
+  /// Fathalla Price Defense & Competitor Threat Intelligence Getters
+  /// -------------------------------------------------------------------------
+
+  /// Whether this product is observed in Fathalla Market
+  bool get hasFathallaPrice => latestPricesByChain.containsKey('أسواق فتح الله');
+
+  /// Fathalla's latest unit price
+  double? get fathallaPrice => latestPricesByChain['أسواق فتح الله'];
+
+  /// Number of distinct retail chains observing this product
+  int get distinctChainsCount => latestPricesByChain.keys.length;
+
+  /// True if observed in 2 or more distinct enterprise chains (Cross-Chain Shared SKU)
+  bool get isMultiChain => distinctChainsCount >= 2;
+
+  /// True if any competitor chain is selling cheaper than Fathalla Markets!
+  bool get isUnderpricedByCompetitors {
+    final fPrice = fathallaPrice;
+    if (fPrice == null || fPrice <= 0) return false;
+    return latestPricesByChain.entries.any(
+      (e) => e.key != 'أسواق فتح الله' && e.value < (fPrice - 0.05),
+    );
+  }
+
+  /// List of competitors that are selling cheaper than Fathalla
+  List<MapEntry<String, double>> get cheaperCompetitors {
+    final fPrice = fathallaPrice;
+    if (fPrice == null || fPrice <= 0) return [];
+    return latestPricesByChain.entries
+        .where((e) => e.key != 'أسواق فتح الله' && e.value < (fPrice - 0.05))
+        .toList();
+  }
+
+  /// Competitor offering the cheapest price below Fathalla
+  String get cheapestCompetitorName {
+    final cheapList = cheaperCompetitors;
+    if (cheapList.isEmpty) return '';
+    cheapList.sort((a, b) => a.value.compareTo(b.value));
+    return cheapList.first.key;
+  }
+
+  /// Lowest price among competitors that are cheaper than Fathalla
+  double get lowestCompetitorPriceBelowFathalla {
+    final cheapList = cheaperCompetitors;
+    if (cheapList.isEmpty) return 0.0;
+    cheapList.sort((a, b) => a.value.compareTo(b.value));
+    return cheapList.first.value;
+  }
+
+  /// The monetary amount saved / underpriced by the cheapest competitor compared to Fathalla
+  double get competitorUnderpricedDiff {
+    final fPrice = fathallaPrice;
+    if (fPrice == null || fPrice <= 0) return 0.0;
+    final lowest = lowestCompetitorPriceBelowFathalla;
+    if (lowest <= 0) return 0.0;
+    return fPrice - lowest;
+  }
+
+  /// The percentage saved / underpriced by the competitor compared to Fathalla
+  double get competitorUnderpricedPercent {
+    final fPrice = fathallaPrice;
+    if (fPrice == null || fPrice <= 0) return 0.0;
+    final diff = competitorUnderpricedDiff;
+    if (diff <= 0) return 0.0;
+    return (diff / fPrice) * 100;
+  }
+
+  /// True if Fathalla is the absolute cheapest or tied for cheapest among multi-chain items
+  bool get isFathallaCheapest {
+    final fPrice = fathallaPrice;
+    if (fPrice == null || fPrice <= 0) return false;
+    return fPrice <= minPrice + 0.05;
+  }
+
+  /// True if all observed chains have the exact same price
+  bool get isPricesEqual {
+    if (!isMultiChain) return false;
+    return priceVariancePercent < 0.5;
+  }
+
   /// Returns distinct price change events grouped chronologically per chain
   List<ProductPriceHistoryEntry> get distinctPriceChangeEvents {
     final List<ProductPriceHistoryEntry> result = [];
@@ -303,6 +388,22 @@ class ChainProductItem {
       });
     }
 
+    final Map<String, String> posNames = {};
+    if (json['latestPosNameByChain'] is Map) {
+      (json['latestPosNameByChain'] as Map).forEach((k, v) {
+        posNames[k.toString()] = v?.toString() ?? '';
+      });
+    }
+
+    final Map<String, List<String>> aliases = {};
+    if (json['chainAliases'] is Map) {
+      (json['chainAliases'] as Map).forEach((k, v) {
+        if (v is List) {
+          aliases[k.toString()] = v.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+        }
+      });
+    }
+
     final Map<String, ChainPricingSummary> summaries = {};
     if (json['chainSummaries'] is Map) {
       (json['chainSummaries'] as Map).forEach((k, v) {
@@ -320,6 +421,8 @@ class ChainProductItem {
       latestPricesByChain: prices,
       latestRegularPricesByChain: regPrices,
       latestDatesByChain: dates,
+      latestPosNameByChain: posNames,
+      chainAliases: aliases,
       chainSummaries: summaries,
       priceHistory: history,
       totalScansCount: (json['totalScansCount'] as num?)?.toInt() ?? history.length,
@@ -339,6 +442,8 @@ class ChainProductItem {
       'latestPricesByChain': latestPricesByChain,
       'latestRegularPricesByChain': latestRegularPricesByChain,
       'latestDatesByChain': latestDatesByChain,
+      'latestPosNameByChain': latestPosNameByChain,
+      'chainAliases': chainAliases,
       'chainSummaries': chainSummaries.map((k, v) => MapEntry(k, v.toJson())),
       'priceHistory': priceHistory.map((e) => e.toJson()).toList(),
       'totalScansCount': totalScansCount,
@@ -350,6 +455,13 @@ class ChainProductItem {
       'mostExpensiveChain': mostExpensiveChain,
       'priceVariancePercent': priceVariancePercent,
       'isCurrentlyOnPromotion': isCurrentlyOnPromotion,
+      'hasFathallaPrice': hasFathallaPrice,
+      'fathallaPrice': fathallaPrice,
+      'isMultiChain': isMultiChain,
+      'isUnderpricedByCompetitors': isUnderpricedByCompetitors,
+      'cheapestCompetitorName': cheapestCompetitorName,
+      'competitorUnderpricedDiff': competitorUnderpricedDiff,
+      'isFathallaCheapest': isFathallaCheapest,
     };
   }
 
@@ -363,6 +475,8 @@ class ChainProductItem {
     Map<String, double>? latestPricesByChain,
     Map<String, double>? latestRegularPricesByChain,
     Map<String, String>? latestDatesByChain,
+    Map<String, String>? latestPosNameByChain,
+    Map<String, List<String>>? chainAliases,
     Map<String, ChainPricingSummary>? chainSummaries,
     Map<String, ProductPriceHistoryEntry>? latestEntryByChain,
     List<ProductPriceHistoryEntry>? priceHistory,
@@ -380,6 +494,8 @@ class ChainProductItem {
       latestPricesByChain: latestPricesByChain ?? this.latestPricesByChain,
       latestRegularPricesByChain: latestRegularPricesByChain ?? this.latestRegularPricesByChain,
       latestDatesByChain: latestDatesByChain ?? this.latestDatesByChain,
+      latestPosNameByChain: latestPosNameByChain ?? this.latestPosNameByChain,
+      chainAliases: chainAliases ?? this.chainAliases,
       chainSummaries: chainSummaries ?? this.chainSummaries,
       latestEntryByChain: latestEntryByChain ?? this.latestEntryByChain,
       priceHistory: priceHistory ?? this.priceHistory,

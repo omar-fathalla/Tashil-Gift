@@ -109,8 +109,56 @@ class ChainProductCard extends ConsumerWidget {
                       ),
                     ),
                   const Spacer(),
-                  // Promotion or Fluctuation Tonal Tag
-                  if (isOnPromotion)
+                  // Fathalla Market Threat / Winning Position Badge
+                  if (product.isUnderpricedByCompetitors)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.red.shade300, width: 0.8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.warning_amber_rounded, size: 12, color: Colors.red),
+                          const SizedBox(width: 3),
+                          Text(
+                            isAr ? 'المنافس أرخص 🚨' : 'Threat 🚨',
+                            style: GoogleFonts.cairo(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.red.shade900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else if (product.isFathallaCheapest && product.isMultiChain)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.green.shade300, width: 0.8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.stars_rounded, size: 12, color: Colors.amber),
+                          const SizedBox(width: 3),
+                          Text(
+                            isAr ? 'أنت الأرخص 🏆' : 'Best Price 🏆',
+                            style: GoogleFonts.cairo(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.green.shade900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else if (isOnPromotion)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                       decoration: BoxDecoration(

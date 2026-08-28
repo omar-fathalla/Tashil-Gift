@@ -464,5 +464,47 @@ class AiDirectivesSeedData {
           tags: ['pos-concatenation', 'branch-reconciliation', 'gomla-market', 'tresemme', 'obour-buildings', 'unilever'],
           lastUpdated: '2026-08-27',
         ),
+
+        const AiDirectiveModel(
+          id: 'AIR-22',
+          code: 'FATHALLA_PRICE_DEFENSE_AND_COMPETITOR_THREAT_RADAR',
+          orderIndex: 22,
+          category: AiDirectiveCategory.unitEconomics,
+          titleAr: 'رادار مراقبة وحماية ريادة أسعار أسواق فتح الله والإنذار الفوري لكسر الأسعار (Fathalla Price Defense Radar)',
+          titleEn: 'Fathalla Price Defense Radar & Competitor Underpricing Threat Alarms',
+          descriptionAr:
+              'حوكمة المقارنة السعرية التنافسية من منظور أسواق فتح الله لحماية ريادتها السعرية؛ برصد أي صنف يباع لدى المنافسين (جملة ماركت، بيت الجملة، كارفور، إلخ) بسعر أرخص من فتح الله وإطلاق إنذار كسر سعر فوري يوضح فارق السعر والنسبة، مع حجب الأصناف غير المشتركة لتسريع العرض ومنع التشتت مع الحفاظ على تخزينها الكامل في قاعدة البيانات.',
+          descriptionEn:
+              'Competitive pricing defense governance from the perspective of Fathalla Markets owner. Detects any SKU sold by competitors cheaper than Fathalla, triggers immediate Threat Alarms with price gap and percentage, while filtering out single-chain noise from active matrices.',
+          logicAr:
+              '1. ضبط "أسواق فتح الله" كعمود أساسي مرجعي ثابت (Baseline Column).\n2. مقارنة سعر الصافي لفتح الله مع أقل سعر منافس: isUnderpricedByCompetitors = (hasFathallaPrice && competitorPrice < fathallaPrice).\n3. حساب فارق السعر المالي competitorUnderpricedDiff والنسبة المئوية competitorUnderpricedPercent واسم السلسلة المنافسة الأرخص cheapestCompetitorName.\n4. تطبيق فلترة ذكية افتراضية (SHARED_ONLY) لعرض الأصناف المشتركة بين سلسلتين فأكثر فقط لحماية الأداء وسرعة الاستجابة.\n5. حفظ وتدقيق كافة الأصناف في الفايربيز وتفعيل إمكانية استعراض الأرشيف الكامل بنقرة واحدة.',
+          logicEn:
+              '1. Sets "Fathalla Markets" as the fixed primary baseline column.\n2. Computes competitor underpricing: isUnderpricedByCompetitors = (hasFathallaPrice && competitorPrice < fathallaPrice).\n3. Calculates exact monetary gap, percentage difference, and cheaper competitor identity.\n4. Applies default SHARED_ONLY filter (2+ chains) to eliminate single-chain noise and optimize UI speed.\n5. Persists all harvested receipts in Firestore with instant toggle to full archive.',
+          exampleInput: 'فاتورة جملة ماركت بسعر 99 ج لشامبو كلير 360 مل، بينما سعر الصنف بأسواق فتح الله 115 ج',
+          exampleOutput: 'إنذار كسر سعر فوري: 🚨 جملة ماركت أرخص بـ 16 ج (-14%) وإبراز الصنف في كروت التنبيهات المتقدمة بنقرة واحدة.',
+          tags: ['price-defense', 'fathalla-markets', 'threat-radar', 'competitor-intelligence', 'multi-chain', 'unit-economics'],
+          lastUpdated: '2026-08-28',
+        ),
+
+        const AiDirectiveModel(
+          id: 'AIR-23',
+          code: 'MULTI_CHAIN_POS_ALIAS_AUTO_HARVESTING_AND_GOLDEN_BARCODE_ANCHOR',
+          orderIndex: 23,
+          category: AiDirectiveCategory.nlpMatching,
+          titleAr: 'حوكمة الباركود الذهبي الموحد وحصاد مسميات الكاشير التلقائي عبر السلاسل التجارية (Golden Barcode & Multi-Chain POS Aliases)',
+          titleEn: 'Master Barcode Anchor & Multi-Chain POS Aliases Auto-Harvesting',
+          descriptionAr:
+              'اعتماد الباركود الدولي (EAN-13 / GTIN) كمرجع أساسي موحد لكل صنف، مع حصاد وتغذية مسميات الكاشير المتغيرة تلقائياً عبر السلاسل التجارية (فتح الله، كارفور، جملة ماركت، لولو، بيت الجملة) في قاموس مرادفات حية (chainAliases). يتيح هذا للنظام مطابقة أي فاتورة قادمة فوراً حتى لو اختلفت صياغة الكاشير أو لم يُطبع الباركود.',
+          descriptionEn:
+              'Anchors each SKU to its international golden barcode (EAN-13 / GTIN) while auto-harvesting disparate cashier POS strings into a dynamic multi-chain alias dictionary (chainAliases). Enables deterministic 100% receipt recognition even when barcode is omitted or POS names vary across retail chains.',
+          logicAr:
+              '1. استخدام الباركود الدولي كمعرف ثابت وموحد للمنتج (Master SKU Anchor).\n2. فحص الفواتير: عند التقاط باركود مع مسمى مختلف في سلسلة جديدة (مثل كارفور)، يتم تسجيل المسمى فوراً كـ Alias تابع لهذه السلسلة.\n3. عند ورود فاتورة بدون باركود: يقوم الـ AI بالبحث في قاموس المرادفات (chainAliases) لربط الصنف بالباركود المعتمد آلياً.\n4. دمج الأصناف في مصفوفة الأسعار تحت باركود واحد ومنع تكرار الصنف في أسطر متعددة.',
+          logicEn:
+              '1. Uses GTIN/EAN-13 barcode as the deterministic master SKU anchor.\n2. Ingestion phase: registers raw POS names under the respective retail chain in chainAliases.\n3. Fallback recognition: matches non-barcoded receipts against pre-learned chainAliases with zero human input.\n4. Consolidates cross-chain matrices under a single master SKU line item.',
+          exampleInput: 'فاتورة كارفور تحتوي على "AXE SPRAY BLACK NIGHT 150ML" وفاتورة فتح الله تحتوي على "اكس اسبراي بلاك نايت 150 مل خصم 15%" لنفس الباركود 6221155122926',
+          exampleOutput: 'دمج الصنفين تحت باركود واحد 6221155122926، وتسجيل المسمى الإنجليزي في مرادفات كارفور والمسمى العربي في مرادفات فتح الله مع مطابقة 100% للفواتير المستقبلية.',
+          tags: ['barcode-anchor', 'pos-aliases', 'multi-chain', 'unilever', 'carrefour', 'fathalla', 'auto-harvesting'],
+          lastUpdated: '2026-08-28',
+        ),
       ];
 }

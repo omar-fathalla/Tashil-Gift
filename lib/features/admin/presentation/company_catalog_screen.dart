@@ -1026,6 +1026,67 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
     }
   }
 
+  /// Audits products catalog for a company and eliminates any duplicated records
+  Future<void> _auditAndDeduplicateCompany(CompanyModel company) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        icon: const Icon(Icons.cleaning_services_rounded, color: Colors.teal, size: 40),
+        title: Text('تدقيق وفحص التكرار لشركة "${company.name}"', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 16)),
+        content: Text(
+          'سيقوم النظام الآن بفحص وتدقيق كافة الأصناف والباركودات المسجلة لشركة "${company.name}"، والتأكد من عدم وجود أي أصناف مكررة، وحذف أي سجلات زائدة وتصحيح العداد بدقة.\n\nهل ترغب في بدء الفحص الآن؟',
+          style: GoogleFonts.cairo(fontSize: 13, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('إلغاء', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.teal.shade700,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+            icon: const Icon(Icons.auto_fix_high_rounded, size: 18),
+            label: Text('بدء التدقيق ومنع التكرار', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    try {
+      final res = await ref.read(companyProductsServiceProvider).auditAndDeduplicateCompanyProducts(company.slug);
+      if (mounted) {
+        final total = res['total'] ?? 0;
+        final unique = res['unique'] ?? 0;
+        final dups = res['duplicatesRemoved'] ?? 0;
+
+        await M3Feedback.showSuccess(
+          context,
+          title: 'اكتمل تدقيق الأصناف بنجاح',
+          message: dups > 0
+              ? 'تم فحص ($total) صنفاً، واكتشاف وإزالة ($dups) صنف مكرر بنجاح.\nإجمالي الأصناف الموثقة والفريدة حالياً: ($unique) صنف 🧹'
+              : 'تم فحص ($total) صنفاً لشركة "${company.name}". الكتالوج سليم 100% وخالٍ تماماً من أي أصناف مكررة ($unique صنف موثق) ✅',
+          buttonText: 'ممتاز',
+        );
+        setState(() {});
+      }
+    } catch (e) {
+      if (mounted) {
+        M3Feedback.showToast(
+          context,
+          message: 'حدث خطأ أثناء تدقيق الأصناف: $e',
+          isSuccess: false,
+        );
+      }
+    }
+  }
+
   Future<void> _seedDefaultSampleData() async {
     setState(() => _isSeeding = true);
     final service = ref.read(companyProductsServiceProvider);
@@ -2598,22 +2659,14 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
     CompanyModel selectedCompany,
     AppStrings strings,
   ) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: firestore
-          .collection('receipts_transactions')
-          .snapshots(),
+    return StreamBuilder<List<DiscoveredProductDocument>>(
+      stream: ref.watch(aiProductDiscoveryServiceProvider).streamDiscoveredProducts(
+        companySlug: selectedCompany.slug,
+        status: 'pending',
+      ),
       builder: (context, snapshot) {
-        final docs = snapshot.data?.docs ?? [];
-        if (docs.isEmpty) return const SizedBox.shrink();
-
-        int receiptProductsCount = 0;
-        for (final doc in docs) {
-          final data = doc.data() as Map<String, dynamic>? ?? {};
-          final products = data['extracted_products'] as List<dynamic>? ?? [];
-          receiptProductsCount += products.length;
-        }
-
-        if (receiptProductsCount == 0) return const SizedBox.shrink();
+        final pendingDocs = snapshot.data ?? [];
+        if (pendingDocs.isEmpty) return const SizedBox.shrink();
 
         return Container(
           margin: const EdgeInsets.only(bottom: 14),
@@ -2644,7 +2697,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      strings.discoveredProductsPendingApproval,
+                      '${strings.discoveredProductsPendingApproval} (${pendingDocs.length} صنف جديد)',
                       style: GoogleFonts.cairo(
                         fontWeight: FontWeight.bold,
                         fontSize: 13.5,
@@ -2779,6 +2832,19 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                   icon: const Icon(Icons.add_box_rounded, size: 16),
                   label: const Text('إضافة منتجات'),
                   style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Tooltip(
+                message: 'تدقيق وفحص كافة أصناف (${selectedCompany.name}) المسجلة وحذف أي أصناف مكررة فوراً وتصحيح العداد',
+                child: FilledButton.tonalIcon(
+                  onPressed: () => _auditAndDeduplicateCompany(selectedCompany),
+                  icon: const Icon(Icons.cleaning_services_rounded, size: 16, color: Colors.teal),
+                  label: Text('تدقيق ومنع التكرار', style: GoogleFonts.cairo(color: Colors.teal.shade800, fontWeight: FontWeight.bold)),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.teal.shade50,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   ),
                 ),
@@ -3043,28 +3109,63 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                           item.productName,
                           style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 14),
                         ),
-                        subtitle: Row(
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'الباركود: ${item.barcode}',
-                              style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
-                            ),
-                            const SizedBox(width: 8),
-                            InkWell(
-                              onTap: () {
-                                Clipboard.setData(ClipboardData(text: item.barcode));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('تم نسخ الباركود (${item.barcode}) بنجاح'),
-                                    duration: const Duration(seconds: 2),
+                            Row(
+                              children: [
+                                Text(
+                                  'الباركود: ${item.barcode}',
+                                  style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                                ),
+                                const SizedBox(width: 8),
+                                InkWell(
+                                  onTap: () {
+                                    Clipboard.setData(ClipboardData(text: item.barcode));
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('تم نسخ الباركود (${item.barcode}) بنجاح'),
+                                        duration: const Duration(seconds: 2),
+                                      ),
+                                    );
+                                  },
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                    child: Icon(Icons.copy_rounded, size: 14, color: colorScheme.primary),
                                   ),
-                                );
-                              },
-                              borderRadius: BorderRadius.circular(4),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                child: Icon(Icons.copy_rounded, size: 14, color: colorScheme.primary),
-                              ),
+                                ),
+                                if (item.chainAliases.isNotEmpty) ...[
+                                  const SizedBox(width: 8),
+                                  InkWell(
+                                    onTap: () => _showChainAliasesDialog(context, item),
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.tertiaryContainer,
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: colorScheme.tertiary.withValues(alpha: 0.3)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.storefront_rounded, size: 12, color: colorScheme.onTertiaryContainer),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '${item.chainAliases.length} سلاسل مرصودة',
+                                            style: GoogleFonts.cairo(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: colorScheme.onTertiaryContainer,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ],
                         ),
@@ -3153,6 +3254,153 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
           },
         ),
       ],
+    );
+  }
+
+  void _showChainAliasesDialog(BuildContext context, CompanyProductModel item) {
+    final colorScheme = Theme.of(context).colorScheme;
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.storefront_rounded, color: colorScheme.onPrimaryContainer, size: 22),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'مسميات الصنف في السلاسل التجارية',
+                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    Text(
+                      item.productName,
+                      style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 460,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.qr_code_2_rounded, size: 20, color: colorScheme.primary),
+                        const SizedBox(width: 8),
+                        Text(
+                          'الباركود الذهبي الموحد: ',
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                        SelectableText(
+                          item.barcode,
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: colorScheme.primary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (item.chainAliases.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Text(
+                        'لم يتم رصد مسميات مختلفة لهذا الصنف في السلاسل الأخرى بعد.',
+                        style: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant),
+                      ),
+                    )
+                  else
+                    ...item.chainAliases.entries.map((entry) {
+                      final chain = entry.key;
+                      final aliases = entry.value;
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.store_mall_directory_rounded, size: 16, color: colorScheme.primary),
+                                const SizedBox(width: 6),
+                                Text(
+                                  chain,
+                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: colorScheme.primary),
+                                ),
+                                const Spacer(),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.secondaryContainer,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    '${aliases.length} مسمى في الكاشير',
+                                    style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.bold, color: colorScheme.onSecondaryContainer),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            ...aliases.map((a) => Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 2),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('• ', style: TextStyle(color: colorScheme.outline)),
+                                      Expanded(
+                                        child: SelectableText(
+                                          a,
+                                          style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurface),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )),
+                          ],
+                        ),
+                      );
+                    }),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('إغلاق'),
+            ),
+          ],
+        );
+      },
     );
   }
 }

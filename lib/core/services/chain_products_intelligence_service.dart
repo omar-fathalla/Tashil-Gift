@@ -41,11 +41,15 @@ class ChainProductsIntelligenceService {
     final Map<String, List<_RawProductOccurrence>> occurrencesBySku = {};
 
     // -------------------------------------------------------------------------
-    // PASS 1: Barcode Harvesting across all invoices (بناء قاموس الباركودات)
+    // PASS 1: Barcode Harvesting across all valid invoices (بناء قاموس الباركودات)
     // -------------------------------------------------------------------------
     final Map<String, String> nameToBarcodeMap = {};
     for (final doc in docs) {
-      final rawProducts = doc.data()['extracted_products'] as List<dynamic>? ?? [];
+      final data = doc.data();
+      if (data['is_valid'] == false || data['isValid'] == false || data['status'] == 'rejected') {
+        continue;
+      }
+      final rawProducts = data['extracted_products'] as List<dynamic>? ?? [];
       for (final p in rawProducts) {
         if (p is! Map) continue;
         final name = p['name']?.toString().trim() ?? '';
@@ -65,6 +69,9 @@ class ChainProductsIntelligenceService {
     // -------------------------------------------------------------------------
     for (final doc in docs) {
       final data = doc.data();
+      if (data['is_valid'] == false || data['isValid'] == false || data['status'] == 'rejected') {
+        continue;
+      }
       final String receiptNumber = data['receipt_number']?.toString() ?? doc.id;
       final String receiptDate = data['receipt_date']?.toString() ?? '';
       
@@ -225,11 +232,18 @@ class ChainProductsIntelligenceService {
         }
       }
 
-      // Build structured ChainPricingSummary for each enterprise retail chain
+      // Build structured ChainPricingSummary and collect POS aliases for each enterprise retail chain
+      final Map<String, String> latestPosNameByChain = {};
+      final Map<String, List<String>> chainAliases = {};
+
       for (final cEntry in chainGroupedOccurrences.entries) {
         final chainName = cEntry.key;
         final cOccs = cEntry.value;
         final latestOcc = cOccs.first;
+
+        latestPosNameByChain[chainName] = latestOcc.name;
+        final distinctNames = cOccs.map((o) => o.name.trim()).where((n) => n.isNotEmpty).toSet().toList();
+        chainAliases[chainName] = distinctNames;
 
         int cTotalScans = cOccs.length;
         int cTotalQty = cOccs.fold<int>(0, (acc, o) => acc + o.quantity);
@@ -267,6 +281,8 @@ class ChainProductsIntelligenceService {
           latestPricesByChain: latestPricesByChain,
           latestRegularPricesByChain: latestRegularPricesByChain,
           latestDatesByChain: latestDatesByChain,
+          latestPosNameByChain: latestPosNameByChain,
+          chainAliases: chainAliases,
           chainSummaries: chainSummaries,
           latestEntryByChain: latestEntryByChain,
           priceHistory: priceHistory,

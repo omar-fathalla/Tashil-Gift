@@ -189,5 +189,53 @@ void main() {
       expect(prompt, contains('فواتشر بقيمة 125 جنيه'));
       expect(prompt, contains('matchedRuleId'));
     });
+
+    test('Case 8: Exact Gomla Market receipt Tresemme Keratin 400ml single piece (295 EGP)', () {
+      final tresemme2pcRule = PromotionalRuleItem(
+        id: 'rule_tresemme',
+        ruleTitle: 'عرض تريزيمي 400 مل (2 قطعة) -> هدية تريزيمي 250 مل',
+        triggerProduct: 'تريزيمي 400 مل، تريزيمى 400 مل، تريزمي 400، tresemme 400ml',
+        minQuantity: 2,
+        rewardType: 'free_product',
+        rewardValue: 'تريزيمي 250 مل هدية',
+      );
+
+      final extractedItems = [
+        ExtractedProductItem(
+          name: 'صانسيلك شامبو الشعر الاسود 600مل (خصم 20',
+          price: 132.0,
+          quantity: 1,
+          isTargetCompany: true,
+        ),
+        ExtractedProductItem(
+          name: 'سيجنال معجون اسنان مكافح التسوس 20مل (ع)',
+          price: 16.0,
+          quantity: 3,
+          isTargetCompany: true,
+        ),
+        ExtractedProductItem(
+          name: 'تريزيمى شامبو ريد للشعر الكيراتين 400مل',
+          price: 295.0,
+          quantity: 1,
+          isTargetCompany: true,
+        ),
+      ];
+
+      // 1. Should not match because only 1 piece was purchased, while rule requires 2
+      final match = PromotionalRuleMatcher.match(
+        extractedProducts: extractedItems,
+        promotionalRules: [tresemme2pcRule],
+      );
+      expect(match, isNull);
+
+      // 2. Unfulfilled reasons must give precise explanation with piece count
+      final reasons = PromotionalRuleMatcher.getUnfulfilledPromotionReasons(
+        extractedProducts: extractedItems,
+        promotionalRules: [tresemme2pcRule],
+      );
+      expect(reasons.isNotEmpty, isTrue);
+      expect(reasons.first, contains('تم رصد (1) قطعة'));
+      expect(reasons.first, contains('الحد الأدنى المطلوب للحصول على الهدية هو (2) قطعة'));
+    });
   });
 }

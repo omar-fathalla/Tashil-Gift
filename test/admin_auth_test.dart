@@ -131,7 +131,7 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
 
       // 1. Verify AI speed benchmark button is removed from header
       expect(find.text('اختبار سرعة AI ⚡'), findsNothing);
@@ -144,11 +144,11 @@ void main() {
       expect(find.byType(OutlinedButton), findsNothing);
 
       // 4. Verify Profile Menu is rendered in header
-      final profileIconFinder = find.byIcon(Icons.person_rounded);
-      expect(profileIconFinder, findsOneWidget);
+      final profileFinder = find.widgetWithText(PopupMenuButton<String>, 'مسؤول النظام');
+      expect(profileFinder, findsOneWidget);
 
       // 5. Tap Profile menu to open popup
-      await tester.tap(profileIconFinder);
+      await tester.tap(profileFinder);
       await tester.pumpAndSettle();
 
       // 6. Verify Profile dropdown contents including Logout
@@ -156,7 +156,6 @@ void main() {
       expect(find.text('support@switchpoint.com'), findsOneWidget);
       expect(find.text('جلسة إدارية نشطة'), findsOneWidget);
       expect(find.text('تسجيل الخروج'), findsOneWidget);
-      expect(find.byIcon(Icons.logout_rounded), findsOneWidget);
       expect(find.byIcon(Icons.logout_rounded), findsOneWidget);
     });
 

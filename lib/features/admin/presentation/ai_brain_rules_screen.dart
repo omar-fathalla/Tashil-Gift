@@ -5,6 +5,7 @@ import '../../../core/localization/app_strings.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/services/ai_directives_service.dart';
 import '../domain/ai_directive_model.dart';
+import '../domain/ai_directives_seed_data.dart';
 
 class AiBrainRulesScreen extends ConsumerStatefulWidget {
   const AiBrainRulesScreen({super.key});
@@ -17,6 +18,7 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen> {
   final TextEditingController _searchController = TextEditingController();
   AiDirectiveCategory? _selectedCategory; // null = all
   String _searchQuery = '';
+  bool _isSyncing = false;
 
   @override
   void initState() {
@@ -41,6 +43,7 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen> {
     final colorScheme = theme.colorScheme;
 
     final directivesAsync = ref.watch(aiDirectivesStreamProvider);
+    final totalCount = directivesAsync.value?.length ?? AiDirectivesSeedData.initialDirectives.length;
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
@@ -48,7 +51,7 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen> {
         slivers: [
           // 1. Header Banner & KPIs
           SliverToBoxAdapter(
-            child: _buildHeaderBanner(context, strings, isAr, colorScheme),
+            child: _buildHeaderBanner(context, strings, isAr, colorScheme, totalCount),
           ),
 
           // 2. Search & Category Filter Toolbar
@@ -128,7 +131,13 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen> {
     }).toList();
   }
 
-  Widget _buildHeaderBanner(BuildContext context, AppStrings strings, bool isAr, ColorScheme colorScheme) {
+  Widget _buildHeaderBanner(
+    BuildContext context,
+    AppStrings strings,
+    bool isAr,
+    ColorScheme colorScheme,
+    int totalDirectivesCount,
+  ) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
@@ -189,6 +198,55 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen> {
                   ],
                 ),
               ),
+              const SizedBox(width: 12),
+              // Cloud Sync Button
+              OutlinedButton.icon(
+                onPressed: _isSyncing
+                    ? null
+                    : () async {
+                        setState(() => _isSyncing = true);
+                        try {
+                          final count = await ref.read(aiDirectivesServiceProvider).forceSyncAllDirectives();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  isAr
+                                      ? 'تمت مزامنة كافة القواعد المعيارية ($count بنداً) مع السحابة بنجاح 🚀'
+                                      : 'All $count directives synced to cloud successfully',
+                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                                ),
+                                backgroundColor: Colors.teal.shade700,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('فشلت المزامنة: $e'),
+                                backgroundColor: Colors.red.shade700,
+                              ),
+                            );
+                          }
+                        } finally {
+                          if (mounted) setState(() => _isSyncing = false);
+                        }
+                      },
+                icon: _isSyncing
+                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.cloud_sync_rounded, size: 18),
+                label: Text(
+                  isAr ? 'مزامنة القواعد السحابية' : 'Sync Cloud Directives',
+                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: colorScheme.surface,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 24),
@@ -203,7 +261,7 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen> {
                 children: [
                   _buildKpiCard(
                     title: strings.totalAiDirectivesCount,
-                    value: '18 ${isAr ? 'بنداً معيارياً' : 'Directives'}',
+                    value: '$totalDirectivesCount ${isAr ? 'بنداً معيارياً' : 'Directives'}',
                     subtitle: isAr ? 'محدثة ونشطة بكافة الحملات' : 'Enforced Globally',
                     icon: Icons.checklist_rtl_rounded,
                     color: const Color(0xFF6750A4),

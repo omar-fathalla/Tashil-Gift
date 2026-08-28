@@ -11,6 +11,7 @@ class CompanyProductItem {
   final String unitSize;
   final double? referencePrice;
   final Map<String, dynamic>? metadata;
+  final Map<String, List<String>> chainAliases;
 
   CompanyProductItem({
     required this.id,
@@ -21,9 +22,32 @@ class CompanyProductItem {
     this.unitSize = '',
     this.referencePrice,
     this.metadata,
+    this.chainAliases = const {},
   });
 
+  /// Total count of recognized distinct retail chains where aliases were registered
+  int get observedChainsCount => chainAliases.keys.length;
+
+  /// Returns all aliases flattened into a list
+  List<String> get allAliasesList {
+    final List<String> list = [];
+    for (final aliases in chainAliases.values) {
+      list.addAll(aliases);
+    }
+    return list;
+  }
+
   factory CompanyProductItem.fromMap(Map<String, dynamic> data, String id) {
+    final Map<String, List<String>> aliases = {};
+    final rawAliases = data['chainAliases'];
+    if (rawAliases is Map) {
+      rawAliases.forEach((k, v) {
+        if (v is List) {
+          aliases[k.toString()] = v.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+        }
+      });
+    }
+
     return CompanyProductItem(
       id: id,
       companySlug: data['companySlug']?.toString() ?? '',
@@ -33,6 +57,7 @@ class CompanyProductItem {
       unitSize: data['unitSize']?.toString() ?? '',
       referencePrice: (data['referencePrice'] as num?)?.toDouble(),
       metadata: data['metadata'] is Map ? Map<String, dynamic>.from(data['metadata']) : null,
+      chainAliases: aliases,
     );
   }
 
@@ -50,8 +75,33 @@ class CompanyProductItem {
       if (unitSize.isNotEmpty) 'unitSize': unitSize,
       if (referencePrice != null) 'referencePrice': referencePrice,
       if (metadata != null && metadata!.isNotEmpty) 'metadata': metadata,
+      if (chainAliases.isNotEmpty) 'chainAliases': chainAliases,
       'updatedAt': FieldValue.serverTimestamp(),
     };
+  }
+
+  CompanyProductItem copyWith({
+    String? id,
+    String? companySlug,
+    String? productName,
+    String? barcode,
+    String? category,
+    String? unitSize,
+    double? referencePrice,
+    Map<String, dynamic>? metadata,
+    Map<String, List<String>>? chainAliases,
+  }) {
+    return CompanyProductItem(
+      id: id ?? this.id,
+      companySlug: companySlug ?? this.companySlug,
+      productName: productName ?? this.productName,
+      barcode: barcode ?? this.barcode,
+      category: category ?? this.category,
+      unitSize: unitSize ?? this.unitSize,
+      referencePrice: referencePrice ?? this.referencePrice,
+      metadata: metadata ?? this.metadata,
+      chainAliases: chainAliases ?? this.chainAliases,
+    );
   }
 }
 
@@ -94,21 +144,97 @@ class CompanyProductsService {
       } catch (_) {}
     }
 
-    // 2. Check by exact product name for this company (if name is provided)
+    // 3. Check by POS Chain Alias (if name is provided)
     if (normName.isNotEmpty) {
       try {
-        final nameQuery = await _firestore
-            .collection('company_products')
-            .where('companySlug', isEqualTo: slug)
-            .where('productName', isEqualTo: productName.trim())
-            .limit(1)
-            .get()
-            .timeout(const Duration(seconds: 4), onTimeout: () => throw Exception('Timeout'));
-
-        if (nameQuery.docs.isNotEmpty) {
-          return CompanyProductItem.fromFirestore(nameQuery.docs.first);
+        final products = await getProductsForCompany(slug);
+        for (final product in products) {
+          for (final aliasesList in product.chainAliases.values) {
+            if (aliasesList.any((a) => a.trim().toLowerCase() == normName)) {
+              return product;
+            }
+          }
         }
       } catch (_) {}
+    }
+
+    return null;
+  }
+
+  /// Atomically registers a newly observed POS raw alias for a specific retail chain under a product's barcode
+  Future<void> registerChainAlias({
+    required String companySlug,
+    required String barcode,
+    required String chainName,
+    required String rawPosName,
+  }) async {
+    final slug = companySlug.trim().toLowerCase();
+    final normBarcode = barcode.trim();
+    final cleanPosName = rawPosName.trim();
+    final cleanChain = chainName.trim();
+
+    if (slug.isEmpty || normBarcode.isEmpty || cleanPosName.isEmpty || cleanChain.isEmpty) return;
+
+    try {
+      final docId = '${slug}_$normBarcode';
+      final docRef = _firestore.collection('company_products').doc(docId);
+
+      await _firestore.runTransaction((tx) async {
+        final snap = await tx.get(docRef);
+        if (snap.exists) {
+          final data = snap.data() ?? {};
+          final rawAliases = data['chainAliases'] is Map ? Map<String, dynamic>.from(data['chainAliases']) : <String, dynamic>{};
+          final currentList = rawAliases[cleanChain] is List ? List<String>.from(rawAliases[cleanChain]) : <String>[];
+          if (!currentList.contains(cleanPosName)) {
+            currentList.add(cleanPosName);
+            rawAliases[cleanChain] = currentList;
+            tx.update(docRef, {
+              'chainAliases': rawAliases,
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+          }
+        }
+      });
+    } catch (_) {}
+  }
+
+  /// Finds a company product by international Barcode, exact Name, or POS Chain Alias
+  Future<CompanyProductItem?> findProductByBarcodeOrAlias({
+    required String companySlug,
+    String? barcode,
+    String? rawName,
+    String? chainName,
+    List<CompanyProductItem>? preloadedCatalog,
+  }) async {
+    final slug = companySlug.trim().toLowerCase();
+    if (slug.isEmpty) return null;
+
+    final normBarcode = (barcode ?? '').trim();
+    final normName = (rawName ?? '').trim().toLowerCase();
+
+    final catalog = preloadedCatalog ?? await getProductsForCompany(slug);
+
+    // 1. Match by exact barcode
+    if (normBarcode.isNotEmpty && normBarcode.length >= 6) {
+      final match = catalog.where((p) => p.barcode.trim() == normBarcode);
+      if (match.isNotEmpty) return match.first;
+    }
+
+    // 2. Match by exact canonical product name
+    if (normName.isNotEmpty) {
+      final nameMatch = catalog.where((p) => p.productName.trim().toLowerCase() == normName);
+      if (nameMatch.isNotEmpty) return nameMatch.first;
+
+      // 3. Match against chain aliases
+      for (final product in catalog) {
+        for (final aliasEntry in product.chainAliases.entries) {
+          for (final alias in aliasEntry.value) {
+            if (alias.trim().toLowerCase() == normName) {
+              return product;
+            }
+          }
+        }
+      }
     }
 
     return null;
@@ -354,5 +480,70 @@ class CompanyProductsService {
         .get();
 
     return query.docs.map((doc) => CompanyProductItem.fromFirestore(doc)).toList();
+  }
+
+  /// Audits all products for a specific company, removes any duplicate documents, and resets productsCount
+  Future<Map<String, int>> auditAndDeduplicateCompanyProducts(String companySlug) async {
+    final slug = companySlug.trim().toLowerCase();
+    if (slug.isEmpty) return {'total': 0, 'unique': 0, 'duplicatesRemoved': 0};
+
+    final query = await _firestore
+        .collection('company_products')
+        .where('companySlug', isEqualTo: slug)
+        .limit(1000)
+        .get();
+
+    final docs = query.docs;
+    final Set<String> seenBarcodes = {};
+    final Set<String> seenNames = {};
+    final List<DocumentReference> duplicateRefs = [];
+
+    for (final doc in docs) {
+      final data = doc.data();
+      final barcode = (data['barcode'] ?? '').toString().trim();
+      final name = (data['productName'] ?? '').toString().trim().toLowerCase();
+
+      bool isDup = false;
+      if (barcode.isNotEmpty && barcode.length >= 6) {
+        if (seenBarcodes.contains(barcode)) {
+          isDup = true;
+        } else {
+          seenBarcodes.add(barcode);
+        }
+      }
+
+      if (!isDup && name.isNotEmpty) {
+        if (seenNames.contains(name)) {
+          isDup = true;
+        } else {
+          seenNames.add(name);
+        }
+      }
+
+      if (isDup) {
+        duplicateRefs.add(doc.reference);
+      }
+    }
+
+    if (duplicateRefs.isNotEmpty) {
+      final batch = _firestore.batch();
+      for (final ref in duplicateRefs) {
+        batch.delete(ref);
+      }
+      await batch.commit();
+    }
+
+    final uniqueCount = docs.length - duplicateRefs.length;
+    // Correct productsCount in companies collection
+    await _firestore.collection('companies').doc(slug).set({
+      'productsCount': uniqueCount,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    return {
+      'total': docs.length,
+      'unique': uniqueCount,
+      'duplicatesRemoved': duplicateRefs.length,
+    };
   }
 }

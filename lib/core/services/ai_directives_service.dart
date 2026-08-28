@@ -44,7 +44,7 @@ class AiDirectivesService {
     }
   }
 
-  /// Sync seed directives to Firestore if collection is empty or missing new directives (e.g. AIR-19, AIR-20)
+  /// Sync seed directives to Firestore if collection is empty or missing new directives (e.g. AIR-19, AIR-20, AIR-23)
   Future<void> seedDirectivesIfEmpty() async {
     try {
       final snapshot = await _firestore.collection('ai_brain_directives').get();
@@ -65,6 +65,24 @@ class AiDirectivesService {
       }
     } catch (e) {
       debugPrint('Error seeding AI directives to Firestore: $e');
+    }
+  }
+
+  /// Force updates all seed directives into Firestore to ensure the cloud database has the latest version
+  Future<int> forceSyncAllDirectives() async {
+    try {
+      final allDirectives = AiDirectivesSeedData.initialDirectives;
+      final batch = _firestore.batch();
+      for (final directive in allDirectives) {
+        final docRef = _firestore.collection('ai_brain_directives').doc(directive.id);
+        batch.set(docRef, directive.toMap());
+      }
+      await batch.commit();
+      debugPrint('Successfully synced all ${allDirectives.length} AI Brain Directives to Firestore');
+      return allDirectives.length;
+    } catch (e) {
+      debugPrint('Error force-syncing AI directives to Firestore: $e');
+      rethrow;
     }
   }
 

@@ -156,5 +156,91 @@ void main() {
       expect(restored.isBarcodeAutoLinked, isTrue);
       expect(restored.barcode, '6221155607447');
     });
+
+    test('Fathalla Price Defense & Competitor Threat Radar detects underpriced items accurately', () {
+      // Case 1: Threat! Gomla Market sells at 99 EGP, Fathalla sells at 115 EGP
+      final threatProduct = ChainProductItem(
+        id: 'p-001',
+        name: 'شامبو كلير 360 مل',
+        barcode: '6221155607447',
+        latestPricesByChain: {
+          'أسواق فتح الله': 115.0,
+          'جملة ماركت': 99.0,
+          'كارفور': 120.0,
+        },
+      );
+
+      expect(threatProduct.hasFathallaPrice, isTrue);
+      expect(threatProduct.fathallaPrice, 115.0);
+      expect(threatProduct.isMultiChain, isTrue);
+      expect(threatProduct.isUnderpricedByCompetitors, isTrue);
+      expect(threatProduct.cheapestCompetitorName, 'جملة ماركت');
+      expect(threatProduct.competitorUnderpricedDiff, 16.0); // 115 - 99
+      expect(threatProduct.competitorUnderpricedPercent, closeTo(13.91, 0.05)); // (16 / 115) * 100
+      expect(threatProduct.isFathallaCheapest, isFalse);
+
+      // Case 2: Fathalla Winning! Fathalla sells at 99 EGP, Competitors sell at 115 & 120 EGP
+      final winningProduct = ChainProductItem(
+        id: 'p-002',
+        name: 'رول اون ريكسونا 50 مل',
+        barcode: '6221155608888',
+        latestPricesByChain: {
+          'أسواق فتح الله': 99.0,
+          'جملة ماركت': 115.0,
+          'بيت الجملة': 120.0,
+        },
+      );
+
+      expect(winningProduct.isMultiChain, isTrue);
+      expect(winningProduct.isUnderpricedByCompetitors, isFalse);
+      expect(winningProduct.isFathallaCheapest, isTrue);
+      expect(winningProduct.cheapestCompetitorName, '');
+      expect(winningProduct.competitorUnderpricedDiff, 0.0);
+
+      // Case 3: Single-chain item (Observed only in 1 competitor chain) -> Must not be multi-chain
+      final singleChainProduct = ChainProductItem(
+        id: 'p-003',
+        name: 'منتج غير مسجل إلا بسلسلة واحدة',
+        barcode: '6221155609999',
+        latestPricesByChain: {
+          'جملة ماركت': 85.0,
+        },
+      );
+
+      expect(singleChainProduct.isMultiChain, isFalse);
+      expect(singleChainProduct.hasFathallaPrice, isFalse);
+      expect(singleChainProduct.isUnderpricedByCompetitors, isFalse);
+      expect(singleChainProduct.isFathallaCheapest, isFalse);
+    });
+
+    test('CompanyProductItem and ChainProductItem chainAliases serialization and helpers work properly', () {
+      final item = ChainProductItem(
+        id: '6221155122926',
+        name: 'أكس مزيل عرق بخاخ بلاك نايت 150 مل',
+        barcode: '6221155122926',
+        companySlug: 'unilever',
+        latestPosNameByChain: {
+          'أسواق فتح الله': 'اكس اسبراي بلاك نايت 150 مل خصم 15%',
+          'كارفور': 'AXE SPRAY BLACK NIGHT 150ML',
+        },
+        chainAliases: {
+          'أسواق فتح الله': ['اكس اسبراي بلاك نايت 150 مل خصم 15%'],
+          'كارفور': ['AXE SPRAY BLACK NIGHT 150ML', 'اكس بخاخ بلاك'],
+          'جملة ماركت': ['اكس سبراى نايت 150مل'],
+        },
+      );
+
+      expect(item.chainAliases.length, 3);
+      expect(item.latestPosNameByChain['كارفور'], 'AXE SPRAY BLACK NIGHT 150ML');
+
+      final json = item.toJson();
+      expect(json['chainAliases'], isNotNull);
+      expect((json['chainAliases'] as Map)['كارفور'], contains('AXE SPRAY BLACK NIGHT 150ML'));
+
+      final restored = ChainProductItem.fromJson(json);
+      expect(restored.chainAliases.length, 3);
+      expect(restored.latestPosNameByChain['أسواق فتح الله'], 'اكس اسبراي بلاك نايت 150 مل خصم 15%');
+      expect(restored.chainAliases['كارفور'], contains('اكس بخاخ بلاك'));
+    });
   });
 }

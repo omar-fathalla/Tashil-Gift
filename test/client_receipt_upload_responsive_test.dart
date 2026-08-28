@@ -75,9 +75,9 @@ void main() {
       expect(phoneField.textInputAction, TextInputAction.done);
       expect(phoneField.keyboardType, TextInputType.phone);
 
-      // Check Camera action button (Camera-only mode)
+      // Check Camera and Gallery action buttons
       expect(find.byIcon(Icons.camera_alt_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.photo_library_rounded), findsNothing);
+      expect(find.byIcon(Icons.photo_library_rounded), findsOneWidget);
 
       // Check Terms and Conditions
       expect(find.textContaining('تطبق الشروط والأحكام'), findsOneWidget);
@@ -94,7 +94,7 @@ void main() {
 
       expect(find.text('أهلاً بكم في مهرجان الصيف'), findsOneWidget);
       expect(find.byIcon(Icons.camera_alt_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.photo_library_rounded), findsNothing);
+      expect(find.byIcon(Icons.photo_library_rounded), findsOneWidget);
       expect(find.byType(TextField), findsNWidgets(2));
     });
 
@@ -111,9 +111,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Camera button in English (Camera-only mode)
+      // Camera and Gallery buttons in English
       expect(find.byIcon(Icons.camera_alt_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.photo_library_rounded), findsNothing);
+      expect(find.byIcon(Icons.photo_library_rounded), findsOneWidget);
     });
 
     testWidgets('Displays clear suffix icon when text is entered and clears text on tap', (tester) async {
