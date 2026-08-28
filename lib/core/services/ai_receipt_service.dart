@@ -1520,11 +1520,21 @@ class PromotionalRuleMatcher {
         if (rule.minQuantity > 0 && remainingQty >= rule.minQuantity) {
           int count = 1;
           if (rule.allowMultipliers || allowCampaignMultipliers) {
-            count = remainingQty ~/ rule.minQuantity;
+            if (rule.minQuantity == 1) {
+              int rawPackCount = 0;
+              for (final idx in matchingProductIndices) {
+                if ((remainingItemQuantities[idx] ?? 0) > 0) {
+                  rawPackCount += effectiveProducts[idx].quantity > 0 ? effectiveProducts[idx].quantity : 1;
+                }
+              }
+              count = rawPackCount > 0 ? rawPackCount : (remainingQty ~/ rule.minQuantity);
+            } else {
+              count = remainingQty ~/ rule.minQuantity;
+            }
             if (count < 1) count = 1;
           }
 
-          final int usedQty = count * rule.minQuantity;
+          final int usedQty = rule.minQuantity == 1 ? remainingQty : (count * rule.minQuantity);
           remainingQty -= usedQty;
 
           // Deduct consumed quantity from the matching product items
