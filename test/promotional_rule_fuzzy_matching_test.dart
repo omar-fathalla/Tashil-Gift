@@ -401,9 +401,9 @@ void main() {
       final singleStandaloneShampoo = [
         ExtractedProductItem(
           name: 'تريزيمى شامبو 400 ملى لشعر جاف',
-          price: 170.0,
+          price: 150.0,
           quantity: 1, // Only 1 standalone shampoo bottle (no conditioner)
-          barcode: '6221155612199',
+          barcode: '6221155086228',
           isTargetCompany: true,
         ),
       ];
@@ -429,7 +429,7 @@ void main() {
       expect(reasons.first, contains('(2) قطعة'));
     });
 
-    test('Customer in Gomla Market Obour Buildings buying 1x Tresemme Shampoo (شامبوزيت 400مل) auto-infers target company, reconciles branch, and reports quantity rule reason', () {
+    test('AIR-32 & Rule 2: Customer in Gomla Market Miami buying Tresemme 400ml Coconut Promo Bundle Box (6221155612182 @ 295.00 EGP) is a 2-piece combo and awards EXACTLY 1x Tresemme 250ml gift', () {
       // 1. Test brand auto-inference from raw JSON
       final rawItemJson = {
         'name': 'تريزيمى شامبوزيت جوز الهند والصبار 400مل',
@@ -441,23 +441,29 @@ void main() {
       final item = ExtractedProductItem.fromJson(rawItemJson);
       expect(item.isTargetCompany, isTrue); // Auto-inferred
 
-      // 2. Test rule matching: 1 bottle does not meet Rule 2 (needs 2)
+      // 2. Test effective quantity resolution (Barcode 6221155612182 @ 295 EGP is a 2-piece bundle)
+      final effectiveQty = PromotionalRuleMatcher.getEffectiveProductQuantity(item);
+      expect(effectiveQty, 2);
+
+      // 3. Test rule matching: 1 bundle = 2 physical pieces -> matches Rule 2 (needs 2)
       final matchedResults = PromotionalRuleMatcher.matchAllWithMultipliers(
         extractedProducts: [item],
         promotionalRules: rules,
         allowCampaignMultipliers: true,
       );
-      expect(matchedResults, isEmpty);
+      expect(matchedResults.length, 1);
+      final match = matchedResults.first;
+      expect(match.rule.id, 'rule_2');
+      expect(match.multiplier, 1);
+      expect(match.multipliedLinkedGifts.first.giftName, 'تريزيمي 250 مل هديه');
+      expect(match.multipliedLinkedGifts.first.quantity, 1);
 
-      // 3. Test unfulfilled reasons
+      // 4. Test unfulfilled reasons (must be completely empty)
       final reasons = PromotionalRuleMatcher.getUnfulfilledPromotionReasons(
         extractedProducts: [item],
         promotionalRules: rules,
       );
-      expect(reasons.isNotEmpty, true);
-      expect(reasons.first, contains('تريزيمي'));
-      expect(reasons.first, contains('تم رصد (1) قطعة'));
-      expect(reasons.first, contains('(2) قطعة'));
+      expect(reasons, isEmpty);
     });
 
     test('Customer in Gomla Market Janaklees buying 6x Rexona Roll-on Women Peach matches ONLY Rule 5 (3x 50 EGP vouchers) and NEVER matches Tresemme', () {

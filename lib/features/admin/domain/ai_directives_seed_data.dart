@@ -671,6 +671,27 @@ class AiDirectivesSeedData {
           tags: ['form-guard', 'roll-on-vs-spray', 'rexona-rollon', 'category-isolation', 'promotional-rules', 'air-31'],
           lastUpdated: '2026-08-29',
         ),
+
+        const AiDirectiveModel(
+          id: 'AIR-32',
+          code: 'TRESEMME_400ML_PROMO_BUNDLE_BARCODE_AND_PRICE_HEURISTIC',
+          orderIndex: 32,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'اعتماد باركودات حزم تريزيمي 400 مل المزدوجة ومطابقة العبوة كقطعتين (Tresemme 400ml Promo Bundle Barcodes & 2-Piece Resolution)',
+          titleEn: 'Tresemme 400ml Promo Bundle Barcodes & 2-Piece Piece Count Resolution',
+          descriptionAr:
+              'التعرف التلقائي المباشر على باركودات حزم وبكجات تريزيمي المزدوجة 400 مل المعتمدة (مثل باركود 6221155612182 لجوز الهند والصبار، 6221155612199 لبوتنكس، 6221155612168 لكيراتين سموث) أو الأصناف المسعرة بـ 240+ ج.م (مثل 295 ج.م أو 299 ج.م أو 378 ج.م) ومعاملتها فوراً كـ (2 قطعة) واستحقاق هدية تريزيمي 250 مل كاملة حتى لو طُبعت الكمية = 1 في بون الكاشير.',
+          descriptionEn:
+              'Directly identifies Tresemme 400ml twin bundle promo barcodes (6221155612182 for Coconut/Aloe, 6221155612199 for Botanix, 6221155612168 for Keratin Smooth) or hair care items priced >= 240 EGP (e.g. 295, 299, 378 EGP), immediately treating them as 2 physical pieces (effectiveQty = 2) and awarding 1x Tresemme 250ml gift (rule_2) even when printed as qty = 1 on POS receipts.',
+          logicAr:
+              '1. اعتماد الباركودات المباشرة (_knownTwinBundleBarcodes): أي صنف يحمل باركود حزمة ترويجية (6221155612182 / 6221155612199 / 6221155612168 / 6221155612175) يُعامل كـ 2 قطعة في محرك getEffectiveProductQuantity.\n2. معيار التسعير لحزم الشعر (Hair Care Bundle Price Heuristic): أي صنف تريزيمي 400 مل بسعر 240+ ج.م (مثل 295.00 ج.م في جملة ماركت ميامي) هو عبوة مزدوجة (شامبو 400 مل + بلسم 400 مل في كرتونة ترويجية) ويُعامل كـ 2 قطعة.\n3. استحقاق الجائزة: تحقيق شرط الـ 2 قطعة لقاعدة تريزيمي (rule_2) واستحقاق 1 عبوة تريزيمي 250 مل هدية فورية (free_product).\n4. منع رسائل الرفض الخاطئة: حظر إصدار رسالة (تم رصد 1 قطعة والمطلوب 2) لهذه الباركودات والحزم المسعرة.',
+          logicEn:
+              '1. Verified Bundle Barcodes: treats known promo box barcodes (6221155612182 / 6221155612199 / 6221155612168) as 2 pieces in getEffectiveProductQuantity.\n2. Hair Care Bundle Price Heuristic: any Tresemme 400ml priced >= 240 EGP (e.g. 295.00 EGP in Gomla Market Miami) is resolved as a 2-piece physical combo pack.\n3. Prize Qualification: satisfies the 2-piece condition of rule_2 and awards 1x Tresemme 250ml gift.\n4. Zero False Rejection: completely prevents false-positive rejection messages for bundle receipts.',
+          exampleInput: 'بون جملة ماركت ميامي: "تريزيمى شامبوزيت جوز الهند والصبار 400مل" باركود 6221155612182 السعر 295.00 ج.م والكمية 1',
+          exampleOutput: 'التعرف على الصنف كـ "حزمة تريزيمي مزدوجة (2 قطعة)" ومنح هدية "تريزيمي 250 مل هديه" (rule_2) بنجاح 100%.',
+          tags: ['tresemme-bundle', 'barcode-6221155612182', 'coconut-aloe-400ml', 'gomla-market-miami', 'promo-box-295egp', 'air-32'],
+          lastUpdated: '2026-08-29',
+        ),
       ];
 }
 

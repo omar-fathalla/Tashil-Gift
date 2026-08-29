@@ -667,11 +667,10 @@ $rulesListFormatted
 4. في حال وجود أكثر من قاعدة لنفس المنتج بمستويات كميات مختلفة (مثل: شراء 1 اسبراي ريكسونا -> 50 ج.م، وشراء 2 اسبراي ريكسونا -> 125 ج.م)، يجب عليك اختيار القاعدة ذات الكمية المشروطة الأعلى التي حققها العميل (مثال: إذا اشترى 2 اسبراي أو أكثر، اختر قاعدة الـ 125 ج.م).
 5. [حزم البندل وعروض الشرنك المزدوجة (Twin Bundles & Shrink)]: إذا احتوت الفاتورة على صنف حزمة مزدوجة أو شرنك (مثل عبوة أكس 2 قطعة أو سعر 335 ج.م مع خصم ~65 ج.م بصافي 270 ج.م، أو ريكسونا 150 مل بسعر 275 ج.م، أو احتوى الاسم على كلمات شرنك/مزدوج/2ق)، يُعامل الصنف كـ (2 قطعة) ويطابق فوراً قاعدة الـ 2 قطعة (عرض الـ 125 ج.م).
 6. [أصناف ريكسونا وأكس 150 مل]: أي صنف ريكسونا أو أكس بحجم 150 مل (مثل "ريكسونا 150 مل حر" أو "ريكسونا 150 مل رج" أو "اكس 150 مل") هو اسبراي مزيل عرق ويعامل كـ (اسبراي) ويطابق فوراً عروض الاسبراي (فواتشر 50 ج.م للقطعة أو 125 ج.م للقطعتين أو البكج المزدوج 275 ج.م).
-7. [عروض تريزيمي Tresemme المعتمدة والحجم الصارم 400 مل]:
-   - عروض تريزيمي مخصصة حصراً لعبوات (تريزيمي 400 مل) أو بكجات الشامبو والبلسم المزدوجة الترويجية بحجم 400 مل (مثل 'تريزيمى شامبو + بلسم 400 ملى' أو باركود 6221155612199 أو 6221155612168 بسعر 299 ج.م أو 378 ج.م).
+7. [عروض تريزيمي Tresemme المعتمدة وحزم البندل المزدوجة 400 مل]:
+   - عبوات وبكجات تريزيمي المزدوجة بحجم 400 مل (مثل 'تريزيمى شامبوزيت جوز الهند والصبار 400مل' أو 'تريزيمى شامبو + بلسم 400 ملى' أو باركود 6221155612182 أو باركود 6221155612199 أو باركود 6221155612168 أو بسعر 240+ ج.م مثل 295 ج.م أو 299 ج.م أو 378 ج.م)، تُعامل كـ (2 قطعة) وتحقق فوراً شرط الـ 2 قطعة لقاعدة تريزيمي (rule_2) وتمنح هدية تريزيمي 250 مل معتمدة (free_product).
    - عبوات تريزيمي الفردية بحجم 600 مل أو 900 مل أو 200 مل (مثل 'تريزيمى بلسم 600 مل' أو باركود 6221155086228) ليست مدرجة في عرض الـ 400 مل وتُستبعد تماماً وتمنح 0 هدية تريزيمي.
-   - شراء عبوة فردية واحدة (الكمية = 1) من شامبو أو بلسم تريزيمي 400 مل لا يستحق الهدية، حيث يشترط العرض شراء قطعتين (2 قطعة).
-   - عند شراء عبوة واحدة من البكج المزدوج 400 مل (الكمية في البون = 1)، يُعامل الصنف كـ (2 قطعة) ويحقق فوراً شرط الـ 2 قطعة لقاعدة تريزيمي (rule_2) ويمنح هدية تريزيمي 250 مل معتمدة (free_product).
+   - شراء عبوة فردية عادية واحدة بسعر عادي (~150 ج.م) من شامبو أو بلسم تريزيمي 400 مل لا يستحق الهدية بمفرده، حيث يشترط العرض شراء قطعتين (2 قطعة).
 8. [مضاعفة الجوائز والفرص]: إذا كانت القاعدة تتيح المضاعفة، وكان العميل قد اشترى مضاعفات الكمية المشروطة:
    - احسب عدد مرات تكرار العرض واضرب قيمة المكافأة بعدد المرات (مثال: شراء 6 رول أون يطابق قاعدة الـ 2 رول أون بمضاعف 3x = 3 فواتشر فئة 50 ج.م بإجمالي 150 ج.م).
 9. قم بتعبئة حقل (matchedRuleId) بمعرف القاعدة المطابقة (مثل "rule_5" للرول أون أو "rule_2" لتريزيمي أو "rule_4" للاسبراي).
@@ -1630,8 +1629,17 @@ class PromotionalRuleMatcher {
   }) {
     if (promotionalRules.isEmpty) return [];
 
-    final reasons = <String>[];
     final products = extractedProducts ?? result?.extractedProducts ?? const <ExtractedProductItem>[];
+    if (products.isEmpty) return ['الفاتورة لا تحتوي على أي من المنتجات المؤهلة لعروض الحملة الحالية.'];
+
+    // If receipt already matches any promotional rule, there are no unfulfilled reasons
+    final matches = matchAllWithMultipliers(
+      extractedProducts: products,
+      promotionalRules: promotionalRules,
+    );
+    if (matches.isNotEmpty) return const [];
+
+    final reasons = <String>[];
 
     // Check if any product partially matched a rule but didn't reach minQuantity
     for (final rule in promotionalRules) {
@@ -1663,29 +1671,50 @@ class PromotionalRuleMatcher {
     return reasons;
   }
 
+  /// Verified promo twin bundle barcodes that represent a 2-piece combo pack (Shampoo + Conditioner or Dual Sprays)
+  static const Set<String> _knownTwinBundleBarcodes = {
+    '6221155612182', // تريزيمي شامبو + بلسم 400 مل جوز الهند والصبار (حزمة ترويجية مزدوجة 2 قطعة)
+    '6221155612199', // تريزيمي شامبو + بلسم 400 مل بوتنكس زبدة الشيا والكركديه (حزمة ترويجية مزدوجة 2 قطعة)
+    '6221155612168', // تريزيمي شامبو + بلسم 400 مل كيراتين سموث (حزمة ترويجية مزدوجة 2 قطعة)
+    '6221155612175', // تريزيمي شامبو + بلسم 400 مل إصلاح وحماية (حزمة ترويجية مزدوجة 2 قطعة)
+    '6221155612144', // تريزيمي شامبو 400 مل + بلسم 400 مل
+  };
+
   /// Resolves the effective physical piece count of an item, taking into account twin bundles / shrink packs
   /// where POS registers 1 quantity for a 2-piece physical promotional pack.
   static int getEffectiveProductQuantity(ExtractedProductItem p) {
     int qty = p.quantity > 0 ? p.quantity : 1;
     final nameLower = _normalize(p.name);
+    final cleanBarcode = p.barcode.trim();
 
-    // 1. Explicit keyword indicators for bundle/shrink/twin packs
+    // 1. Verified Promo Twin Bundle Barcodes (Tresemme 400ml Promo Boxes, Axe/Rexona Promo Shrinks)
+    if (cleanBarcode.isNotEmpty && _knownTwinBundleBarcodes.contains(cleanBarcode)) {
+      return qty * 2;
+    }
+
+    // 2. Explicit keyword indicators for bundle/shrink/twin packs
     final hasBundleName = RegExp(r'\b(شرنك|دبل|مزدوج|باندل|بندل|توين|2\s*قطعة|2\s*قطع|2\s*ق|2x|2\*)\b')
         .hasMatch(nameLower);
 
-    // 2. Hair care twin combo (Shampoo + Conditioner / شامبو + بلسم)
+    // 3. Hair care twin combo (Shampoo + Conditioner / شامبو + بلسم)
     // E.g. "تريزيمى شامبو + بلسم 400 ملى" is physically 2 bottles (Shampoo + Conditioner @ 50% discount)
     final bool isShampooAndConditionerCombo =
         (nameLower.contains('شامبو') || nameLower.contains('shampoo')) &&
         (nameLower.contains('بلسم') || nameLower.contains('conditioner'));
 
-    // 3. Price heuristic for deodorant bodyspray twin bundles (Axe / Rexona)
+    // 4. Price heuristic for hair care / Tresemme twin bundles (400ml promo boxes)
+    // In Egyptian retail, a single standalone bottle of Tresemme 400ml is ~140-165 EGP.
+    // A twin bundle / promo box is 240+ EGP (e.g. 295 EGP in Gomla Market, 299 EGP in Fathalla, 378 EGP gross).
+    final bool isTresemmeHairCare = nameLower.contains('تريزيم') || nameLower.contains('tresemme');
+    final double grossPrice = p.originalPrice ?? p.price;
+    final bool hasTresemmeBundlePrice = isTresemmeHairCare && (grossPrice >= 240.0 || p.price >= 240.0 || (p.price >= 220.0 && p.discountAmount >= 30.0));
+
+    // 5. Price heuristic for deodorant bodyspray twin bundles (Axe / Rexona)
     // In retail, a single 150ml can is ~140-150 EGP. A twin bundle is 240+ EGP (e.g. 275 EGP in Fathalla, 335 EGP gross in Gomla Market).
     final bool isSpray = nameLower.contains('اسبراي') || nameLower.contains('اكس') || nameLower.contains('ريكسونا');
-    final double grossPrice = p.originalPrice ?? p.price;
-    final bool hasBundlePrice = isSpray && (grossPrice >= 240.0 || p.price >= 240.0 || (p.price >= 220.0 && p.discountAmount >= 30.0));
+    final bool hasSprayBundlePrice = isSpray && (grossPrice >= 240.0 || p.price >= 240.0 || (p.price >= 220.0 && p.discountAmount >= 30.0));
 
-    if (hasBundleName || hasBundlePrice || isShampooAndConditionerCombo) {
+    if (hasBundleName || hasSprayBundlePrice || hasTresemmeBundlePrice || isShampooAndConditionerCombo) {
       return qty * 2;
     }
 
@@ -1772,6 +1801,15 @@ class PromotionalRuleMatcher {
     // Reject toothpaste matching shampoo or deodorant rules:
     if (isProductToothpaste && (isTriggerShampoo || isTriggerSpray || isTriggerRollOn) && !isTriggerToothpaste) {
       return false;
+    }
+
+    // Direct barcode matching if trigger contains barcodes or known promo bundle barcodes:
+    if (product.barcode.isNotEmpty) {
+      final cleanBarcode = product.barcode.trim();
+      if (triggerProduct.contains(cleanBarcode)) return true;
+      if (_knownTwinBundleBarcodes.contains(cleanBarcode) && (triggerNorm.contains('تريزيم') || triggerNorm.contains('tresemme'))) {
+        return true;
+      }
     }
 
     final int? productSize = _extractSizeMl(pNorm);

@@ -215,7 +215,7 @@ void main() {
         ),
         ExtractedProductItem(
           name: 'تريزيمى شامبو ريد للشعر الكيراتين 400مل',
-          price: 295.0,
+          price: 150.0,
           quantity: 1,
           isTargetCompany: true,
         ),
