@@ -660,8 +660,9 @@ $rulesListFormatted
    - قم بكتابة ملخص الجوائز المجمعة في (matchedRewardValue) (مثال: "فواتشر 50 جنيه + فواتشر 50 جنيه").
    - قم بتعيين (matchedRuleId) بمعرف القاعدة الأولى المطابقة.
 3. في حال وجود أكثر من قاعدة لنفس المنتج بمستويات كميات مختلفة (مثل: شراء 1 اسبراي ريكسونا -> 50 ج.م، وشراء 2 اسبراي ريكسونا -> 125 ج.م)، يجب عليك اختيار القاعدة ذات الكمية المشروطة الأعلى التي حققها العميل (مثال: إذا اشترى 2 أو أكثر، اختر قاعدة الـ 125 ج.م).
-4. [حزم البندل وعروض الشرنك المزدوجة (Twin Bundles & Shrink)]: إذا احتوت الفاتورة على صنف حزمة مزدوجة أو شرنك (مثل عبوة أكس 2 قطعة أو سعر 335 ج.م مع خصم ~65 ج.م بصافي 270 ج.م، أو احتوى الاسم على كلمات شرنك/مزدوج/2ق)، يُعامل الصنف كـ (2 قطعة) ويطابق فوراً قاعدة الـ 2 قطعة (عرض الـ 125 ج.م).
-5. [عروض تريزيمي Tresemme المعتمدة والحجم الصارم 400 مل]:
+4. [حزم البندل وعروض الشرنك المزدوجة (Twin Bundles & Shrink)]: إذا احتوت الفاتورة على صنف حزمة مزدوجة أو شرنك (مثل عبوة أكس 2 قطعة أو سعر 335 ج.م مع خصم ~65 ج.م بصافي 270 ج.م، أو ريكسونا 150 مل بسعر 275 ج.م، أو احتوى الاسم على كلمات شرنك/مزدوج/2ق)، يُعامل الصنف كـ (2 قطعة) ويطابق فوراً قاعدة الـ 2 قطعة (عرض الـ 125 ج.م).
+5. [أصناف ريكسونا وأكس 150 مل]: أي صنف ريكسونا أو أكس بحجم 150 مل (مثل "ريكسونا 150 مل حر" أو "ريكسونا 150 مل رج" أو "اكس 150 مل") هو اسبراي مزيل عرق ويعامل كـ (اسبراي) ويطابق فوراً عروض الاسبراي (فواتشر 50 ج.م للقطعة أو 125 ج.م للقطعتين أو البكج المزدوج 275 ج.م).
+6. [عروض تريزيمي Tresemme المعتمدة والحجم الصارم 400 مل]:
    - عروض تريزيمي مخصصة حصراً لعبوات (تريزيمي 400 مل) أو بكجات الشامبو والبلسم المزدوجة الترويجية بحجم 400 مل (مثل 'تريزيمى شامبو + بلسم 400 ملى' أو باركود 6221155612199 أو 6221155612168 بسعر 299 ج.م أو 378 ج.م).
    - عبوات تريزيمي الفردية بحجم 600 مل أو 900 مل أو 200 مل (مثل 'تريزيمى بلسم 600 مل' أو باركود 6221155086228) ليست مدرجة في عرض الـ 400 مل وتُستبعد تماماً وتمنح 0 هدية تريزيمي.
    - شراء عبوة فردية واحدة (الكمية = 1) من شامبو أو بلسم تريزيمي 400 مل لا يستحق الهدية، حيث يشترط العرض شراء قطعتين (2 قطعة).
@@ -1679,10 +1680,10 @@ class PromotionalRuleMatcher {
         (nameLower.contains('بلسم') || nameLower.contains('conditioner'));
 
     // 3. Price heuristic for deodorant bodyspray twin bundles (Axe / Rexona)
-    // In retail, a single 150ml can is ~150-185 EGP. A twin bundle is 300+ EGP (e.g. 335 EGP gross, ~270 EGP net).
+    // In retail, a single 150ml can is ~140-150 EGP. A twin bundle is 240+ EGP (e.g. 275 EGP in Fathalla, 335 EGP gross in Gomla Market).
     final bool isSpray = nameLower.contains('اسبراي') || nameLower.contains('اكس') || nameLower.contains('ريكسونا');
     final double grossPrice = p.originalPrice ?? p.price;
-    final bool hasBundlePrice = isSpray && (grossPrice >= 280.0 || (p.price >= 250.0 && p.discountAmount >= 40.0));
+    final bool hasBundlePrice = isSpray && (grossPrice >= 240.0 || p.price >= 240.0 || (p.price >= 220.0 && p.discountAmount >= 30.0));
 
     if (hasBundleName || hasBundlePrice || isShampooAndConditionerCombo) {
       return qty * 2;
@@ -1855,6 +1856,8 @@ class PromotionalRuleMatcher {
     // POS & transliteration dictionary normalization
     str = str.replaceAll('شامبوزيت', 'شامبو زيت');
     str = str.replaceAll('بلسمزيت', 'بلسم زيت');
+    str = str.replaceAll(RegExp(r'\bحر\b'), 'حريمي');
+    str = str.replaceAll(RegExp(r'\bرج\b'), 'رجالي');
     str = str.replaceAll(RegExp(r'روول|رووول|roll\s*on|roll-on|rollon'), 'رول اون');
     str = str.replaceAll(RegExp(r'اسبرى|اسبري|اسبراى|سبراي|سبراى|بخاخ|body\s*spray'), 'اسبراي');
     str = str.replaceAll(RegExp(r'شمبو|شامبوا|shampoo'), 'شامبو');
@@ -1865,6 +1868,14 @@ class PromotionalRuleMatcher {
     str = str.replaceAll(RegExp(r'\bclear\b'), 'كلير');
     str = str.replaceAll(RegExp(r'\bdove\b'), 'دوف');
     str = str.replaceAll(RegExp(r'سيجنال|سجنال|\bsignal\b'), 'سيجنال');
+
+    // 150ml Aerosol Bodyspray Resolution: In retail FMCG, 150ml for Rexona/Axe is ALWAYS an aerosol spray
+    // E.g. "ريكسونا 150 مل حريمي" -> "ريكسونا اسبراي 150 مل حريمي", "اكس 150 مل" -> "اكس اسبراي 150 مل"
+    if ((str.contains('ريكسونا') || str.contains('اكس')) &&
+        (str.contains('150 مل') || str.contains('150ml') || str.contains('150')) &&
+        !str.contains('اسبراي') && !str.contains('رول') && !str.contains('ستيك')) {
+      str = str.replaceAllMapped(RegExp(r'(ريكسونا|اكس)'), (m) => '${m.group(1)} اسبراي');
+    }
 
     // Compress repeated Arabic long vowels (e.g. روول -> رول, شوكلييت -> شوكليت)
     str = str.replaceAll(RegExp(r'([و])\1+'), 'و');

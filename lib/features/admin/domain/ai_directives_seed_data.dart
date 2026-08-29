@@ -629,6 +629,27 @@ class AiDirectivesSeedData {
           tags: ['unit-economics', 'dual-column-pos', 'gomla-market', 'price-healing', 'double-division-prevention', 'air-29'],
           lastUpdated: '2026-08-28',
         ),
+
+        const AiDirectiveModel(
+          id: 'AIR-30',
+          code: 'REXONA_AXE_150ML_AEROSOL_POS_RESOLUTION_AND_BUNDLE_HEURISTIC',
+          orderIndex: 30,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'التعرف الصوتي والهيكلي على اسبراي ريكسونا وأكس 150 مل وحزم الـ 275 ج.م المزدوجة (Rexona & Axe 150ml Aerosol POS & Bundle Heuristic)',
+          titleEn: 'Rexona & Axe 150ml Aerosol POS Resolution & 275 EGP Twin Bundle Heuristic',
+          descriptionAr:
+              'التعرف التلقائي على أصناف ريكسونا وأكس بحجم 150 مل واختصارات الكاشير (مثل "ريكسونا 150 مل حر" أو "ريكسونا 150 مل رج" في أسواق فتح الله) كـ "اسبراي مزيل عرق" ومطابقتها فوراً مع عروض الاسبراي، ومعاملة السعر 275+ ج.م كعرض شرنك/حزمة مزدوجة (2 قطعة) تمنح فواتشر 125 ج.م حتى لو طُبعت الكمية = 1 في البون.',
+          descriptionEn:
+              'Resolves Rexona & Axe 150ml items and cashier gender abbreviations (e.g. "ريكسونا 150 مل حر" for Harimi in Fathalla Market) as aerosol bodysprays, matching them to spray promotions. Also treats pricing >= 240 EGP (e.g. 275 EGP) as 2-piece twin bundles awarding 125 EGP vouchers.',
+          logicAr:
+              '1. معالجة اختصارات الكاشير: تحويل "حر" إلى "حريمي" و "رج" إلى "رجالي" في _normalize.\n2. إسناد فئة الاسبراي: أي صنف ريكسونا أو أكس بحجم 150 مل يتم تصنيفه كـ (اسبراي) لأن حجم 150 مل مخصص حصراً لبخاخات الاسبراي في قطاع التجزئة.\n3. رصد الحزم المزدوجة بالسعر: إذا كان سعر صنف الاسبراي 240+ ج.م (مثل 275 ج.م بأسواق فتح الله أو 335 ج.م بجملة ماركت)، يتم احتساب الكمية = 2 قطعة.\n4. مطابقة القواعد: منح فواتشر 125 ج.م (قاعدة قطعتين: 2 × 50 + 1 × 25) للعبوة المزدوجة، أو فواتشر 50 ج.م للعبوة الفردية (140-144 ج.م).',
+          logicEn:
+              '1. Normalizes POS abbreviations: maps "حر" to Harimi and "رج" to Regali in _normalize.\n2. Injects spray category: treats Rexona/Axe 150ml as aerosol spray because 150ml format is exclusively bodyspray in retail FMCG.\n3. Bundle price detection: resolves sprays priced >= 240 EGP (e.g. 275 EGP in Fathalla) as 2 physical pieces.\n4. Promotional matching: awards Rule 4 (125 EGP Voucher: 2x 50 + 1x 25) for bundles, or Rule 3 (50 EGP Voucher) for single cans (140-144 EGP).',
+          exampleInput: 'بون أسواق فتح الله يحتوي على: "ريكسونا 150 مل حر" السعر 275.00 ج.م والكمية 1',
+          exampleOutput: 'التعرف على الصنف كـ "ريكسونا اسبراي 150 مل حريمي (حزمة مزدوجة 2 قطعة)" ومنح فواتشر بقيمة 125 جنيه (2 × فواتشر 50 ج + 1 × فواتشر 25 ج) بنجاح.',
+          tags: ['rexona-150ml', 'axe-150ml', 'twin-bundle-275egp', 'fathalla-markets', 'harimi-abbreviation', 'voucher-125egp', 'air-30'],
+          lastUpdated: '2026-08-29',
+        ),
       ];
 }
 

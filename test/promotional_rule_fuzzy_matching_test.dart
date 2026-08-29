@@ -699,6 +699,50 @@ void main() {
       expect(rule5Match.totalRewardAmount, 50.0);
       expect(rule5Match.multipliedLinkedGifts.first.giftName, contains('50'));
     });
+
+    test('AIR-23 & Rule 4: Fathalla Market POS "ريكسونا 150 مل حر" @ 275.00 EGP correctly recognized as 2-piece spray twin bundle and awards 125 EGP voucher', () {
+      final fathallaTwinItem = ExtractedProductItem(
+        name: 'ريكسونا 150 مل حر',
+        price: 275.0,
+        quantity: 1,
+        isTargetCompany: true,
+      );
+
+      final matches = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: [fathallaTwinItem],
+        promotionalRules: rules,
+        allowCampaignMultipliers: true,
+      );
+
+      expect(matches.length, 1);
+      final rule4Match = matches.first;
+      expect(rule4Match.rule.id, 'rule_4');
+      expect(rule4Match.totalRewardAmount, 125.0);
+      expect(rule4Match.multipliedLinkedGifts.length, 2); // 2x 50 + 1x 25
+      expect(rule4Match.multipliedLinkedGifts.where((g) => g.unitValue == 50.0).first.quantity, 2);
+      expect(rule4Match.multipliedLinkedGifts.where((g) => g.unitValue == 25.0).first.quantity, 1);
+    });
+
+    test('AIR-23 & Rule 3: Single "ريكسونا 150 مل حر" or "ريكسونا 150 مل رج" @ 144.00 EGP awards 50 EGP voucher', () {
+      final singleItem = ExtractedProductItem(
+        name: 'ريكسونا 150 مل رج',
+        price: 144.0,
+        quantity: 1,
+        isTargetCompany: true,
+      );
+
+      final matches = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: [singleItem],
+        promotionalRules: rules,
+        allowCampaignMultipliers: true,
+      );
+
+      expect(matches.length, 1);
+      final rule3Match = matches.first;
+      expect(rule3Match.rule.id, 'rule_3');
+      expect(rule3Match.totalRewardAmount, 50.0);
+      expect(rule3Match.multipliedLinkedGifts.first.quantity, 1);
+    });
   });
 }
 
