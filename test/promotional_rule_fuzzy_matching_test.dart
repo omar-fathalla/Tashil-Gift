@@ -743,6 +743,136 @@ void main() {
       expect(rule3Match.totalRewardAmount, 50.0);
       expect(rule3Match.multipliedLinkedGifts.first.quantity, 1);
     });
+
+    test('AIR-31 & Rule 5: User Receipt from Gomla Market Montazah (6x Rexona Roll-on across 4 lines + Clorox + Sensodyne) strictly awards 3x 50 EGP vouchers (150 EGP total) and NEVER 375 EGP / 125 EGP rule', () {
+      final userReceiptItems = [
+        ExtractedProductItem(
+          name: 'ريكسونا رول اون رجالي بالنعناع 50مل (خصم ريكسونا روول اون 50ملى رجالى نعناع وشجرةالارز وفر 10 ج',
+          price: 69.0,
+          originalPrice: 69.0,
+          discountAmount: 0.0,
+          quantity: 2,
+          barcode: '6221155210173',
+          isTargetCompany: true,
+        ),
+        ExtractedProductItem(
+          name: 'ريكسونا رول اون حريمي بامبو وصبار 50 مل ريكسونا روول اون 50 ملى حريمى بامبو وفر 10ج',
+          price: 69.0,
+          originalPrice: 69.0,
+          discountAmount: 0.0,
+          quantity: 1,
+          barcode: '6221155210135',
+          isTargetCompany: true,
+        ),
+        ExtractedProductItem(
+          name: 'ريكسونا رول اون رجالي غير مرئي 50 مل (خص ريكسونا رول اون 50ملى رجالى انتى بكتيريا +بلاك اندوايت شكل جديد خصم سعر',
+          price: 69.0,
+          originalPrice: 69.0,
+          discountAmount: 0.0,
+          quantity: 2,
+          barcode: '6221155210180',
+          isTargetCompany: true,
+        ),
+        ExtractedProductItem(
+          name: 'ريكسونا رول اون رجالي في 8 50 مل (خصم سع ريكسونا روول اون 50 ملى رجالى فى 8 وفر 10ج',
+          price: 69.0,
+          originalPrice: 69.0,
+          discountAmount: 0.0,
+          quantity: 1,
+          barcode: '6221155210142',
+          isTargetCompany: true,
+        ),
+        ExtractedProductItem(
+          name: 'كلوركس ابيض 950مل',
+          price: 32.0,
+          originalPrice: 32.0,
+          quantity: 1,
+          barcode: '6221152001255',
+          isTargetCompany: false,
+        ),
+        ExtractedProductItem(
+          name: 'سنسوداين معجون اسنان مكافح تسوس 100مل (خ',
+          price: 65.0,
+          originalPrice: 65.0,
+          quantity: 5,
+          barcode: '6223013533127',
+          isTargetCompany: false,
+        ),
+        ExtractedProductItem(
+          name: 'سنسوداين معجون اسنان مكافح تسوس 100مل',
+          price: 78.0,
+          originalPrice: 78.0,
+          quantity: 2,
+          barcode: '6223013531994',
+          isTargetCompany: false,
+        ),
+      ];
+
+      // Test with campaign rules containing potentially overlapping trigger keywords
+      final campaignRulesWithBroadKeywords = [
+        ...rules.sublist(0, 2),
+        PromotionalRuleItem(
+          id: 'rule_3',
+          ruleTitle: 'عرض اسبراي ريكسونا أو أكس (قطعة واحدة) -> فواتشر 50 ج.م',
+          triggerProduct: 'اسبراي ريكسونا، اسبراي أكس، مزيل عرق ريكسونا اسبراي، مزيل عرق أكس اسبراي، ريكسونا 150 مل، اكس 150 مل، ريكسونا 150، اكس 150، ريكسونا حريمي، ريكسونا رجالي',
+          minQuantity: 1,
+          rewardType: 'voucher',
+          rewardValue: 'قسيمة مشتريات بقيمة 50 ج.م',
+          rewardAmount: 50.0,
+          allowMultipliers: true,
+          linkedGifts: [
+            LinkedGiftAllocation(giftId: 'g_50', giftName: 'فواتشر 50 جنيه', quantity: 1, unitValue: 50.0, giftType: 'voucher'),
+          ],
+        ),
+        PromotionalRuleItem(
+          id: 'rule_4',
+          ruleTitle: 'عرض اسبراي ريكسونا أو أكس (قطعتين أو شرنك مزدوج) -> فواتشر 125 ج.م',
+          triggerProduct: 'اسبراي ريكسونا، اسبراي أكس، مزيل عرق ريكسونا اسبراي، مزيل عرق أكس اسبراي، عرض اكس شرنك، اكس مزدوج، ريكسونا 150 مل، اكس 150 مل، ريكسونا 150، اكس 150، ريكسونا مزدوج، ريكسونا شرنك',
+          minQuantity: 2,
+          rewardType: 'voucher',
+          rewardValue: 'قسيمة مشتريات بقيمة 125 ج.م',
+          rewardAmount: 125.0,
+          allowMultipliers: true,
+          linkedGifts: [
+            LinkedGiftAllocation(giftId: 'g_50', giftName: 'فواتشر 50 جنيه', quantity: 2, unitValue: 50.0, giftType: 'voucher'),
+            LinkedGiftAllocation(giftId: 'g_25', giftName: 'فواتشر 25 جنيه', quantity: 1, unitValue: 25.0, giftType: 'voucher'),
+          ],
+        ),
+        PromotionalRuleItem(
+          id: 'rule_5',
+          ruleTitle: 'عرض رول أون ريكسونا أو أكس (قطعتين) -> فواتشر 50 ج.م',
+          triggerProduct: 'رول أون ريكسونا، رول أون أكس، ريكسونا رول اون، ريكسونا روول اون، مزيل عرق ريكسونا رول، مزيل عرق أكس رول',
+          minQuantity: 2,
+          rewardType: 'voucher',
+          rewardValue: 'قسيمة مشتريات بقيمة 50 ج.م',
+          rewardAmount: 50.0,
+          allowMultipliers: true,
+          linkedGifts: [
+            LinkedGiftAllocation(giftId: 'g_50', giftName: 'فواتشر 50 جنيه', quantity: 1, unitValue: 50.0, giftType: 'voucher'),
+          ],
+        ),
+      ];
+
+      final matchedResults = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: userReceiptItems,
+        promotionalRules: campaignRulesWithBroadKeywords,
+        allowCampaignMultipliers: true,
+      );
+
+      // Verify that exactly ONE rule matched (Rule 5)
+      expect(matchedResults.length, 1);
+      final match = matchedResults.first;
+      expect(match.rule.id, 'rule_5');
+      expect(match.multiplier, 3); // 6 roll-on pieces / 2 minQuantity = 3
+      expect(match.totalRewardAmount, 150.0); // 3 x 50 = 150 EGP (NEVER 375 EGP)
+
+      // Verify the composite bundle
+      final bundle = CompositePromotionalBundle.fromMatchedRules(matchedResults);
+      expect(bundle.totalVoucherValue, 150.0);
+      expect(bundle.combinedLinkedGifts.length, 1);
+      expect(bundle.combinedLinkedGifts.first.giftName, 'فواتشر 50 جنيه');
+      expect(bundle.combinedLinkedGifts.first.quantity, 3); // Exactly 3 vouchers of 50 EGP (NEVER 6x 50 + 3x 25)
+    });
   });
 }
 

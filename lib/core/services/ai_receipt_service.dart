@@ -652,28 +652,33 @@ class AiReceiptService {
 - محرك القواعد والعروض الترويجية والجوائز المعتمدة (Promotional Rules Engine):
 $rulesListFormatted
 
-⚠️ تعليمات مطابقة القواعد الترويجية وحساب المضاعفات والحزم المتعددة (Promotional Rules & Multi-Offer Instructions):
-1. افحص بدقة أسماء الأصناف في الفاتورة مع مراعاة كافة الاختلافات الإملائية والطباعية في بونات الكاشير (مثال: "روول اون" = "رول اون", "اسبراى" = "اسبراي", "صنسلك" = "صنسيلك", "تريزمي" = "تريزيمي").
-2. [تجميع العروض المتزامنة (Multi-Offer Bundling)]: إذا اشترى العميل أصنافاً تحقق أكثر من عرض ترويجي مختلف في نفس الفاتورة (مثال: اشترى 1 اسبراي يستحق فواتشر 50 ج.م واشترى أيضاً 2 رول أون يستحق فواتشر 50 ج.م):
+⚠️ تعليمات مطابقة القواعد الترويجية وحساب المضاعفات والعزل الصارم للتصنيف الفيزيائي (Promotional Rules & Anti-Collision Instructions):
+1. [حارس العزل الصارم للشكل الفيزيائي للعبوة (Physical Packaging & Form Guard)]:
+   - **الرول أون (Roll-on / Stick بحجم 50 مل)**: أي صنف رول أون / روول / ستيك (مثل "ريكسونا رول اون" أو "اكس رول اون" 50 مل) يطابق **حصراً** قواعد الرول أون المعتمدة (مثل شراء 2 رول أون -> فواتشر 50 ج.م)، ويُحظر تماماً ومطلقاً مطابقته مع أي قاعدة تخص الاسبراي (مثل عروض الـ 125 ج.م للقطعتين) حتى لو تضمنت كلمات القاعدة اسم "ريكسونا" أو "أكس" أو "حريمي" أو "رجالي".
+   - **الاسبراي (Aerosol Bodyspray بحجم 150 مل)**: أي صنف اسبراي / بخاخ مزيل عرق يطابق **حصراً** عروض الاسبراي (فواتشر 50 ج.م للقطعة أو 125 ج.م للقطعتين/الشرنك المزدوج)، ويُحظر من مطابقة عروض الرول أون.
+   - **الشامبو والبلسم (400 مل و 360 مل)**: عبوات تريزيمي 400 مل تطابق حصراً عروض تريزيمي (2 قطعة -> هدية 250 مل). عبوات كلير 360 مل تطابق حصراً عروض كلير (1 قطعة -> هدية 90 مل).
+   - **معجون الأسنان والمنتجات المستبعدة**: أي منتج معجون أسنان (مثل سنسوداين أو سيجنال غير مشروط) أو منظفات (مثل كلوركس) يُستبعد كلياً ولا يُمنح أي هدايا.
+2. افحص بدقة أسماء الأصناف في الفاتورة مع مراعاة كافة الاختلافات الإملائية والطباعية في بونات الكاشير (مثال: "روول اون" = "رول اون", "اسبراى" = "اسبراي", "صنسلك" = "صنسيلك", "تريزمي" = "تريزيمي").
+3. [تجميع العروض المتزامنة (Multi-Offer Bundling)]: إذا اشترى العميل أصنافاً تحقق أكثر من عرض ترويجي مختلف في نفس الفاتورة (مثال: اشترى 1 اسبراي يستحق فواتشر 50 ج.م واشترى أيضاً 2 رول أون يستحق فواتشر 50 ج.م):
    - قم بتضمين كافة معرفات القواعد المطابقة في حقل (matchedRuleIds) كقائمة (مثل: ["rule_3", "rule_5"]).
    - قم بجمع إجمالي قيمة المكافآت المستحقة في (matchedRewardAmount) (مثال: 50 + 50 = 100.0).
    - قم بكتابة ملخص الجوائز المجمعة في (matchedRewardValue) (مثال: "فواتشر 50 جنيه + فواتشر 50 جنيه").
    - قم بتعيين (matchedRuleId) بمعرف القاعدة الأولى المطابقة.
-3. في حال وجود أكثر من قاعدة لنفس المنتج بمستويات كميات مختلفة (مثل: شراء 1 اسبراي ريكسونا -> 50 ج.م، وشراء 2 اسبراي ريكسونا -> 125 ج.م)، يجب عليك اختيار القاعدة ذات الكمية المشروطة الأعلى التي حققها العميل (مثال: إذا اشترى 2 أو أكثر، اختر قاعدة الـ 125 ج.م).
-4. [حزم البندل وعروض الشرنك المزدوجة (Twin Bundles & Shrink)]: إذا احتوت الفاتورة على صنف حزمة مزدوجة أو شرنك (مثل عبوة أكس 2 قطعة أو سعر 335 ج.م مع خصم ~65 ج.م بصافي 270 ج.م، أو ريكسونا 150 مل بسعر 275 ج.م، أو احتوى الاسم على كلمات شرنك/مزدوج/2ق)، يُعامل الصنف كـ (2 قطعة) ويطابق فوراً قاعدة الـ 2 قطعة (عرض الـ 125 ج.م).
-5. [أصناف ريكسونا وأكس 150 مل]: أي صنف ريكسونا أو أكس بحجم 150 مل (مثل "ريكسونا 150 مل حر" أو "ريكسونا 150 مل رج" أو "اكس 150 مل") هو اسبراي مزيل عرق ويعامل كـ (اسبراي) ويطابق فوراً عروض الاسبراي (فواتشر 50 ج.م للقطعة أو 125 ج.م للقطعتين أو البكج المزدوج 275 ج.م).
-6. [عروض تريزيمي Tresemme المعتمدة والحجم الصارم 400 مل]:
+4. في حال وجود أكثر من قاعدة لنفس المنتج بمستويات كميات مختلفة (مثل: شراء 1 اسبراي ريكسونا -> 50 ج.م، وشراء 2 اسبراي ريكسونا -> 125 ج.م)، يجب عليك اختيار القاعدة ذات الكمية المشروطة الأعلى التي حققها العميل (مثال: إذا اشترى 2 اسبراي أو أكثر، اختر قاعدة الـ 125 ج.م).
+5. [حزم البندل وعروض الشرنك المزدوجة (Twin Bundles & Shrink)]: إذا احتوت الفاتورة على صنف حزمة مزدوجة أو شرنك (مثل عبوة أكس 2 قطعة أو سعر 335 ج.م مع خصم ~65 ج.م بصافي 270 ج.م، أو ريكسونا 150 مل بسعر 275 ج.م، أو احتوى الاسم على كلمات شرنك/مزدوج/2ق)، يُعامل الصنف كـ (2 قطعة) ويطابق فوراً قاعدة الـ 2 قطعة (عرض الـ 125 ج.م).
+6. [أصناف ريكسونا وأكس 150 مل]: أي صنف ريكسونا أو أكس بحجم 150 مل (مثل "ريكسونا 150 مل حر" أو "ريكسونا 150 مل رج" أو "اكس 150 مل") هو اسبراي مزيل عرق ويعامل كـ (اسبراي) ويطابق فوراً عروض الاسبراي (فواتشر 50 ج.م للقطعة أو 125 ج.م للقطعتين أو البكج المزدوج 275 ج.م).
+7. [عروض تريزيمي Tresemme المعتمدة والحجم الصارم 400 مل]:
    - عروض تريزيمي مخصصة حصراً لعبوات (تريزيمي 400 مل) أو بكجات الشامبو والبلسم المزدوجة الترويجية بحجم 400 مل (مثل 'تريزيمى شامبو + بلسم 400 ملى' أو باركود 6221155612199 أو 6221155612168 بسعر 299 ج.م أو 378 ج.م).
    - عبوات تريزيمي الفردية بحجم 600 مل أو 900 مل أو 200 مل (مثل 'تريزيمى بلسم 600 مل' أو باركود 6221155086228) ليست مدرجة في عرض الـ 400 مل وتُستبعد تماماً وتمنح 0 هدية تريزيمي.
    - شراء عبوة فردية واحدة (الكمية = 1) من شامبو أو بلسم تريزيمي 400 مل لا يستحق الهدية، حيث يشترط العرض شراء قطعتين (2 قطعة).
    - عند شراء عبوة واحدة من البكج المزدوج 400 مل (الكمية في البون = 1)، يُعامل الصنف كـ (2 قطعة) ويحقق فوراً شرط الـ 2 قطعة لقاعدة تريزيمي (rule_2) ويمنح هدية تريزيمي 250 مل معتمدة (free_product).
-6. [مضاعفة الجوائز والفرص]: إذا كانت القاعدة تتيح المضاعفة، وكان العميل قد اشترى مضاعفات الكمية المشروطة:
-   - احسب عدد مرات تكرار العرض واضرب قيمة المكافأة بعدد المرات.
-7. قم بتعبئة حقل (matchedRuleId) بمعرف القاعدة المطابقة (مثل "rule_2" أو "rule_4" أو "rule_3").
-8. قم بتعبئة حقل (matchedRuleTitle) بعنوان القاعدة المطابقة.
-9. قم بتعبئة حقل (matchedRewardType) بنوع المكافأة ("voucher" أو "free_product").
-10. [العزل الصارم للأصناف واستهلاك الكميات]: كل صنف يطابق قاعدة علامته التجارية فقط (مثال: رول أون ريكسونا يطابق قاعدة رول أون ريكسونا فقط، ولا يجوز إطلاقاً احتسابه في عروض تريزيمي أو كلير). تُخصم الكمية المستهلكة فوراً من السلة لمنع احتساب نفس القطعة في أكثر من عرض.
-11. إذا لم تنطبق أي من هذه القواعد الخاصة، اترك حقل (matchedRuleId) فارغاً "" وحقل (matchedRuleIds) كقائمة فارغة [].
+8. [مضاعفة الجوائز والفرص]: إذا كانت القاعدة تتيح المضاعفة، وكان العميل قد اشترى مضاعفات الكمية المشروطة:
+   - احسب عدد مرات تكرار العرض واضرب قيمة المكافأة بعدد المرات (مثال: شراء 6 رول أون يطابق قاعدة الـ 2 رول أون بمضاعف 3x = 3 فواتشر فئة 50 ج.م بإجمالي 150 ج.م).
+9. قم بتعبئة حقل (matchedRuleId) بمعرف القاعدة المطابقة (مثل "rule_5" للرول أون أو "rule_2" لتريزيمي أو "rule_4" للاسبراي).
+10. قم بتعبئة حقل (matchedRuleTitle) بعنوان القاعدة المطابقة.
+11. قم بتعبئة حقل (matchedRewardType) بنوع المكافأة ("voucher" أو "free_product").
+12. [العزل الصارم للأصناف واستهلاك الكميات]: كل صنف يطابق قاعدة علامته التجارية ونوعه الفيزيائي فقط (مثال: رول أون ريكسونا يطابق قاعدة رول أون ريكسونا فقط، ولا يجوز إطلاقاً احتسابه في عروض الاسبراي أو تريزيمي أو كلير). تُخصم الكمية المستهلكة فوراً من السلة لمنع احتساب نفس القطعة في أكثر من عرض.
+13. إذا لم تنطبق أي من هذه القواعد الخاصة، اترك حقل (matchedRuleId) فارغاً "" وحقل (matchedRuleIds) كقائمة فارغة [].
 ''';
       }
 
@@ -1546,34 +1551,29 @@ class PromotionalRuleMatcher {
       final sortedGroup = List<PromotionalRuleItem>.from(group)
         ..sort((a, b) => b.minQuantity.compareTo(a.minQuantity));
 
-      // Calculate total available unconsumed quantity in the receipt for this family
-      int totalAvailableQty = 0;
-      final List<int> matchingProductIndices = [];
-      for (int i = 0; i < effectiveProducts.length; i++) {
-        final p = effectiveProducts[i];
-        final remaining = remainingItemQuantities[i] ?? 0;
-        if (remaining > 0 && sortedGroup.any((r) => _matchesProduct(p, r.triggerProduct))) {
-          totalAvailableQty += remaining;
-          matchingProductIndices.add(i);
-        }
-      }
-
-      int remainingQty = totalAvailableQty;
-
       for (final rule in sortedGroup) {
-        if (remainingQty <= 0) break;
+        // Calculate available unconsumed quantity specifically matching this rule
+        final matchingProductIndices = <int>[];
+        int availableQtyForRule = 0;
+        for (int i = 0; i < effectiveProducts.length; i++) {
+          final p = effectiveProducts[i];
+          final remaining = remainingItemQuantities[i] ?? 0;
+          if (remaining > 0 && _matchesProduct(p, rule.triggerProduct)) {
+            availableQtyForRule += remaining;
+            matchingProductIndices.add(i);
+          }
+        }
 
-        if (rule.minQuantity > 0 && remainingQty >= rule.minQuantity) {
+        if (rule.minQuantity > 0 && availableQtyForRule >= rule.minQuantity) {
           int count = 1;
           if (rule.allowMultipliers || allowCampaignMultipliers) {
-            count = remainingQty ~/ rule.minQuantity;
+            count = availableQtyForRule ~/ rule.minQuantity;
             if (count < 1) count = 1;
           }
 
           final int usedQty = count * rule.minQuantity;
-          remainingQty -= usedQty;
 
-          // Deduct consumed quantity from the matching product items
+          // Deduct consumed quantity strictly from the matching product items for this rule
           int qtyToDeduct = usedQty;
           for (final idx in matchingProductIndices) {
             if (qtyToDeduct <= 0) break;
@@ -1731,6 +1731,7 @@ class PromotionalRuleMatcher {
     }
 
     final pNorm = _normalize(product.name);
+    final triggerNorm = _normalize(triggerProduct);
 
     // 0.1 Strict Brand Root Anchor Guard:
     // If the trigger rule explicitly targets specific brands (e.g. Tresemme, Rexona, Axe, Clear),
@@ -1744,6 +1745,35 @@ class PromotionalRuleMatcher {
       }
     }
 
+    // 0.2 Strict Product Form & Physical Category Collision Guard (حارس التصنيف الفيزيائي للمنتج):
+    // Disallows matching spray rules against roll-on products, and vice versa.
+    final bool isProductRollOn = pNorm.contains('رول اون') || pNorm.contains('رول') || pNorm.contains('روول') || pNorm.contains('ستيك') || pNorm.contains('roll on') || pNorm.contains('rollon') || pNorm.contains('stick');
+    final bool isProductSpray = pNorm.contains('اسبراي') || pNorm.contains('بخاخ') || pNorm.contains('spray') || pNorm.contains('bodyspray') || (pNorm.contains('150 مل') && !isProductRollOn);
+    final bool isProductShampoo = pNorm.contains('شامبو') || pNorm.contains('shampoo');
+    final bool isProductToothpaste = pNorm.contains('معجون') || pNorm.contains('toothpaste') || pNorm.contains('تسوس');
+
+    final bool isTriggerRollOn = triggerNorm.contains('رول') || triggerNorm.contains('roll') || triggerNorm.contains('ستيك');
+    final bool isTriggerSpray = triggerNorm.contains('اسبراي') || triggerNorm.contains('بخاخ') || triggerNorm.contains('spray') || triggerNorm.contains('150 مل');
+    final bool isTriggerShampoo = triggerNorm.contains('شامبو') || triggerNorm.contains('shampoo');
+    final bool isTriggerToothpaste = triggerNorm.contains('معجون') || triggerNorm.contains('toothpaste');
+
+    // Reject roll-on products matching pure spray rules:
+    if (isProductRollOn && !isProductSpray && isTriggerSpray && !isTriggerRollOn) {
+      return false;
+    }
+    // Reject spray products matching pure roll-on rules:
+    if (isProductSpray && !isProductRollOn && isTriggerRollOn && !isTriggerSpray) {
+      return false;
+    }
+    // Reject shampoo matching deodorant or toothpaste rules:
+    if (isProductShampoo && (isTriggerSpray || isTriggerRollOn || isTriggerToothpaste) && !isTriggerShampoo) {
+      return false;
+    }
+    // Reject toothpaste matching shampoo or deodorant rules:
+    if (isProductToothpaste && (isTriggerShampoo || isTriggerSpray || isTriggerRollOn) && !isTriggerToothpaste) {
+      return false;
+    }
+
     final int? productSize = _extractSizeMl(pNorm);
 
     final parts = triggerProduct.split(RegExp(r'[,،/\+\n]|(\s+أو\s+)|(\s+or\s+)', caseSensitive: false));
@@ -1751,6 +1781,13 @@ class PromotionalRuleMatcher {
     for (final part in parts) {
       final partNorm = _normalize(part);
       if (partNorm.isEmpty) continue;
+
+      final bool isPartRollOn = partNorm.contains('رول') || partNorm.contains('roll') || partNorm.contains('ستيك');
+      final bool isPartSpray = partNorm.contains('اسبراي') || partNorm.contains('بخاخ') || partNorm.contains('spray') || partNorm.contains('150 مل');
+
+      // Skip part if format conflicts with the physical product
+      if (isProductRollOn && !isProductSpray && isPartSpray && !isPartRollOn) continue;
+      if (isProductSpray && !isProductRollOn && isPartRollOn && !isPartSpray) continue;
 
       final int? partSize = _extractSizeMl(partNorm);
       // Volume/size conflict guard: If part specifies volume (e.g. 400ml) and product specifies a different volume (e.g. 600ml), reject!
@@ -1906,33 +1943,45 @@ class PromotionalRuleMatcher {
   }
 
   static String _getProductGroupKey(PromotionalRuleItem rule) {
-    final raw = _normalize(rule.triggerProduct.isNotEmpty ? rule.triggerProduct : rule.ruleTitle);
+    final titleNorm = _normalize(rule.ruleTitle);
+    final triggerNorm = _normalize(rule.triggerProduct);
+    final combined = '$titleNorm $triggerNorm';
 
     // Canonical FMCG product family grouping:
-    if (raw.contains('رول') || raw.contains('roll')) {
+    // Check Roll-on first if explicitly mentioned in title or trigger
+    if (titleNorm.contains('رول') || titleNorm.contains('roll') || titleNorm.contains('ستيك') ||
+        (triggerNorm.contains('رول') && !triggerNorm.contains('اسبراي'))) {
       return 'rollon_family';
     }
-    if (raw.contains('اسبراي') || raw.contains('اكس') || raw.contains('ريكسونا') || raw.contains('spray')) {
+    // Check Spray if explicitly mentioned in title or trigger
+    if (titleNorm.contains('اسبراي') || titleNorm.contains('spray') || titleNorm.contains('بخاخ') || titleNorm.contains('شرنك') ||
+        (triggerNorm.contains('اسبراي') && !triggerNorm.contains('رول'))) {
       return 'spray_family';
     }
-    if (raw.contains('كلير') || raw.contains('clear')) {
+    if (combined.contains('كلير') || combined.contains('clear')) {
       return 'clear_family';
     }
-    if (raw.contains('تريزيمي') || raw.contains('tresemme')) {
+    if (combined.contains('تريزيمي') || combined.contains('tresemme')) {
       return 'tresemme_family';
     }
-    if (raw.contains('صنسيلك') || raw.contains('sunsilk')) {
+    if (combined.contains('صنسيلك') || combined.contains('sunsilk')) {
       return 'sunsilk_family';
     }
-    if (raw.contains('دوف') || raw.contains('dove')) {
+    if (combined.contains('دوف') || combined.contains('dove')) {
       return 'dove_family';
     }
+    if (combined.contains('سيجنال') || combined.contains('signal')) {
+      return 'signal_family';
+    }
+    if (combined.contains('ريكسونا') || combined.contains('اكس')) {
+      return 'deodorant_general_family';
+    }
 
-    final tokens = _extractTokens(raw)..sort();
+    final tokens = _extractTokens(triggerNorm.isNotEmpty ? triggerNorm : titleNorm)..sort();
     if (tokens.isNotEmpty) {
       return tokens.join('_');
     }
-    return raw;
+    return triggerNorm.isNotEmpty ? triggerNorm : titleNorm;
   }
 }
 

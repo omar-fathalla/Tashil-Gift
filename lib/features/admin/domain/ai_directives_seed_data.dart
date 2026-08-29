@@ -650,6 +650,27 @@ class AiDirectivesSeedData {
           tags: ['rexona-150ml', 'axe-150ml', 'twin-bundle-275egp', 'fathalla-markets', 'harimi-abbreviation', 'voucher-125egp', 'air-30'],
           lastUpdated: '2026-08-29',
         ),
+
+        const AiDirectiveModel(
+          id: 'AIR-31',
+          code: 'PHYSICAL_PRODUCT_FORM_AND_CATEGORY_COLLISION_PREVENTION_GUARD',
+          orderIndex: 31,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'حارس العزل الصارم للتصنيف الفيزيائي للمنتجات ومنع تداخل عروض الاسبراي مع الرول أون (Physical Product Form & Category Collision Guard)',
+          titleEn: 'Physical Product Form & Category Collision Guard (Roll-on vs Aerosol Spray Segregation)',
+          descriptionAr:
+              'العزل الصارم بين أشكال وتصنيفات المنتجات الفيزيائية (رول أون 50 مل مقابل اسبراي 150 مل مقابل شامبو/بلسم/معجون) في محرك مطابقة القواعد الترويجية، بحيث لا يمكن مطلقاً لأصناف الرول أون أن تطابق عروض الاسبراي (مثل عرض الـ 125 ج.م للقطعتين) حتى لو احتوت كلمات المشغّل على ألفاظ عامة، والتحقق المستقل لكل قاعدة في السلة المجمعة.',
+          descriptionEn:
+              'Strict physical form segregation (50ml Roll-on vs 150ml Spray vs Shampoo/Conditioner/Toothpaste) in PromotionalRuleMatcher, guaranteeing that Roll-on items never match Spray promotions (such as the 125 EGP 2-piece voucher) even if triggers contain general brand tokens, with independent per-rule item verification.',
+          logicAr:
+              '1. حارس التصنيف الفيزيائي (Form Guard): استخلاص نوع العبوة (رول أون / ستيك / 50 مل مقابل اسبراي / بخاخ / 150 مل مقابل شامبو / بلسم / معجون).\n2. منع التصادم: رفض مطابقة أي منتج رول أون مع أي قاعدة أو كلمة مفتاحية تشترط اسبراي، ورفض مطابقة أي اسبراي مع قواعد الرول أون.\n3. التحقق المستقل في تخصيص الكميات: في محرك matchAllWithMultipliers، يتم حساب الكميات المستحقة لكل قاعدة تحديداً بناءً على الأصناف التي تطابق شرط تلك القاعدة فعلياً، ومنع القواعد ذات الفئات الأعلى (مثل الـ 125 ج.م) من استهلاك أصناف تخص فئات أخرى (مثل الرول أون).\n4. فصل مجموعات العائلات: فصل rollon_family عن spray_family في مفاتيح التجميع لضمان حساب جوائز كل فئة باستقلالية تامة.',
+          logicEn:
+              '1. Form Collision Guard: extracts packaging format (Roll-on/Stick/50ml vs Spray/Aerosol/150ml vs Shampoo/Conditioner/Toothpaste).\n2. Anti-Collision Invariant: strictly rejects Roll-on products against Spray rule parts/triggers, and rejects Sprays against Roll-on rules.\n3. Rule-Specific Allocation: in matchAllWithMultipliers, quantity availability is evaluated strictly per-rule, preventing higher-tier rules (e.g. 125 EGP) from consuming quantities of non-matching physical items.\n4. Group Isolation: segregates rollon_family from spray_family to guarantee independent reward calculation across different FMCG categories.',
+          exampleInput: 'فاتورة جملة ماركت تحتوي على: 6 قطع ريكسونا رول اون (2+1+2+1) + كلوركس + 7 قطع سنسوداين',
+          exampleOutput: 'تطبيق حصري لقاعدة رول أون (rule_5): 3 × فواتشر 50 ج.م = 150 ج.م إجمالي، مع استبعاد تام لقاعدة الاسبراي 125 ج.م ومطابقة دقيقة 100%.',
+          tags: ['form-guard', 'roll-on-vs-spray', 'rexona-rollon', 'category-isolation', 'promotional-rules', 'air-31'],
+          lastUpdated: '2026-08-29',
+        ),
       ];
 }
 
