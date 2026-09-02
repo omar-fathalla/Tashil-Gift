@@ -758,7 +758,12 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           Expanded(
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24.0),
+                padding: EdgeInsets.only(
+                  left: isMobile ? 12 : 24,
+                  right: isMobile ? 12 : 24,
+                  top: isMobile ? 10 : 24,
+                  bottom: isMobile ? 48 : 32,
+                ),
                 child: Container(
                   constraints: const BoxConstraints(maxWidth: 640),
                   child: Card(

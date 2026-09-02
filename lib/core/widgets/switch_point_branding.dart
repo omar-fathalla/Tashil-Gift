@@ -63,7 +63,7 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
   });
 
   @override
-  Size get preferredSize => const Size.fromHeight(68);
+  Size get preferredSize => const Size.fromHeight(56);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -79,21 +79,23 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
     final isAr = ref.isArabic;
 
     if (isMobile) {
-      return Container(
-        height: 54,
-        decoration: BoxDecoration(
-          color: colorScheme.surfaceContainerLow,
-          border: Border(
-            bottom: BorderSide(
-              color: colorScheme.outlineVariant.withValues(alpha: 0.6),
-              width: 1,
+      return SafeArea(
+        bottom: false,
+        child: Container(
+          height: 54,
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerLow,
+            border: Border(
+              bottom: BorderSide(
+                color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+                width: 1,
+              ),
             ),
           ),
-        ),
-        padding: const EdgeInsets.symmetric(
-          horizontal: 8,
-          vertical: 4,
-        ),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 4,
+          ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -151,8 +153,9 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
             ),
           ],
         ),
-      );
-    }
+      ),
+    );
+  }
 
     return Container(
       decoration: BoxDecoration(

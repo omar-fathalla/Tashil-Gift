@@ -1108,9 +1108,11 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         children: [
           Expanded(
             child: SingleChildScrollView(
-              padding: EdgeInsets.symmetric(
-                horizontal: isMobile ? 12 : (isTablet ? 20 : 28),
-                vertical: isMobile ? 12 : 24,
+              padding: EdgeInsets.only(
+                left: isMobile ? 12 : (isTablet ? 20 : 28),
+                right: isMobile ? 12 : (isTablet ? 20 : 28),
+                top: isMobile ? 10 : 24,
+                bottom: isMobile ? 48 : 32,
               ),
               child: Center(
                 child: Container(
