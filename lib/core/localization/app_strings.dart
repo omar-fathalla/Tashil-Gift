@@ -2769,6 +2769,131 @@ class AppStrings {
   String get directiveDetailsTitle => _t(ar: 'تفاصيل البند المعياري الذكي', en: 'Directive Specifications', hi: 'निर्देश विवरण');
   String get directiveSavedSuccess => _t(ar: 'تم حفظ وتوثيق البند بنجاح في عقل الذكاء الاصطناعي', en: 'Directive successfully recorded in AI Brain', hi: 'निर्देश सफलतापूर्वक एआई में दर्ज किया गया');
   String get directiveDeletedSuccess => _t(ar: 'تم حذف البند بنجاح', en: 'Directive deleted successfully', hi: 'निर्देश सफलतापूर्वक हटा दिया गया');
+
+  // ---------------------------------------------------------------------------
+  // 18. Spend Conditions, Combo Bundles & Catalog Selection
+  // ---------------------------------------------------------------------------
+  String get conditionTypeLabel => _t(ar: 'نوع شرط العرض:', en: 'Condition Type:', hi: 'शर्त का प्रकार:');
+  String get byQuantityCondition => _t(ar: 'حسب الكمية (عدد القطع)', en: 'By Quantity (Piece Count)', hi: 'मात्रा के अनुसार (टुकड़ों की संख्या)');
+  String get bySpendCondition => _t(ar: 'حسب القيمة (إجمالي المبلغ)', en: 'By Spend (Total EGP)', hi: 'खर्च के अनुसार (कुल राशि)');
+  String get comboSpendCondition => _t(ar: 'حزمة كومبو (شراء علامات معاً بقيمة محددة)', en: 'Combo Bundle (Brands Together for Target Spend)', hi: 'कॉम्बो बंडल (लक्षित खर्च के लिए एक साथ ब्रांड)');
+  String get minSpendLabel => _t(ar: 'الحد الأدنى لقيمة المشتريات (ج.م):', en: 'Minimum Spend Amount (EGP):', hi: 'न्यूनतम खरीद राशि (EGP):');
+  String get requiredBrandsLabel => _t(ar: 'العلامات التجارية المشروطة معاً في الفاتورة:', en: 'Required Brands Together in Receipt:', hi: 'रसीद में एक साथ आवश्यक ब्रांड:');
+  String get selectFromCatalogBtn => _t(ar: 'اختيار من الكتالوج', en: 'Select from Catalog', hi: 'कैटलॉग से चुनें');
+  String get chooseProductsFromCatalogTitle => _t(ar: 'اختيار الأصناف والباركودات المعتمدة من كتالوج الشركة', en: 'Select Approved Products & Barcodes from Catalog', hi: 'कैटलॉग से स्वीकृत उत्पाद और बारकोड चुनें');
+  String get searchCatalogProductsHint => _t(ar: 'بحث باسم الصنف أو الباركود...', en: 'Search by product name or barcode...', hi: 'उत्पाद के नाम या बारकोड से खोजें...');
+  String get selectAll => _t(ar: 'تحديد الكل', en: 'Select All', hi: 'सभी चुनें');
+  String get deselectAll => _t(ar: 'إلغاء التحديد', en: 'Deselect All', hi: 'अचयनित करें');
+
+  // ---------------------------------------------------------------------------
+  // 19. Customer Marketing & WhatsApp Gateway
+  // ---------------------------------------------------------------------------
+  String get customersMarketingNavTitle => _t(ar: 'تسويق وواتساب العملاء', en: 'Customer Marketing & WhatsApp', hi: 'ग्राहक विपणन और व्हाट्सएप');
+  String get customersMarketingTitle => _t(ar: 'تسويق وتواصل العملاء (WhatsApp Marketing)', en: 'Customer Marketing & WhatsApp Outreach', hi: 'ग्राहक विपणन और आउटरीच');
+  String get customersMarketingSubtitle => _t(
+    ar: 'استعراض قاعدة بيانات عملاء الحملات، وتصفية المتسوقين والـ VIP، وإرسال رسائل وعروض ترويجية مخصصة عبر واتساب',
+    en: 'Manage customer database, segment shoppers and VIPs, and broadcast personalized WhatsApp marketing campaigns',
+    hi: 'अभियान ग्राहकों का डेटाबेस प्रबंधित करें और वैयक्तिकृत व्हाट्सएप अभियान भेजें',
+  );
+  String get noCustomersFound => _t(ar: 'لا يوجد عملاء مطابقون لمعايير البحث الحالية', en: 'No customers found matching search criteria', hi: 'कोई ग्राहक नहीं मिला');
+  String get totalCustomersKpi => _t(ar: 'إجمالي العملاء', en: 'Total Shoppers', hi: 'कुल ग्राहक');
+  String get totalCustomerSpendKpi => _t(ar: 'مشتريات العملاء', en: 'Total Sales Spend', hi: 'कुल ग्राहक खर्च');
+  String get totalPrizesWonKpi => _t(ar: 'الجوائز المسلمة', en: 'Claimed Rewards', hi: 'वितरित पुरस्कार');
+  String get testPhonePlaceholder => _t(ar: 'رقم الهاتف للتجربة (مثال: 01012345678)...', en: 'Test phone number (e.g. 01012345678)...', hi: 'परीक्षण फ़ोन नंबर...');
+  String get testCustomerNameOptional => _t(ar: 'اسم العميل التجريبي (اختياري)', en: 'Test customer name (optional)', hi: 'परीक्षण ग्राहक का नाम');
+  String get sendTestWhatsApp => _t(ar: 'إرسال رسالة الاختبار', en: 'Send Test WhatsApp', hi: 'परीक्षण संदेश भेजें');
+  String get testMessageSentSuccess => _t(ar: 'تم تجهيز وفتح رسالة الاختبار بنجاح', en: 'Test message prepared successfully', hi: 'परीक्षण संदेश सफलतापूर्वक तैयार किया गया');
+  String get addCustomRecipient => _t(ar: 'إضافة مستلم مخصص', en: 'Add Custom Recipient', hi: 'कस्टम प्राप्तकर्ता जोड़ें');
+
+  String get repeatShoppersKpi => _t(ar: 'العملاء المتكررون', en: 'Repeat Shoppers', hi: 'बार-बार आने वाले ग्राहक');
+  String get composeWhatsAppCampaign => _t(ar: 'صياغة رسالة حملة الواتساب', en: 'Compose WhatsApp Campaign', hi: 'व्हाट्सएप अभियान संदेश लिखें');
+  String get launchWhatsAppQueue => _t(ar: 'إطلاق طابور الإرسال للعملاء', en: 'Launch WhatsApp Queue', hi: 'व्हाट्सएप प्रेषण कतार शुरू करें');
+  String get presetTemplatesTitle => _t(ar: 'نماذج ورسائل جاهزة سريعة:', en: 'Quick Ready Templates:', hi: 'त्वरित तैयार संदेश:');
+  String get templateNewEvent => _t(ar: 'حملة جديدة', en: 'New Campaign', hi: 'नया अभियान');
+  String get templateRewardVoucher => _t(ar: 'استلام قسيمة', en: 'Claim Voucher', hi: 'वाउचर प्राप्त करें');
+  String get templateWeekendOffer => _t(ar: 'عروض الويك إند', en: 'Weekend Offers', hi: 'सप्ताहांत के ऑफ़र');
+  String get messageTemplatePlaceholder => _t(
+    ar: 'اكتب نص الرسالة التسويقية هنا...',
+    en: 'Write marketing message text here...',
+    hi: 'यहाँ विपणन संदेश लिखें...',
+  );
+  String get insertVariable => _t(ar: 'إدراج متغير', en: 'Insert Variable', hi: 'वेरिएबल डालें');
+  String get sendTestMessage => _t(ar: 'إرسال رسالة تجريبية', en: 'Send Test Message', hi: 'परीक्षण संदेश भेजें');
+  String get testMessageNotice => _t(
+    ar: 'سيتم إرسال الرسالة إلى رقم هاتفك المسجل للاختبار والمعاينة قبل الإرسال للجمهور.',
+    en: 'A preview test message will be sent to your number before sending to customers.',
+    hi: 'ग्राहकों को भेजने से पहले आपके नंबर पर एक परीक्षण संदेश भेजा जाएगा।',
+  );
+  String get quickTestSend => _t(ar: 'إرسال تجريبي سريع', en: 'Quick Test Send', hi: 'त्वरित परीक्षण भेजें');
+  String get filterSegmentAll => _t(ar: 'كافة العملاء', en: 'All Customers', hi: 'सभी ग्राहक');
+  String get filterSegmentWinners => _t(ar: 'الفائزون بجوائز', en: 'Prize Winners', hi: 'विजेता ग्राहक');
+  String get filterSegmentTopSpenders => _t(ar: 'الأعلى إنفاقاً (VIP)', en: 'Top Spenders (VIP)', hi: 'शीर्ष खरीदार (वीआईपी)');
+  String get filterSegmentRepeat => _t(ar: 'المتسوقون المتكررون', en: 'Repeat Shoppers', hi: 'बार-बार आने वाले ग्राहक');
+  String get searchCustomerPlaceholder => _t(ar: 'بحث بالاسم أو رقم الهاتف أو الفرع...', en: 'Search by name, phone, or branch...', hi: 'नाम, फोन या शाखा द्वारा खोजें...');
+  String get deselectAllCustomers => _t(ar: 'إلغاء تحديد الكل', en: 'Deselect All', hi: 'सभी अचयनित करें');
+  String get selectAllCustomers => _t(ar: 'تحديد كافة العملاء', en: 'Select All Customers', hi: 'सभी ग्राहकों का चयन करें');
+  String selectedCustomersCount(int count) => _t(
+    ar: 'تم تحديد $count عميل',
+    en: '$count customers selected',
+    hi: '$count ग्राहक चयनित',
+  );
+  String get exportContactsExcel => _t(ar: 'تصدير Excel', en: 'Export Excel', hi: 'एक्सेल निर्यात करें');
+  String get exportVcfContacts => _t(ar: 'تصدير جهات اتصال (VCF)', en: 'Export Contacts (VCF)', hi: 'संपर्क निर्यात करें (वीसीएफ)');
+  String get totalReceiptsCountCol => _t(ar: 'عدد الفواتير', en: 'Receipts Count', hi: 'रसीद संख्या');
+  String get totalSpendAmountCol => _t(ar: 'إجمالي المشتريات', en: 'Total Spend', hi: 'कुल खरीद');
+  String get prizesWonCol => _t(ar: 'الجوائز المستلمة', en: 'Prizes Claimed', hi: 'प्राप्त पुरस्कार');
+  String get branchesCol => _t(ar: 'الفروع التي زارها', en: 'Visited Outlets', hi: 'देखी गई शाखाएं');
+  String get lastVisitCol => _t(ar: 'آخر زيارة', en: 'Last Visit', hi: 'अंतिम यात्रा');
+  String get sendDirectWhatsApp => _t(ar: 'إرسال واتساب مباشر', en: 'Direct WhatsApp', hi: 'सीधा व्हाट्सएप भेजें');
+  String get callCustomerPhone => _t(ar: 'اتصال هاتفي', en: 'Call Phone', hi: 'फ़ोन कॉल करें');
+
+  String showingCustomersRange(int start, int end, int total) => _t(
+    ar: 'عرض $start إلى $end من إجمالي $total عميل',
+    en: 'Showing $start to $end of $total customers',
+    hi: 'कुल $total में से $start से $end ग्राहक दिखाए जा रहे हैं',
+  );
+  String get allRowsOption => _t(ar: 'الكل', en: 'All', hi: 'सभी');
+  String get previousCustomer => _t(ar: 'العميل السابق', en: 'Previous Customer', hi: 'पिछला ग्राहक');
+  String get nextCustomer => _t(ar: 'العميل التالي', en: 'Next Customer', hi: 'अगला ग्राहक');
+  String pageOfTotal(int page, int totalPages) => _t(
+    ar: 'صفحة $page من $totalPages',
+    en: 'Page $page of $totalPages',
+    hi: 'पृष्ठ $page का $totalPages',
+  );
+  String get whatsappGatewayTitle => _t(
+    ar: 'بوابة إرسال واتساب للعملاء',
+    en: 'WhatsApp Customer Gateway',
+    hi: 'व्हाट्सएप ग्राहक गेटवे',
+  );
+  String get whatsappGatewaySubtitle => _t(
+    ar: 'إعدادات ربط بوابة UltraMsg أو Wasapi أو Custom Webhook للإرسال الآلي للرسائل والعروض الترويجية',
+    en: 'Configure UltraMsg, Wasapi, or Custom Webhook for automated messaging and promotions',
+    hi: 'स्वचालित संदेशों के लिए अल्ट्रा-मैसेज या वासापी गेटवे सेटिंग्स',
+  );
+  String get gatewayProviderLabel => _t(ar: 'مزود خدمة البوابة', en: 'Gateway Provider', hi: 'गेटवे प्रदाता');
+  String get instanceIdLabel => _t(ar: 'معرف النسخة (Instance ID)', en: 'Instance ID', hi: 'इंस्टेंस आईडी');
+  String get apiTokenLabel => _t(ar: 'رمز المصادقة (API Token)', en: 'API Token', hi: 'एपीआई टोकन');
+  String get customEndpointLabel => _t(ar: 'رابط البوابة المخصصة (Webhook/API Endpoint)', en: 'Custom API Endpoint', hi: 'कस्टम एपीआई यूआरएल');
+  String get delayBetweenMessagesLabel => _t(ar: 'الفاصل الزمني بين كل رسالة (ثواني)', en: 'Delay Between Messages (seconds)', hi: 'संदेशों के बीच का समय (सेकंड)');
+  String get gatewayConnectedBadge => _t(ar: 'متصل وجاهز', en: 'Connected & Ready', hi: 'सक्रिय और तैयार');
+  String get gatewayDisconnectedBadge => _t(ar: 'غير متصل', en: 'Not Configured', hi: 'कॉन्फ़िगर नहीं किया गया');
+  String get testGatewayConnection => _t(ar: 'اختبار الاتصال بالبوابة', en: 'Test Gateway Connection', hi: 'गेटवे कनेक्शन का परीक्षण करें');
+  String get saveGatewaySettings => _t(ar: 'حفظ إعدادات البوابة', en: 'Save Gateway Settings', hi: 'गेटवे सेटिंग्स سहेजें');
+  String get autoGatewayDispatchMode => _t(ar: 'إرسال آلي عبر البوابة (UltraMsg / Wasapi)', en: 'Auto Dispatch via Gateway (UltraMsg / Wasapi)', hi: 'गेटवे के माध्यम से स्वचालित प्रेषण');
+  String get manualDispatchMode => _t(ar: 'إرسال يدوي فردي (WhatsApp Web / App)', en: 'Manual One-by-One Dispatch (WhatsApp Web / App)', hi: 'मैन्युअल एक-एक करके प्रेषण');
+  String get autoAdvanceToggle => _t(ar: 'الانتقال التلقائي للعميل التالي بعد الإرسال', en: 'Auto-advance to next customer after dispatch', hi: 'भेजने के बाद स्वचालित रूप से अगले ग्राहक पर जाएं');
+  String get gatewayNotConfiguredBadge => _t(ar: 'البوابة غير مهيأة', en: 'Gateway Not Configured', hi: 'गेटवे कॉन्फ़िगर नहीं किया गया');
+  String get autoDispatchTitle => _t(ar: 'حملة الإرسال التلقائي', en: 'Automated Campaign Dispatcher', hi: 'स्वचालित अभियान प्रेषण');
+  String get autoDispatchNotice => _t(ar: 'سيتم إرسال الرسائل المخصصة لكل عميل تباعاً عبر البوابة مع مراعاة الفاصل الزمني لتجنب حظر الأرقام.', en: 'Customized messages will be sent sequentially via the gateway with safety delays to prevent number banning.', hi: 'सुरक्षा देरी के साथ गेटवे के माध्यम से संदेश स्वचालित रूप से भेजे जाएंगे।');
+  String get startAutoDispatch => _t(ar: 'بدء الإرسال الآلي الآن', en: 'Start Auto Dispatch Now', hi: 'अब स्वचालित प्रेषण शुरू करें');
+  String get resumeDispatch => _t(ar: 'استئناف الإرسال', en: 'Resume Dispatch', hi: 'प्रेषण फिर से शुरू करें');
+  String get pauseDispatch => _t(ar: 'إيقاف مؤقت', en: 'Pause Dispatch', hi: 'प्रेषण रोकें');
+  String get cancelDispatch => _t(ar: 'إلغاء الحملة', en: 'Cancel Dispatch', hi: 'अभियान रद्द करें');
+  String get customerQueueProgress => _t(ar: 'قائمة انتظار العملاء وحالة الإرسال', en: 'Customer Queue & Progress', hi: 'ग्राहक कतार और स्थिति');
+  String get liveMessagePreview => _t(ar: 'معاينة حية للرسالة المخصصة للعميل الحالي', en: 'Live Customer Message Preview', hi: 'ग्राहक संदेश का पूर्वावलोकन');
+  String get sendAndOpenWhatsApp => _t(ar: 'إرسال وفتح واتساب', en: 'Send & Open WhatsApp', hi: 'व्हाट्सएप भेजें और खोलें');
+  String get skipToNextCustomer => _t(ar: 'تخطي للعميل التالي', en: 'Skip to Next Customer', hi: 'अगले ग्राहक पर जाएं');
+  String get dispatchCompleted => _t(ar: 'اكتمل إرسال الحملة بنجاح لكافة العملاء المحددِين!', en: 'Campaign dispatch completed successfully for all targeted customers!', hi: 'सभी लक्षित ग्राहकों के लिए अभियान सफलतापूर्वक पूरा हुआ!');
 }
 
 

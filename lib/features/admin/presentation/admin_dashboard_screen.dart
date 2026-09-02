@@ -17,6 +17,7 @@ import '../../../core/widgets/switch_point_branding.dart';
 import '../../../core/constants/country_currency_config.dart';
 import '../../../core/widgets/m3_button_groups.dart';
 import 'company_catalog_screen.dart';
+import '../../company_portal/presentation/company_customers_marketing_screen.dart';
 import 'company_gifts_screen.dart';
 import '../../games/presentation/game_types_screen.dart';
 import 'retail_chains_screen.dart';
@@ -38,10 +39,20 @@ class AdminDashboardScreen extends ConsumerStatefulWidget {
 
 class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   int _selectedIndex = 0;
+  final Set<int> _loadedTabs = {0};
   bool _isSidebarExpanded = true;
   String _campaignFilter = 'ALL';
   EventModel? _selectedReportsEvent;
   final _searchController = TextEditingController();
+
+  void _selectTab(int index) {
+    if (_selectedIndex != index) {
+      setState(() {
+        _selectedIndex = index;
+        _loadedTabs.add(index);
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -443,106 +454,111 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       body: Row(
         children: [
           if (!isMobile) ...[
-            // Sidebar Navigation (Desktop/Tablet)
-            NavigationRail(
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: (index) {
-                setState(() => _selectedIndex = index);
-              },
-              extended: !isTablet && _isSidebarExpanded,
-              minWidth: 72,
-              minExtendedWidth: 230,
-              backgroundColor: colorScheme.surfaceContainerLow,
-              elevation: 1,
-              indicatorColor: colorScheme.secondaryContainer,
-              selectedIconTheme: IconThemeData(color: colorScheme.onSecondaryContainer, size: 24),
-              unselectedIconTheme: IconThemeData(color: colorScheme.onSurfaceVariant, size: 22),
-              selectedLabelTextStyle: GoogleFonts.cairo(color: colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 14),
-              unselectedLabelTextStyle: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant, fontSize: 13),
-              destinations: [
-                NavigationRailDestination(
-                  icon: const Icon(Icons.dashboard_outlined),
-                  selectedIcon: const Icon(Icons.dashboard_rounded),
-                  label: Text(strings.navEventsManagement),
-                ),
-                NavigationRailDestination(
-                  icon: const Icon(Icons.bar_chart_outlined),
-                  selectedIcon: const Icon(Icons.bar_chart_rounded),
-                  label: Text(strings.navAnalytics),
-                ),
-                NavigationRailDestination(
-                  icon: const Icon(Icons.business_center_outlined),
-                  selectedIcon: const Icon(Icons.business_center_rounded),
-                  label: Text(strings.navCompanyCatalog),
-                ),
-                NavigationRailDestination(
-                  icon: const Icon(Icons.storefront_outlined),
-                  selectedIcon: const Icon(Icons.storefront_rounded),
-                  label: Text(strings.navRetailChains),
-                ),
-                NavigationRailDestination(
-                  icon: const Icon(Icons.inventory_2_outlined),
-                  selectedIcon: const Icon(Icons.inventory_2_rounded),
-                  label: Text(strings.navProductsIntelligence),
-                ),
-                NavigationRailDestination(
-                  icon: const Icon(Icons.receipt_long_outlined),
-                  selectedIcon: const Icon(Icons.receipt_long_rounded),
-                  label: Text(strings.navInvoicesAudit),
-                ),
-                NavigationRailDestination(
-                  icon: const Icon(Icons.add_circle_outline_rounded),
-                  selectedIcon: const Icon(Icons.add_circle_rounded),
-                  label: Text(strings.navCreateCampaign),
-                ),
-                NavigationRailDestination(
-                  icon: const Icon(Icons.card_giftcard_outlined),
-                  selectedIcon: const Icon(Icons.card_giftcard_rounded),
-                  label: Text(strings.navCompanyGifts),
-                ),
-                NavigationRailDestination(
-                  icon: const Icon(Icons.casino_outlined),
-                  selectedIcon: const Icon(Icons.casino_rounded),
-                  label: Text(strings.navGameTypes),
-                ),
-                NavigationRailDestination(
-                  icon: const Icon(Icons.speed_outlined),
-                  selectedIcon: const Icon(Icons.speed_rounded),
-                  label: Text(strings.navAiSpeedBenchmark),
-                ),
-                NavigationRailDestination(
-                  icon: const Icon(Icons.psychology_outlined),
-                  selectedIcon: const Icon(Icons.psychology_rounded),
-                  label: Text(strings.navAiBrainRules),
-                ),
-                NavigationRailDestination(
-                  icon: StreamBuilder<int>(
-                    stream: ref.watch(aiProductDiscoveryServiceProvider).streamPendingCount(),
-                    builder: (context, snapshot) {
-                      final count = snapshot.data ?? 0;
-                      return Badge(
-                        isLabelVisible: count > 0,
-                        label: Text('$count'),
-                        backgroundColor: Colors.orange.shade800,
-                        child: const Icon(Icons.auto_awesome_outlined),
-                      );
-                    },
+            // Sidebar Navigation (Desktop/Tablet) wrapped in RepaintBoundary for 60 FPS (Rule 9 / Pillar 2)
+            RepaintBoundary(
+              child: NavigationRail(
+                selectedIndex: _selectedIndex,
+                onDestinationSelected: _selectTab,
+                extended: !isTablet && _isSidebarExpanded,
+                minWidth: 72,
+                minExtendedWidth: 230,
+                backgroundColor: colorScheme.surfaceContainerLow,
+                elevation: 1,
+                indicatorColor: colorScheme.secondaryContainer,
+                selectedIconTheme: IconThemeData(color: colorScheme.onSecondaryContainer, size: 24),
+                unselectedIconTheme: IconThemeData(color: colorScheme.onSurfaceVariant, size: 22),
+                selectedLabelTextStyle: GoogleFonts.cairo(color: colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 14),
+                unselectedLabelTextStyle: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant, fontSize: 13),
+                destinations: [
+                  NavigationRailDestination(
+                    icon: const Icon(Icons.dashboard_outlined),
+                    selectedIcon: const Icon(Icons.dashboard_rounded),
+                    label: Text(strings.navEventsManagement),
                   ),
-                  selectedIcon: StreamBuilder<int>(
-                    stream: ref.watch(aiProductDiscoveryServiceProvider).streamPendingCount(),
-                    builder: (context, snapshot) {
-                      final count = snapshot.data ?? 0;
-                      return Badge(
-                        isLabelVisible: count > 0,
-                        label: Text('$count'),
-                        backgroundColor: Colors.orange.shade800,
-                        child: const Icon(Icons.auto_awesome_rounded),
-                      );
-                    },
+                  NavigationRailDestination(
+                    icon: const Icon(Icons.bar_chart_outlined),
+                    selectedIcon: const Icon(Icons.bar_chart_rounded),
+                    label: Text(strings.navAnalytics),
                   ),
-                  label: Text(strings.navAiProductDiscovery),
-                ),
-              ],
+                  NavigationRailDestination(
+                    icon: const Icon(Icons.business_center_outlined),
+                    selectedIcon: const Icon(Icons.business_center_rounded),
+                    label: Text(strings.navCompanyCatalog),
+                  ),
+                  NavigationRailDestination(
+                    icon: const Icon(Icons.storefront_outlined),
+                    selectedIcon: const Icon(Icons.storefront_rounded),
+                    label: Text(strings.navRetailChains),
+                  ),
+                  NavigationRailDestination(
+                    icon: const Icon(Icons.inventory_2_outlined),
+                    selectedIcon: const Icon(Icons.inventory_2_rounded),
+                    label: Text(strings.navProductsIntelligence),
+                  ),
+                  NavigationRailDestination(
+                    icon: const Icon(Icons.receipt_long_outlined),
+                    selectedIcon: const Icon(Icons.receipt_long_rounded),
+                    label: Text(strings.navInvoicesAudit),
+                  ),
+                  NavigationRailDestination(
+                    icon: const Icon(Icons.add_circle_outline_rounded),
+                    selectedIcon: const Icon(Icons.add_circle_rounded),
+                    label: Text(strings.navCreateCampaign),
+                  ),
+                  NavigationRailDestination(
+                    icon: const Icon(Icons.card_giftcard_outlined),
+                    selectedIcon: const Icon(Icons.card_giftcard_rounded),
+                    label: Text(strings.navCompanyGifts),
+                  ),
+                  NavigationRailDestination(
+                    icon: const Icon(Icons.casino_outlined),
+                    selectedIcon: const Icon(Icons.casino_rounded),
+                    label: Text(strings.navGameTypes),
+                  ),
+                  NavigationRailDestination(
+                    icon: const Icon(Icons.speed_outlined),
+                    selectedIcon: const Icon(Icons.speed_rounded),
+                    label: Text(strings.navAiSpeedBenchmark),
+                  ),
+                  NavigationRailDestination(
+                    icon: const Icon(Icons.psychology_outlined),
+                    selectedIcon: const Icon(Icons.psychology_rounded),
+                    label: Text(strings.navAiBrainRules),
+                  ),
+                  NavigationRailDestination(
+                    icon: StreamBuilder<int>(
+                      stream: ref.watch(aiProductDiscoveryServiceProvider).streamPendingCount(),
+                      builder: (context, snapshot) {
+                        final count = snapshot.data ?? 0;
+                        return Badge(
+                          isLabelVisible: count > 0,
+                          label: Text('$count'),
+                          backgroundColor: Colors.orange.shade800,
+                          child: const Icon(Icons.auto_awesome_outlined),
+                        );
+                      },
+                    ),
+                    selectedIcon: StreamBuilder<int>(
+                      stream: ref.watch(aiProductDiscoveryServiceProvider).streamPendingCount(),
+                      builder: (context, snapshot) {
+                        final count = snapshot.data ?? 0;
+                        return Badge(
+                          isLabelVisible: count > 0,
+                          label: Text('$count'),
+                          backgroundColor: Colors.orange.shade800,
+                          child: const Icon(Icons.auto_awesome_rounded),
+                        );
+                      },
+                    ),
+                    label: Text(strings.navAiProductDiscovery),
+                  ),
+                  NavigationRailDestination(
+                    icon: const Icon(Icons.mark_chat_read_outlined),
+                    selectedIcon: const Icon(Icons.mark_chat_read_rounded),
+                    label: Text(strings.customersMarketingNavTitle),
+                  ),
+                ],
+              ),
             ),
             VerticalDivider(thickness: 1, width: 1, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
           ],
@@ -563,9 +579,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       bottomNavigationBar: isMobile
           ? NavigationBar(
               selectedIndex: _selectedIndex > 10 ? 0 : _selectedIndex,
-              onDestinationSelected: (index) {
-                setState(() => _selectedIndex = index);
-              },
+              onDestinationSelected: _selectTab,
               backgroundColor: colorScheme.surfaceContainerLow,
               destinations: [
                 NavigationDestination(
@@ -623,9 +637,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           : null,
       floatingActionButton: _selectedIndex == 0
           ? FloatingActionButton.extended(
-              onPressed: () {
-                setState(() => _selectedIndex = 6);
-              },
+              onPressed: () => _selectTab(6),
               backgroundColor: colorScheme.primary,
               foregroundColor: colorScheme.onPrimary,
               icon: const Icon(Icons.add_rounded),
@@ -635,15 +647,36 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     );
   }
 
+  /// High-Performance Lazy On-Demand Tab Viewport with in-memory caching (Pillar 1)
   Widget _buildMainView(FirebaseFirestore? firestore, AppStrings strings, bool isAr) {
-    switch (_selectedIndex) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        for (int i = 0; i <= 12; i++)
+          Offstage(
+            offstage: _selectedIndex != i,
+            child: TickerMode(
+              enabled: _selectedIndex == i,
+              child: _loadedTabs.contains(i)
+                  ? RepaintBoundary(
+                      child: _buildMainViewForIndex(i, firestore, strings, isAr),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildMainViewForIndex(int index, FirebaseFirestore? firestore, AppStrings strings, bool isAr) {
+    switch (index) {
       case 0:
         return _buildCampaignsDashboard(firestore, strings, isAr);
       case 1:
         return CampaignReportsScreen(
           isEmbedded: true,
           initialEvent: _selectedReportsEvent,
-          onBack: () => setState(() => _selectedIndex = 0),
+          onBack: () => _selectTab(0),
         );
       case 2:
         return const CompanyCatalogScreen();
@@ -656,8 +689,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       case 6:
         return CreateEventScreen(
           isEmbedded: true,
-          onCancel: () => setState(() => _selectedIndex = 0),
-          onSaved: () => setState(() => _selectedIndex = 0),
+          onCancel: () => _selectTab(0),
+          onSaved: () => _selectTab(0),
         );
       case 7:
         return const CompanyGiftsScreen();
@@ -669,6 +702,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         return const AiBrainRulesScreen();
       case 11:
         return const AiProductDiscoveryScreen();
+      case 12:
+        return const CompanyCustomersMarketingScreen(isEmbedded: true);
       default:
         return _buildCampaignsDashboard(firestore, strings, isAr);
     }

@@ -69,16 +69,23 @@ class LinkedGiftAllocation {
   }
 }
 
-/// Represents a structured promotional rule/offer condition (e.g. "Buy 1 Axe/Rexona spray -> Get 50 EGP voucher")
+/// Represents a structured promotional rule/offer condition (e.g. "Buy 1 Axe/Rexona spray -> Get 50 EGP voucher" or "Buy >= 100 EGP of Signal + Closeup -> Get 25 EGP voucher")
 class PromotionalRuleItem {
   final String id;
   final String ruleTitle;
   final String triggerProduct;
   final int minQuantity;
+  final String conditionType; // 'by_quantity' | 'by_spend' | 'combo_spend'
+  final double minSpend; // e.g. 100.0, 150.0, 200.0 if conditionType is by_spend or combo_spend
+  final String matchMode; // 'OR' | 'AND' (for combo bundles, 'AND' requires presence of all required brands/items)
+  final List<String> requiredBrands; // e.g. ['سيجنال', 'كلوس اب'] or ['Signal', 'Closeup']
+  final List<String> selectedProductIds; // Specific company_products IDs selected from catalog
+  final List<String> selectedBarcodes; // Specific company_products barcodes selected from catalog
+  final List<String> selectedProductNames; // Specific company_products names selected from catalog
   final String rewardType; // 'voucher' | 'free_product' | 'game_spin'
   final String rewardValue; // e.g. 'قسيمة مشتريات 50 ج.م' or 'كلير 90 مل هدية'
   final double rewardAmount; // 50.0 if voucher
-  final bool allowMultipliers; // true if buying 2x items gives 2x rewards
+  final bool allowMultipliers; // true if buying multiples gives multiple rewards
   final String? linkedGiftId; // ID of the linked CompanyGiftModel from inventory (legacy/fallback)
   final String? linkedGiftName; // Friendly display name of the linked gift (legacy/fallback)
   final List<LinkedGiftAllocation> linkedGifts; // Multiple allocated gifts/vouchers for this rule
@@ -88,6 +95,13 @@ class PromotionalRuleItem {
     required this.ruleTitle,
     required this.triggerProduct,
     this.minQuantity = 1,
+    this.conditionType = 'by_quantity',
+    this.minSpend = 0.0,
+    this.matchMode = 'OR',
+    this.requiredBrands = const [],
+    this.selectedProductIds = const [],
+    this.selectedBarcodes = const [],
+    this.selectedProductNames = const [],
     this.rewardType = 'free_product',
     required this.rewardValue,
     this.rewardAmount = 0.0,
@@ -98,6 +112,12 @@ class PromotionalRuleItem {
   });
 
   bool get hasLinkedGifts => linkedGifts.isNotEmpty || (linkedGiftId != null && linkedGiftId!.isNotEmpty);
+
+  /// Whether this rule is evaluated based on total monetary spend (e.g. >= 100 EGP) rather than piece count
+  bool get isSpendBased => conditionType == 'by_spend' || conditionType == 'combo_spend' || minSpend > 0;
+
+  /// Whether this rule requires multiple brands or products together (e.g. Signal + Closeup combo)
+  bool get isCombo => conditionType == 'combo_spend' || (matchMode == 'AND' && requiredBrands.length > 1);
 
   /// Returns total monetary value of linked vouchers
   double get totalVoucherValue {
@@ -113,6 +133,19 @@ class PromotionalRuleItem {
       return linkedGiftName ?? '';
     }
     return linkedGifts.map((g) => g.quantity > 1 ? '${g.quantity} × ${g.giftName}' : g.giftName).join(' + ');
+  }
+
+  /// Human-readable summary of the condition
+  String get conditionSummaryText {
+    final spendInt = minSpend == minSpend.roundToDouble() ? minSpend.toInt() : minSpend;
+    if (isCombo) {
+      final brandsList = requiredBrands.isNotEmpty ? requiredBrands.join(' و ') : triggerProduct;
+      return 'شراء بقيمة $spendInt ج.م أو أكثر من ($brandsList معاً)';
+    } else if (isSpendBased) {
+      return 'شراء بقيمة $spendInt ج.م أو أكثر من [$triggerProduct]';
+    } else {
+      return 'شراء كمية ($minQuantity) أو أكثر من [$triggerProduct]';
+    }
   }
 
   factory PromotionalRuleItem.fromMap(Map<String, dynamic> data) {
@@ -138,11 +171,42 @@ class PromotionalRuleItem {
       ));
     }
 
+    final parsedRequiredBrands = (data['requiredBrands'] as List?)
+            ?.map((e) => e.toString().trim())
+            .where((e) => e.isNotEmpty)
+            .toList() ??
+        [];
+
+    final parsedSelectedProductIds = (data['selectedProductIds'] as List?)
+            ?.map((e) => e.toString().trim())
+            .where((e) => e.isNotEmpty)
+            .toList() ??
+        [];
+
+    final parsedSelectedBarcodes = (data['selectedBarcodes'] as List?)
+            ?.map((e) => e.toString().trim())
+            .where((e) => e.isNotEmpty)
+            .toList() ??
+        [];
+
+    final parsedSelectedProductNames = (data['selectedProductNames'] as List?)
+            ?.map((e) => e.toString().trim())
+            .where((e) => e.isNotEmpty)
+            .toList() ??
+        [];
+
     return PromotionalRuleItem(
       id: data['id']?.toString() ?? '',
       ruleTitle: data['ruleTitle']?.toString() ?? '',
       triggerProduct: data['triggerProduct']?.toString() ?? '',
       minQuantity: (data['minQuantity'] as num?)?.toInt() ?? 1,
+      conditionType: data['conditionType']?.toString() ?? 'by_quantity',
+      minSpend: (data['minSpend'] as num?)?.toDouble() ?? 0.0,
+      matchMode: data['matchMode']?.toString() ?? 'OR',
+      requiredBrands: parsedRequiredBrands,
+      selectedProductIds: parsedSelectedProductIds,
+      selectedBarcodes: parsedSelectedBarcodes,
+      selectedProductNames: parsedSelectedProductNames,
       rewardType: data['rewardType']?.toString() ?? 'free_product',
       rewardValue: data['rewardValue']?.toString() ?? '',
       rewardAmount: (data['rewardAmount'] as num?)?.toDouble() ?? 0.0,
@@ -162,6 +226,13 @@ class PromotionalRuleItem {
       'ruleTitle': ruleTitle,
       'triggerProduct': triggerProduct,
       'minQuantity': minQuantity,
+      'conditionType': conditionType,
+      'minSpend': minSpend,
+      'matchMode': matchMode,
+      if (requiredBrands.isNotEmpty) 'requiredBrands': requiredBrands,
+      if (selectedProductIds.isNotEmpty) 'selectedProductIds': selectedProductIds,
+      if (selectedBarcodes.isNotEmpty) 'selectedBarcodes': selectedBarcodes,
+      if (selectedProductNames.isNotEmpty) 'selectedProductNames': selectedProductNames,
       'rewardType': rewardType,
       'rewardValue': rewardValue,
       'rewardAmount': rewardAmount,
@@ -177,6 +248,13 @@ class PromotionalRuleItem {
     String? ruleTitle,
     String? triggerProduct,
     int? minQuantity,
+    String? conditionType,
+    double? minSpend,
+    String? matchMode,
+    List<String>? requiredBrands,
+    List<String>? selectedProductIds,
+    List<String>? selectedBarcodes,
+    List<String>? selectedProductNames,
     String? rewardType,
     String? rewardValue,
     double? rewardAmount,
@@ -190,6 +268,13 @@ class PromotionalRuleItem {
       ruleTitle: ruleTitle ?? this.ruleTitle,
       triggerProduct: triggerProduct ?? this.triggerProduct,
       minQuantity: minQuantity ?? this.minQuantity,
+      conditionType: conditionType ?? this.conditionType,
+      minSpend: minSpend ?? this.minSpend,
+      matchMode: matchMode ?? this.matchMode,
+      requiredBrands: requiredBrands ?? this.requiredBrands,
+      selectedProductIds: selectedProductIds ?? this.selectedProductIds,
+      selectedBarcodes: selectedBarcodes ?? this.selectedBarcodes,
+      selectedProductNames: selectedProductNames ?? this.selectedProductNames,
       rewardType: rewardType ?? this.rewardType,
       rewardValue: rewardValue ?? this.rewardValue,
       rewardAmount: rewardAmount ?? this.rewardAmount,

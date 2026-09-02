@@ -682,6 +682,220 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     });
   }
 
+  /// Normalizes Arabic text with phonetic aliases for brands and search terms
+  String _normalizeCatalogSearchText(String s) {
+    var str = s.toLowerCase().trim();
+    // Diacritics
+    str = str.replaceAll(RegExp(r'[\u064B-\u0652\u0640]'), '');
+    str = str.replaceAll(RegExp(r'[أإآ]'), 'ا');
+    str = str.replaceAll('ى', 'ي');
+    str = str.replaceAll('ة', 'ه');
+    str = str.replaceAll('ؤ', 'و');
+    str = str.replaceAll('ئ', 'ي');
+
+    // Phonetic & POS Brand Aliases
+    str = str.replaceAll(RegExp(r'\b(سيج|سجنال|signal)\b'), 'سيجنال');
+    str = str.replaceAll(RegExp(r'\b(كلوس|كلوساب|closeup|close-up|close up)\b'), 'كلوس اب');
+    str = str.replaceAll(RegExp(r'\b(تريزم|تريسم|تريزمي|tresemme|treseme)\b'), 'تريزيمي');
+    str = str.replaceAll(RegExp(r'\b(ريكس|ركس|rexona)\b'), 'ريكسونا');
+    str = str.replaceAll(RegExp(r'\b(axe)\b'), 'اكس');
+    str = str.replaceAll(RegExp(r'\b(dove)\b'), 'دوف');
+    str = str.replaceAll(RegExp(r'\b(clear)\b'), 'كلير');
+    str = str.replaceAll(RegExp(r'\b(sunsilk|صنسلك)\b'), 'صنسيلك');
+    str = str.replaceAll(RegExp(r'\b(lux)\b'), 'لوكس');
+    str = str.replaceAll(RegExp(r'\b(camay|كامي)\b'), 'كاماي');
+    str = str.replaceAll(RegExp(r'\b(lifebuoy|لايف بوي)\b'), 'لايفبوي');
+    str = str.replaceAll(RegExp(r'\b(vaseline)\b'), 'فازلين');
+    str = str.replaceAll(RegExp(r'\b(knorr)\b'), 'كنور');
+    str = str.replaceAll(RegExp(r'\b(lipton)\b'), 'ليبتون');
+    return str;
+  }
+
+  /// Extracts major brand clusters with counts from the loaded company products catalog
+  Map<String, int> _extractBrandCountsFromProducts(List<CompanyProductItem> products) {
+    final Map<String, int> counts = {};
+    for (final p in products) {
+      final norm = _normalizeCatalogSearchText(p.productName);
+      if (norm.contains('سيجنال') || p.productName.contains('سجنال') || p.productName.toLowerCase().contains('signal')) {
+        counts['سيجنال'] = (counts['سيجنال'] ?? 0) + 1;
+      }
+      if (norm.contains('كلوس اب') || p.productName.contains('كلوس') || p.productName.toLowerCase().contains('closeup')) {
+        counts['كلوس اب'] = (counts['كلوس اب'] ?? 0) + 1;
+      }
+      if (norm.contains('تريزيمي') || p.productName.contains('تريزم') || p.productName.toLowerCase().contains('tresemme')) {
+        counts['تريزيمي'] = (counts['تريزيمي'] ?? 0) + 1;
+      }
+      if (norm.contains('ريكسونا') || p.productName.contains('ركسونا') || p.productName.toLowerCase().contains('rexona')) {
+        counts['ريكسونا'] = (counts['ريكسونا'] ?? 0) + 1;
+      }
+      if (norm.contains('دوف') || p.productName.toLowerCase().contains('dove')) {
+        counts['دوف'] = (counts['دوف'] ?? 0) + 1;
+      }
+      if (norm.contains('كلير') || p.productName.toLowerCase().contains('clear')) {
+        counts['كلير'] = (counts['كلير'] ?? 0) + 1;
+      }
+      if (norm.contains('لوكس') || p.productName.toLowerCase().contains('lux')) {
+        counts['لوكس'] = (counts['لوكس'] ?? 0) + 1;
+      }
+      if (norm.contains('اكس') || p.productName.toLowerCase().contains('axe')) {
+        counts['اكس'] = (counts['اكس'] ?? 0) + 1;
+      }
+      if (norm.contains('صنسيلك') || p.productName.contains('صنسلك') || p.productName.toLowerCase().contains('sunsilk')) {
+        counts['صنسيلك'] = (counts['صنسيلك'] ?? 0) + 1;
+      }
+      if (norm.contains('كاماي') || p.productName.contains('كامي') || p.productName.toLowerCase().contains('camay')) {
+        counts['كاماي'] = (counts['كاماي'] ?? 0) + 1;
+      }
+      if (norm.contains('فازلين') || p.productName.toLowerCase().contains('vaseline')) {
+        counts['فازلين'] = (counts['فازلين'] ?? 0) + 1;
+      }
+      if (norm.contains('لايفبوي') || p.productName.contains('لايف بوي') || p.productName.toLowerCase().contains('lifebuoy')) {
+        counts['لايفبوي'] = (counts['لايفبوي'] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }
+
+  /// Filters company products based on search query, barcode, and active brand chip
+  List<CompanyProductItem> _filterCompanyProducts({
+    required List<CompanyProductItem> products,
+    required String searchQuery,
+    String? selectedBrand,
+  }) {
+    final cleanQuery = searchQuery.trim();
+    final normQuery = _normalizeCatalogSearchText(cleanQuery);
+    final queryTokens = normQuery.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
+
+    return products.where((p) {
+      final pNorm = _normalizeCatalogSearchText(p.productName);
+      final rawLower = p.productName.toLowerCase();
+
+      // 1. Brand filter chip check
+      if (selectedBrand != null && selectedBrand.isNotEmpty) {
+        if (selectedBrand == 'سيجنال' && !pNorm.contains('سيجنال') && !p.productName.contains('سجنال') && !rawLower.contains('signal')) return false;
+        if (selectedBrand == 'كلوس اب' && !pNorm.contains('كلوس اب') && !p.productName.contains('كلوس') && !rawLower.contains('closeup')) return false;
+        if (selectedBrand == 'تريزيمي' && !pNorm.contains('تريزيمي') && !p.productName.contains('تريزم') && !rawLower.contains('tresemme')) return false;
+        if (selectedBrand == 'ريكسونا' && !pNorm.contains('ريكسونا') && !p.productName.contains('ركسونا') && !rawLower.contains('rexona')) return false;
+        if (selectedBrand == 'دوف' && !pNorm.contains('دوف') && !rawLower.contains('dove')) return false;
+        if (selectedBrand == 'كلير' && !pNorm.contains('كلير') && !rawLower.contains('clear')) return false;
+        if (selectedBrand == 'لوكس' && !pNorm.contains('لوكس') && !rawLower.contains('lux')) return false;
+        if (selectedBrand == 'اكس' && !pNorm.contains('اكس') && !rawLower.contains('axe')) return false;
+        if (selectedBrand == 'صنسيلك' && !pNorm.contains('صنسيلك') && !p.productName.contains('صنسلك') && !rawLower.contains('sunsilk')) return false;
+        if (selectedBrand == 'كاماي' && !pNorm.contains('كاماي') && !p.productName.contains('كامي') && !rawLower.contains('camay')) return false;
+        if (selectedBrand == 'فازلين' && !pNorm.contains('فازلين') && !rawLower.contains('vaseline')) return false;
+        if (selectedBrand == 'لايفبوي' && !pNorm.contains('لايفبوي') && !p.productName.contains('لايف بوي') && !rawLower.contains('lifebuoy')) return false;
+      }
+
+      // 2. Query filter
+      if (cleanQuery.isEmpty) return true;
+
+      // Direct barcode match
+      if (p.barcode.isNotEmpty && p.barcode.contains(cleanQuery)) {
+        return true;
+      }
+
+      // Special shorthand for "سج" -> matches "سيجنال" or "سجنال" or "signal"
+      if (cleanQuery == 'سج' || cleanQuery == 'سجنال' || cleanQuery == 'سيجنال') {
+        if (pNorm.contains('سيجنال') || p.productName.contains('سجنال') || rawLower.contains('signal')) {
+          return true;
+        }
+      }
+
+      // Special shorthand for "كلوس" -> matches "كلوس اب" or "closeup"
+      if (cleanQuery == 'كلوس' || cleanQuery == 'كلوس اب') {
+        if (pNorm.contains('كلوس اب') || p.productName.contains('كلوس') || rawLower.contains('closeup')) {
+          return true;
+        }
+      }
+
+      // Substring match in raw name or category or unit size
+      if (rawLower.contains(cleanQuery.toLowerCase()) || p.category.toLowerCase().contains(cleanQuery.toLowerCase()) || p.unitSize.toLowerCase().contains(cleanQuery.toLowerCase())) {
+        return true;
+      }
+
+      // All search tokens must be found in either normalized name or raw name or barcode
+      if (queryTokens.isNotEmpty) {
+        final allTokensMatch = queryTokens.every((token) {
+          if (pNorm.contains(token) || rawLower.contains(token) || p.barcode.contains(token)) return true;
+          if (token.length >= 3 && (pNorm.startsWith(token) || rawLower.startsWith(token))) return true;
+          return false;
+        });
+        if (allTokensMatch) return true;
+      }
+
+      return false;
+    }).toList();
+  }
+
+  /// Builds horizontal scrollable brand filter chips
+  Widget _buildBrandFilterChipsWidget({
+    required BuildContext context,
+    required Map<String, int> brandCounts,
+    required int totalCount,
+    required String selectedBrand,
+    required Function(String) onSelectBrand,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final List<Map<String, dynamic>> brandItems = [
+      {'name': '', 'label': 'كافة المنتجات ($totalCount)'},
+    ];
+
+    final iconMap = {
+      'سيجنال': '🦷',
+      'كلوس اب': '💎',
+      'تريزيمي': '✨',
+      'ريكسونا': '🌿',
+      'دوف': '🕊️',
+      'كلير': '❄️',
+      'لوكس': '🌸',
+      'اكس': '⚡',
+      'كاماي': '🧼',
+      'فازلين': '🧴',
+      'صنسيلك': '💆',
+      'لايفبوي': '🛡️',
+    };
+
+    brandCounts.forEach((brand, qty) {
+      final emoji = iconMap[brand] ?? '🏷️';
+      brandItems.add({
+        'name': brand,
+        'label': '$emoji $brand ($qty)',
+        'count': qty,
+      });
+    });
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Row(
+        children: brandItems.map((item) {
+          final isSelected = selectedBrand == item['name'];
+          return Padding(
+            padding: const EdgeInsetsDirectional.only(end: 6),
+            child: ChoiceChip(
+              label: Text(
+                item['label'] as String,
+                style: GoogleFonts.cairo(
+                  fontSize: 11.5,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color: isSelected ? colorScheme.onPrimary : colorScheme.onSurface,
+                ),
+              ),
+              selected: isSelected,
+              selectedColor: colorScheme.primary,
+              backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+              showCheckmark: false,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+              onSelected: (_) => onSelectBrand(item['name'] as String),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   Future<void> _showProductSelectorDialog() async {
     final colorScheme = Theme.of(context).colorScheme;
     if (_companyProducts.isEmpty) {
@@ -697,17 +911,19 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
     final selectedSet = Set<String>.from(_selectedProductNames);
     String searchQuery = '';
+    String selectedBrand = '';
+    final brandCounts = _extractBrandCountsFromProducts(_companyProducts);
 
     await showDialog(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            final filteredProducts = _companyProducts.where((p) {
-              if (searchQuery.trim().isEmpty) return true;
-              final q = searchQuery.toLowerCase();
-              return p.productName.toLowerCase().contains(q) || p.barcode.toLowerCase().contains(q);
-            }).toList();
+            final filteredProducts = _filterCompanyProducts(
+              products: _companyProducts,
+              searchQuery: searchQuery,
+              selectedBrand: selectedBrand,
+            );
 
             final allFilteredSelected = filteredProducts.isNotEmpty &&
                 filteredProducts.every((p) => selectedSet.contains(p.productName));
@@ -753,8 +969,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                 ],
               ),
               content: SizedBox(
-                width: 600,
-                height: 480,
+                width: 650,
+                height: 520,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -762,8 +978,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     TextFormField(
                       style: GoogleFonts.cairo(fontSize: 14),
                       decoration: InputDecoration(
-                        hintText: 'ابحث باسم المنتج أو الباركود...',
-                        hintStyle: GoogleFonts.cairo(fontSize: 13),
+                        hintText: 'ابحث باسم المنتج أو الماركة (سيجنال، كلوس اب) أو الباركود...',
+                        hintStyle: GoogleFonts.cairo(fontSize: 12.5),
                         prefixIcon: const Icon(Icons.search_rounded, size: 20),
                         suffixIcon: searchQuery.isNotEmpty
                             ? IconButton(
@@ -785,7 +1001,19 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         setDialogState(() => searchQuery = val);
                       },
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 8),
+                    if (brandCounts.isNotEmpty) ...[
+                      _buildBrandFilterChipsWidget(
+                        context: context,
+                        brandCounts: brandCounts,
+                        totalCount: _companyProducts.length,
+                        selectedBrand: selectedBrand,
+                        onSelectBrand: (brand) {
+                          setDialogState(() => selectedBrand = brand);
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                    ],
                     Row(
                       children: [
                         Container(
@@ -822,7 +1050,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                           ),
                           label: Text(
                             allFilteredSelected ? 'إلغاء تحديد المعروض' : 'تحديد المعروض (${filteredProducts.length})',
-                            style: GoogleFonts.cairo(fontSize: 12),
+                            style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
                           ),
                           onPressed: () {
                             setDialogState(() {
@@ -863,9 +1091,16 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     Expanded(
                       child: filteredProducts.isEmpty
                           ? Center(
-                              child: Text(
-                                'لا توجد منتجات مطابقة للبحث.',
-                                style: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.search_off_rounded, size: 40, color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'لا توجد منتجات مطابقة للبحث في قاعدة البيانات.',
+                                    style: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant),
+                                  ),
+                                ],
                               ),
                             )
                           : ListView.separated(
@@ -899,6 +1134,10 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                                 color: colorScheme.onSurfaceVariant,
                                               ),
                                             ),
+                                            if (item.unitSize.isNotEmpty) ...[
+                                              const SizedBox(width: 8),
+                                              Text(item.unitSize, style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant)),
+                                            ],
                                           ],
                                         )
                                       : null,
@@ -1466,16 +1705,599 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       );
       setState(() => _promotionalRules.add(newRule));
       _syncPromptFromRules(showSnackbar: false);
+    } else if (presetKey == 'oral_bundle_100') {
+      final decomposed = CampaignAiAssistantService.decomposeVoucherAmount(25.0, _companyGifts);
+      final oralProducts = _companyProducts.where((p) {
+        final n = p.productName.toLowerCase();
+        return n.contains('سيجنال') || n.contains('كلوس') || n.contains('signal') || n.contains('close');
+      }).toList();
+      final newRule = PromotionalRuleItem(
+        id: 'rule_${_promotionalRules.length + 1}',
+        ruleTitle: 'حزمة العناية بالفم 1 (Signal + Closeup معاً بقيمة 100 ج.م) -> فواتشر 25 ج.م',
+        triggerProduct: 'معجون أسنان سيجنال، معجون أسنان كلوس اب، Signal Toothpaste, Closeup Toothpaste',
+        conditionType: 'combo_spend',
+        minSpend: 100.0,
+        matchMode: 'AND',
+        requiredBrands: ['سيجنال', 'كلوس اب'],
+        selectedProductIds: oralProducts.map((p) => p.id).toList(),
+        selectedBarcodes: oralProducts.map((p) => p.barcode).where((b) => b.isNotEmpty).toList(),
+        selectedProductNames: oralProducts.map((p) => p.productName).toList(),
+        rewardType: 'voucher',
+        rewardValue: 'قسيمة مشتريات بقيمة 25 ج.م',
+        rewardAmount: 25.0,
+        allowMultipliers: true,
+        linkedGifts: decomposed,
+        linkedGiftId: decomposed.firstOrNull?.giftId,
+        linkedGiftName: decomposed.firstOrNull?.giftName,
+      );
+      setState(() => _promotionalRules.add(newRule));
+      _syncPromptFromRules(showSnackbar: false);
+    } else if (presetKey == 'oral_bundle_150') {
+      final decomposed = CampaignAiAssistantService.decomposeVoucherAmount(50.0, _companyGifts);
+      final oralProducts = _companyProducts.where((p) {
+        final n = p.productName.toLowerCase();
+        return n.contains('سيجنال') || n.contains('كلوس') || n.contains('signal') || n.contains('close');
+      }).toList();
+      final newRule = PromotionalRuleItem(
+        id: 'rule_${_promotionalRules.length + 1}',
+        ruleTitle: 'حزمة العناية بالفم 2 (Signal + Closeup معاً بقيمة 150 ج.م) -> فواتشر 50 ج.م',
+        triggerProduct: 'معجون أسنان سيجنال، معجون أسنان كلوس اب، Signal Toothpaste, Closeup Toothpaste',
+        conditionType: 'combo_spend',
+        minSpend: 150.0,
+        matchMode: 'AND',
+        requiredBrands: ['سيجنال', 'كلوس اب'],
+        selectedProductIds: oralProducts.map((p) => p.id).toList(),
+        selectedBarcodes: oralProducts.map((p) => p.barcode).where((b) => b.isNotEmpty).toList(),
+        selectedProductNames: oralProducts.map((p) => p.productName).toList(),
+        rewardType: 'voucher',
+        rewardValue: 'قسيمة مشتريات بقيمة 50 ج.م',
+        rewardAmount: 50.0,
+        allowMultipliers: true,
+        linkedGifts: decomposed,
+        linkedGiftId: decomposed.firstOrNull?.giftId,
+        linkedGiftName: decomposed.firstOrNull?.giftName,
+      );
+      setState(() => _promotionalRules.add(newRule));
+      _syncPromptFromRules(showSnackbar: false);
+    } else if (presetKey == 'oral_bundle_200') {
+      final decomposed = CampaignAiAssistantService.decomposeVoucherAmount(75.0, _companyGifts);
+      final oralProducts = _companyProducts.where((p) {
+        final n = p.productName.toLowerCase();
+        return n.contains('سيجنال') || n.contains('كلوس') || n.contains('signal') || n.contains('close');
+      }).toList();
+      final newRule = PromotionalRuleItem(
+        id: 'rule_${_promotionalRules.length + 1}',
+        ruleTitle: 'حزمة العناية بالفم 3 (Signal أو Closeup بقيمة 200 ج.م) -> فواتشر 75 ج.م',
+        triggerProduct: 'معجون أسنان سيجنال، معجون أسنان كلوس اب، Signal Toothpaste, Closeup Toothpaste',
+        conditionType: 'by_spend',
+        minSpend: 200.0,
+        matchMode: 'OR',
+        requiredBrands: ['سيجنال', 'كلوس اب'],
+        selectedProductIds: oralProducts.map((p) => p.id).toList(),
+        selectedBarcodes: oralProducts.map((p) => p.barcode).where((b) => b.isNotEmpty).toList(),
+        selectedProductNames: oralProducts.map((p) => p.productName).toList(),
+        rewardType: 'voucher',
+        rewardValue: 'قسيمة مشتريات بقيمة 75 ج.م',
+        rewardAmount: 75.0,
+        allowMultipliers: true,
+        linkedGifts: decomposed,
+        linkedGiftId: decomposed.firstOrNull?.giftId,
+        linkedGiftName: decomposed.firstOrNull?.giftName,
+      );
+      setState(() => _promotionalRules.add(newRule));
+      _syncPromptFromRules(showSnackbar: false);
     }
+  }
+
+  Future<void> _showCatalogProductPickerDialog({
+    required BuildContext context,
+    required List<String> initialSelectedIds,
+    required Function(List<CompanyProductItem> selectedItems) onConfirm,
+  }) async {
+    final strings = AppStrings.of(ref);
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final Set<String> selectedIds = Set<String>.from(initialSelectedIds);
+    String searchQuery = '';
+    String selectedBrand = '';
+    final brandCounts = _extractBrandCountsFromProducts(_companyProducts);
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            final filteredProducts = _filterCompanyProducts(
+              products: _companyProducts,
+              searchQuery: searchQuery,
+              selectedBrand: selectedBrand,
+            );
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.inventory_2_rounded, color: colorScheme.primary, size: 22),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          strings.chooseProductsFromCatalogTitle,
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    onChanged: (val) => setDialogState(() => searchQuery = val),
+                    decoration: InputDecoration(
+                      hintText: 'ابحث باسم المنتج أو الماركة (سيجنال، كلوس اب) أو الباركود...',
+                      hintStyle: GoogleFonts.cairo(fontSize: 12.5),
+                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                      isDense: true,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (brandCounts.isNotEmpty) ...[
+                    _buildBrandFilterChipsWidget(
+                      context: context,
+                      brandCounts: brandCounts,
+                      totalCount: _companyProducts.length,
+                      selectedBrand: selectedBrand,
+                      onSelectBrand: (brand) {
+                        setDialogState(() => selectedBrand = brand);
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  Row(
+                    children: [
+                      TextButton.icon(
+                        style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+                        icon: const Icon(Icons.select_all_rounded, size: 16),
+                        label: Text(
+                          'تحديد المعروض (${filteredProducts.length})',
+                          style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          setDialogState(() {
+                            for (final p in filteredProducts) {
+                              selectedIds.add(p.id);
+                            }
+                          });
+                        },
+                      ),
+                      const SizedBox(width: 12),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+                        icon: const Icon(Icons.deselect_rounded, size: 16),
+                        label: Text(strings.deselectAll, style: GoogleFonts.cairo(fontSize: 12)),
+                        onPressed: () {
+                          setDialogState(() {
+                            for (final p in filteredProducts) {
+                              selectedIds.remove(p.id);
+                            }
+                          });
+                        },
+                      ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '${selectedIds.length} صنف محدد',
+                          style: GoogleFonts.cairo(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 600,
+                height: 420,
+                child: filteredProducts.isEmpty
+                    ? Center(
+                        child: Text(
+                          _companyProducts.isEmpty
+                              ? 'لم يتم تحميل أي أصناف لكتالوج الشركة الحالي.'
+                              : 'لا توجد منتجات مطابقة لكلمة البحث.',
+                          style: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant),
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: filteredProducts.length,
+                        separatorBuilder: (context, i) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final item = filteredProducts[index];
+                          final isChecked = selectedIds.contains(item.id);
+                          return CheckboxListTile(
+                            value: isChecked,
+                            dense: true,
+                            controlAffinity: ListTileControlAffinity.leading,
+                            title: Text(
+                              item.productName,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: isChecked ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                            subtitle: Wrap(
+                              spacing: 6,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                if (item.barcode.isNotEmpty)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: colorScheme.surfaceContainerHighest,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      '🏷️ ${item.barcode}',
+                                      style: const TextStyle(fontFamily: 'monospace', fontSize: 10.5),
+                                    ),
+                                  ),
+                                if (item.unitSize.isNotEmpty)
+                                  Text(item.unitSize, style: const TextStyle(fontSize: 11)),
+                                if (item.referencePrice != null && item.referencePrice! > 0)
+                                  Text('${item.referencePrice} ج.م', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.teal)),
+                              ],
+                            ),
+                            onChanged: (val) {
+                              setDialogState(() {
+                                if (val == true) {
+                                  selectedIds.add(item.id);
+                                } else {
+                                  selectedIds.remove(item.id);
+                                }
+                              });
+                            },
+                          );
+                        },
+                      ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: Text(strings.cancel),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final selectedItems = _companyProducts.where((p) => selectedIds.contains(p.id)).toList();
+                    onConfirm(selectedItems);
+                    Navigator.pop(dialogCtx);
+                  },
+                  child: Text('تأكيد الاختيار (${selectedIds.length})'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _showSelectedProductsViewerDialog(PromotionalRuleItem rule) async {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    // Resolve products from company catalog
+    List<CompanyProductItem> matchedProducts = [];
+    if (rule.selectedProductIds.isNotEmpty) {
+      final idSet = rule.selectedProductIds.toSet();
+      matchedProducts = _companyProducts.where((p) => idSet.contains(p.id)).toList();
+    }
+    if (matchedProducts.isEmpty && rule.selectedBarcodes.isNotEmpty) {
+      final barcodeSet = rule.selectedBarcodes.toSet();
+      matchedProducts = _companyProducts.where((p) => barcodeSet.contains(p.barcode)).toList();
+    }
+    if (matchedProducts.isEmpty && rule.selectedProductNames.isNotEmpty) {
+      final nameSet = rule.selectedProductNames.toSet();
+      matchedProducts = _companyProducts.where((p) => nameSet.contains(p.productName)).toList();
+    }
+
+    final List<Map<String, String>> displayItems = [];
+    if (matchedProducts.isNotEmpty) {
+      for (final p in matchedProducts) {
+        displayItems.add({
+          'name': p.productName,
+          'barcode': p.barcode,
+          'unit': p.unitSize,
+          'price': p.referencePrice != null && p.referencePrice! > 0 ? '${p.referencePrice} ج.م' : '',
+        });
+      }
+    } else {
+      for (int i = 0; i < rule.selectedProductNames.length; i++) {
+        final name = rule.selectedProductNames[i];
+        final barcode = i < rule.selectedBarcodes.length ? rule.selectedBarcodes[i] : '';
+        displayItems.add({
+          'name': name,
+          'barcode': barcode,
+          'unit': '',
+          'price': '',
+        });
+      }
+    }
+
+    // Extract brand clusters from matched items
+    final Map<String, int> brandBreakdown = {};
+    for (final it in displayItems) {
+      final norm = _normalizeCatalogSearchText(it['name'] ?? '');
+      if (norm.contains('سيجنال') || (it['name'] ?? '').contains('سجنال')) {
+        brandBreakdown['سيجنال'] = (brandBreakdown['سيجنال'] ?? 0) + 1;
+      }
+      if (norm.contains('كلوس اب') || (it['name'] ?? '').contains('كلوس')) {
+        brandBreakdown['كلوس اب'] = (brandBreakdown['كلوس اب'] ?? 0) + 1;
+      }
+      if (norm.contains('تريزيمي') || (it['name'] ?? '').contains('تريزم')) {
+        brandBreakdown['تريزيمي'] = (brandBreakdown['تريزيمي'] ?? 0) + 1;
+      }
+      if (norm.contains('ريكسونا') || (it['name'] ?? '').contains('ركسونا')) {
+        brandBreakdown['ريكسونا'] = (brandBreakdown['ريكسونا'] ?? 0) + 1;
+      }
+      if (norm.contains('دوف')) {
+        brandBreakdown['دوف'] = (brandBreakdown['دوف'] ?? 0) + 1;
+      }
+      if (norm.contains('كلير')) {
+        brandBreakdown['كلير'] = (brandBreakdown['كلير'] ?? 0) + 1;
+      }
+      if (norm.contains('لوكس')) {
+        brandBreakdown['لوكس'] = (brandBreakdown['لوكس'] ?? 0) + 1;
+      }
+      if (norm.contains('اكس')) {
+        brandBreakdown['اكس'] = (brandBreakdown['اكس'] ?? 0) + 1;
+      }
+    }
+
+    String localSearch = '';
+    String localBrand = '';
+
+    await showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final filtered = displayItems.where((item) {
+              final name = item['name'] ?? '';
+              final barcode = item['barcode'] ?? '';
+              final norm = _normalizeCatalogSearchText(name);
+
+              if (localBrand.isNotEmpty) {
+                if (localBrand == 'سيجنال' && !norm.contains('سيجنال') && !name.contains('سجنال')) return false;
+                if (localBrand == 'كلوس اب' && !norm.contains('كلوس اب') && !name.contains('كلوس')) return false;
+                if (localBrand == 'تريزيمي' && !norm.contains('تريزيمي') && !name.contains('تريزم')) return false;
+                if (localBrand == 'ريكسونا' && !norm.contains('ريكسونا') && !name.contains('ركسونا')) return false;
+                if (localBrand == 'دوف' && !norm.contains('دوف')) return false;
+                if (localBrand == 'كلير' && !norm.contains('كلير')) return false;
+                if (localBrand == 'لوكس' && !norm.contains('لوكس')) return false;
+                if (localBrand == 'اكس' && !norm.contains('اكس')) return false;
+              }
+
+              if (localSearch.trim().isEmpty) return true;
+              final q = localSearch.trim().toLowerCase();
+              return norm.contains(_normalizeCatalogSearchText(q)) ||
+                  name.toLowerCase().contains(q) ||
+                  barcode.contains(q);
+            }).toList();
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+              actionsPadding: const EdgeInsets.all(16),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.format_list_bulleted_rounded, color: colorScheme.primary, size: 22),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'الأصناف والباركودات المربوطة بالشرط',
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                        Text(
+                          rule.ruleTitle,
+                          style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.teal.shade50,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.teal.shade300),
+                    ),
+                    child: Text(
+                      '${displayItems.length} صنف',
+                      style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.teal.shade900),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 650,
+                height: 500,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      style: GoogleFonts.cairo(fontSize: 13.5),
+                      decoration: InputDecoration(
+                        hintText: 'بحث سريع في أصناف هذا الشرط أو الباركود...',
+                        hintStyle: GoogleFonts.cairo(fontSize: 12.5),
+                        prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                        suffixIcon: localSearch.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 16),
+                                onPressed: () => setDialogState(() => localSearch = ''),
+                              )
+                            : null,
+                        isDense: true,
+                        filled: true,
+                        fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                      onChanged: (val) => setDialogState(() => localSearch = val),
+                    ),
+                    const SizedBox(height: 8),
+                    if (brandBreakdown.isNotEmpty) ...[
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        child: Row(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsetsDirectional.only(end: 6),
+                              child: ChoiceChip(
+                                label: Text('الكل (${displayItems.length})', style: GoogleFonts.cairo(fontSize: 11.5)),
+                                selected: localBrand.isEmpty,
+                                onSelected: (_) => setDialogState(() => localBrand = ''),
+                              ),
+                            ),
+                            ...brandBreakdown.entries.map((e) {
+                              return Padding(
+                                padding: const EdgeInsetsDirectional.only(end: 6),
+                                child: ChoiceChip(
+                                  label: Text('${e.key} (${e.value})', style: GoogleFonts.cairo(fontSize: 11.5)),
+                                  selected: localBrand == e.key,
+                                  onSelected: (_) => setDialogState(() => localBrand = e.key),
+                                ),
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    const Divider(height: 1),
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? Center(
+                              child: Text(
+                                'لا توجد أصناف مطابقة للبحث.',
+                                style: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant),
+                              ),
+                            )
+                          : ListView.separated(
+                              itemCount: filtered.length,
+                              separatorBuilder: (context, index) => const Divider(height: 1),
+                              itemBuilder: (context, idx) {
+                                final item = filtered[idx];
+                                return ListTile(
+                                  dense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  leading: CircleAvatar(
+                                    radius: 13,
+                                    backgroundColor: colorScheme.primaryContainer,
+                                    child: Text(
+                                      '${idx + 1}',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: colorScheme.onPrimaryContainer,
+                                      ),
+                                    ),
+                                  ),
+                                  title: Text(
+                                    item['name'] ?? '',
+                                    style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600),
+                                  ),
+                                  subtitle: Wrap(
+                                    spacing: 8,
+                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                    children: [
+                                      if ((item['barcode'] ?? '').isNotEmpty)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                          decoration: BoxDecoration(
+                                            color: colorScheme.surfaceContainerHighest,
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            '🏷️ ${item['barcode']}',
+                                            style: GoogleFonts.robotoMono(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      if ((item['unit'] ?? '').isNotEmpty)
+                                        Text(
+                                          item['unit']!,
+                                          style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                                        ),
+                                      if ((item['price'] ?? '').isNotEmpty)
+                                        Text(
+                                          item['price']!,
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.teal.shade800,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  style: FilledButton.styleFrom(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: Text('إغلاق', style: GoogleFonts.cairo()),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   List<RuleConflictIssue> _detectRuleConflicts() {
     final conflicts = <RuleConflictIssue>[];
     if (_promotionalRules.isEmpty) return conflicts;
 
-    // 1. Check title vs quantity mismatch (e.g. title says "شراء 1 قطعة" while minQuantity is 2)
+    // 1. Check title vs quantity mismatch (ONLY for by_quantity rules)
     for (int i = 0; i < _promotionalRules.length; i++) {
       final rule = _promotionalRules[i];
+      if (rule.conditionType != 'by_quantity') continue;
+
       final title = rule.ruleTitle.trim();
       final titleHas1 = RegExp(r'(شراء\s*1\s*قطعة|شراء\s*1\s*قطعه|1\s*قطعة|1\s*قطعه|قطعة\s*واحدة|قطعه\s*واحده)').hasMatch(title);
       final titleHas2 = RegExp(r'(شراء\s*2\s*قطعة|شراء\s*2\s*قطعه|2\s*قطعة|2\s*قطعه|قطعتين|قطعتان|2\s*قطع|2\s*ق|شرنك)').hasMatch(title);
@@ -1509,7 +2331,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       }
     }
 
-    // 2. Check duplicate / conflicting rules with identical trigger products and identical minQuantity
+    // 2. Check duplicate / conflicting rules with identical trigger products AND identical threshold (spend or quantity)
     for (int i = 0; i < _promotionalRules.length; i++) {
       for (int j = i + 1; j < _promotionalRules.length; j++) {
         final ruleA = _promotionalRules[i];
@@ -1521,19 +2343,46 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         final bool isSimilarProduct = (normA.isNotEmpty && normB.isNotEmpty) &&
             (normA == normB || (normA.length > 5 && normB.length > 5 && (normA.contains(normB) || normB.contains(normA))));
 
-        if (isSimilarProduct && ruleA.minQuantity == ruleB.minQuantity) {
-          conflicts.add(RuleConflictIssue(
-            title: 'تكرار متعارض بين القاعدة #${i + 1} والقاعدة #${j + 1}',
-            description: 'كلا القاعدتين تشترطان نفس الأصناف (${ruleA.triggerProduct}) بنفس الكمية (${ruleA.minQuantity}) ولكن بمكافأتين منفصلتين.',
-            conflictingRuleIndices: [i, j],
-            suggestedFixLabel: 'حذف القاعدة المكررة #${j + 1} 🗑️',
-            onResolve: () {
-              setState(() {
-                _promotionalRules.removeAt(j);
-              });
-              _syncPromptFromRules(showSnackbar: false);
-            },
-          ));
+        if (!isSimilarProduct) continue;
+
+        // Check if condition types match
+        final bool sameConditionType = ruleA.conditionType == ruleB.conditionType;
+        if (!sameConditionType) continue;
+
+        // Spend-based conditions (by_spend, combo_spend)
+        if (ruleA.conditionType == 'by_spend' || ruleA.conditionType == 'combo_spend') {
+          // If spend thresholds differ (e.g. 100 vs 150 vs 200), this is a tiered offer, NOT a conflict!
+          if ((ruleA.minSpend - ruleB.minSpend).abs() < 0.01 && ruleA.matchMode == ruleB.matchMode) {
+            conflicts.add(RuleConflictIssue(
+              title: 'تكرار متعارض بين القاعدة #${i + 1} والقاعدة #${j + 1}',
+              description: 'كلا القاعدتين تشترطان نفس الأصناف ونفس المبلغ (${ruleA.minSpend.toInt()} ج.م) ولكن بمكافأتين منفصلتين.',
+              conflictingRuleIndices: [i, j],
+              suggestedFixLabel: 'حذف القاعدة المكررة #${j + 1} 🗑️',
+              onResolve: () {
+                setState(() {
+                  _promotionalRules.removeAt(j);
+                });
+                _syncPromptFromRules(showSnackbar: false);
+              },
+            ));
+          }
+        } else {
+          // Quantity-based conditions (by_quantity)
+          // If minimum quantities differ (e.g. 1 piece vs 2 pieces), this is a tiered offer, NOT a conflict!
+          if (ruleA.minQuantity == ruleB.minQuantity) {
+            conflicts.add(RuleConflictIssue(
+              title: 'تكرار متعارض بين القاعدة #${i + 1} والقاعدة #${j + 1}',
+              description: 'كلا القاعدتين تشترطان نفس الأصناف (${ruleA.triggerProduct}) بنفس الكمية (${ruleA.minQuantity}) ولكن بمكافأتين منفصلتين.',
+              conflictingRuleIndices: [i, j],
+              suggestedFixLabel: 'حذف القاعدة المكررة #${j + 1} 🗑️',
+              onResolve: () {
+                setState(() {
+                  _promotionalRules.removeAt(j);
+                });
+                _syncPromptFromRules(showSnackbar: false);
+              },
+            ));
+          }
         }
       }
     }
@@ -1559,19 +2408,48 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     final titleController = TextEditingController(text: existingRule?.ruleTitle ?? '');
     final triggerController = TextEditingController(text: existingRule?.triggerProduct ?? '');
     final minQtyController = TextEditingController(text: (existingRule?.minQuantity ?? 1).toString());
+    final minSpendController = TextEditingController(
+      text: existingRule?.isSpendBased == true && existingRule!.minSpend > 0
+          ? existingRule.minSpend.toInt().toString()
+          : (existingRule?.minSpend ?? 100.0).toInt().toString(),
+    );
     final rewardValController = TextEditingController(text: existingRule?.rewardValue ?? '');
     final rewardAmtController = TextEditingController(text: (existingRule?.rewardAmount ?? 0.0).toString());
+    String conditionType = existingRule?.conditionType ?? 'by_quantity';
     String rewardType = existingRule?.rewardType ?? 'free_product';
     bool allowMultipliers = existingRule?.allowMultipliers ?? true;
+    List<String> selectedProductIds = List<String>.from(existingRule?.selectedProductIds ?? []);
+    List<String> selectedBarcodes = List<String>.from(existingRule?.selectedBarcodes ?? []);
+    List<String> selectedProductNames = List<String>.from(existingRule?.selectedProductNames ?? []);
+    List<String> requiredBrands = List<String>.from(existingRule?.requiredBrands ?? []);
+    String matchMode = existingRule?.matchMode ?? 'OR';
+
     CompanyGiftModel? selectedGift = existingRule?.linkedGiftId != null
         ? _companyGifts.where((g) => g.id == existingRule!.linkedGiftId).firstOrNull
         : null;
+    List<LinkedGiftAllocation> dialogLinkedGifts = List<LinkedGiftAllocation>.from(existingRule?.linkedGifts ?? []);
+    if (dialogLinkedGifts.isEmpty && selectedGift != null) {
+      dialogLinkedGifts.add(LinkedGiftAllocation(
+        giftId: selectedGift.id,
+        giftName: selectedGift.giftName,
+        quantity: 1,
+        unitValue: selectedGift.unitValue,
+        giftType: selectedGift.giftType,
+      ));
+    }
 
     showDialog(
       context: context,
       builder: (dialogCtx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
+            final double currentAllocatedTotal = dialogLinkedGifts.fold<double>(
+              0.0,
+              (runningTotal, item) => runningTotal + (item.unitValue * item.quantity),
+            );
+            final double targetVoucherAmt = double.tryParse(rewardAmtController.text.trim()) ?? 0.0;
+            final bool isVoucherMatch = rewardType != 'voucher' || (targetVoucherAmt > 0 && (currentAllocatedTotal - targetVoucherAmt).abs() < 0.01);
+
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               title: Row(
@@ -1589,44 +2467,283 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               ),
               content: SingleChildScrollView(
                 child: SizedBox(
-                  width: 480,
+                  width: 540,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Condition Type Selector
+                      Text(
+                        strings.conditionTypeLabel,
+                        style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 6),
+                      SegmentedButton<String>(
+                        segments: [
+                          ButtonSegment(
+                            value: 'by_quantity',
+                            label: Text(strings.byQuantityCondition, style: const TextStyle(fontSize: 11)),
+                            icon: const Icon(Icons.pin_rounded, size: 15),
+                          ),
+                          ButtonSegment(
+                            value: 'by_spend',
+                            label: Text(strings.bySpendCondition, style: const TextStyle(fontSize: 11)),
+                            icon: const Icon(Icons.attach_money_rounded, size: 15),
+                          ),
+                          ButtonSegment(
+                            value: 'combo_spend',
+                            label: Text(strings.comboSpendCondition, style: const TextStyle(fontSize: 11)),
+                            icon: const Icon(Icons.join_inner_rounded, size: 15),
+                          ),
+                        ],
+                        selected: {conditionType},
+                        onSelectionChanged: (set) {
+                          setDialogState(() {
+                            conditionType = set.first;
+                            if (conditionType == 'combo_spend') {
+                              matchMode = 'AND';
+                              if (requiredBrands.isEmpty) {
+                                requiredBrands = ['سيجنال', 'كلوس اب'];
+                              }
+                            } else {
+                              matchMode = 'OR';
+                            }
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+
                       TextFormField(
                         controller: titleController,
                         decoration: InputDecoration(
                           labelText: strings.ruleTitleLabel,
-                          hintText: 'مثال: عرض اسبراي ريكسونا أو أكس (قطعتين)',
+                          hintText: conditionType == 'combo_spend'
+                              ? 'مثال: حزمة سيجنال + كلوس اب بقيمة 100 ج.م -> فواتشر 25 ج.م'
+                              : 'مثال: عرض اسبراي ريكسونا أو أكس (قطعتين)',
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                           isDense: true,
                         ),
                       ),
                       const SizedBox(height: 12),
+
+                      // Product Catalog Picker Card
+                      if (_companyProducts.isNotEmpty) ...[
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: selectedProductIds.isNotEmpty
+                                ? Colors.teal.shade50
+                                : Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: selectedProductIds.isNotEmpty
+                                  ? Colors.teal.shade300
+                                  : Colors.grey.shade300,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.inventory_2_rounded,
+                                    size: 18,
+                                    color: selectedProductIds.isNotEmpty ? Colors.teal.shade800 : Colors.grey.shade700,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      selectedProductIds.isNotEmpty
+                                          ? 'تم ربط ${selectedProductIds.length} صنف و ${selectedBarcodes.length} باركود من الكتالوج'
+                                          : 'ربط الأصناف والباركودات من كتالوج الشركة مباشرة',
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: selectedProductIds.isNotEmpty ? Colors.teal.shade900 : Colors.grey.shade800,
+                                      ),
+                                    ),
+                                  ),
+                                  FilledButton.tonalIcon(
+                                    style: FilledButton.styleFrom(
+                                      visualDensity: VisualDensity.compact,
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    ),
+                                    icon: const Icon(Icons.playlist_add_check_rounded, size: 16),
+                                    label: Text(
+                                      selectedProductIds.isNotEmpty ? 'تعديل الأصناف' : strings.selectFromCatalogBtn,
+                                      style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
+                                    ),
+                                    onPressed: () {
+                                      _showCatalogProductPickerDialog(
+                                        context: context,
+                                        initialSelectedIds: selectedProductIds,
+                                        onConfirm: (items) {
+                                          setDialogState(() {
+                                            selectedProductIds = items.map((e) => e.id).toList();
+                                            selectedBarcodes = items.map((e) => e.barcode).where((b) => b.isNotEmpty).toList();
+                                            selectedProductNames = items.map((e) => e.productName).toList();
+                                            // Auto-detect brands
+                                            final Set<String> detectedBrands = {};
+                                            for (final item in items) {
+                                              final norm = _normalizeCatalogSearchText(item.productName);
+                                              if (norm.contains('سيجنال') || item.productName.contains('سجنال')) detectedBrands.add('سيجنال');
+                                              if (norm.contains('كلوس اب') || item.productName.contains('كلوس')) detectedBrands.add('كلوس اب');
+                                              if (norm.contains('تريزيمي') || item.productName.contains('تريزم')) detectedBrands.add('تريزيمي');
+                                              if (norm.contains('ريكسونا') || item.productName.contains('ركسونا')) detectedBrands.add('ريكسونا');
+                                              if (norm.contains('دوف')) detectedBrands.add('دوف');
+                                              if (norm.contains('كلير')) detectedBrands.add('كلير');
+                                              if (norm.contains('لوكس')) detectedBrands.add('لوكس');
+                                              if (norm.contains('اكس')) detectedBrands.add('أكس');
+                                              if (norm.contains('صنسيلك')) detectedBrands.add('صنسيلك');
+                                            }
+                                            if (detectedBrands.isNotEmpty) {
+                                              requiredBrands = detectedBrands.toList();
+                                            }
+
+                                            if (triggerController.text.isEmpty || triggerController.text.contains('مثال') || triggerController.text.length > 80 || triggerController.text.contains('،')) {
+                                              if (detectedBrands.isNotEmpty) {
+                                                triggerController.text = 'منتجات ${detectedBrands.join(' و ')} (${items.length} صنف)';
+                                              } else if (items.length > 3) {
+                                                triggerController.text = '${items.length} صنف محدد من الكتالوج';
+                                              } else {
+                                                triggerController.text = items.map((e) => e.productName).join('، ');
+                                              }
+                                            }
+                                          });
+                                        },
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                              if (selectedProductNames.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  children: [
+                                    ...requiredBrands.map((b) {
+                                      return Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: Colors.teal.shade100,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          '🏷️ $b',
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.teal.shade900,
+                                          ),
+                                        ),
+                                      );
+                                    }),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: Colors.teal.shade300),
+                                      ),
+                                      child: Text(
+                                        'إجمالي: ${selectedProductNames.length} صنف و ${selectedBarcodes.length} باركود',
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.teal.shade900,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
                       TextFormField(
                         controller: triggerController,
                         decoration: InputDecoration(
                           labelText: strings.triggerProductLabel,
-                          hintText: 'مثال: اسبراي ريكسونا، اسبراي أكس',
+                          hintText: 'مثال: معجون أسنان سيجنال، كلوس اب، اسبراي أكس',
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                           isDense: true,
                         ),
                       ),
                       const SizedBox(height: 12),
+
+                      if (conditionType == 'combo_spend') ...[
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.blue.shade200),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                strings.requiredBrandsLabel,
+                                style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.blue.shade900),
+                              ),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 6,
+                                children: ['سيجنال', 'كلوس اب', 'تريزيمي', 'ريكسونا', 'أكس', 'كلير'].map((b) {
+                                  final isSelected = requiredBrands.contains(b);
+                                  return FilterChip(
+                                    label: Text(b, style: TextStyle(fontSize: 11, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                                    selected: isSelected,
+                                    onSelected: (val) {
+                                      setDialogState(() {
+                                        if (val) {
+                                          requiredBrands.add(b);
+                                        } else {
+                                          requiredBrands.remove(b);
+                                        }
+                                      });
+                                    },
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
                       Row(
                         children: [
-                          Expanded(
-                            child: TextFormField(
-                              controller: minQtyController,
-                              keyboardType: TextInputType.number,
-                              decoration: InputDecoration(
-                                labelText: strings.minQuantityLabel,
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                                isDense: true,
+                          if (conditionType == 'by_quantity')
+                            Expanded(
+                              child: TextFormField(
+                                controller: minQtyController,
+                                keyboardType: TextInputType.number,
+                                decoration: InputDecoration(
+                                  labelText: strings.minQuantityLabel,
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                  isDense: true,
+                                ),
+                              ),
+                            )
+                          else
+                            Expanded(
+                              child: TextFormField(
+                                controller: minSpendController,
+                                keyboardType: TextInputType.number,
+                                decoration: InputDecoration(
+                                  labelText: strings.minSpendLabel,
+                                  hintText: '100',
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                  isDense: true,
+                                ),
                               ),
                             ),
-                          ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: DropdownButtonFormField<String>(
@@ -1637,13 +2754,18 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                 isDense: true,
                               ),
                               items: [
-                                DropdownMenuItem(value: 'free_product', child: Text(strings.freeProductRewardLabel)),
                                 DropdownMenuItem(value: 'voucher', child: Text(strings.voucherRewardLabel)),
+                                DropdownMenuItem(value: 'free_product', child: Text(strings.freeProductRewardLabel)),
                                 DropdownMenuItem(value: 'game_spin', child: Text(strings.gameSpinRewardLabel)),
                               ],
                               onChanged: (val) {
                                 if (val != null) {
-                                  setDialogState(() => rewardType = val);
+                                  setDialogState(() {
+                                    rewardType = val;
+                                    if (rewardType == 'voucher' && dialogLinkedGifts.isEmpty && targetVoucherAmt > 0) {
+                                      dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(targetVoucherAmt, _companyGifts);
+                                    }
+                                  });
                                 }
                               },
                             ),
@@ -1651,76 +2773,289 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      if (_companyGifts.isNotEmpty) ...[
-                        DropdownButtonFormField<CompanyGiftModel>(
-                          initialValue: selectedGift,
-                          isExpanded: true,
-                          decoration: InputDecoration(
-                            labelText: strings.chooseInventoryGiftLabel,
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                            isDense: true,
-                          ),
-                          items: _companyGifts.map((g) {
-                            final typeDesc = g.isVoucher ? 'فواتشر (${g.formattedUnitValue})' : 'هدية عينية';
-                            return DropdownMenuItem(
-                              value: g,
-                              child: Text(
-                                '${g.giftName} - $typeDesc',
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 13),
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: (gift) {
-                            if (gift != null) {
-                              setDialogState(() {
-                                selectedGift = gift;
-                                if (gift.isVoucher) {
-                                  rewardType = 'voucher';
-                                  rewardAmtController.text = gift.unitValue.toString();
-                                  if (rewardValController.text.isEmpty || rewardValController.text.contains('هدية')) {
-                                    rewardValController.text = 'قسيمة مشتريات بقيمة ${gift.formattedUnitValue}';
-                                  }
-                                } else {
-                                  rewardType = 'free_product';
-                                  rewardAmtController.text = '0.0';
-                                  if (rewardValController.text.isEmpty || rewardValController.text.contains('قسيمة')) {
-                                    rewardValController.text = '${gift.giftName} هدية';
-                                  }
-                                }
-                              });
-                            }
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                      ],
+
                       TextFormField(
                         controller: rewardValController,
                         decoration: InputDecoration(
                           labelText: 'نص الجائزة / المكافأة',
-                          hintText: 'مثال: فواتشر بقيمة 125 جنيه أو كلير 90 مل هدية',
+                          hintText: 'مثال: قسيمة مشتريات بقيمة 75 ج.م أو كلير 90 مل هدية',
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                           isDense: true,
                         ),
                       ),
+                      const SizedBox(height: 12),
+
                       if (rewardType == 'voucher') ...[
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: rewardAmtController,
+                                keyboardType: TextInputType.number,
+                                decoration: InputDecoration(
+                                  labelText: 'المبلغ الإجمالي للفاوتشر (ج.م)',
+                                  hintText: '75',
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                  isDense: true,
+                                ),
+                                onChanged: (val) {
+                                  final numVal = double.tryParse(val.trim()) ?? 0.0;
+                                  if (numVal > 0) {
+                                    setDialogState(() {
+                                      if (rewardValController.text.isEmpty || rewardValController.text.contains('قسيمة') || rewardValController.text.contains('فواتشر')) {
+                                        rewardValController.text = 'قسيمة مشتريات بقيمة ${numVal.toInt()} ج.م';
+                                      }
+                                      dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(numVal, _companyGifts);
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            FilledButton.tonalIcon(
+                              style: FilledButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              icon: const Icon(Icons.auto_awesome_rounded, size: 16),
+                              label: Text(
+                                'تفكيك تلقائي',
+                                style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
+                              ),
+                              onPressed: () {
+                                final numVal = double.tryParse(rewardAmtController.text.trim()) ?? 0.0;
+                                if (numVal > 0) {
+                                  setDialogState(() {
+                                    dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(numVal, _companyGifts);
+                                  });
+                                }
+                              },
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 12),
-                        TextFormField(
-                          controller: rewardAmtController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: 'المبلغ الإجمالي للفاوتشر (ج.م)',
-                            hintText: '125',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                            isDense: true,
+                      ],
+
+                      // Multi-Gift / Multi-Voucher Allocation Builder Inside Dialog
+                      if (_companyGifts.isNotEmpty) ...[
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: isVoucherMatch
+                                ? Colors.teal.shade50.withValues(alpha: 0.5)
+                                : Colors.amber.shade50.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: isVoucherMatch
+                                  ? Colors.teal.shade300
+                                  : Colors.amber.shade300,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.inventory_2_rounded,
+                                    size: 16,
+                                    color: isVoucherMatch ? Colors.teal.shade800 : Colors.amber.shade900,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      'الهدية / الكروت المربوطة من مخزون الشركة:',
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: isVoucherMatch ? Colors.teal.shade900 : Colors.amber.shade900,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+
+                              // Active allocations list
+                              if (dialogLinkedGifts.isNotEmpty) ...[
+                                ...dialogLinkedGifts.asMap().entries.map((entry) {
+                                  final gIndex = entry.key;
+                                  final alloc = entry.value;
+                                  final isVoucher = alloc.isVoucher;
+
+                                  return Container(
+                                    margin: const EdgeInsets.only(bottom: 6),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.grey.shade300),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
+                                          size: 16,
+                                          color: isVoucher ? Colors.amber.shade800 : Colors.teal.shade700,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                alloc.giftName,
+                                                style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              Text(
+                                                isVoucher
+                                                    ? 'فئة: ${alloc.unitValue.toInt()} ج.م × ${alloc.quantity} = ${(alloc.unitValue * alloc.quantity).toInt()} ج.م'
+                                                    : 'هدية عينية × ${alloc.quantity}',
+                                                style: GoogleFonts.cairo(fontSize: 10.5, color: Colors.grey.shade700),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.remove_circle_outline, size: 18),
+                                          visualDensity: VisualDensity.compact,
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                          onPressed: () {
+                                            setDialogState(() {
+                                              if (alloc.quantity > 1) {
+                                                dialogLinkedGifts[gIndex] = alloc.copyWith(quantity: alloc.quantity - 1);
+                                              } else {
+                                                dialogLinkedGifts.removeAt(gIndex);
+                                              }
+                                            });
+                                          },
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                                          child: Text(
+                                            '${alloc.quantity}',
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                          ),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.add_circle_outline, size: 18, color: Colors.teal),
+                                          visualDensity: VisualDensity.compact,
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                          onPressed: () {
+                                            setDialogState(() {
+                                              dialogLinkedGifts[gIndex] = alloc.copyWith(quantity: alloc.quantity + 1);
+                                            });
+                                          },
+                                        ),
+                                        const SizedBox(width: 6),
+                                        IconButton(
+                                          icon: const Icon(Icons.close_rounded, size: 16, color: Colors.red),
+                                          visualDensity: VisualDensity.compact,
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                          onPressed: () {
+                                            setDialogState(() {
+                                              dialogLinkedGifts.removeAt(gIndex);
+                                            });
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }),
+                                const SizedBox(height: 4),
+                              ],
+
+                              // Real-time Total Status Badge
+                              if (dialogLinkedGifts.isNotEmpty) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: isVoucherMatch
+                                        ? Colors.teal.shade100.withValues(alpha: 0.6)
+                                        : Colors.amber.shade100.withValues(alpha: 0.8),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        isVoucherMatch ? Icons.check_circle_rounded : Icons.info_outline_rounded,
+                                        size: 14,
+                                        color: isVoucherMatch ? Colors.teal.shade800 : Colors.amber.shade900,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        isVoucherMatch
+                                            ? 'إجمالي قيمة الكروت المربوطة: ${currentAllocatedTotal.toInt()} ج.م (مطابقة تامة ومكتملة ✓)'
+                                            : 'إجمالي الكروت: ${currentAllocatedTotal.toInt()} ج.م (المطلوب: ${targetVoucherAmt.toInt()} ج.م - فرق ${(targetVoucherAmt - currentAllocatedTotal).toInt()} ج.م ⚠️)',
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: isVoucherMatch ? Colors.teal.shade900 : Colors.amber.shade900,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                              ],
+
+                              // Add gift dropdown
+                              DropdownButtonFormField<CompanyGiftModel>(
+                                isExpanded: true,
+                                decoration: InputDecoration(
+                                  hintText: '+ إضافة هدية / كارت للمكافأة',
+                                  hintStyle: GoogleFonts.cairo(fontSize: 12),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  isDense: true,
+                                ),
+                                items: _companyGifts.map((g) {
+                                  final typeDesc = g.isVoucher ? 'فواتشر (${g.formattedUnitValue})' : 'هدية عينية';
+                                  return DropdownMenuItem(
+                                    value: g,
+                                    child: Text(
+                                      '${g.giftName} - $typeDesc',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.cairo(fontSize: 12),
+                                    ),
+                                  );
+                                }).toList(),
+                                onChanged: (gift) {
+                                  if (gift != null) {
+                                    setDialogState(() {
+                                      final existingIdx = dialogLinkedGifts.indexWhere((a) => a.giftId == gift.id);
+                                      if (existingIdx >= 0) {
+                                        dialogLinkedGifts[existingIdx] = dialogLinkedGifts[existingIdx].copyWith(
+                                          quantity: dialogLinkedGifts[existingIdx].quantity + 1,
+                                        );
+                                      } else {
+                                        dialogLinkedGifts.add(LinkedGiftAllocation(
+                                          giftId: gift.id,
+                                          giftName: gift.giftName,
+                                          quantity: 1,
+                                          unitValue: gift.unitValue,
+                                          giftType: gift.giftType,
+                                        ));
+                                      }
+                                    });
+                                  }
+                                },
+                              ),
+                            ],
                           ),
                         ),
+                        const SizedBox(height: 12),
                       ],
-                      const SizedBox(height: 8),
+
                       SwitchListTile(
                         title: Text(
                           strings.multipliersAllowedLabel,
-                          style: const TextStyle(fontSize: 13),
+                          style: GoogleFonts.cairo(fontSize: 13),
                         ),
                         value: allowMultipliers,
                         contentPadding: EdgeInsets.zero,
@@ -1734,31 +3069,22 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(dialogCtx),
-                  child: Text(strings.cancel),
+                  child: Text(strings.cancel, style: GoogleFonts.cairo()),
                 ),
                 FilledButton(
                   onPressed: () {
                     final title = titleController.text.trim();
                     final trigger = triggerController.text.trim();
                     final minQty = int.tryParse(minQtyController.text.trim()) ?? 1;
+                    final minSpend = double.tryParse(minSpendController.text.trim()) ?? 0.0;
                     final rewardVal = rewardValController.text.trim();
                     final rewardAmt = double.tryParse(rewardAmtController.text.trim()) ?? 0.0;
 
-                    if (title.isEmpty || trigger.isEmpty) return;
+                    if (title.isEmpty) return;
 
-                    List<LinkedGiftAllocation> linkedGifts = [];
-                    if (rewardType == 'voucher' && rewardAmt > 0) {
-                      linkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(rewardAmt, _companyGifts);
-                    } else if (selectedGift != null) {
-                      linkedGifts = [
-                        LinkedGiftAllocation(
-                          giftId: selectedGift!.id,
-                          giftName: selectedGift!.giftName,
-                          quantity: 1,
-                          unitValue: selectedGift!.unitValue,
-                          giftType: selectedGift!.giftType,
-                        ),
-                      ];
+                    List<LinkedGiftAllocation> finalLinkedGifts = List<LinkedGiftAllocation>.from(dialogLinkedGifts);
+                    if (finalLinkedGifts.isEmpty && rewardType == 'voucher' && rewardAmt > 0) {
+                      finalLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(rewardAmt, _companyGifts);
                     }
 
                     final ruleId = existingRule?.id.isNotEmpty == true
@@ -1768,15 +3094,24 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     final updatedRule = PromotionalRuleItem(
                       id: ruleId,
                       ruleTitle: title,
-                      triggerProduct: trigger,
+                      triggerProduct: trigger.isNotEmpty ? trigger : title,
                       minQuantity: minQty,
+                      conditionType: conditionType,
+                      minSpend: minSpend,
+                      matchMode: matchMode,
+                      requiredBrands: requiredBrands,
+                      selectedProductIds: selectedProductIds,
+                      selectedBarcodes: selectedBarcodes,
+                      selectedProductNames: selectedProductNames,
                       rewardType: rewardType,
                       rewardValue: rewardVal.isNotEmpty ? rewardVal : title,
                       rewardAmount: rewardAmt,
                       allowMultipliers: allowMultipliers,
-                      linkedGiftId: linkedGifts.isNotEmpty ? linkedGifts.first.giftId : selectedGift?.id,
-                      linkedGiftName: linkedGifts.isNotEmpty ? linkedGifts.first.giftName : selectedGift?.giftName,
-                      linkedGifts: linkedGifts,
+                      linkedGiftId: finalLinkedGifts.isNotEmpty ? finalLinkedGifts.first.giftId : selectedGift?.id,
+                      linkedGiftName: finalLinkedGifts.isNotEmpty
+                          ? finalLinkedGifts.map((d) => d.quantity > 1 ? '${d.quantity}x ${d.giftName}' : d.giftName).join(' + ')
+                          : selectedGift?.giftName,
+                      linkedGifts: finalLinkedGifts,
                     );
 
                     setState(() {
@@ -4206,6 +5541,18 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       ),
                       items: const [
                         DropdownMenuItem(
+                          value: 'oral_bundle_100',
+                          child: Text('🦷 حزمة العناية بالفم 1: سيجنال + كلوس اب معاً ≥ 100 ج.م -> فواتشر 25 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'oral_bundle_150',
+                          child: Text('🦷 حزمة العناية بالفم 2: سيجنال + كلوس اب معاً ≥ 150 ج.م -> فواتشر 50 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'oral_bundle_200',
+                          child: Text('🦷 حزمة العناية بالفم 3: سيجنال أو كلوس اب ≥ 200 ج.م -> فواتشر 75 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                        ),
+                        DropdownMenuItem(
                           value: 'tresemme_single',
                           child: Text('🧴 شراء 1 تريزيمي 400 مل -> هدية تريزيمي 250 مل', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
                         ),
@@ -4558,6 +5905,32 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       }
     }
 
+    final int linkedItemsCount = rule.selectedProductIds.isNotEmpty
+        ? rule.selectedProductIds.length
+        : (rule.selectedBarcodes.isNotEmpty ? rule.selectedBarcodes.length : rule.selectedProductNames.length);
+
+    String triggerDisplay;
+    if (rule.requiredBrands.isNotEmpty) {
+      triggerDisplay = 'منتجات ${rule.requiredBrands.join(rule.isCombo ? ' و ' : ' أو ')}';
+    } else if (rule.triggerProduct.isNotEmpty && rule.triggerProduct.length <= 80 && !rule.triggerProduct.contains('،')) {
+      triggerDisplay = rule.triggerProduct;
+    } else if (linkedItemsCount > 0) {
+      triggerDisplay = '$linkedItemsCount صنف محدد من الكتالوج';
+    } else {
+      triggerDisplay = rule.triggerProduct.length > 80
+          ? '${rule.triggerProduct.substring(0, 77)}...'
+          : rule.triggerProduct;
+    }
+
+    String conditionSummary;
+    if (rule.isCombo) {
+      conditionSummary = '• الشرط: شراء بقيمة ${rule.minSpend.toInt()} ج.م من ($triggerDisplay) معاً ➔ المكافأة: [${rule.rewardValue}]';
+    } else if (rule.isSpendBased) {
+      conditionSummary = '• الشرط: شراء بقيمة ${rule.minSpend.toInt()} ج.م من ($triggerDisplay) ➔ المكافأة: [${rule.rewardValue}]';
+    } else {
+      conditionSummary = '• الشرط: شراء ${rule.minQuantity} ق من ($triggerDisplay) ➔ المكافأة: [${rule.rewardValue}]';
+    }
+
     return Container(
       decoration: BoxDecoration(
         color: colorScheme.surface,
@@ -4591,13 +5964,16 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   children: [
                     Text(
                       rule.ruleTitle,
-                      style: const TextStyle(
+                      style: GoogleFonts.cairo(
                         fontWeight: FontWeight.bold,
                         fontSize: 13.5,
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Row(
+                    Wrap(
+                      spacing: 5,
+                      runSpacing: 3,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
@@ -4614,7 +5990,54 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 6),
+                        if (rule.isCombo)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: Colors.purple.shade100,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'حزمة كومبو (${rule.requiredBrands.join(' + ')})',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.purple.shade900,
+                              ),
+                            ),
+                          )
+                        else if (rule.isSpendBased)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade100,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'شرط إنفاق (${rule.minSpend.toInt()} ج.م)',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue.shade900,
+                              ),
+                            ),
+                          ),
+                        if (rule.selectedBarcodes.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: Colors.teal.shade100,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '🏷️ ${rule.selectedBarcodes.length} باركود',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.teal.shade900,
+                              ),
+                            ),
+                          ),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                           decoration: BoxDecoration(
@@ -4675,21 +6098,76 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            '• الشرط: شراء ${rule.minQuantity} من [${rule.triggerProduct}] ➔ المكافأة: [${rule.rewardValue}]',
-            style: TextStyle(
-              fontSize: 12,
-              color: colorScheme.onSurfaceVariant,
+            conditionSummary,
+            style: GoogleFonts.cairo(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurface,
             ),
           ),
+          if (linkedItemsCount > 0) ...[
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: () => _showSelectedProductsViewerDialog(rule),
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.teal.shade50.withValues(alpha: 0.85),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.teal.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.format_list_bulleted_rounded, size: 16, color: Colors.teal.shade800),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'قائمة الأصناف والباركودات المربوطة بهذا الشرط ($linkedItemsCount صنف) — انقر للاستعراض والبحث',
+                        style: GoogleFonts.cairo(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal.shade900,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.shade700,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'عرض القائمة',
+                            style: GoogleFonts.cairo(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.open_in_new_rounded, size: 12, color: Colors.white),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
           if (rule.allowMultipliers) ...[
-            const SizedBox(height: 3),
+            const SizedBox(height: 6),
             Row(
               children: [
                 Icon(Icons.all_inclusive_rounded, size: 14, color: Colors.blue.shade700),
                 const SizedBox(width: 4),
                 Text(
                   strings.multipliersAllowedLabel,
-                  style: TextStyle(
+                  style: GoogleFonts.cairo(
                     fontSize: 11,
                     color: Colors.blue.shade700,
                     fontWeight: FontWeight.w600,

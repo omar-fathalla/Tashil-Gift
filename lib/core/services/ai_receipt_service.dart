@@ -1382,25 +1382,60 @@ class PromotionalRuleMatcher {
       if (match != null) return match;
     }
 
-    // 4. Smart NLP token and quantity-tiered match on extractedProducts
+    // 4. Smart NLP token, spend-based, and quantity-tiered match on extractedProducts
     if (effectiveProducts.isNotEmpty) {
       final matchingRulesWithScores = <PromotionalRuleItem, int>{};
 
       for (final rule in promotionalRules) {
-        int totalMatchedQty = 0;
-        int matchedItemCount = 0;
-
-        for (final p in effectiveProducts) {
-          if (_matchesProduct(p, rule.triggerProduct)) {
-            totalMatchedQty += getEffectiveProductQuantity(p);
-            matchedItemCount++;
+        if (rule.isSpendBased) {
+          // Check combo requirement if applicable
+          if (rule.isCombo && rule.requiredBrands.isNotEmpty) {
+            final Set<String> foundBrands = {};
+            for (final p in effectiveProducts) {
+              final pNorm = _normalize(p.name);
+              for (final rb in rule.requiredBrands) {
+                final rbNorm = _normalize(rb);
+                if (pNorm.contains(rbNorm)) {
+                  foundBrands.add(rb);
+                }
+              }
+            }
+            if (!rule.requiredBrands.every((rb) => foundBrands.contains(rb))) {
+              continue;
+            }
           }
-        }
 
-        if (matchedItemCount > 0 && totalMatchedQty >= rule.minQuantity) {
-          // Weight minQuantity heavily so 2-pcs tier beats 1-pc tier
-          final score = (rule.minQuantity * 100) + matchedItemCount;
-          matchingRulesWithScores[rule] = score;
+          double totalSpend = 0.0;
+          int matchedItemCount = 0;
+          for (final p in effectiveProducts) {
+            if (_matchesProduct(p, rule.triggerProduct, rule)) {
+              final price = p.price > 0 ? p.price : (p.originalPrice ?? 0.0);
+              totalSpend += price * getEffectiveProductQuantity(p);
+              matchedItemCount++;
+            }
+          }
+
+          if (matchedItemCount > 0 && rule.minSpend > 0 && totalSpend >= rule.minSpend) {
+            // Weight minSpend heavily so higher spend tier beats lower spend tier
+            final score = (rule.minSpend.toInt() * 100) + matchedItemCount;
+            matchingRulesWithScores[rule] = score;
+          }
+        } else {
+          int totalMatchedQty = 0;
+          int matchedItemCount = 0;
+
+          for (final p in effectiveProducts) {
+            if (_matchesProduct(p, rule.triggerProduct, rule)) {
+              totalMatchedQty += getEffectiveProductQuantity(p);
+              matchedItemCount++;
+            }
+          }
+
+          if (matchedItemCount > 0 && totalMatchedQty >= rule.minQuantity) {
+            // Weight minQuantity heavily so 2-pcs tier beats 1-pc tier
+            final score = (rule.minQuantity * 100) + matchedItemCount;
+            matchingRulesWithScores[rule] = score;
+          }
         }
       }
 
@@ -1440,27 +1475,40 @@ class PromotionalRuleMatcher {
         ? result.extractedProducts
         : extractedProducts;
 
-    // Calculate total quantity of trigger products purchased
+    // Calculate total quantity & spend of trigger products purchased
     int totalTriggerQty = 0;
+    double totalTriggerSpend = 0.0;
     if (effectiveProducts.isNotEmpty) {
       for (final p in effectiveProducts) {
-        if (_matchesProduct(p, matchedRule.triggerProduct)) {
-          totalTriggerQty += getEffectiveProductQuantity(p);
+        if (_matchesProduct(p, matchedRule.triggerProduct, matchedRule)) {
+          final qty = getEffectiveProductQuantity(p);
+          totalTriggerQty += qty;
+          final price = p.price > 0 ? p.price : (p.originalPrice ?? 0.0);
+          totalTriggerSpend += price * qty;
         }
       }
     }
 
-    // Determine multiplier strictly based on trigger product quantity
+    // Determine multiplier
     int multiplier = 1;
-    if (matchedRule.minQuantity > 0 && totalTriggerQty >= matchedRule.minQuantity) {
-      if (matchedRule.allowMultipliers || allowCampaignMultipliers) {
-        multiplier = totalTriggerQty ~/ matchedRule.minQuantity;
-        if (multiplier < 1) multiplier = 1;
-      } else {
-        multiplier = 1;
+    if (matchedRule.isSpendBased) {
+      if (matchedRule.minSpend > 0 && totalTriggerSpend >= matchedRule.minSpend) {
+        if (matchedRule.allowMultipliers || allowCampaignMultipliers) {
+          multiplier = totalTriggerSpend ~/ matchedRule.minSpend;
+          if (multiplier < 1) multiplier = 1;
+        } else {
+          multiplier = 1;
+        }
       }
     } else {
-      multiplier = 1;
+      if (matchedRule.minQuantity > 0 && totalTriggerQty >= matchedRule.minQuantity) {
+        if (matchedRule.allowMultipliers || allowCampaignMultipliers) {
+          multiplier = totalTriggerQty ~/ matchedRule.minQuantity;
+          if (multiplier < 1) multiplier = 1;
+        } else {
+          multiplier = 1;
+        }
+      }
     }
 
     final double baseAmount = matchedRule.totalVoucherValue > 0
@@ -1546,74 +1594,188 @@ class PromotionalRuleMatcher {
     }
 
     for (final group in rulesByProductGroup.values) {
-      // Sort rules within the family descending by minQuantity (highest tier first: e.g. 2 pcs before 1 pc)
-      final sortedGroup = List<PromotionalRuleItem>.from(group)
-        ..sort((a, b) => b.minQuantity.compareTo(a.minQuantity));
+      final isSpendGroup = group.any((r) => r.isSpendBased);
 
-      for (final rule in sortedGroup) {
-        // Calculate available unconsumed quantity specifically matching this rule
-        final matchingProductIndices = <int>[];
-        int availableQtyForRule = 0;
-        for (int i = 0; i < effectiveProducts.length; i++) {
-          final p = effectiveProducts[i];
-          final remaining = remainingItemQuantities[i] ?? 0;
-          if (remaining > 0 && _matchesProduct(p, rule.triggerProduct)) {
-            availableQtyForRule += remaining;
-            matchingProductIndices.add(i);
+      if (isSpendGroup) {
+        // Sort descending by minSpend (highest spend tier first: e.g. 200 EGP before 150 EGP before 100 EGP)
+        final sortedGroup = List<PromotionalRuleItem>.from(group)
+          ..sort((a, b) => b.minSpend.compareTo(a.minSpend));
+
+        for (final rule in sortedGroup) {
+          // Check combo brand requirement (e.g. Signal AND Closeup together)
+          if (rule.isCombo && rule.requiredBrands.isNotEmpty) {
+            final Set<String> foundBrands = {};
+            for (int i = 0; i < effectiveProducts.length; i++) {
+              final p = effectiveProducts[i];
+              final rem = remainingItemQuantities[i] ?? 0;
+              if (rem > 0) {
+                final pNorm = _normalize(p.name);
+                for (final rb in rule.requiredBrands) {
+                  final rbNorm = _normalize(rb);
+                  final isBarcodeMatch = p.barcode.isNotEmpty && rule.selectedBarcodes.contains(p.barcode.trim());
+                  if (pNorm.contains(rbNorm) || isBarcodeMatch) {
+                    // If matched by barcode or name contains brand root, register brand
+                    if (pNorm.contains(rbNorm) || _getBrandRootsInText(pNorm).contains(rbNorm)) {
+                      foundBrands.add(rb);
+                    } else if (isBarcodeMatch) {
+                      // Look up in rule's selectedProductNames for corresponding catalog brand
+                      bool matchedCatalogBrand = false;
+                      for (final sel in rule.selectedProductNames) {
+                        if (_normalize(sel).contains(rbNorm)) {
+                          foundBrands.add(rb);
+                          matchedCatalogBrand = true;
+                          break;
+                        }
+                      }
+                      if (!matchedCatalogBrand && (pNorm.contains('سيج') || pNorm.contains('كلوس') || rbNorm.length <= 4)) {
+                        foundBrands.add(rb);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            final hasAllRequiredBrands = rule.requiredBrands.every((rb) => foundBrands.contains(rb));
+            if (!hasAllRequiredBrands) {
+              continue;
+            }
+          }
+
+          // Gather matching product indices and calculate total eligible spend
+          final matchingProductIndices = <int>[];
+          double totalEligibleSpend = 0.0;
+          int totalMatchedQty = 0;
+
+          for (int i = 0; i < effectiveProducts.length; i++) {
+            final p = effectiveProducts[i];
+            final remaining = remainingItemQuantities[i] ?? 0;
+            if (remaining > 0 && _matchesProduct(p, rule.triggerProduct, rule)) {
+              final double itemPrice = p.price > 0 ? p.price : (p.originalPrice ?? 0.0);
+              totalEligibleSpend += itemPrice * remaining;
+              totalMatchedQty += remaining;
+              matchingProductIndices.add(i);
+            }
+          }
+
+          if (rule.minSpend > 0 && totalEligibleSpend >= rule.minSpend) {
+            int count = 1;
+            if (rule.allowMultipliers || allowCampaignMultipliers) {
+              count = totalEligibleSpend ~/ rule.minSpend;
+              if (count < 1) count = 1;
+            }
+
+            // Consume products for this spend tier
+            for (final idx in matchingProductIndices) {
+              remainingItemQuantities[idx] = 0;
+            }
+
+            final double baseAmount = rule.totalVoucherValue > 0
+                ? rule.totalVoucherValue
+                : (rule.rewardAmount > 0 ? rule.rewardAmount : 0.0);
+            final double totalAmount = baseAmount * count;
+
+            final multipliedLinkedGifts = rule.linkedGifts.map((g) {
+              return g.copyWith(quantity: g.quantity * count);
+            }).toList();
+
+            String prizeSummary;
+            if (count > 1) {
+              if (rule.rewardType == 'voucher' || baseAmount > 0) {
+                final totalInt = totalAmount == totalAmount.roundToDouble() ? totalAmount.toInt() : totalAmount;
+                prizeSummary = '$count × ${rule.rewardValue} (إجمالي $totalInt جنيه)';
+              } else {
+                prizeSummary = '$count × ${rule.rewardValue}';
+              }
+            } else {
+              prizeSummary = rule.rewardValue;
+            }
+
+            matchedRuleIds.add(rule.id);
+            allMatchedResults.add(
+              MatchedPromotionalRuleResult(
+                rule: rule,
+                multiplier: count,
+                totalTriggerQuantity: totalMatchedQty,
+                totalRewardAmount: totalAmount,
+                formattedPrizeSummary: prizeSummary,
+                multipliedLinkedGifts: multipliedLinkedGifts,
+              ),
+            );
+
+            // Winner tier resolved for this spend group
+            break;
           }
         }
+      } else {
+        // Quantity-based rules within the family (highest tier first: e.g. 2 pcs before 1 pc)
+        final sortedGroup = List<PromotionalRuleItem>.from(group)
+          ..sort((a, b) => b.minQuantity.compareTo(a.minQuantity));
 
-        if (rule.minQuantity > 0 && availableQtyForRule >= rule.minQuantity) {
-          int count = 1;
-          if (rule.allowMultipliers || allowCampaignMultipliers) {
-            count = availableQtyForRule ~/ rule.minQuantity;
-            if (count < 1) count = 1;
-          }
-
-          final int usedQty = count * rule.minQuantity;
-
-          // Deduct consumed quantity strictly from the matching product items for this rule
-          int qtyToDeduct = usedQty;
-          for (final idx in matchingProductIndices) {
-            if (qtyToDeduct <= 0) break;
-            final curr = remainingItemQuantities[idx] ?? 0;
-            final take = math.min(curr, qtyToDeduct);
-            remainingItemQuantities[idx] = curr - take;
-            qtyToDeduct -= take;
-          }
-
-          final double baseAmount = rule.totalVoucherValue > 0
-              ? rule.totalVoucherValue
-              : (rule.rewardAmount > 0 ? rule.rewardAmount : 0.0);
-          final double totalAmount = baseAmount * count;
-
-          final multipliedLinkedGifts = rule.linkedGifts.map((g) {
-            return g.copyWith(quantity: g.quantity * count);
-          }).toList();
-
-          String prizeSummary;
-          if (count > 1) {
-            if (rule.rewardType == 'voucher' || baseAmount > 0) {
-              final totalInt = totalAmount == totalAmount.roundToDouble() ? totalAmount.toInt() : totalAmount;
-              prizeSummary = '$count × ${rule.rewardValue} (إجمالي $totalInt جنيه)';
-            } else {
-              prizeSummary = '$count × ${rule.rewardValue}';
+        for (final rule in sortedGroup) {
+          // Calculate available unconsumed quantity specifically matching this rule
+          final matchingProductIndices = <int>[];
+          int availableQtyForRule = 0;
+          for (int i = 0; i < effectiveProducts.length; i++) {
+            final p = effectiveProducts[i];
+            final remaining = remainingItemQuantities[i] ?? 0;
+            if (remaining > 0 && _matchesProduct(p, rule.triggerProduct, rule)) {
+              availableQtyForRule += remaining;
+              matchingProductIndices.add(i);
             }
-          } else {
-            prizeSummary = rule.rewardValue;
           }
 
-          matchedRuleIds.add(rule.id);
-          allMatchedResults.add(
-            MatchedPromotionalRuleResult(
-              rule: rule,
-              multiplier: count,
-              totalTriggerQuantity: usedQty,
-              totalRewardAmount: totalAmount,
-              formattedPrizeSummary: prizeSummary,
-              multipliedLinkedGifts: multipliedLinkedGifts,
-            ),
-          );
+          if (rule.minQuantity > 0 && availableQtyForRule >= rule.minQuantity) {
+            int count = 1;
+            if (rule.allowMultipliers || allowCampaignMultipliers) {
+              count = availableQtyForRule ~/ rule.minQuantity;
+              if (count < 1) count = 1;
+            }
+
+            final int usedQty = count * rule.minQuantity;
+
+            // Deduct consumed quantity strictly from the matching product items for this rule
+            int qtyToDeduct = usedQty;
+            for (final idx in matchingProductIndices) {
+              if (qtyToDeduct <= 0) break;
+              final curr = remainingItemQuantities[idx] ?? 0;
+              final take = math.min(curr, qtyToDeduct);
+              remainingItemQuantities[idx] = curr - take;
+              qtyToDeduct -= take;
+            }
+
+            final double baseAmount = rule.totalVoucherValue > 0
+                ? rule.totalVoucherValue
+                : (rule.rewardAmount > 0 ? rule.rewardAmount : 0.0);
+            final double totalAmount = baseAmount * count;
+
+            final multipliedLinkedGifts = rule.linkedGifts.map((g) {
+              return g.copyWith(quantity: g.quantity * count);
+            }).toList();
+
+            String prizeSummary;
+            if (count > 1) {
+              if (rule.rewardType == 'voucher' || baseAmount > 0) {
+                final totalInt = totalAmount == totalAmount.roundToDouble() ? totalAmount.toInt() : totalAmount;
+                prizeSummary = '$count × ${rule.rewardValue} (إجمالي $totalInt جنيه)';
+              } else {
+                prizeSummary = '$count × ${rule.rewardValue}';
+              }
+            } else {
+              prizeSummary = rule.rewardValue;
+            }
+
+            matchedRuleIds.add(rule.id);
+            allMatchedResults.add(
+              MatchedPromotionalRuleResult(
+                rule: rule,
+                multiplier: count,
+                totalTriggerQuantity: usedQty,
+                totalRewardAmount: totalAmount,
+                formattedPrizeSummary: prizeSummary,
+                multipliedLinkedGifts: multipliedLinkedGifts,
+              ),
+            );
+          }
         }
       }
     }
@@ -1641,18 +1803,61 @@ class PromotionalRuleMatcher {
 
     final reasons = <String>[];
 
-    // Check if any product partially matched a rule but didn't reach minQuantity
+    // Check spend-based and combo rules
     for (final rule in promotionalRules) {
-      int count = 0;
-      for (final p in products) {
-        if (_matchesProduct(p, rule.triggerProduct)) {
-          count += getEffectiveProductQuantity(p);
+      if (rule.isSpendBased) {
+        if (rule.isCombo && rule.requiredBrands.isNotEmpty) {
+          final Set<String> foundBrands = {};
+          double currentSpend = 0.0;
+          for (final p in products) {
+            final pNorm = _normalize(p.name);
+            for (final rb in rule.requiredBrands) {
+              final rbNorm = _normalize(rb);
+              if (pNorm.contains(rbNorm)) {
+                foundBrands.add(rb);
+              }
+            }
+            if (_matchesProduct(p, rule.triggerProduct, rule)) {
+              currentSpend += (p.price > 0 ? p.price : (p.originalPrice ?? 0.0)) * getEffectiveProductQuantity(p);
+            }
+          }
+
+          final missingBrands = rule.requiredBrands.where((b) => !foundBrands.contains(b)).toList();
+          if (missingBrands.isNotEmpty) {
+            reasons.add(
+              '${rule.ruleTitle}: يشترط العرض شراء منتجات (${rule.requiredBrands.join(" و ")}) معاً في نفس الفاتورة. ينقص الفاتورة منتجات من (${missingBrands.join("، ")}).',
+            );
+          } else if (rule.minSpend > 0 && currentSpend < rule.minSpend) {
+            reasons.add(
+              '${rule.ruleTitle}: إجمالي مشتريات المنتجات المشروطة (${currentSpend.toInt()} ج.م) أقل من الحد الأدنى المطلوب للعرض (${rule.minSpend.toInt()} ج.م).',
+            );
+          }
+        } else {
+          double currentSpend = 0.0;
+          for (final p in products) {
+            if (_matchesProduct(p, rule.triggerProduct, rule)) {
+              currentSpend += (p.price > 0 ? p.price : (p.originalPrice ?? 0.0)) * getEffectiveProductQuantity(p);
+            }
+          }
+          if (currentSpend > 0 && rule.minSpend > 0 && currentSpend < rule.minSpend) {
+            reasons.add(
+              '${rule.ruleTitle}: إجمالي قيمة المشتريات المؤهلة (${currentSpend.toInt()} ج.م) أقل من الحد الأدنى للعرض (${rule.minSpend.toInt()} ج.م).',
+            );
+          }
         }
-      }
-      if (count > 0 && count < rule.minQuantity) {
-        reasons.add(
-          '${rule.ruleTitle}: تم رصد ($count) قطعة في الفاتورة، والحد الأدنى المطلوب للحصول على الهدية هو (${rule.minQuantity}) قطعة.',
-        );
+      } else {
+        // Quantity-based rule check
+        int count = 0;
+        for (final p in products) {
+          if (_matchesProduct(p, rule.triggerProduct, rule)) {
+            count += getEffectiveProductQuantity(p);
+          }
+        }
+        if (count > 0 && count < rule.minQuantity) {
+          reasons.add(
+            '${rule.ruleTitle}: تم رصد ($count) قطعة في الفاتورة، والحد الأدنى المطلوب للحصول على الهدية هو (${rule.minQuantity}) قطعة.',
+          );
+        }
       }
     }
 
@@ -1724,11 +1929,12 @@ class PromotionalRuleMatcher {
   static const Set<String> _noiseWords = {
     'شراء', 'عرض', 'من', 'قطعة', 'قطع', 'علبة', 'عبوة', 'عدد', 'مع', 'على', 'في', 'او', 'or', 'and',
     'مل', 'ml', 'جرام', 'جم', 'g', 'gm', 'كيلو', 'كجم', 'kg',
+    'اسنان', 'أسنان', 'سنان', 'معجون', 'فرشاة', 'عناية',
     'حريمي', 'حريمى', 'رجالي', 'رجال', 'نسائي', 'نسائى', 'بناتي', 'اطفال', 'أطفال', 'جديد', 'قديم', 'شكل'
   };
 
   static const Set<String> _brandRoots = {
-    'تريزيمي', 'ريكسونا', 'اكس', 'كلير', 'صنسيلك', 'دوف', 'لوكس', 'لايفبوي', 'سيجنال', 'فازلين'
+    'تريزيمي', 'ريكسونا', 'اكس', 'كلير', 'صنسيلك', 'دوف', 'لوكس', 'لايفبوي', 'سيجنال', 'فازلين', 'كلوس اب', 'كلوساب'
   };
 
   static int? _extractSizeMl(String text) {
@@ -1749,23 +1955,65 @@ class PromotionalRuleMatcher {
     return brands;
   }
 
-  static bool _matchesProduct(ExtractedProductItem product, String triggerProduct) {
-    if (triggerProduct.trim().isEmpty) return false;
+  static bool _matchesProduct(ExtractedProductItem product, String triggerProduct, [PromotionalRuleItem? rule]) {
+    if (triggerProduct.trim().isEmpty && (rule == null || (rule.selectedBarcodes.isEmpty && rule.selectedProductNames.isEmpty && rule.requiredBrands.isEmpty))) {
+      return false;
+    }
 
     // 0. Golden Barcode Priority Match:
-    // If the receipt item has a barcode, and the trigger product contains this barcode, match immediately!
+    // If the rule has selected barcodes from catalog, or trigger contains barcode, match immediately!
     final cleanBarcode = product.barcode.trim();
-    if (cleanBarcode.isNotEmpty && cleanBarcode.length >= 6 && triggerProduct.contains(cleanBarcode)) {
-      return true;
+    if (cleanBarcode.isNotEmpty) {
+      if (rule != null && rule.selectedBarcodes.isNotEmpty && rule.selectedBarcodes.contains(cleanBarcode)) {
+        return true;
+      }
+      if (cleanBarcode.length >= 6 && triggerProduct.contains(cleanBarcode)) {
+        return true;
+      }
+      if (_knownTwinBundleBarcodes.contains(cleanBarcode) && (_normalize(triggerProduct).contains('تريزيم') || _normalize(triggerProduct).contains('tresemme'))) {
+        return true;
+      }
     }
 
     final pNorm = _normalize(product.name);
     final triggerNorm = _normalize(triggerProduct);
 
+    // 0.05 Selected Product Names from catalog match:
+    if (rule != null && rule.selectedProductNames.isNotEmpty) {
+      for (final selName in rule.selectedProductNames) {
+        final selNorm = _normalize(selName);
+        if (pNorm == selNorm || pNorm.contains(selNorm) || selNorm.contains(pNorm)) {
+          return true;
+        }
+      }
+    }
+
+    // 0.08 Spend & Combo Brand Rule Match:
+    // If the rule has requiredBrands or is spend-based, match if product contains any required brand!
+    if (rule != null && (rule.isSpendBased || rule.isCombo) && rule.requiredBrands.isNotEmpty) {
+      final Set<String> productBrands = _getBrandRootsInText(pNorm);
+      final bool hasRuleBrand = rule.requiredBrands.any((rb) {
+        final rbNorm = _normalize(rb);
+        return productBrands.contains(rbNorm) || pNorm.contains(rbNorm);
+      });
+      if (hasRuleBrand) {
+        // Guard against category collision
+        final bool isProductToothpaste = pNorm.contains('معجون') || pNorm.contains('toothpaste') || pNorm.contains('تسوس') || pNorm.contains('سيجنال') || pNorm.contains('كلوس اب');
+        final bool isRuleToothpaste = rule.requiredBrands.any((rb) => rb.contains('سيجنال') || rb.contains('كلوس')) || triggerNorm.contains('معجون');
+        if (isRuleToothpaste && isProductToothpaste) return true;
+        if (!isRuleToothpaste) return true;
+      }
+    }
+
     // 0.1 Strict Brand Root Anchor Guard:
-    // If the trigger rule explicitly targets specific brands (e.g. Tresemme, Rexona, Axe, Clear),
-    // the product MUST contain at least one of those brand roots to prevent cross-brand false positives (e.g. Sherosa vs Tresemme).
+    // If the trigger rule explicitly targets specific brands (e.g. Tresemme, Rexona, Axe, Clear, Signal, Closeup),
+    // the product MUST contain at least one of those brand roots to prevent cross-brand false positives.
     final Set<String> triggerBrands = _getBrandRootsInText(triggerProduct);
+    if (rule != null && rule.requiredBrands.isNotEmpty) {
+      for (final rb in rule.requiredBrands) {
+        triggerBrands.addAll(_getBrandRootsInText(_normalize(rb)));
+      }
+    }
     if (triggerBrands.isNotEmpty) {
       final Set<String> productBrands = _getBrandRootsInText(pNorm);
       final bool hasMatchingBrand = triggerBrands.any((tb) => productBrands.contains(tb));
@@ -1779,12 +2027,12 @@ class PromotionalRuleMatcher {
     final bool isProductRollOn = pNorm.contains('رول اون') || pNorm.contains('رول') || pNorm.contains('روول') || pNorm.contains('ستيك') || pNorm.contains('roll on') || pNorm.contains('rollon') || pNorm.contains('stick');
     final bool isProductSpray = pNorm.contains('اسبراي') || pNorm.contains('بخاخ') || pNorm.contains('spray') || pNorm.contains('bodyspray') || (pNorm.contains('150 مل') && !isProductRollOn);
     final bool isProductShampoo = pNorm.contains('شامبو') || pNorm.contains('shampoo');
-    final bool isProductToothpaste = pNorm.contains('معجون') || pNorm.contains('toothpaste') || pNorm.contains('تسوس');
+    final bool isProductToothpaste = pNorm.contains('معجون') || pNorm.contains('toothpaste') || pNorm.contains('تسوس') || pNorm.contains('سيجنال') || pNorm.contains('كلوس اب');
 
     final bool isTriggerRollOn = triggerNorm.contains('رول') || triggerNorm.contains('roll') || triggerNorm.contains('ستيك');
     final bool isTriggerSpray = triggerNorm.contains('اسبراي') || triggerNorm.contains('بخاخ') || triggerNorm.contains('spray') || triggerNorm.contains('150 مل');
     final bool isTriggerShampoo = triggerNorm.contains('شامبو') || triggerNorm.contains('shampoo');
-    final bool isTriggerToothpaste = triggerNorm.contains('معجون') || triggerNorm.contains('toothpaste');
+    final bool isTriggerToothpaste = triggerNorm.contains('معجون') || triggerNorm.contains('toothpaste') || triggerNorm.contains('سيجنال') || triggerNorm.contains('كلوس اب');
 
     // Reject roll-on products matching pure spray rules:
     if (isProductRollOn && !isProductSpray && isTriggerSpray && !isTriggerRollOn) {
@@ -1943,6 +2191,7 @@ class PromotionalRuleMatcher {
     str = str.replaceAll(RegExp(r'\bclear\b'), 'كلير');
     str = str.replaceAll(RegExp(r'\bdove\b'), 'دوف');
     str = str.replaceAll(RegExp(r'سيجنال|سجنال|\bsignal\b'), 'سيجنال');
+    str = str.replaceAll(RegExp(r'كلوس\s*اب|كلوساب|close\s*up|closeup|close-up'), 'كلوس اب');
 
     // 150ml Aerosol Bodyspray Resolution: In retail FMCG, 150ml for Rexona/Axe is ALWAYS an aerosol spray
     // E.g. "ريكسونا 150 مل حريمي" -> "ريكسونا اسبراي 150 مل حريمي", "اكس 150 مل" -> "اكس اسبراي 150 مل"
@@ -1965,7 +2214,8 @@ class PromotionalRuleMatcher {
   static String normalize(String s) => _normalize(s);
 
   @visibleForTesting
-  static bool matchesProduct(ExtractedProductItem p, String trigger) => _matchesProduct(p, trigger);
+  static bool matchesProduct(ExtractedProductItem p, String trigger, [PromotionalRuleItem? rule]) =>
+      _matchesProduct(p, trigger, rule);
 
   static List<String> _extractTokens(String trigger) {
     final parts = trigger.split(RegExp(r'[,،/\+\n]|(\s+أو\s+)|(\s+or\s+)', caseSensitive: false));
@@ -1986,6 +2236,13 @@ class PromotionalRuleMatcher {
     final combined = '$titleNorm $triggerNorm';
 
     // Canonical FMCG product family grouping:
+    if (rule.isCombo || (rule.requiredBrands.contains('سيجنال') && rule.requiredBrands.contains('كلوس اب')) ||
+        (combined.contains('سيجنال') && combined.contains('كلوس'))) {
+      return 'oral_care_bundle_family';
+    }
+    if (combined.contains('كلوس اب') || combined.contains('closeup')) {
+      return 'closeup_family';
+    }
     // Check Roll-on first if explicitly mentioned in title or trigger
     if (titleNorm.contains('رول') || titleNorm.contains('roll') || titleNorm.contains('ستيك') ||
         (triggerNorm.contains('رول') && !triggerNorm.contains('اسبراي'))) {

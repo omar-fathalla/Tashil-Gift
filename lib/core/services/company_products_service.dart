@@ -476,7 +476,6 @@ class CompanyProductsService {
     final query = await _firestore
         .collection('company_products')
         .where('companySlug', isEqualTo: companySlug.toLowerCase())
-        .limit(1000)
         .get();
 
     return query.docs.map((doc) => CompanyProductItem.fromFirestore(doc)).toList();
@@ -490,7 +489,6 @@ class CompanyProductsService {
     final query = await _firestore
         .collection('company_products')
         .where('companySlug', isEqualTo: slug)
-        .limit(1000)
         .get();
 
     final docs = query.docs;

@@ -10,13 +10,13 @@ class AppVersionConfig {
   static const int minor = 0;
 
   /// Patch / Iteration version (Feature additions, enhancements, bugfixes)
-  static const int patch = 40;
+  static const int patch = 41;
 
   /// Global sequential build counter (Increments on every deployment)
-  static const int buildNumber = 95;
+  static const int buildNumber = 96;
 
   /// Release date of the current build
-  static const String releaseDate = '2026-08-29';
+  static const String releaseDate = '2026-09-02';
 
   /// Environment tag
   static const String environment = 'Production (Firebase)';

@@ -95,7 +95,20 @@ class CampaignAiAssistantService {
                   'triggerProduct': Schema.string(
                     description: 'Required product keywords or description (e.g. اسبراي ريكسونا، اسبراي أكس).',
                   ),
-                  'minQuantity': Schema.integer(description: 'Minimum quantity required to earn the reward.'),
+                  'minQuantity': Schema.integer(description: 'Minimum quantity required to earn the reward (if by_quantity).'),
+                  'conditionType': Schema.string(
+                    description: 'Condition type: "by_quantity" (piece count) or "by_spend" (monetary spend in EGP) or "combo_spend" (multiple brands bought together for a target spend).',
+                  ),
+                  'minSpend': Schema.number(
+                    description: 'Minimum spend amount in EGP (e.g. 100, 150, 200) if conditionType is by_spend or combo_spend, or 0.0 otherwise.',
+                  ),
+                  'matchMode': Schema.string(
+                    description: 'Match mode: "AND" for combo rules requiring multiple brands together, or "OR" otherwise.',
+                  ),
+                  'requiredBrands': Schema.array(
+                    description: 'List of brands required together (e.g. ["Signal", "Closeup"]).',
+                    items: Schema.string(),
+                  ),
                   'rewardType': Schema.string(
                     description: 'Type of reward: "voucher" (قسيمة مشتريات) or "free_product" (منتج مجاني) or "game_spin" (دورة لعبة).',
                   ),
@@ -106,7 +119,7 @@ class CampaignAiAssistantService {
                     description: 'Numeric monetary amount if reward is voucher (e.g. 50.0), or 0 otherwise.',
                   ),
                   'allowMultipliers': Schema.boolean(
-                    description: 'True if purchasing multiples of the required quantity grants multiple rewards.',
+                    description: 'True if purchasing multiples of the required quantity/spend grants multiple rewards.',
                   ),
                   'linkedGiftId': Schema.string(
                     description: 'The exact ID of the matched gift from the company master inventory list, or empty string if not matched.',
@@ -292,13 +305,20 @@ $rawIdeaText
       for (int i = 0; i < promotionalRules.length; i++) {
         final r = promotionalRules[i];
         final id = r.id.isNotEmpty ? r.id : 'rule_${i + 1}';
-        final multText = r.allowMultipliers ? ' (تتضاعف الجوائز بمضاعفة الكمية)' : '';
+        final multText = r.allowMultipliers ? ' (تتضاعف الجوائز بمضاعفة الاستهلاك/الإنفاق)' : '';
         final voucherVal = r.totalVoucherValue > 0
             ? ' [قيمة نقدية: ${r.totalVoucherValue.toInt()} ج.م]'
             : (r.rewardAmount > 0 ? ' [قيمة نقدية: ${r.rewardAmount.toInt()} ج.م]' : '');
         final giftBinding = r.linkedGiftsSummary.isNotEmpty ? ' ➔ تسليم كروت: (${r.linkedGiftsSummary})' : '';
         buffer.writeln('${i + 1}. [معرف ID: "$id"] عنوان: "${r.ruleTitle}"');
-        buffer.writeln('   - الشرط: شراء كمية (${r.minQuantity}) أو أكثر من أصناف [${r.triggerProduct}]');
+        if (r.isCombo) {
+          final brandsList = r.requiredBrands.isNotEmpty ? r.requiredBrands.join(' و ') : r.triggerProduct;
+          buffer.writeln('   - الشرط: شراء بقيمة إجمالية (${r.minSpend.toInt()} ج.م) أو أكثر تشمل منتجات من ($brandsList معاً) في نفس الفاتورة.');
+        } else if (r.isSpendBased) {
+          buffer.writeln('   - الشرط: شراء بقيمة إجمالية (${r.minSpend.toInt()} ج.م) أو أكثر من أصناف [${r.triggerProduct}]');
+        } else {
+          buffer.writeln('   - الشرط: شراء كمية (${r.minQuantity}) أو أكثر من أصناف [${r.triggerProduct}]');
+        }
         buffer.writeln('   - المكافأة المستحقة: [${r.rewardValue}$voucherVal] (نوع: ${r.rewardType})$giftBinding$multText');
       }
       buffer.writeln();
@@ -307,9 +327,11 @@ $rawIdeaText
       buffer.writeln('  * أصناف الرول أون (Roll-on بحجم 50 مل) تطابق حصراً قواعد الرول أون، ويُحظر تماماً مطابقتها مع قواعد الاسبراي (مثل عرض الـ 125 ج.م).');
       buffer.writeln('  * أصناف الاسبراي (Aerosol Spray بحجم 150 مل) تطابق حصراً قواعد الاسبراي، ويُحظر مطابقتها مع قواعد الرول أون.');
       buffer.writeln('  * عبوات تريزيمي 400 مل تطابق حصراً قاعدة تريزيمي، وعبوات كلير 360 مل تطابق حصراً قاعدة كلير.');
-      buffer.writeln('  * أي منتجات أخرى (مثل معجون الأسنان أو المنظفات) تُستبعد تماماً من الجوائز.');
-      buffer.writeln('- في حال وجود مستويات متعددة من الكميات لنفس الصنف، امنح العميل القاعدة ذات المستوى الأعلى المحقق من نفس الفئة (مثل: 2 قطعة اسبراي تفوز بقاعدة 125 ج.م وليس قاعدة قطعة واحدة).');
-      buffer.writeln('- ضع في حقل (matchedRuleId) معرف القاعدة الفائزة بدقة (مثل "rule_5" للرول أون).');
+      buffer.writeln('  * أصناف العناية بالفم (معجون أسنان سيجنال أو كلوس اب) تطابق حصراً قواعد حزم العناية بالفم (Oral Care Bundles).');
+      buffer.writeln('- [قاعدة الحزم المدمجة Combo Bundles]:');
+      buffer.writeln('  * إذا اشترطت الحزمة وجود علامتين معاً (مثل Signal و Closeup معاً)، يجب التأكد من وجود صنف واحد على الأقل من كل علامة، وبلوغ إجمالي مشترياتهما معاً الحد الأدنى للإنفاق (مثال: 100 ج.م أو 150 ج.م).');
+      buffer.writeln('  * في حال وجود مستويات متعددة من الإنفاق أو الكميات، امنح العميل القاعدة ذات المستوى الأعلى المحقق من نفس الفئة (مثل: 200 ج.م تفوز بقاعدة الـ 75 ج.م وليس 25 ج.م).');
+      buffer.writeln('- ضع في حقل (matchedRuleId) معرف القاعدة الفائزة بدقة (مثل "rule_1" أو "rule_3").');
       buffer.writeln('- ضع في حقل (matchedRewardValue) اسم الجائزة المستحقة بدقة.');
       buffer.writeln('- إذا لم تتحقق أي قاعدة خاصة، اترك (matchedRuleId) فارغاً.');
     }

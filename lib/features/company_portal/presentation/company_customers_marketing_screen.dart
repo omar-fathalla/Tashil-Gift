@@ -1,0 +1,2783 @@
+import 'dart:convert';
+import 'dart:math' as math;
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:excel/excel.dart' hide Border;
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart' as intl;
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../../core/localization/app_strings.dart';
+import '../../../core/localization/locale_provider.dart';
+import '../../../core/services/firebase_service.dart';
+import '../../../core/utils/arabic_numbers_utils.dart';
+import '../../../core/utils/file_download_helper.dart';
+import '../../../core/utils/slug_utils.dart';
+import '../../../core/widgets/switch_point_branding.dart';
+import '../../admin/domain/event_model.dart';
+import '../domain/whatsapp_gateway_config_model.dart';
+import '../domain/whatsapp_gateway_service.dart';
+import 'widgets/whatsapp_campaign_dispatcher_dialog.dart';
+import 'widgets/whatsapp_gateway_settings_dialog.dart';
+import 'widgets/whatsapp_live_outbox_view.dart';
+
+enum MarketingMainTab {
+  audience,
+  liveOutbox,
+}
+
+enum CustomerSegmentType {
+  all,
+  winners,
+  topSpenders,
+  repeatShoppers,
+}
+
+/// Standalone Dedicated Partner Customer Relationship CRM & WhatsApp Marketing Screen
+/// Provides customer intelligence, multi-select targeting, dynamic message templates,
+/// sequential WhatsApp dispatching, and contact exporting.
+class CompanyCustomersMarketingScreen extends ConsumerStatefulWidget {
+  final String? initialEventId;
+  final String? lockedCompanySlug;
+  final String? lockedCompanyName;
+  final bool isEmbedded;
+
+  const CompanyCustomersMarketingScreen({
+    super.key,
+    this.initialEventId,
+    this.lockedCompanySlug,
+    this.lockedCompanyName,
+    this.isEmbedded = false,
+  });
+
+  @override
+  ConsumerState<CompanyCustomersMarketingScreen> createState() => _CompanyCustomersMarketingScreenState();
+}
+
+class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustomersMarketingScreen> {
+  MarketingMainTab _activeMainTab = MarketingMainTab.audience;
+  String _selectedCompany = 'all';
+  String? _selectedEventId;
+  String? _selectedBranch;
+  CustomerSegmentType _selectedSegment = CustomerSegmentType.all;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  // Pagination state for ultra-fast rendering (Rule 9)
+  int _currentPage = 0;
+  int _rowsPerPage = 50;
+
+  // Selection state
+  final Set<String> _selectedContactIds = {};
+
+  // Marketing message template state
+  bool _isComposerExpanded = false;
+  late final TextEditingController _messageController;
+
+  // Memoization cache key and cached contact list (Rule 9: O(1) performance)
+  String _lastCacheKey = '';
+  List<CustomerCampaignContact> _cachedContacts = [];
+  double _cachedTotalSpend = 0;
+  int _cachedTotalPrizes = 0;
+  int _cachedRepeatCount = 0;
+
+  // Filter memoization cache
+  String _lastFilterCacheKey = '';
+  List<CustomerCampaignContact> _cachedFilteredContacts = [];
+
+  // WhatsApp Gateway Service & Config
+  final WhatsAppGatewayService _gatewayService = WhatsAppGatewayService();
+  WhatsAppGatewayConfigModel _gatewayConfig = const WhatsAppGatewayConfigModel();
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedEventId = widget.initialEventId;
+    _messageController = TextEditingController(
+      text: 'أهلاً بك {اسم_العميل}! يسر {الشركة} دعوتك لمهرجان وعروض {الحملة} في فرع {الفرع}. زُرنا اليوم واربح جوائز فورية وقسائم مشتريات قيمة!',
+    );
+    _loadGatewayConfig();
+  }
+
+  Future<void> _loadGatewayConfig() async {
+    final config = await _gatewayService.loadConfig(companySlug: widget.lockedCompanySlug);
+    if (mounted) {
+      setState(() {
+        _gatewayConfig = config;
+      });
+    }
+  }
+
+  void _openGatewaySettings(AppStrings strings, bool isAr) {
+    showDialog<WhatsAppGatewayConfigModel>(
+      context: context,
+      builder: (ctx) => WhatsAppGatewaySettingsDialog(
+        currentConfig: _gatewayConfig,
+        companySlug: widget.lockedCompanySlug,
+        strings: strings,
+        isAr: isAr,
+        onSaved: (updated) {
+          setState(() {
+            _gatewayConfig = updated;
+          });
+        },
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  /// Inserts a smart tag into the message composer
+  void _insertTag(String tag) {
+    final text = _messageController.text;
+    final selection = _messageController.selection;
+    if (selection.start >= 0) {
+      final newText = text.replaceRange(selection.start, selection.end, tag);
+      _messageController.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(offset: selection.start + tag.length),
+      );
+    } else {
+      _messageController.text = '$text $tag';
+    }
+    setState(() {});
+  }
+
+  /// Applies a preset message template
+  void _applyPresetTemplate(String template) {
+    setState(() {
+      _messageController.text = template;
+    });
+  }
+
+  /// Processes raw transaction documents into unified customer profiles
+  void _aggregateCustomers({
+    required List<QueryDocumentSnapshot> transactions,
+    required List<EventModel> events,
+    required String effectiveSlug,
+    required String companyName,
+  }) {
+    final cacheKey = '${transactions.length}_${events.length}_${_selectedCompany}_${_selectedEventId ?? 'all'}_${_selectedBranch ?? 'all'}';
+    if (_lastCacheKey == cacheKey) {
+      return;
+    }
+
+    final Map<String, CustomerCampaignContact> contactsMap = {};
+    int totalPrizes = 0;
+    double totalSpend = 0;
+
+    for (final doc in transactions) {
+      final data = doc.data() as Map<String, dynamic>? ?? {};
+
+      // Match company slug or target company
+      final docCompanySlug = (data['companySlug'] ?? '').toString();
+      final docTargetCompany = (data['targetCompany'] ?? '').toString();
+      if (effectiveSlug.isNotEmpty) {
+        final matchesSlug = docCompanySlug.toLowerCase() == effectiveSlug.toLowerCase() ||
+            SlugUtils.toSlug(docTargetCompany).toLowerCase() == effectiveSlug.toLowerCase() ||
+            docTargetCompany.trim().toLowerCase() == companyName.trim().toLowerCase();
+        if (!matchesSlug) continue;
+      }
+
+      // Match campaign if selected
+      final campaignId = (data['campaignId'] ?? '').toString();
+      if (_selectedEventId != null && _selectedEventId!.isNotEmpty && _selectedEventId != 'all') {
+        if (campaignId != _selectedEventId) continue;
+      }
+
+      // Customer raw info
+      final rawPhone = (data['customerPhone'] ?? data['customer_phone'] ?? data['phone'] ?? '').toString().trim();
+      if (rawPhone.isEmpty || rawPhone.length < 6) continue;
+
+      final cleanPhone = WhatsappCampaignDispatcherDialog.formatPhoneForWhatsApp(rawPhone);
+      final rawName = (data['customerName'] ?? data['customer_name'] ?? data['name'] ?? '').toString().trim();
+      final branch = (data['branch_detected'] ?? data['canonical_branch'] ?? data['branch'] ?? '').toString().trim();
+
+      // Filter branch if selected
+      if (_selectedBranch != null && _selectedBranch!.isNotEmpty && _selectedBranch != 'all') {
+        if (branch != _selectedBranch) continue;
+      }
+
+      // Spend and prizes
+      final spend = (data['target_company_total'] ?? data['total_value'] ?? 0);
+      final spendVal = spend is num ? spend.toDouble() : 0.0;
+      final prizeWon = (data['prize_won'] ?? data['prizeName'] ?? '').toString().trim();
+      final List<String> prizes = [];
+      if (prizeWon.isNotEmpty && prizeWon != 'null') {
+        prizes.add(prizeWon);
+        totalPrizes++;
+      }
+
+      // Linked gifts / vouchers
+      final linkedGifts = data['linkedGifts'] as List?;
+      if (linkedGifts != null) {
+        for (final lg in linkedGifts) {
+          if (lg is Map && lg['giftName'] != null) {
+            final gName = lg['giftName'].toString().trim();
+            if (gName.isNotEmpty && !prizes.contains(gName)) {
+              prizes.add(gName);
+              totalPrizes++;
+            }
+          }
+        }
+      }
+
+      // Date
+      DateTime? visitDate;
+      if (data['receipt_date'] is Timestamp) {
+        visitDate = (data['receipt_date'] as Timestamp).toDate();
+      } else if (data['timestamp'] is Timestamp) {
+        visitDate = (data['timestamp'] as Timestamp).toDate();
+      } else if (data['receipt_date'] is String) {
+        visitDate = DateTime.tryParse(data['receipt_date']);
+      }
+
+      if (!contactsMap.containsKey(cleanPhone)) {
+        contactsMap[cleanPhone] = CustomerCampaignContact(
+          id: cleanPhone,
+          name: rawName,
+          rawPhone: rawPhone,
+          cleanPhone: cleanPhone,
+          totalSpend: spendVal,
+          totalInvoices: 1,
+          prizesWon: prizes,
+          branches: branch.isNotEmpty ? [branch] : [],
+          lastBranch: branch,
+          lastVisitDate: visitDate,
+        );
+      } else {
+        final existing = contactsMap[cleanPhone]!;
+        final updatedSpend = existing.totalSpend + spendVal;
+        final updatedInvoices = existing.totalInvoices + 1;
+        final updatedBranches = List<String>.from(existing.branches);
+        if (branch.isNotEmpty && !updatedBranches.contains(branch)) {
+          updatedBranches.add(branch);
+        }
+        final updatedPrizes = List<String>.from(existing.prizesWon);
+        for (final p in prizes) {
+          if (!updatedPrizes.contains(p)) updatedPrizes.add(p);
+        }
+        final updatedName = existing.name.isEmpty && rawName.isNotEmpty ? rawName : existing.name;
+        final updatedDate = visitDate != null && (existing.lastVisitDate == null || visitDate.isAfter(existing.lastVisitDate!))
+            ? visitDate
+            : existing.lastVisitDate;
+
+        contactsMap[cleanPhone] = CustomerCampaignContact(
+          id: cleanPhone,
+          name: updatedName,
+          rawPhone: existing.rawPhone,
+          cleanPhone: cleanPhone,
+          totalSpend: updatedSpend,
+          totalInvoices: updatedInvoices,
+          prizesWon: updatedPrizes,
+          branches: updatedBranches,
+          lastBranch: branch.isNotEmpty ? branch : existing.lastBranch,
+          lastVisitDate: updatedDate,
+          status: existing.status,
+        );
+      }
+      totalSpend += spendVal;
+    }
+
+    final allContacts = contactsMap.values.toList();
+    allContacts.sort((a, b) {
+      // Sort by last visit or total invoices
+      if (a.lastVisitDate != null && b.lastVisitDate != null) {
+        return b.lastVisitDate!.compareTo(a.lastVisitDate!);
+      }
+      return b.totalInvoices.compareTo(a.totalInvoices);
+    });
+
+    _lastCacheKey = cacheKey;
+    _lastFilterCacheKey = ''; // Invalidate filter cache on new dataset
+    _cachedContacts = allContacts;
+    _cachedTotalSpend = totalSpend;
+    _cachedTotalPrizes = totalPrizes;
+    _cachedRepeatCount = allContacts.where((c) => c.isRepeat).length;
+  }
+
+  /// Filters contacts according to segment and live search query with O(1) memoization
+  List<CustomerCampaignContact> _getFilteredContacts() {
+    final filterKey = '${_cachedContacts.length}_${_selectedSegment.index}_${_searchQuery.trim()}';
+    if (_cachedFilteredContacts.isNotEmpty && _lastFilterCacheKey == filterKey) {
+      return _cachedFilteredContacts;
+    }
+
+    final result = _cachedContacts.where((contact) {
+      // Segment filter
+      switch (_selectedSegment) {
+        case CustomerSegmentType.all:
+          break;
+        case CustomerSegmentType.winners:
+          if (!contact.isWinner) return false;
+          break;
+        case CustomerSegmentType.topSpenders:
+          if (contact.totalSpend < 200 && contact.totalInvoices < 2) return false;
+          break;
+        case CustomerSegmentType.repeatShoppers:
+          if (!contact.isRepeat) return false;
+          break;
+      }
+
+      // Search query filter
+      if (_searchQuery.isNotEmpty) {
+        final query = _searchQuery.toLowerCase().trim();
+        final nameMatch = contact.name.toLowerCase().contains(query);
+        final phoneMatch = contact.rawPhone.toEnglishDigits().contains(query) || contact.cleanPhone.contains(query);
+        final branchMatch = contact.branches.any((b) => b.toLowerCase().contains(query));
+        if (!nameMatch && !phoneMatch && !branchMatch) return false;
+      }
+
+      return true;
+    }).toList();
+
+    _lastFilterCacheKey = filterKey;
+    _cachedFilteredContacts = result;
+    return result;
+  }
+
+  /// Triggers the interactive sequential WhatsApp sender modal
+  void _launchWhatsAppCampaign({
+    required List<CustomerCampaignContact> targetContacts,
+    required String companyName,
+    required String campaignName,
+    required AppStrings strings,
+    required bool isAr,
+  }) {
+    if (targetContacts.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(strings.noCustomersFound),
+          backgroundColor: Colors.orange.shade800,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => WhatsappCampaignDispatcherDialog(
+        contacts: targetContacts,
+        messageTemplate: _messageController.text,
+        companyName: companyName,
+        campaignName: campaignName,
+        companySlug: widget.lockedCompanySlug,
+        strings: strings,
+        isAr: isAr,
+      ),
+    );
+  }
+
+  /// Opens dialog to send a test WhatsApp message to any custom mobile number
+  void _showCustomNumberTestDialog({
+    required BuildContext context,
+    required ColorScheme cs,
+    required AppStrings strings,
+    required bool isAr,
+    required String companyName,
+    required String campaignName,
+  }) {
+    final phoneController = TextEditingController();
+    final nameController = TextEditingController(text: isAr ? 'عميل تجريبي' : 'Test Customer');
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final isMobile = MediaQuery.of(context).size.width < 600;
+            final testName = nameController.text.trim().isNotEmpty
+                ? nameController.text.trim()
+                : (isAr ? 'عزيزنا العميل' : 'Valued Customer');
+
+            // Build real-time preview
+            String previewText = _messageController.text;
+            previewText = previewText.replaceAll('{اسم_العميل}', testName);
+            previewText = previewText.replaceAll('{الاسم}', testName);
+            previewText = previewText.replaceAll('{customer_name}', testName);
+            previewText = previewText.replaceAll('{name}', testName);
+
+            final compName = companyName.trim().isNotEmpty ? companyName.trim() : (isAr ? 'الشركة' : 'Company');
+            previewText = previewText.replaceAll('{الشركة}', compName);
+            previewText = previewText.replaceAll('{company_name}', compName);
+            previewText = previewText.replaceAll('{company}', compName);
+
+            final campName = campaignName.trim().isNotEmpty ? campaignName.trim() : (isAr ? 'المهرجان الترويجي' : 'Promotional Campaign');
+            previewText = previewText.replaceAll('{الحملة}', campName);
+            previewText = previewText.replaceAll('{campaign_name}', campName);
+            previewText = previewText.replaceAll('{campaign}', campName);
+
+            final brName = (_selectedBranch != null && _selectedBranch != 'all')
+                ? _selectedBranch!
+                : (isAr ? 'الفرع الرئيسي' : 'Main Outlet');
+            previewText = previewText.replaceAll('{الفرع}', brName);
+            previewText = previewText.replaceAll('{branch_name}', brName);
+            previewText = previewText.replaceAll('{branch}', brName);
+
+            final rawInput = phoneController.text.trim().toEnglishDigits();
+            final formattedPhone = WhatsappCampaignDispatcherDialog.formatPhoneForWhatsApp(rawInput);
+            final isValidPhone = rawInput.replaceAll(RegExp(r'[^0-9]'), '').length >= 8;
+
+            return Dialog(
+              backgroundColor: cs.surface,
+              surfaceTintColor: Colors.transparent,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              insetPadding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 20, vertical: 20),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 580, maxHeight: 680),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Header
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 20, vertical: 14),
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Color(0xFF0F5132),
+                              Color(0xFF198754),
+                              Color(0xFF20C997),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(Icons.science_rounded, color: Colors.white, size: 22),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    strings.sendTestMessage,
+                                    style: GoogleFonts.cairo(
+                                      fontSize: isMobile ? 15 : 17,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    '$companyName • $campaignName',
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 11,
+                                      color: Colors.white.withValues(alpha: 0.9),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close_rounded, color: Colors.white),
+                              onPressed: () => Navigator.of(dialogCtx).pop(),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Body
+                      Flexible(
+                        child: SingleChildScrollView(
+                          padding: EdgeInsets.all(isMobile ? 14 : 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Notice banner
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF198754).withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: const Color(0xFF198754).withValues(alpha: 0.3)),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Icon(Icons.info_outline_rounded, size: 18, color: Color(0xFF198754)),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        strings.testMessageNotice,
+                                        style: GoogleFonts.cairo(fontSize: 12, height: 1.5, color: cs.onSurface),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Mobile number field
+                              Text(
+                                strings.customerPhoneField,
+                                style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 6),
+                              TextField(
+                                controller: phoneController,
+                                keyboardType: TextInputType.phone,
+                                autofocus: true,
+                                decoration: InputDecoration(
+                                  hintText: strings.testPhonePlaceholder,
+                                  hintStyle: GoogleFonts.cairo(fontSize: 12, color: cs.onSurfaceVariant.withValues(alpha: 0.7)),
+                                  prefixIcon: const Icon(Icons.phone_iphone_rounded, size: 20, color: Color(0xFF25D366)),
+                                  suffixIcon: rawInput.isNotEmpty
+                                      ? IconButton(
+                                          icon: const Icon(Icons.clear_rounded, size: 18),
+                                          onPressed: () {
+                                            phoneController.clear();
+                                            setDialogState(() {});
+                                          },
+                                        )
+                                      : null,
+                                  filled: true,
+                                  fillColor: cs.surfaceContainerLow,
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                                  helperText: formattedPhone.isNotEmpty ? 'WhatsApp ID: +$formattedPhone' : null,
+                                  helperStyle: GoogleFonts.robotoMono(fontSize: 11, color: const Color(0xFF198754)),
+                                ),
+                                style: GoogleFonts.robotoMono(fontSize: 14, fontWeight: FontWeight.w600),
+                                onChanged: (_) => setDialogState(() {}),
+                              ),
+                              const SizedBox(height: 14),
+
+                              // Customer Name field (optional)
+                              Text(
+                                strings.testCustomerNameOptional,
+                                style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 6),
+                              TextField(
+                                controller: nameController,
+                                decoration: InputDecoration(
+                                  hintText: isAr ? 'أدخل اسم للتجربة...' : 'Enter test name...',
+                                  hintStyle: GoogleFonts.cairo(fontSize: 12),
+                                  prefixIcon: const Icon(Icons.person_outline_rounded, size: 20),
+                                  filled: true,
+                                  fillColor: cs.surfaceContainerLow,
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                                ),
+                                style: GoogleFonts.cairo(fontSize: 13),
+                                onChanged: (_) => setDialogState(() {}),
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Preview
+                              Text(
+                                strings.liveMessagePreview,
+                                style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSurfaceVariant),
+                              ),
+                              const SizedBox(height: 6),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFDCF8C6).withValues(alpha: 0.35),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: const Color(0xFF25D366).withValues(alpha: 0.4)),
+                                ),
+                                child: SelectableText(
+                                  previewText,
+                                  style: GoogleFonts.cairo(fontSize: 13, height: 1.5, color: Colors.black87),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+
+                              // Launch WhatsApp Test Button
+                              SizedBox(
+                                height: 48,
+                                child: FilledButton.icon(
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: const Color(0xFF25D366),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                  ),
+                                  icon: const Icon(Icons.send_rounded, size: 18),
+                                  label: Text(
+                                    strings.sendTestWhatsApp,
+                                    style: GoogleFonts.cairo(fontSize: isMobile ? 13 : 14, fontWeight: FontWeight.bold),
+                                  ),
+                                  onPressed: isValidPhone
+                                      ? () async {
+                                          final messenger = ScaffoldMessenger.of(context);
+                                          final url = 'https://wa.me/$formattedPhone?text=${Uri.encodeComponent(previewText)}';
+                                          final uri = Uri.parse(url);
+                                          try {
+                                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                            if (dialogCtx.mounted) {
+                                              Navigator.of(dialogCtx).pop();
+                                            }
+                                            messenger.showSnackBar(
+                                              SnackBar(
+                                                content: Text(strings.testMessageSentSuccess),
+                                                backgroundColor: const Color(0xFF198754),
+                                                behavior: SnackBarBehavior.floating,
+                                              ),
+                                            );
+                                          } catch (e) {
+                                            messenger.showSnackBar(
+                                              SnackBar(
+                                                content: Text(strings.operationFailed(e.toString())),
+                                                backgroundColor: Colors.red.shade700,
+                                              ),
+                                            );
+                                          }
+                                        }
+                                      : null,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+
+                              // Secondary Action: Add to Current Audience List
+                              OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                ),
+                                icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+                                label: Text(
+                                  strings.addCustomRecipient,
+                                  style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                                onPressed: isValidPhone
+                                    ? () {
+                                        final customContact = CustomerCampaignContact(
+                                          id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
+                                          name: nameController.text.trim().isNotEmpty ? nameController.text.trim() : (isAr ? 'رقم مخصص' : 'Custom Recipient'),
+                                          rawPhone: rawInput,
+                                          cleanPhone: formattedPhone,
+                                          totalSpend: 0,
+                                          totalInvoices: 0,
+                                          prizesWon: [],
+                                          branches: brName.isNotEmpty ? [brName] : [],
+                                          lastBranch: brName,
+                                          lastVisitDate: DateTime.now(),
+                                        );
+
+                                        setState(() {
+                                          _cachedContacts.insert(0, customContact);
+                                          _selectedContactIds.add(customContact.id);
+                                        });
+
+                                        Navigator.of(dialogCtx).pop();
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(isAr ? 'تمت إضافة الرقم إلى قائمة المستلمين وتحديده' : 'Contact added and selected in audience queue'),
+                                            backgroundColor: const Color(0xFF198754),
+                                            behavior: SnackBarBehavior.floating,
+                                          ),
+                                        );
+                                      }
+                                    : null,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Exports filtered or selected customers to an Excel spreadsheet
+  Future<void> _exportToExcel(List<CustomerCampaignContact> contacts, String companyName, AppStrings strings) async {
+    if (contacts.isEmpty) return;
+
+    final excel = Excel.createExcel();
+    final sheet = excel['Sheet1'];
+
+    final headers = [
+      strings.customerNameField,
+      strings.customerPhoneField,
+      'WhatsApp Phone',
+      strings.totalReceiptsCountCol,
+      strings.totalSpendAmountCol,
+      strings.prizesWonCol,
+      strings.branchesCol,
+      strings.lastVisitCol,
+    ];
+
+    sheet.appendRow(headers.map((h) => TextCellValue(h)).toList());
+
+    for (final c in contacts) {
+      final dateStr = c.lastVisitDate != null ? intl.DateFormat('yyyy-MM-dd HH:mm').format(c.lastVisitDate!) : 'N/A';
+      sheet.appendRow([
+        TextCellValue(c.name.isNotEmpty ? c.name : 'N/A'),
+        TextCellValue(c.rawPhone),
+        TextCellValue('+${c.cleanPhone}'),
+        IntCellValue(c.totalInvoices),
+        DoubleCellValue(c.totalSpend),
+        TextCellValue(c.prizesWon.join(' | ')),
+        TextCellValue(c.branches.join(', ')),
+        TextCellValue(dateStr),
+      ]);
+    }
+
+    final fileBytes = excel.encode();
+    if (fileBytes != null) {
+      final now = DateTime.now();
+      final dateStr = '${now.year}_${now.month.toString().padLeft(2, '0')}_${now.day.toString().padLeft(2, '0')}';
+      final cleanComp = companyName.replaceAll(RegExp(r'[^\w\s\u0600-\u06FF]'), '').replaceAll(' ', '_');
+      final fileName = 'Tashil_Customers_${cleanComp}_$dateStr.xlsx';
+
+      downloadFileBytes(bytes: fileBytes, fileName: fileName);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Text('${strings.success}: $fileName'),
+              ],
+            ),
+            backgroundColor: const Color(0xFF198754),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Exports filtered customers to VCF contact cards for 1-click mobile phonebook import
+  void _exportToVcf(List<CustomerCampaignContact> contacts, String companyName, AppStrings strings) {
+    if (contacts.isEmpty) return;
+
+    final StringBuffer vcfBuffer = StringBuffer();
+    for (final c in contacts) {
+      final displayName = c.name.isNotEmpty ? c.name : 'عميل $companyName';
+      vcfBuffer.writeln('BEGIN:VCARD');
+      vcfBuffer.writeln('VERSION:3.0');
+      vcfBuffer.writeln('FN:$displayName ($companyName)');
+      vcfBuffer.writeln('TEL;TYPE=CELL,VOICE:+${c.cleanPhone}');
+      vcfBuffer.writeln('ORG:$companyName Customer');
+      if (c.branches.isNotEmpty) {
+        vcfBuffer.writeln('NOTE:Branch: ${c.branches.join(", ")} | Invoices: ${c.totalInvoices}');
+      }
+      vcfBuffer.writeln('END:VCARD');
+    }
+
+    final bytes = utf8.encode(vcfBuffer.toString());
+    final now = DateTime.now();
+    final dateStr = '${now.year}_${now.month.toString().padLeft(2, '0')}_${now.day.toString().padLeft(2, '0')}';
+    final cleanComp = companyName.replaceAll(RegExp(r'[^\w\s\u0600-\u06FF]'), '').replaceAll(' ', '_');
+    final fileName = 'Contacts_${cleanComp}_$dateStr.vcf';
+
+    downloadFileBytes(bytes: bytes, fileName: fileName);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.contact_phone_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              Text('${strings.success}: $fileName'),
+            ],
+          ),
+          backgroundColor: Colors.teal.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(ref);
+    final isAr = ref.watch(localeProvider).languageCode == 'ar';
+    final cs = Theme.of(context).colorScheme;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 768;
+    final firestore = ref.watch(firestoreProvider);
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: firestore.collection('events').snapshots(),
+      builder: (context, eventsSnapshot) {
+        final eventsDocs = eventsSnapshot.data?.docs ?? [];
+        final allEvents = eventsDocs
+            .map((d) {
+              try {
+                return EventModel.fromFirestore(d);
+              } catch (_) {
+                return null;
+              }
+            })
+            .whereType<EventModel>()
+            .toList();
+
+        // 1. Discover all distinct registered companies across campaigns
+        final Set<String> distinctCompaniesSet = {};
+        for (final e in allEvents) {
+          final comp = e.targetCompany.trim();
+          if (comp.isNotEmpty) {
+            distinctCompaniesSet.add(comp);
+          }
+        }
+        final distinctCompanies = distinctCompaniesSet.toList()..sort();
+
+        // 2. Resolve active company & events scoping
+        final isLockedCompany = widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty;
+        final String effectiveSlug;
+        final String effectiveCompanyName;
+        final List<EventModel> companyEvents;
+
+        if (isLockedCompany) {
+          effectiveSlug = widget.lockedCompanySlug!;
+          companyEvents = allEvents.where((e) {
+            return e.companySlug.toLowerCase() == effectiveSlug.toLowerCase() ||
+                SlugUtils.toSlug(e.targetCompany).toLowerCase() == effectiveSlug.toLowerCase();
+          }).toList();
+          effectiveCompanyName = widget.lockedCompanyName ??
+              (companyEvents.isNotEmpty ? companyEvents.first.targetCompany : effectiveSlug);
+        } else {
+          // Admin Mode: Driven by _selectedCompany dropdown
+          if (_selectedCompany != 'all' && distinctCompanies.contains(_selectedCompany)) {
+            effectiveCompanyName = _selectedCompany;
+            effectiveSlug = SlugUtils.toSlug(_selectedCompany);
+            companyEvents = allEvents.where((e) {
+              return e.targetCompany.trim().toLowerCase() == _selectedCompany.trim().toLowerCase() ||
+                  SlugUtils.toSlug(e.targetCompany).toLowerCase() == effectiveSlug.toLowerCase();
+            }).toList();
+          } else {
+            effectiveCompanyName = isAr ? 'كافة الشركات' : 'All Companies';
+            effectiveSlug = '';
+            companyEvents = allEvents;
+          }
+        }
+
+        // All canonical branches across resolved company events
+        final Set<String> allBranches = {};
+        for (final ev in companyEvents) {
+          allBranches.addAll(ev.branchNames);
+        }
+        final sortedBranches = allBranches.toList()..sort();
+
+        // Query transactions
+        Query transactionsQuery = firestore.collection('receipts_transactions');
+        if (effectiveSlug.isNotEmpty) {
+          transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: effectiveSlug);
+        }
+
+        return StreamBuilder<QuerySnapshot>(
+          stream: transactionsQuery.snapshots(),
+          builder: (context, transSnapshot) {
+            final transDocs = transSnapshot.data?.docs ?? [];
+
+            // Aggregate customers with memoization
+            _aggregateCustomers(
+              transactions: transDocs,
+              events: companyEvents,
+              effectiveSlug: effectiveSlug,
+              companyName: effectiveCompanyName,
+            );
+
+            final filteredContacts = _getFilteredContacts();
+            final activeCampaignName = _selectedEventId != null && _selectedEventId != 'all'
+                ? (companyEvents.where((e) => e.id == _selectedEventId).map((e) => e.eventName).firstOrNull ?? effectiveCompanyName)
+                : effectiveCompanyName;
+
+            return Directionality(
+              textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
+              child: Scaffold(
+                backgroundColor: cs.surface,
+                appBar: widget.isEmbedded
+                    ? null
+                    : SwitchPointHeader(
+                        subtitle: '$effectiveCompanyName • ${strings.customersMarketingNavTitle}',
+                      ),
+                body: CustomScrollView(
+                  slivers: [
+                    // 1. Header Banner & Title
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(isMobile ? 14 : 24, 20, isMobile ? 14 : 24, 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: EdgeInsets.all(isMobile ? 10 : 12),
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [Color(0xFF0F5132), Color(0xFF198754)],
+                                    ),
+                                    borderRadius: BorderRadius.circular(16),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFF198754).withValues(alpha: 0.3),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Icon(Icons.people_alt_rounded, color: Colors.white, size: isMobile ? 24 : 28),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        strings.customersMarketingTitle,
+                                        style: GoogleFonts.cairo(
+                                          fontSize: isMobile ? 16 : 22,
+                                          fontWeight: FontWeight.bold,
+                                          color: cs.onSurface,
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        strings.customersMarketingSubtitle,
+                                        style: GoogleFonts.cairo(
+                                          fontSize: isMobile ? 11 : 13,
+                                          color: cs.onSurfaceVariant,
+                                        ),
+                                        maxLines: isMobile ? 2 : 3,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+
+                            // Main View Switcher (Audience vs Live Outbox)
+                            SizedBox(
+                              width: double.infinity,
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: SegmentedButton<MarketingMainTab>(
+                                  style: SegmentedButton.styleFrom(
+                                    selectedBackgroundColor: cs.primaryContainer,
+                                    selectedForegroundColor: cs.onPrimaryContainer,
+                                  ),
+                                  segments: [
+                                    ButtonSegment<MarketingMainTab>(
+                                      value: MarketingMainTab.audience,
+                                      label: Text(
+                                        isAr ? 'دليل العملاء والحملات (${_cachedContacts.length})' : 'Customer Audience (${_cachedContacts.length})',
+                                        style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
+                                      ),
+                                      icon: const Icon(Icons.people_outline_rounded, size: 18),
+                                    ),
+                                    ButtonSegment<MarketingMainTab>(
+                                      value: MarketingMainTab.liveOutbox,
+                                      label: Text(
+                                        isAr ? 'سجل رسائل الواتساب وحالة التسليم الحية' : 'Live WhatsApp Outbox & Delivery Log',
+                                        style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
+                                      ),
+                                      icon: const Icon(Icons.outbox_rounded, size: 18),
+                                    ),
+                                  ],
+                                  selected: {_activeMainTab},
+                                  onSelectionChanged: (newSelection) {
+                                    setState(() {
+                                      _activeMainTab = newSelection.first;
+                                    });
+                                  },
+                                ),
+                              ),
+                            ),
+                            if (_activeMainTab == MarketingMainTab.audience) ...[
+                              const SizedBox(height: 18),
+
+                              // 2. Executive KPI Cards Row
+                              RepaintBoundary(
+                                child: _buildKpiMetricsGrid(cs, screenWidth, strings, isAr),
+                              ),
+                              const SizedBox(height: 18),
+
+                              // 3. Campaign & Branch Filter Selectors
+                              RepaintBoundary(
+                                child: _buildFiltersBar(
+                                  cs: cs,
+                                  isMobile: isMobile,
+                                  isLockedCompany: isLockedCompany,
+                                  distinctCompanies: distinctCompanies,
+                                  companyEvents: companyEvents,
+                                  sortedBranches: sortedBranches,
+                                  strings: strings,
+                                  isAr: isAr,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              // 4. Marketing Message Composer Studio (Expandable)
+                              RepaintBoundary(
+                                child: _buildMarketingStudioCard(
+                                  cs: cs,
+                                  isMobile: isMobile,
+                                  strings: strings,
+                                  isAr: isAr,
+                                  companyName: effectiveCompanyName,
+                                  campaignName: activeCampaignName,
+                                  filteredContacts: filteredContacts,
+                                ),
+                              ),
+                              const SizedBox(height: 18),
+
+                              // 5. Customer Segments Tabs & Search Bar & Bulk Actions Toolbar
+                              RepaintBoundary(
+                                child: _buildAudienceToolbar(
+                                  cs: cs,
+                                  isMobile: isMobile,
+                                  strings: strings,
+                                  isAr: isAr,
+                                  filteredContacts: filteredContacts,
+                                  companyName: effectiveCompanyName,
+                                  campaignName: activeCampaignName,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // Content View: Either Live Outbox Log OR Customer Data Table
+                    if (_activeMainTab == MarketingMainTab.liveOutbox)
+                      SliverToBoxAdapter(
+                        child: RepaintBoundary(
+                          child: WhatsAppLiveOutboxView(
+                            gatewayConfig: _gatewayConfig,
+                            companySlug: widget.lockedCompanySlug,
+                            strings: strings,
+                            isAr: isAr,
+                            onOpenSettings: () => _openGatewaySettings(strings, isAr),
+                          ),
+                        ),
+                      )
+                    else if (filteredContacts.isEmpty)
+                      SliverToBoxAdapter(
+                        child: Container(
+                          margin: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 24, vertical: 32),
+                          padding: const EdgeInsets.all(36),
+                          decoration: BoxDecoration(
+                            color: cs.surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                          ),
+                          child: Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.person_search_rounded, size: 54, color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
+                                const SizedBox(height: 12),
+                                Text(
+                                  strings.noCustomersFound,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      )
+                    else if (isMobile)
+                      _buildMobileCustomerCardsList(filteredContacts, cs, strings, isAr, effectiveCompanyName, activeCampaignName)
+                    else
+                      _buildDesktopCustomerTable(filteredContacts, cs, strings, isAr, effectiveCompanyName, activeCampaignName),
+
+                    const SliverToBoxAdapter(child: SizedBox(height: 48)),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Builds the 4 executive KPI summary cards with adaptive responsive layouts
+  Widget _buildKpiMetricsGrid(ColorScheme cs, double screenWidth, AppStrings strings, bool isAr) {
+    final cards = [
+      _KpiItem(
+        icon: Icons.groups_rounded,
+        title: strings.totalCustomersKpi,
+        value: '${_cachedContacts.length}',
+        accentColor: const Color(0xFF6750A4),
+      ),
+      _KpiItem(
+        icon: Icons.shopping_cart_checkout_rounded,
+        title: strings.totalCustomerSpendKpi,
+        value: '${_cachedTotalSpend.toStringAsFixed(1)} ${isAr ? "ج.م" : "EGP"}',
+        accentColor: const Color(0xFF006C50),
+      ),
+      _KpiItem(
+        icon: Icons.military_tech_rounded,
+        title: strings.totalPrizesWonKpi,
+        value: '$_cachedTotalPrizes',
+        accentColor: Colors.amber.shade800,
+      ),
+      _KpiItem(
+        icon: Icons.replay_circle_filled_rounded,
+        title: strings.repeatShoppersKpi,
+        value: '$_cachedRepeatCount',
+        accentColor: const Color(0xFF2563EB),
+      ),
+    ];
+
+    if (screenWidth < 600) {
+      // Small to standard smartphones (360px - 599px)
+      return GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: 2,
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        childAspectRatio: 1.5,
+        children: cards.map((c) => _buildSingleKpiCard(c, cs, isCompact: true)).toList(),
+      );
+    } else if (screenWidth < 1100) {
+      // Tablets / Medium screens
+      return GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: 2,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 2.8,
+        children: cards.map((c) => _buildSingleKpiCard(c, cs, isCompact: false)).toList(),
+      );
+    }
+
+    // Large desktop displays
+    return Row(
+      children: cards
+          .map((c) => Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: _buildSingleKpiCard(c, cs, isCompact: false),
+                ),
+              ))
+          .toList(),
+    );
+  }
+
+  Widget _buildSingleKpiCard(_KpiItem item, ColorScheme cs, {bool isCompact = false}) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: isCompact ? 12 : 16, vertical: isCompact ? 12 : 16),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(isCompact ? 8 : 10),
+            decoration: BoxDecoration(
+              color: item.accentColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(item.icon, color: item.accentColor, size: isCompact ? 20 : 24),
+          ),
+          SizedBox(width: isCompact ? 10 : 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  item.title,
+                  style: GoogleFonts.cairo(
+                    fontSize: isCompact ? 11 : 12,
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurfaceVariant,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    item.value,
+                    style: GoogleFonts.cairo(
+                      fontSize: isCompact ? 16 : 18,
+                      fontWeight: FontWeight.bold,
+                      color: cs.onSurface,
+                    ),
+                    maxLines: 1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Filters dropdown toolbar (Campaign & Branch)
+  /// Filters dropdown toolbar (Company, Campaign & Branch)
+  Widget _buildFiltersBar({
+    required ColorScheme cs,
+    required bool isMobile,
+    required bool isLockedCompany,
+    required List<String> distinctCompanies,
+    required List<EventModel> companyEvents,
+    required List<String> sortedBranches,
+    required AppStrings strings,
+    required bool isAr,
+  }) {
+    // 1. Company Dropdown (for Admin mode)
+    final companyDropdown = DropdownButtonFormField<String>(
+      key: ValueKey('company_dd_${distinctCompanies.length}_$_selectedCompany'),
+      initialValue: distinctCompanies.contains(_selectedCompany) ? _selectedCompany : 'all',
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: isAr ? 'الشركة المستهدفة' : 'Target Company',
+        prefixIcon: const Icon(Icons.business_rounded, size: 20),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        filled: true,
+        fillColor: cs.surface,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      items: [
+        DropdownMenuItem(
+          value: 'all',
+          child: Text(
+            isAr ? '🏢 كافة الشركات المكودة' : '🏢 All Registered Companies',
+            style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        ...distinctCompanies.map((c) => DropdownMenuItem(
+              value: c,
+              child: Text(c, style: GoogleFonts.cairo(fontSize: 13), overflow: TextOverflow.ellipsis),
+            )),
+      ],
+      onChanged: (val) {
+        if (val != null) {
+          setState(() {
+            _selectedCompany = val;
+            _selectedEventId = 'all';
+            _selectedBranch = 'all';
+            _currentPage = 0;
+          });
+        }
+      },
+    );
+
+    // 2. Deduplicate company events by ID to prevent any duplicate dropdown values
+    final Map<String, EventModel> uniqueEventsMap = {};
+    for (final e in companyEvents) {
+      if (e.id.isNotEmpty) {
+        uniqueEventsMap[e.id] = e;
+      }
+    }
+    final uniqueEvents = uniqueEventsMap.values.toList();
+
+    // 3. Safe event selection check (Rule against Dropdown assertion crashes)
+    final validEventIds = {'all', ...uniqueEvents.map((e) => e.id)};
+    final currentEventVal = validEventIds.contains(_selectedEventId) ? _selectedEventId! : 'all';
+
+    // 4. Deduplicate branches to prevent any duplicate dropdown values
+    final uniqueBranches = sortedBranches.where((b) => b.trim().isNotEmpty).toSet().toList();
+    final validBranchValues = {'all', ...uniqueBranches};
+    final currentBranchVal = validBranchValues.contains(_selectedBranch) ? _selectedBranch! : 'all';
+
+    final campaignDropdown = DropdownButtonFormField<String>(
+      key: ValueKey('campaign_dd_${uniqueEvents.length}_$currentEventVal'),
+      initialValue: currentEventVal,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: strings.eventsTitle,
+        prefixIcon: const Icon(Icons.campaign_outlined, size: 20),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        filled: true,
+        fillColor: cs.surface,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      items: [
+        DropdownMenuItem(
+          value: 'all',
+          child: Text(
+            isAr ? 'جميع فعاليات وحملات الشركة' : 'All Company Campaigns',
+            style: GoogleFonts.cairo(fontSize: 13),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        ...uniqueEvents.map((e) => DropdownMenuItem(
+              value: e.id,
+              child: Text(e.eventName, style: GoogleFonts.cairo(fontSize: 13), overflow: TextOverflow.ellipsis),
+            )),
+      ],
+      onChanged: (val) {
+        setState(() {
+          _selectedEventId = val;
+          _currentPage = 0;
+        });
+      },
+    );
+
+    final branchDropdown = DropdownButtonFormField<String>(
+      key: ValueKey('branch_dd_${uniqueBranches.length}_$currentBranchVal'),
+      initialValue: currentBranchVal,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: strings.branchField,
+        prefixIcon: const Icon(Icons.storefront_outlined, size: 20),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        filled: true,
+        fillColor: cs.surface,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      items: [
+        DropdownMenuItem(
+          value: 'all',
+          child: Text(
+            isAr ? 'كافة الفروع والمنافذ' : 'All Branches & Outlets',
+            style: GoogleFonts.cairo(fontSize: 13),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        ...uniqueBranches.map((b) => DropdownMenuItem(
+              value: b,
+              child: Text(b, style: GoogleFonts.cairo(fontSize: 13), overflow: TextOverflow.ellipsis),
+            )),
+      ],
+      onChanged: (val) {
+        setState(() {
+          _selectedBranch = val;
+          _currentPage = 0;
+        });
+      },
+    );
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: isMobile
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (!isLockedCompany) ...[
+                  companyDropdown,
+                  const SizedBox(height: 12),
+                ],
+                campaignDropdown,
+                const SizedBox(height: 12),
+                branchDropdown,
+              ],
+            )
+          : Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (!isLockedCompany)
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 240),
+                    child: companyDropdown,
+                  ),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 280),
+                  child: campaignDropdown,
+                ),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 240),
+                  child: branchDropdown,
+                ),
+              ],
+            ),
+    );
+  }
+
+  /// Promotional Message Composer & Studio
+  Widget _buildMarketingStudioCard({
+    required ColorScheme cs,
+    required bool isMobile,
+    required AppStrings strings,
+    required bool isAr,
+    required String companyName,
+    required String campaignName,
+    required List<CustomerCampaignContact> filteredContacts,
+  }) {
+    final targetContacts = _selectedContactIds.isNotEmpty
+        ? filteredContacts.where((c) => _selectedContactIds.contains(c.id)).toList()
+        : filteredContacts;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF198754).withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF198754).withValues(alpha: 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header Bar of the Studio
+          InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () => setState(() => _isComposerExpanded = !_isComposerExpanded),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 20, vertical: isMobile ? 12 : 16),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF198754).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.mark_chat_unread_rounded, color: Color(0xFF198754), size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          strings.composeWhatsAppCampaign,
+                          style: GoogleFonts.cairo(
+                            fontSize: isMobile ? 14 : 16,
+                            fontWeight: FontWeight.bold,
+                            color: cs.onSurface,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          isAr
+                              ? 'صياغة رسالة العرض الجديد مع استبدال الأسماء تلقائياً والإرسال التتابعي'
+                              : 'Personalize promotional message with dynamic tags and dispatch queue',
+                          style: GoogleFonts.cairo(
+                            fontSize: isMobile ? 11 : 12,
+                            color: cs.onSurfaceVariant,
+                          ),
+                          maxLines: isMobile ? 1 : 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Quick Launch Queue Button directly from header
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF25D366),
+                      foregroundColor: Colors.white,
+                      padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 16, vertical: isMobile ? 8 : 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.send_rounded, size: 16),
+                    label: Text(
+                      isMobile
+                          ? '(${targetContacts.length})'
+                          : '${strings.launchWhatsAppQueue} (${targetContacts.length})',
+                      style: GoogleFonts.cairo(fontSize: isMobile ? 12 : 13, fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: () => _launchWhatsAppCampaign(
+                      targetContacts: targetContacts,
+                      companyName: companyName,
+                      campaignName: campaignName,
+                      strings: strings,
+                      isAr: isAr,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    _isComposerExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                    color: cs.onSurfaceVariant,
+                    size: 20,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Collapsible Studio Content
+          if (_isComposerExpanded) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: EdgeInsets.all(isMobile ? 14 : 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Preset template pills
+                  Text(
+                    strings.presetTemplatesTitle,
+                    style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ActionChip(
+                        avatar: const Icon(Icons.campaign_rounded, size: 16, color: Color(0xFF0F5132)),
+                        label: Text(strings.templateNewEvent, style: GoogleFonts.cairo(fontSize: 12)),
+                        onPressed: () => _applyPresetTemplate(
+                          'أهلاً بك {اسم_العميل}! يسر {الشركة} دعوتك لمهرجان وعروض {الحملة} في فرع {الفرع}. زُرنا اليوم واربح جوائز فورية وقسائم مشتريات قيمة!',
+                        ),
+                      ),
+                      ActionChip(
+                        avatar: const Icon(Icons.card_giftcard_rounded, size: 16, color: Color(0xFF0F5132)),
+                        label: Text(strings.templateRewardVoucher, style: GoogleFonts.cairo(fontSize: 12)),
+                        onPressed: () => _applyPresetTemplate(
+                          'مرحباً {اسم_العميل}، شكراً لتسوقك الدائم لمنتجات {الشركة}. يسعدنا إهداؤك فرصة حصرية في مهرجاننا الجديد {الحملة} بفرع {الفرع}. ننتظرك لتستلم هديتك!',
+                        ),
+                      ),
+                      ActionChip(
+                        avatar: const Icon(Icons.local_fire_department_rounded, size: 16, color: Colors.orange),
+                        label: Text(strings.templateWeekendOffer, style: GoogleFonts.cairo(fontSize: 12)),
+                        onPressed: () => _applyPresetTemplate(
+                          'عروض حصرية من {الشركة} لنهاية الأسبوع بفرع {الفرع}! خصومات استثنائية وجوائز فورية بانتظارك في {الحملة}. لا تفوّت الفرصة!',
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Message Editor TextField
+                  TextField(
+                    controller: _messageController,
+                    maxLines: 4,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      hintText: strings.messageTemplatePlaceholder,
+                      hintStyle: GoogleFonts.cairo(fontSize: 13, color: cs.onSurfaceVariant.withValues(alpha: 0.6)),
+                      filled: true,
+                      fillColor: cs.surface,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    style: GoogleFonts.cairo(fontSize: 14, height: 1.5),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Smart Placeholder Buttons
+                  isMobile
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              strings.insertVariable,
+                              style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSurfaceVariant),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                _buildTagChip('{اسم_العميل}', cs),
+                                _buildTagChip('{الشركة}', cs),
+                                _buildTagChip('{الحملة}', cs),
+                                _buildTagChip('{الفرع}', cs),
+                              ],
+                            ),
+                          ],
+                        )
+                      : Row(
+                          children: [
+                            Text(
+                              strings.insertVariable,
+                              style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSurfaceVariant),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: [
+                                  _buildTagChip('{اسم_العميل}', cs),
+                                  _buildTagChip('{الشركة}', cs),
+                                  _buildTagChip('{الحملة}', cs),
+                                  _buildTagChip('{الفرع}', cs),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                  const SizedBox(height: 16),
+
+                  // Dedicated Test Send Banner & Action
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF198754).withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFF198754).withValues(alpha: 0.25)),
+                    ),
+                    child: isMobile
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.science_rounded, size: 20, color: Color(0xFF198754)),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      strings.sendTestMessage,
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFF0F5132),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                strings.testMessageNotice,
+                                style: GoogleFonts.cairo(fontSize: 11, color: cs.onSurfaceVariant, height: 1.4),
+                              ),
+                              const SizedBox(height: 10),
+                              FilledButton.tonalIcon(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.2),
+                                  foregroundColor: const Color(0xFF075E54),
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                                icon: const Icon(Icons.send_to_mobile_rounded, size: 18, color: Color(0xFF25D366)),
+                                label: Text(
+                                  strings.quickTestSend,
+                                  style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                                onPressed: () => _showCustomNumberTestDialog(
+                                  context: context,
+                                  cs: cs,
+                                  strings: strings,
+                                  isAr: isAr,
+                                  companyName: companyName,
+                                  campaignName: campaignName,
+                                ),
+                              ),
+                            ],
+                          )
+                        : Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF198754).withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(Icons.science_rounded, size: 20, color: Color(0xFF198754)),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      strings.sendTestMessage,
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFF0F5132),
+                                      ),
+                                    ),
+                                    Text(
+                                      strings.testMessageNotice,
+                                      style: GoogleFonts.cairo(fontSize: 11, color: cs.onSurfaceVariant),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              FilledButton.tonalIcon(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.2),
+                                  foregroundColor: const Color(0xFF075E54),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                                icon: const Icon(Icons.send_to_mobile_rounded, size: 18, color: Color(0xFF25D366)),
+                                label: Text(
+                                  strings.quickTestSend,
+                                  style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                                onPressed: () => _showCustomNumberTestDialog(
+                                  context: context,
+                                  cs: cs,
+                                  strings: strings,
+                                  isAr: isAr,
+                                  companyName: companyName,
+                                  campaignName: campaignName,
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTagChip(String tag, ColorScheme cs) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => _insertTag(tag),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: cs.primary.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: cs.primary.withValues(alpha: 0.3)),
+        ),
+        child: Text(
+          tag,
+          style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.primary),
+        ),
+      ),
+    );
+  }
+
+  /// Audience Segments & Actions Toolbar (Select All, Export, Search)
+  Widget _buildAudienceToolbar({
+    required ColorScheme cs,
+    required bool isMobile,
+    required AppStrings strings,
+    required bool isAr,
+    required List<CustomerCampaignContact> filteredContacts,
+    required String companyName,
+    required String campaignName,
+  }) {
+    final allFilteredSelected = filteredContacts.isNotEmpty &&
+        filteredContacts.every((c) => _selectedContactIds.contains(c.id));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Segments Row
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _buildSegmentTab(CustomerSegmentType.all, strings.filterSegmentAll, Icons.people_outline_rounded, cs),
+              const SizedBox(width: 8),
+              _buildSegmentTab(CustomerSegmentType.winners, strings.filterSegmentWinners, Icons.emoji_events_outlined, cs),
+              const SizedBox(width: 8),
+              _buildSegmentTab(CustomerSegmentType.topSpenders, strings.filterSegmentTopSpenders, Icons.star_border_rounded, cs),
+              const SizedBox(width: 8),
+              _buildSegmentTab(CustomerSegmentType.repeatShoppers, strings.filterSegmentRepeat, Icons.repeat_rounded, cs),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // Search Bar and Action Buttons
+        isMobile
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Search field full-width
+                  TextField(
+                    controller: _searchController,
+                    onChanged: (val) {
+                      setState(() {
+                        _searchQuery = val;
+                      });
+                    },
+                    decoration: InputDecoration(
+                      hintText: strings.searchCustomerPlaceholder,
+                      hintStyle: GoogleFonts.cairo(fontSize: 13),
+                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear_rounded, size: 18),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() => _searchQuery = '');
+                              },
+                            )
+                          : null,
+                      filled: true,
+                      fillColor: cs.surfaceContainerLow,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Actions row on mobile
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      // Select All / Deselect button
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: Icon(
+                          allFilteredSelected ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                          size: 18,
+                          color: allFilteredSelected ? const Color(0xFF198754) : cs.onSurfaceVariant,
+                        ),
+                        label: Text(
+                          allFilteredSelected ? strings.deselectAllCustomers : strings.selectAllCustomers,
+                          style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            if (allFilteredSelected) {
+                              for (final c in filteredContacts) {
+                                _selectedContactIds.remove(c.id);
+                              }
+                            } else {
+                              for (final c in filteredContacts) {
+                                _selectedContactIds.add(c.id);
+                              }
+                            }
+                          });
+                        },
+                      ),
+
+                      // Selected Counter Chip
+                      if (_selectedContactIds.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: cs.primaryContainer,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            strings.selectedCustomersCount(_selectedContactIds.length),
+                            style: GoogleFonts.cairo(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: cs.onPrimaryContainer,
+                            ),
+                          ),
+                        ),
+
+                      // Export to Excel
+                      Tooltip(
+                        message: strings.exportContactsExcel,
+                        child: IconButton.filledTonal(
+                          icon: const Icon(Icons.table_view_rounded, size: 18),
+                          onPressed: () => _exportToExcel(
+                            _selectedContactIds.isNotEmpty
+                                ? filteredContacts.where((c) => _selectedContactIds.contains(c.id)).toList()
+                                : filteredContacts,
+                            companyName,
+                            strings,
+                          ),
+                        ),
+                      ),
+
+                      // Export VCF Contact Cards
+                      Tooltip(
+                        message: strings.exportVcfContacts,
+                        child: IconButton.filledTonal(
+                          icon: const Icon(Icons.contact_phone_rounded, size: 18),
+                          onPressed: () => _exportToVcf(
+                            _selectedContactIds.isNotEmpty
+                                ? filteredContacts.where((c) => _selectedContactIds.contains(c.id)).toList()
+                                : filteredContacts,
+                            companyName,
+                            strings,
+                          ),
+                        ),
+                      ),
+
+                      // Quick Test Send to custom number
+                      Tooltip(
+                        message: strings.sendTestMessage,
+                        child: IconButton.filledTonal(
+                          style: IconButton.styleFrom(
+                            backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.15),
+                            foregroundColor: const Color(0xFF075E54),
+                          ),
+                          icon: const Icon(Icons.science_rounded, size: 18),
+                          onPressed: () => _showCustomNumberTestDialog(
+                            context: context,
+                            cs: cs,
+                            strings: strings,
+                            isAr: isAr,
+                            companyName: companyName,
+                            campaignName: campaignName,
+                          ),
+                        ),
+                      ),
+
+                      // WhatsApp Gateway Settings Shortcut
+                      Tooltip(
+                        message: strings.whatsappGatewayTitle,
+                        child: IconButton.filledTonal(
+                          style: IconButton.styleFrom(
+                            backgroundColor: _gatewayConfig.isConfigured
+                                ? const Color(0xFF198754).withValues(alpha: 0.15)
+                                : cs.surfaceContainerHighest,
+                            foregroundColor: _gatewayConfig.isConfigured
+                                ? const Color(0xFF198754)
+                                : cs.onSurfaceVariant,
+                          ),
+                          icon: const Icon(Icons.cloud_sync_rounded, size: 18),
+                          onPressed: () => _openGatewaySettings(strings, isAr),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              )
+            : Wrap(
+                spacing: 12,
+                runSpacing: 10,
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  // Search field
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 380),
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: (val) {
+                        setState(() {
+                          _searchQuery = val;
+                        });
+                      },
+                      decoration: InputDecoration(
+                        hintText: strings.searchCustomerPlaceholder,
+                        hintStyle: GoogleFonts.cairo(fontSize: 13),
+                        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear_rounded, size: 18),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _searchQuery = '');
+                                },
+                              )
+                            : null,
+                        filled: true,
+                        fillColor: cs.surfaceContainerLow,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                  ),
+
+                  // Select All & Actions Group
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      // Select All / Deselect button
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: Icon(
+                          allFilteredSelected ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                          size: 18,
+                          color: allFilteredSelected ? const Color(0xFF198754) : cs.onSurfaceVariant,
+                        ),
+                        label: Text(
+                          allFilteredSelected ? strings.deselectAllCustomers : strings.selectAllCustomers,
+                          style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            if (allFilteredSelected) {
+                              for (final c in filteredContacts) {
+                                _selectedContactIds.remove(c.id);
+                              }
+                            } else {
+                              for (final c in filteredContacts) {
+                                _selectedContactIds.add(c.id);
+                              }
+                            }
+                          });
+                        },
+                      ),
+
+                      // Selected Counter Chip
+                      if (_selectedContactIds.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: cs.primaryContainer,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            strings.selectedCustomersCount(_selectedContactIds.length),
+                            style: GoogleFonts.cairo(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: cs.onPrimaryContainer,
+                            ),
+                          ),
+                        ),
+
+                      // Export to Excel
+                      Tooltip(
+                        message: strings.exportContactsExcel,
+                        child: IconButton.filledTonal(
+                          icon: const Icon(Icons.table_view_rounded, size: 20),
+                          onPressed: () => _exportToExcel(
+                            _selectedContactIds.isNotEmpty
+                                ? filteredContacts.where((c) => _selectedContactIds.contains(c.id)).toList()
+                                : filteredContacts,
+                            companyName,
+                            strings,
+                          ),
+                        ),
+                      ),
+
+                      // Export VCF Contact Cards
+                      Tooltip(
+                        message: strings.exportVcfContacts,
+                        child: IconButton.filledTonal(
+                          icon: const Icon(Icons.contact_phone_rounded, size: 20),
+                          onPressed: () => _exportToVcf(
+                            _selectedContactIds.isNotEmpty
+                                ? filteredContacts.where((c) => _selectedContactIds.contains(c.id)).toList()
+                                : filteredContacts,
+                            companyName,
+                            strings,
+                          ),
+                        ),
+                      ),
+
+                      // Quick Test Send to custom number
+                      Tooltip(
+                        message: strings.sendTestMessage,
+                        child: IconButton.filledTonal(
+                          style: IconButton.styleFrom(
+                            backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.15),
+                            foregroundColor: const Color(0xFF075E54),
+                          ),
+                          icon: const Icon(Icons.science_rounded, size: 20),
+                          onPressed: () => _showCustomNumberTestDialog(
+                            context: context,
+                            cs: cs,
+                            strings: strings,
+                            isAr: isAr,
+                            companyName: companyName,
+                            campaignName: campaignName,
+                          ),
+                        ),
+                      ),
+
+                      // WhatsApp Gateway Settings Shortcut
+                      Tooltip(
+                        message: strings.whatsappGatewayTitle,
+                        child: IconButton.filledTonal(
+                          style: IconButton.styleFrom(
+                            backgroundColor: _gatewayConfig.isConfigured
+                                ? const Color(0xFF198754).withValues(alpha: 0.15)
+                                : cs.surfaceContainerHighest,
+                            foregroundColor: _gatewayConfig.isConfigured
+                                ? const Color(0xFF198754)
+                                : cs.onSurfaceVariant,
+                          ),
+                          icon: const Icon(Icons.cloud_sync_rounded, size: 20),
+                          onPressed: () => _openGatewaySettings(strings, isAr),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+      ],
+    );
+  }
+
+  Widget _buildSegmentTab(CustomerSegmentType segment, String label, IconData icon, ColorScheme cs) {
+    final isSelected = _selectedSegment == segment;
+    return ChoiceChip(
+      avatar: Icon(icon, size: 16, color: isSelected ? cs.onPrimary : cs.onSurfaceVariant),
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (val) {
+        if (val) {
+          setState(() {
+            _selectedSegment = segment;
+          });
+        }
+      },
+      selectedColor: cs.primary,
+      labelStyle: GoogleFonts.cairo(
+        fontSize: 13,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+        color: isSelected ? cs.onPrimary : cs.onSurface,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    );
+  }
+
+  /// Desktop Customers Table with dynamic width stretching and ultra-fast 60 FPS pagination
+  Widget _buildDesktopCustomerTable(
+    List<CustomerCampaignContact> contacts,
+    ColorScheme cs,
+    AppStrings strings,
+    bool isAr,
+    String companyName,
+    String campaignName,
+  ) {
+    final totalContacts = contacts.length;
+    final totalPages = _rowsPerPage > 0 ? (totalContacts / _rowsPerPage).ceil() : 1;
+    final safeCurrentPage = _currentPage < 0 ? 0 : (_currentPage >= totalPages ? (totalPages > 0 ? totalPages - 1 : 0) : _currentPage);
+    final startIndex = totalContacts == 0 ? 0 : safeCurrentPage * _rowsPerPage;
+    final int endIndex = (startIndex + _rowsPerPage > totalContacts) ? totalContacts : (startIndex + _rowsPerPage);
+    final pagedContacts = totalContacts == 0 ? <CustomerCampaignContact>[] : contacts.sublist(startIndex, endIndex);
+
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      sliver: SliverToBoxAdapter(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final availableWidth = constraints.maxWidth;
+            final minTableWidth = math.max(availableWidth, 1100.0);
+
+            return RepaintBoundary(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(minWidth: minTableWidth),
+                        child: DataTable(
+                          headingRowColor: WidgetStateProperty.all(cs.surfaceContainerHighest.withValues(alpha: 0.5)),
+                          horizontalMargin: 20,
+                          columnSpacing: 24,
+                          columns: [
+                            const DataColumn(label: SizedBox(width: 24)),
+                            DataColumn(label: Text(strings.customerNameField, style: GoogleFonts.cairo(fontWeight: FontWeight.bold))),
+                            DataColumn(label: Text(strings.customerPhoneField, style: GoogleFonts.cairo(fontWeight: FontWeight.bold))),
+                            DataColumn(label: Text(strings.totalReceiptsCountCol, style: GoogleFonts.cairo(fontWeight: FontWeight.bold))),
+                            DataColumn(label: Text(strings.totalSpendAmountCol, style: GoogleFonts.cairo(fontWeight: FontWeight.bold))),
+                            DataColumn(label: Text(strings.prizesWonCol, style: GoogleFonts.cairo(fontWeight: FontWeight.bold))),
+                            DataColumn(label: Text(strings.branchesCol, style: GoogleFonts.cairo(fontWeight: FontWeight.bold))),
+                            DataColumn(label: Text(strings.lastVisitCol, style: GoogleFonts.cairo(fontWeight: FontWeight.bold))),
+                            DataColumn(label: Text(strings.actions, style: GoogleFonts.cairo(fontWeight: FontWeight.bold))),
+                          ],
+                          rows: pagedContacts.map((c) {
+                            final isSelected = _selectedContactIds.contains(c.id);
+                            final dateStr = c.lastVisitDate != null ? intl.DateFormat('yyyy/MM/dd').format(c.lastVisitDate!) : '—';
+
+                            return DataRow(
+                              selected: isSelected,
+                              onSelectChanged: (val) {
+                                setState(() {
+                                  if (val == true) {
+                                    _selectedContactIds.add(c.id);
+                                  } else {
+                                    _selectedContactIds.remove(c.id);
+                                  }
+                                });
+                              },
+                              cells: [
+                                // Checkbox
+                                DataCell(
+                                  Checkbox(
+                                    value: isSelected,
+                                    activeColor: const Color(0xFF198754),
+                                    onChanged: (val) {
+                                      setState(() {
+                                        if (val == true) {
+                                          _selectedContactIds.add(c.id);
+                                        } else {
+                                          _selectedContactIds.remove(c.id);
+                                        }
+                                      });
+                                    },
+                                  ),
+                                ),
+                                // Customer Avatar + Name
+                                DataCell(
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(maxWidth: 220),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 16,
+                                          backgroundColor: cs.primary.withValues(alpha: 0.15),
+                                          child: Text(
+                                            c.name.isNotEmpty ? c.name.characters.first : 'ع',
+                                            style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.primary),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            c.name.isNotEmpty ? c.name : (isAr ? 'عميل بدون اسم' : 'Unnamed Customer'),
+                                            style: GoogleFonts.cairo(fontWeight: FontWeight.w600, fontSize: 13),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                // Phone Number
+                                DataCell(
+                                  Directionality(
+                                    textDirection: TextDirection.ltr,
+                                    child: Text(
+                                      c.rawPhone,
+                                      style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                ),
+                                // Invoices Count
+                                DataCell(
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: cs.surfaceContainerHighest,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Text(
+                                      '${c.totalInvoices}',
+                                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
+                                    ),
+                                  ),
+                                ),
+                                // Spend Amount
+                                DataCell(
+                                  Text(
+                                    '${c.totalSpend.toStringAsFixed(1)} ${isAr ? "ج.م" : "EGP"}',
+                                    style: GoogleFonts.cairo(fontWeight: FontWeight.w600, fontSize: 13),
+                                  ),
+                                ),
+                                // Prizes Won
+                                DataCell(
+                                  c.isWinner
+                                      ? ConstrainedBox(
+                                          constraints: const BoxConstraints(maxWidth: 240),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: Colors.amber.shade800.withValues(alpha: 0.15),
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.emoji_events_rounded, size: 14, color: Colors.amber.shade800),
+                                                const SizedBox(width: 4),
+                                                Expanded(
+                                                  child: Text(
+                                                    c.prizesWon.join(', '),
+                                                    style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+                                                    maxLines: 2,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        )
+                                      : Text('—', style: GoogleFonts.cairo(color: cs.onSurfaceVariant)),
+                                ),
+                                // Visited Branches
+                                DataCell(
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(maxWidth: 180),
+                                    child: Text(
+                                      c.branches.isNotEmpty ? c.branches.join(', ') : '—',
+                                      style: GoogleFonts.cairo(fontSize: 12),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                                // Last Visit
+                                DataCell(Text(dateStr, style: GoogleFonts.cairo(fontSize: 12))),
+                                // Quick Direct WhatsApp Action Button
+                                DataCell(
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Tooltip(
+                                        message: strings.sendDirectWhatsApp,
+                                        child: IconButton(
+                                          icon: const Icon(Icons.chat_bubble_rounded, size: 18, color: Color(0xFF25D366)),
+                                          onPressed: () {
+                                            _launchWhatsAppCampaign(
+                                              targetContacts: [c],
+                                              companyName: companyName,
+                                              campaignName: campaignName,
+                                              strings: strings,
+                                              isAr: isAr,
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                      Tooltip(
+                                        message: strings.callCustomerPhone,
+                                        child: IconButton(
+                                          icon: Icon(Icons.phone_rounded, size: 18, color: cs.primary),
+                                          onPressed: () async {
+                                            final uri = Uri.parse('tel:${c.rawPhone}');
+                                            if (await canLaunchUrl(uri)) {
+                                              await launchUrl(uri);
+                                            }
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                    // Desktop Pagination Controls Footer
+                    if (totalContacts > 0)
+                      _buildPaginationFooter(
+                        cs: cs,
+                        strings: strings,
+                        isAr: isAr,
+                        totalContacts: totalContacts,
+                        totalPages: totalPages,
+                        safeCurrentPage: safeCurrentPage,
+                        startIndex: startIndex,
+                        endIndex: endIndex,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    ),
+  );
+}
+
+  /// Modern M3 Pagination Controls Footer
+  Widget _buildPaginationFooter({
+    required ColorScheme cs,
+    required AppStrings strings,
+    required bool isAr,
+    required int totalContacts,
+    required int totalPages,
+    required int safeCurrentPage,
+    required int startIndex,
+    required int endIndex,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLowest,
+        border: Border(top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.4))),
+      ),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 16,
+        runSpacing: 12,
+        children: [
+          // Range counter (e.g. "عرض 1 - 50 من إجمالي 599 عميل")
+          Text(
+            strings.showingCustomersRange(startIndex + 1, endIndex, totalContacts),
+            style: GoogleFonts.cairo(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+
+          // Controls Group (Rows per page + Page Navigators)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Rows per page selector
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    strings.rowsPerPageLabel,
+                    style: GoogleFonts.cairo(fontSize: 12, color: cs.onSurfaceVariant),
+                  ),
+                  const SizedBox(width: 8),
+                  DropdownButton<int>(
+                    value: _rowsPerPage,
+                    underline: const SizedBox(),
+                    borderRadius: BorderRadius.circular(10),
+                    items: [
+                      DropdownMenuItem(value: 25, child: Text('25', style: GoogleFonts.cairo(fontSize: 12))),
+                      DropdownMenuItem(value: 50, child: Text('50', style: GoogleFonts.cairo(fontSize: 12))),
+                      DropdownMenuItem(value: 100, child: Text('100', style: GoogleFonts.cairo(fontSize: 12))),
+                      DropdownMenuItem(value: 999999, child: Text(strings.allRowsOption, style: GoogleFonts.cairo(fontSize: 12))),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() {
+                          _rowsPerPage = val;
+                          _currentPage = 0;
+                        });
+                      }
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(width: 16),
+
+              // First Page Button
+              IconButton(
+                icon: Icon(isAr ? Icons.last_page_rounded : Icons.first_page_rounded, size: 20),
+                tooltip: isAr ? 'الصفحة الأولى' : 'First Page',
+                onPressed: safeCurrentPage > 0
+                    ? () => setState(() => _currentPage = 0)
+                    : null,
+              ),
+
+              // Previous Page Button
+              IconButton(
+                icon: Icon(isAr ? Icons.chevron_right_rounded : Icons.chevron_left_rounded, size: 22),
+                tooltip: strings.previousCustomer,
+                onPressed: safeCurrentPage > 0
+                    ? () => setState(() => _currentPage = safeCurrentPage - 1)
+                    : null,
+              ),
+
+              // Page Indicator Chip
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  strings.pageOfTotal(safeCurrentPage + 1, totalPages < 1 ? 1 : totalPages),
+                  style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ),
+
+              // Next Page Button
+              IconButton(
+                icon: Icon(isAr ? Icons.chevron_left_rounded : Icons.chevron_right_rounded, size: 22),
+                tooltip: strings.nextCustomer,
+                onPressed: safeCurrentPage < totalPages - 1
+                    ? () => setState(() => _currentPage = safeCurrentPage + 1)
+                    : null,
+              ),
+
+              // Last Page Button
+              IconButton(
+                icon: Icon(isAr ? Icons.first_page_rounded : Icons.last_page_rounded, size: 20),
+                tooltip: isAr ? 'الصفحة الأخيرة' : 'Last Page',
+                onPressed: safeCurrentPage < totalPages - 1
+                    ? () => setState(() => _currentPage = totalPages - 1)
+                    : null,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Mobile Customer Cards List with pagination support
+  Widget _buildMobileCustomerCardsList(
+    List<CustomerCampaignContact> contacts,
+    ColorScheme cs,
+    AppStrings strings,
+    bool isAr,
+    String companyName,
+    String campaignName,
+  ) {
+    final maxChipWidth = (MediaQuery.of(context).size.width - 64).clamp(160.0, 500.0);
+    final totalContacts = contacts.length;
+    final totalPages = _rowsPerPage > 0 ? (totalContacts / _rowsPerPage).ceil() : 1;
+    final safeCurrentPage = _currentPage < 0 ? 0 : (_currentPage >= totalPages ? (totalPages > 0 ? totalPages - 1 : 0) : _currentPage);
+    final startIndex = totalContacts == 0 ? 0 : safeCurrentPage * _rowsPerPage;
+    final int endIndex = (startIndex + _rowsPerPage > totalContacts) ? totalContacts : (startIndex + _rowsPerPage);
+    final pagedContacts = totalContacts == 0 ? <CustomerCampaignContact>[] : contacts.sublist(startIndex, endIndex);
+
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            if (index == pagedContacts.length) {
+              if (totalPages <= 1) return const SizedBox.shrink();
+              return Container(
+                margin: const EdgeInsets.only(top: 8, bottom: 20),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IconButton.filledTonal(
+                      icon: Icon(isAr ? Icons.chevron_right_rounded : Icons.chevron_left_rounded, size: 20),
+                      onPressed: safeCurrentPage > 0
+                          ? () => setState(() => _currentPage = safeCurrentPage - 1)
+                          : null,
+                    ),
+                    Text(
+                      strings.pageOfTotal(safeCurrentPage + 1, totalPages < 1 ? 1 : totalPages),
+                      style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    IconButton.filledTonal(
+                      icon: Icon(isAr ? Icons.chevron_left_rounded : Icons.chevron_right_rounded, size: 20),
+                      onPressed: safeCurrentPage < totalPages - 1
+                          ? () => setState(() => _currentPage = safeCurrentPage + 1)
+                          : null,
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            final c = pagedContacts[index];
+            final isSelected = _selectedContactIds.contains(c.id);
+
+            return InkWell(
+              onTap: () {
+                setState(() {
+                  if (isSelected) {
+                    _selectedContactIds.remove(c.id);
+                  } else {
+                    _selectedContactIds.add(c.id);
+                  }
+                });
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isSelected ? const Color(0xFF198754) : cs.outlineVariant.withValues(alpha: 0.5),
+                    width: isSelected ? 1.5 : 1,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: isSelected,
+                          activeColor: const Color(0xFF198754),
+                          onChanged: (val) {
+                            setState(() {
+                              if (val == true) {
+                                _selectedContactIds.add(c.id);
+                              } else {
+                                _selectedContactIds.remove(c.id);
+                              }
+                            });
+                          },
+                        ),
+                        CircleAvatar(
+                          radius: 16,
+                          backgroundColor: cs.primary.withValues(alpha: 0.15),
+                          child: Text(
+                            c.name.isNotEmpty ? c.name.characters.first : 'ع',
+                            style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.primary),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                c.name.isNotEmpty ? c.name : (isAr ? 'عميل بدون اسم' : 'Unnamed Customer'),
+                                style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Directionality(
+                                textDirection: TextDirection.ltr,
+                                child: Text(
+                                  c.rawPhone,
+                                  style: GoogleFonts.robotoMono(fontSize: 12, color: cs.onSurfaceVariant),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Quick Phone Call button
+                        IconButton.filledTonal(
+                          style: IconButton.styleFrom(
+                            backgroundColor: cs.primary.withValues(alpha: 0.12),
+                            foregroundColor: cs.primary,
+                            minimumSize: const Size(36, 36),
+                            padding: EdgeInsets.zero,
+                          ),
+                          icon: const Icon(Icons.phone_rounded, size: 16),
+                          onPressed: () async {
+                            final uri = Uri.parse('tel:${c.rawPhone}');
+                            if (await canLaunchUrl(uri)) {
+                              await launchUrl(uri);
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 6),
+                        // Quick WhatsApp button
+                        IconButton.filledTonal(
+                          style: IconButton.styleFrom(
+                            backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.15),
+                            foregroundColor: const Color(0xFF25D366),
+                            minimumSize: const Size(36, 36),
+                            padding: EdgeInsets.zero,
+                          ),
+                          icon: const Icon(Icons.chat_bubble_rounded, size: 16),
+                          onPressed: () {
+                            _launchWhatsAppCampaign(
+                              targetContacts: [c],
+                              companyName: companyName,
+                              campaignName: campaignName,
+                              strings: strings,
+                              isAr: isAr,
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        _buildChip(Icons.receipt_long_rounded, '${c.totalInvoices} ${isAr ? "فواتير" : "inv"}', cs, maxWidth: maxChipWidth),
+                        _buildChip(Icons.shopping_bag_outlined, '${c.totalSpend.toStringAsFixed(0)} ${isAr ? "ج.م" : "EGP"}', cs, maxWidth: maxChipWidth),
+                        if (c.lastBranch.isNotEmpty)
+                          _buildChip(Icons.storefront_rounded, c.lastBranch, cs, maxWidth: maxChipWidth),
+                        if (c.isWinner)
+                          _buildChip(
+                            Icons.emoji_events_rounded,
+                            c.prizesWon.join(', '),
+                            cs,
+                            accentColor: Colors.amber.shade800,
+                            maxWidth: maxChipWidth,
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+          childCount: pagedContacts.length + (totalPages > 1 ? 1 : 0),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChip(IconData icon, String text, ColorScheme cs, {Color? accentColor, double? maxWidth}) {
+    final color = accentColor ?? cs.onSurfaceVariant;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: (accentColor ?? cs.surfaceContainerHighest).withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth ?? 220),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: color),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                text,
+                style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600, color: color),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _KpiItem {
+  final IconData icon;
+  final String title;
+  final String value;
+  final Color accentColor;
+
+  const _KpiItem({
+    required this.icon,
+    required this.title,
+    required this.value,
+    required this.accentColor,
+  });
+}

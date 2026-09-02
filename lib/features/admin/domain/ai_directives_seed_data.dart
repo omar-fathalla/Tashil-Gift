@@ -692,6 +692,27 @@ class AiDirectivesSeedData {
           tags: ['tresemme-bundle', 'barcode-6221155612182', 'coconut-aloe-400ml', 'gomla-market-miami', 'promo-box-295egp', 'air-32'],
           lastUpdated: '2026-08-29',
         ),
+
+        const AiDirectiveModel(
+          id: 'AIR-33',
+          code: 'SPEND_BASED_COMBO_BUNDLES_AND_CATALOG_BARCODE_RESOLUTION_STANDARD',
+          orderIndex: 33,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'محرك حزم الإنفاق المشترك والربط المباشر مع باركودات كتالوج الشركة (Spend-Based Multi-Brand Combo Bundles & Catalog Barcodes Binding)',
+          titleEn: 'Spend-Based Multi-Brand Combo Bundles & Catalog Barcode Binding Architecture',
+          descriptionAr:
+              'دعم كامل للشروط الترويجية المستندة إلى القيمة المالية والإنفاق المجمع (by_spend و combo_spend) لمشتريات عدة علامات تجارية معاً (مثل حزم العناية بالفم: Signal و Closeup معاً بقيمة 100 أو 150 ج.م، أو أحدهما بقيمة 200 ج.م)، مع الربط المباشر بباركودات وأصناف كتالوج الشركة (selectedBarcodes) وترتيب استحقاق المستويات تنازلياً لمنع تكرار الجوائز لنفس الإنفاق.',
+          descriptionEn:
+              'Comprehensive support for spend-based and multi-brand combo promotional rules (by_spend & combo_spend), requiring combined purchases of specific brands (e.g. Oral Care Bundles: Signal + Closeup together >= 100/150 EGP or either >= 200 EGP), with direct binding to master company catalog barcodes and descending tier resolution to prevent double-awarding.',
+          logicAr:
+              '1. دعم أنواع الشروط: إضافة (by_quantity / by_spend / combo_spend) في هيكل PromotionalRuleItem.\n2. التحقق من العلامات المشتركة (Combo Brands): في حالة combo_spend، يتم التحقق من وجود منتج واحد على الأقل من كل علامة تجارية مشروطة (مثل Signal و Closeup معاً)، وحساب إجمالي إنفاقهما المشترك بالفاتورة.\n3. أولوية مطابقة الباركودات: عند تحديد باركودات الأصناف من الكتالوج (selectedBarcodes)، تُعطى الأولوية الذهبية للمطابقة عبر الباركود أولاً ثم الاسم.\n4. ترتيب المستويات تنازلياً: فرز قواعد الإنفاق لنفس العائلة تنازلياً حسب minSpend (مثلاً 200 ج ➔ 150 ج ➔ 100 ج) لمنح العميل أعلى مستوى مؤهل فقط ومنع المضاعفة التلقائية على نفس سلة الشراء.',
+          logicEn:
+              '1. Rule Condition Types: full support for by_quantity, by_spend, and combo_spend.\n2. Multi-Brand Verification: for combo_spend rules, verifies presence of at least 1 item per required brand (e.g. Signal and Closeup) and computes their aggregated net spend.\n3. Barcode Priority: matches against selectedBarcodes with highest priority before string fallback.\n4. Descending Multi-Tier Resolution: sorts spend rules descending by minSpend (200 EGP -> 150 EGP -> 100 EGP) to award the highest eligible tier for qualifying spend.',
+          exampleInput: 'فاتورة كارفور تحتوي على: 1 معجون سيجنال (45 ج.م) + 1 معجون كلوس اب (65 ج.م) = إجمالي 110 ج.م',
+          exampleOutput: 'التحقق من وجود العلامتين معاً وتجاوز حد الـ 100 ج.م، وتطبيق قاعدة الحزمة الأولى ومنح فواتشر بقيمة 25 جنيه بنجاح.',
+          tags: ['oral-care-bundle', 'signal-closeup-combo', 'spend-based-rules', 'combo-spend-100-150-200', 'catalog-barcodes-binding', 'air-33'],
+          lastUpdated: '2026-09-02',
+        ),
       ];
 }
 

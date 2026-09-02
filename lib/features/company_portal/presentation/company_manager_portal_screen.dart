@@ -377,6 +377,11 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                   selectedIcon: const Icon(Icons.confirmation_number_rounded),
                   label: isAr ? 'القسائم' : (isHi ? 'वाउचर' : 'Vouchers'),
                 ),
+                NavigationDestination(
+                  icon: const Icon(Icons.mark_chat_unread_outlined),
+                  selectedIcon: const Icon(Icons.mark_chat_unread_rounded),
+                  label: isAr ? 'العملاء والواتساب' : (isHi ? 'ग्राहक' : 'Customers'),
+                ),
               ],
             )
           : null,
@@ -408,7 +413,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  for (int i = 0; i < 5; i++)
+                  for (int i = 0; i < 6; i++)
                     Offstage(
                       offstage: _selectedTab != i,
                       child: TickerMode(
