@@ -693,11 +693,13 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
     final colorScheme = theme.colorScheme;
     final activeCountry = ref.watch(activeCountryProvider);
     final strings = AppStrings.of(ref);
+    final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
       appBar: SwitchPointHeader(
         subtitle: strings.validationScreenSubtitle,
+        companyLogoUrl: _activeEvent?.companyLogoUrl,
         customActions: [
           if (_activeEvent != null) ...[
             // 1. Campaign Concept & Offer Rules Action Button (Brief & Conditions)
@@ -936,7 +938,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
               ),
             ),
           ),
-          const SwitchPointFooter(),
+          if (!isMobile) const SwitchPointFooter(),
         ],
       ),
     );

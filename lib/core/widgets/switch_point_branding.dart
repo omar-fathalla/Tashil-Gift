@@ -48,12 +48,18 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
   final Widget? leading;
   final String? subtitle;
   final List<Widget>? customActions;
+  final bool showMobileMenu;
+  final String? companyLogoUrl;
+  final VoidCallback? onMobileMenuPressed;
 
   const SwitchPointHeader({
     super.key,
     this.leading,
     this.subtitle,
     this.customActions,
+    this.showMobileMenu = true,
+    this.companyLogoUrl,
+    this.onMobileMenuPressed,
   });
 
   @override
@@ -74,6 +80,7 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
 
     if (isMobile) {
       return Container(
+        height: 54,
         decoration: BoxDecoration(
           color: colorScheme.surfaceContainerLow,
           border: Border(
@@ -85,36 +92,60 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
         ),
         padding: const EdgeInsets.symmetric(
           horizontal: 8,
-          vertical: 6,
+          vertical: 4,
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // 1. Right Side (Start in RTL): The Menu / Drawer / Leading button alone
+            // 1. Natural START (Right in Arabic RTL / Left in English LTR): Sleek Mobile Menu
             if (leading != null)
               leading!
-            else if (customActions != null && customActions!.isNotEmpty)
-              Row(mainAxisSize: MainAxisSize.min, children: customActions!)
+            else if (showMobileMenu)
+              IconButton(
+                icon: const Icon(Icons.menu_rounded, size: 24),
+                tooltip: isAr ? 'القائمة الرئيسية والإعدادات' : 'Menu & Settings',
+                color: colorScheme.primary,
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.all(6),
+                onPressed: () {
+                  if (onMobileMenuPressed != null) {
+                    onMobileMenuPressed!();
+                  } else {
+                    SwitchPointMobileMenuSheet.show(
+                      context,
+                      subtitle: subtitle,
+                      companyLogoUrl: companyLogoUrl,
+                      customActions: customActions,
+                    );
+                  }
+                },
+              )
             else
               const SizedBox(width: 36),
 
-            // 2. Middle / Center: Language Switcher + Country & Currency Switcher
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildLanguageSelector(context, ref, colorScheme, true, isAr),
-                const SizedBox(width: 4),
-                _buildCountryCurrencySelector(context, ref, colorScheme, true, activeCountry),
-              ],
+            // 2. Middle: Clean Title / Subtitle Badge
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Text(
+                  subtitle ?? (isAr ? SwitchPointInfo.companyNameAr : SwitchPointInfo.companyName),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.cairo(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+              ),
             ),
 
-            // 3. Left Side (End in RTL): System Dark/Light Mode + Switch Point Brand Logo
+            // 3. Natural END (Left in Arabic RTL / Right in English LTR): Switch Point Mini Brand Logo
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildThemeModeButton(ref, colorScheme, isDark, true),
-                const SizedBox(width: 4),
                 _buildMobileLogo(context, colorScheme),
               ],
             ),
@@ -553,13 +584,19 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
 
 /// Material Design 3 Persistent Footer for Switch Point Platform (English / LTR Format)
 class SwitchPointFooter extends StatelessWidget {
-  const SwitchPointFooter({super.key});
+  final bool hideOnMobile;
+
+  const SwitchPointFooter({super.key, this.hideOnMobile = false});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isMobile = MediaQuery.of(context).size.width < 600;
+
+    if (isMobile && hideOnMobile) {
+      return const SizedBox.shrink();
+    }
 
     return Directionality(
       textDirection: TextDirection.ltr,
@@ -950,6 +987,467 @@ class SwitchPointFooter extends StatelessWidget {
       onTap: () => SwitchPointInfo.launchLink(url),
       borderRadius: BorderRadius.circular(20),
       child: pill,
+    );
+  }
+}
+
+/// Material Design 3 Mobile Navigation, Settings & Support Drawer Sheet
+class SwitchPointMobileMenuSheet extends ConsumerWidget {
+  final String? subtitle;
+  final String? companyLogoUrl;
+  final List<Widget>? customActions;
+
+  const SwitchPointMobileMenuSheet({
+    super.key,
+    this.subtitle,
+    this.companyLogoUrl,
+    this.customActions,
+  });
+
+  /// Static helper to display the modal bottom sheet
+  static Future<void> show(
+    BuildContext context, {
+    String? subtitle,
+    String? companyLogoUrl,
+    List<Widget>? customActions,
+  }) {
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => SwitchPointMobileMenuSheet(
+        subtitle: subtitle,
+        companyLogoUrl: companyLogoUrl,
+        customActions: customActions,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isAr = ref.isArabic;
+    final isHindi = ref.isHindi;
+    final currentLangCode = ref.watch(localeProvider).languageCode;
+    final activeCountry = ref.watch(activeCountryProvider);
+    final themeMode = ref.watch(themeModeProvider);
+    final isDark = themeMode == ThemeMode.dark ||
+        (themeMode == ThemeMode.system && theme.brightness == Brightness.dark);
+
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.88,
+      ),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Drag Handle
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 6),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+
+          // Header Bar
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                if (companyLogoUrl != null && companyLogoUrl!.isNotEmpty) ...[
+                  Container(
+                    width: 38,
+                    height: 38,
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+                    ),
+                    child: ClipOval(
+                      child: Image.network(
+                        companyLogoUrl!,
+                        fit: BoxFit.contain,
+                        errorBuilder: (ctx, err, st) => Icon(Icons.business_rounded, color: colorScheme.primary, size: 20),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                ] else ...[
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [colorScheme.primary, colorScheme.tertiary],
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.hub_rounded, color: Colors.white, size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        subtitle ?? SwitchPointInfo.platformName,
+                        style: GoogleFonts.cairo(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.onSurface,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        isAr ? 'القائمة الرئيسية والإعدادات' : (isHindi ? 'मुख्य मेनू और सेटिंग्स' : 'Main Menu & Settings'),
+                        style: GoogleFonts.cairo(
+                          fontSize: 11,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton.filledTonal(
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  style: IconButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.all(6),
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+
+          // Scrollable Body
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. Campaign Quick Actions (if any)
+                  if (customActions != null && customActions!.isNotEmpty) ...[
+                    Text(
+                      isAr ? 'إجراءات الحملة والبرموتر:' : (isHindi ? 'प्रचार और प्रमोटर क्रियाएं:' : 'Campaign & Promoter Actions:'),
+                      style: GoogleFonts.cairo(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primaryContainer.withValues(alpha: 0.25),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: colorScheme.primary.withValues(alpha: 0.2)),
+                      ),
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: customActions!,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // 2. Preferences & Settings Section
+                  Text(
+                    isAr ? 'إعدادات اللغة والمظهر:' : (isHindi ? 'भाषा और उपस्थिति सेटिंग्स:' : 'Language & Display Settings:'),
+                    style: GoogleFonts.cairo(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Language Selector
+                        Row(
+                          children: [
+                            Icon(Icons.translate_rounded, size: 18, color: colorScheme.primary),
+                            const SizedBox(width: 8),
+                            Text(
+                              isAr ? 'لغة التطبيق' : (isHindi ? 'ऐप की भाषा' : 'App Language'),
+                              style: GoogleFonts.cairo(fontSize: 12.5, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          children: AppLanguage.values.map((lang) {
+                            final isSelected = currentLangCode == lang.code;
+                            return ChoiceChip(
+                              avatar: Text(lang.flagEmoji, style: const TextStyle(fontSize: 14)),
+                              label: Text(
+                                lang.label,
+                                style: GoogleFonts.cairo(
+                                  fontSize: 11.5,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                ),
+                              ),
+                              selected: isSelected,
+                              onSelected: (val) {
+                                if (val) ref.setLocale(lang.code);
+                              },
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Country & Currency Selector
+                        Row(
+                          children: [
+                            Icon(Icons.payments_rounded, size: 18, color: colorScheme.secondary),
+                            const SizedBox(width: 8),
+                            Text(
+                              isAr ? 'الدولة والعملة المعتمدة' : (isHindi ? 'देश और मुद्रा' : 'Country & Currency'),
+                              style: GoogleFonts.cairo(fontSize: 12.5, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          children: CountryCurrencyConfig.supportedCountries.map((country) {
+                            final isSelected = activeCountry.code == country.code;
+                            return ChoiceChip(
+                              avatar: Text(country.flagEmoji, style: const TextStyle(fontSize: 14)),
+                              label: Text(
+                                '${country.name(currentLangCode)} (${country.currencySymbolFor(currentLangCode)})',
+                                style: GoogleFonts.cairo(
+                                  fontSize: 11.5,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                ),
+                              ),
+                              selected: isSelected,
+                              onSelected: (val) {
+                                if (val) ref.read(activeCountryProvider.notifier).state = country;
+                              },
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Dark / Light Theme Mode
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          secondary: Icon(
+                            isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                            color: isDark ? Colors.amber : colorScheme.primary,
+                            size: 20,
+                          ),
+                          title: Text(
+                            isAr
+                                ? (isDark ? 'الوضع الداكن (مفعل)' : 'الوضع الفاتح (مفعل)')
+                                : (isHindi
+                                    ? (isDark ? 'डार्क मोड (सक्रिय)' : 'लाइट मोड (सक्रिय)')
+                                    : (isDark ? 'Dark Mode (Active)' : 'Light Mode (Active)')),
+                            style: GoogleFonts.cairo(fontSize: 12.5, fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text(
+                            isAr ? 'تبديل المظهر بين الوضع الليلي والنهاري' : (isHindi ? 'दिन और रात के मोड के बीच स्विच करें' : 'Toggle between Dark and Light mode'),
+                            style: GoogleFonts.cairo(fontSize: 10.5, color: colorScheme.onSurfaceVariant),
+                          ),
+                          value: isDark,
+                          onChanged: (val) {
+                            ref.read(themeModeProvider.notifier).state = val ? ThemeMode.dark : ThemeMode.light;
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // 3. Contact Us & Support Section (Moved from footer)
+                  Text(
+                    isAr ? 'تواصل معنا والدعم الفني:' : (isHindi ? 'हमसे संपर्क करें और तकनीकी सहायता:' : 'Contact Us & Technical Support:'),
+                    style: GoogleFonts.cairo(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                    ),
+                    child: Column(
+                      children: [
+                        // WhatsApp Egypt
+                        ListTile(
+                          dense: true,
+                          leading: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(Icons.chat_rounded, color: Colors.green.shade700, size: 18),
+                          ),
+                          title: Text(
+                            'WhatsApp (مصر)',
+                            style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text(
+                            SwitchPointInfo.whatsappEgypt,
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          trailing: const Icon(Icons.open_in_new_rounded, size: 16),
+                          onTap: () => SwitchPointInfo.launchLink(SwitchPointInfo.whatsappEgyptUrl),
+                        ),
+                        const Divider(height: 1),
+
+                        // WhatsApp UAE
+                        ListTile(
+                          dense: true,
+                          leading: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(Icons.chat_rounded, color: Colors.green.shade700, size: 18),
+                          ),
+                          title: Text(
+                            'WhatsApp (الإمارات)',
+                            style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text(
+                            SwitchPointInfo.whatsappUae,
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          trailing: const Icon(Icons.open_in_new_rounded, size: 16),
+                          onTap: () => SwitchPointInfo.launchLink(SwitchPointInfo.whatsappUaeUrl),
+                        ),
+                        const Divider(height: 1),
+
+                        // Support Email
+                        ListTile(
+                          dense: true,
+                          leading: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(Icons.mail_outline_rounded, color: Colors.blue.shade700, size: 18),
+                          ),
+                          title: Text(
+                            isAr ? 'البريد الإلكتروني للدعم' : 'Support Email',
+                            style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text(
+                            SwitchPointInfo.supportEmail,
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          trailing: const Icon(Icons.open_in_new_rounded, size: 16),
+                          onTap: () => SwitchPointInfo.launchEmail(SwitchPointInfo.supportEmail),
+                        ),
+                        const Divider(height: 1),
+
+                        // Official Website
+                        ListTile(
+                          dense: true,
+                          leading: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: Colors.purple.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(Icons.public_rounded, color: Colors.purple.shade700, size: 18),
+                          ),
+                          title: Text(
+                            isAr ? 'موقع سويتش بوينت الرسمي' : 'Switch Point Website',
+                            style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text(
+                            SwitchPointInfo.websiteDisplay,
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          trailing: const Icon(Icons.open_in_new_rounded, size: 16),
+                          onTap: () => SwitchPointInfo.launchLink(SwitchPointInfo.websiteUrl),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // 4. Copyright & Version Footer
+                  Center(
+                    child: Column(
+                      children: [
+                        Text(
+                          SwitchPointInfo.copyright,
+                          style: GoogleFonts.cairo(
+                            fontSize: 11,
+                            color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: colorScheme.primaryContainer.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            AppVersionConfig.fullBuildDisplay,
+                            style: GoogleFonts.cairo(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onPrimaryContainer,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

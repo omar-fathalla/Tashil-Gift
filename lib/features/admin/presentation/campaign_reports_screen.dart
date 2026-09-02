@@ -17,6 +17,7 @@ import '../../../core/widgets/m3_button_groups.dart';
 import '../domain/event_model.dart';
 import '../../../core/utils/file_download_helper.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
+import '../../../core/utils/slug_utils.dart';
 import '../../../core/widgets/portal_screen_header_card.dart';
 import 'widgets/branch_chain_analytics_charts.dart';
 
@@ -51,6 +52,7 @@ class _ReportAggregationResult {
 /// and Event-Scoped Analytics breakdowns.
 class CampaignReportsScreen extends ConsumerStatefulWidget {
   final EventModel? initialEvent;
+  final String? initialEventId;
   final String? lockedCompanySlug;
   final String? lockedCompanyName;
   final bool isEmbedded;
@@ -59,6 +61,7 @@ class CampaignReportsScreen extends ConsumerStatefulWidget {
   const CampaignReportsScreen({
     super.key,
     this.initialEvent,
+    this.initialEventId,
     this.lockedCompanySlug,
     this.lockedCompanyName,
     this.isEmbedded = false,
@@ -76,6 +79,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
 
   // Selected Event: null means "All Campaigns / جميع الحملات"
   EventModel? _selectedEvent;
+  String? _selectedEventId;
   int _selectedTab = 0; // 0: Products, 1: Branches
 
   final TextEditingController _productSearchController = TextEditingController();
@@ -102,14 +106,18 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
   void initState() {
     super.initState();
     _selectedEvent = widget.initialEvent;
+    _selectedEventId = widget.initialEventId ?? widget.initialEvent?.id;
   }
 
   @override
   void didUpdateWidget(covariant CampaignReportsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.initialEvent != oldWidget.initialEvent) {
+    if (widget.initialEvent != oldWidget.initialEvent || widget.initialEventId != oldWidget.initialEventId) {
       setState(() {
         _selectedEvent = widget.initialEvent;
+        _selectedEventId = widget.initialEventId ?? widget.initialEvent?.id;
+        _cachedMetrics = null;
+        _lastMetricsCacheKey = null;
       });
     }
   }
@@ -224,7 +232,9 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
             // Scope events if lockedCompanySlug is present
             final scopedEvents = isLocked
                 ? allEvents.where((e) {
-                    final matchSlug = e.companySlug.toLowerCase() == widget.lockedCompanySlug!.toLowerCase();
+                    if (_selectedEventId != null && e.id == _selectedEventId) return true;
+                    final matchSlug = e.companySlug.toLowerCase() == widget.lockedCompanySlug!.toLowerCase() ||
+                        SlugUtils.toSlug(e.targetCompany).toLowerCase() == widget.lockedCompanySlug!.toLowerCase();
                     final matchName = widget.lockedCompanyName != null &&
                         widget.lockedCompanyName!.isNotEmpty &&
                         e.targetCompany.toLowerCase() == widget.lockedCompanyName!.toLowerCase();
@@ -232,18 +242,25 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
                   }).toList()
                 : allEvents;
 
-            // If an initialEvent was provided with an ID, sync it with real-time events list
-            if (_selectedEvent != null && scopedEvents.isNotEmpty) {
-              final matched = scopedEvents.where((e) => e.id == _selectedEvent!.id);
+            // If an initialEvent or initialEventId was provided, resolve and sync it
+            if (_selectedEventId != null && _selectedEventId!.isNotEmpty && _selectedEventId != 'ALL' && _selectedEventId != 'all') {
+              final matched = (scopedEvents.isNotEmpty ? scopedEvents : allEvents).where((e) => e.id == _selectedEventId).toList();
+              if (matched.isNotEmpty) {
+                _selectedEvent = matched.first;
+              }
+            } else if (_selectedEvent != null && scopedEvents.isNotEmpty) {
+              final matched = scopedEvents.where((e) => e.id == _selectedEvent!.id).toList();
               if (matched.isNotEmpty) {
                 _selectedEvent = matched.first;
               }
             }
 
+            final effectiveEventId = _selectedEvent?.id ?? (_selectedEventId != null && _selectedEventId != 'ALL' && _selectedEventId != 'all' ? _selectedEventId : null);
+
             Query transactionsQuery = firestore.collection('receipts_transactions');
-            if (_selectedEvent != null) {
-              transactionsQuery = transactionsQuery.where('campaignId', isEqualTo: _selectedEvent!.id);
-            } else if (isLocked) {
+            if (effectiveEventId != null && effectiveEventId.isNotEmpty) {
+              transactionsQuery = transactionsQuery.where('campaignId', isEqualTo: effectiveEventId);
+            } else if (isLocked && widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty) {
               transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug);
             }
 
@@ -276,19 +293,9 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
                   final compName = data['companyName']?.toString() ?? '';
                   final targetComp = data['target_company']?.toString() ?? '';
 
-                  if (_selectedEvent != null) {
-                    if (cId.isNotEmpty) {
-                      return cId == _selectedEvent!.id;
-                    }
-                    if (_selectedEvent!.companySlug.isNotEmpty && cSlug.toLowerCase() == _selectedEvent!.companySlug.toLowerCase()) {
-                      return true;
-                    }
-                    if (_selectedEvent!.targetCompany.isNotEmpty &&
-                        (compName.toLowerCase() == _selectedEvent!.targetCompany.toLowerCase() ||
-                            targetComp.toLowerCase() == _selectedEvent!.targetCompany.toLowerCase())) {
-                      return true;
-                    }
-                    return false;
+                  if (effectiveEventId != null && effectiveEventId.isNotEmpty) {
+                    // Strict campaign isolation: Only invoices for this specific campaign!
+                    return cId == effectiveEventId;
                   }
 
                   if (widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty) {
@@ -671,6 +678,8 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
     required VoidCallback onExport,
     required bool isMobile,
   }) {
+    final effectiveEventId = _selectedEvent?.id ?? (_selectedEventId != null && _selectedEventId != 'ALL' && _selectedEventId != 'all' ? _selectedEventId : null);
+
     return PortalScreenHeaderCard(
       icon: Icons.analytics_rounded,
       title: strings.analyticsTitle,
@@ -678,12 +687,16 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
           ? 'تحليل مبيعات الأصناف، أداء الفعاليات، وتوزيع الفروع والسلاسل'
           : (isHi ? 'उत्पाद बिक्री विश्लेषण, अभियान प्रदर्शन और शाखा वितरण' : 'Sales performance, top product rankings, and branch analytics'),
       events: allEvents,
-      selectedEventId: _selectedEvent?.id,
+      selectedEventId: effectiveEventId,
       onEventChanged: (val) {
         setState(() {
+          _cachedMetrics = null;
+          _lastMetricsCacheKey = null;
           if (val == null || val == 'ALL' || val == 'all') {
+            _selectedEventId = null;
             _selectedEvent = null;
           } else {
+            _selectedEventId = val;
             _selectedEvent = allEvents.where((e) => e.id == val).firstOrNull;
           }
         });

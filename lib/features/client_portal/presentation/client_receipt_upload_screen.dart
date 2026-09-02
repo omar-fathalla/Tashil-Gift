@@ -1040,6 +1040,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       backgroundColor: colorScheme.surface,
       appBar: SwitchPointHeader(
         subtitle: '${strings.clientPortalSubtitle} — ${event.targetCompany}',
+        companyLogoUrl: event.companyLogoUrl,
         customActions: [
           // 1. Campaign Concept & Offer Rules Action Button (Brief & Conditions)
           Tooltip(
@@ -1666,7 +1667,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
               ),
             ),
           ),
-          const SwitchPointFooter(),
+          if (!isMobile) const SwitchPointFooter(),
         ],
       ),
     );

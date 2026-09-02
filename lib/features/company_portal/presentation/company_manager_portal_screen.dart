@@ -61,7 +61,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _selectedTab = 0; // 0 = Analytics & Insights, 1 = Invoice Audit Feed, 2 = Vouchers, 3 = Prizes & Stock Balance
   final Set<int> _loadedTabs = {0}; // Lazy loading set: only render tabs when requested
-  final Map<int, Widget> _cachedTabWidgets = {}; // High performance memoized tab widget cache (0ms instant tab switching)
+  final Map<String, Widget> _cachedTabWidgets = {}; // High performance memoized tab widget cache (0ms instant tab switching)
   bool _isSidebarExpanded = true;
 
   @override
@@ -447,8 +447,9 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     required String? activeEventId,
     required EventModel? initialEvent,
   }) {
-    if (_cachedTabWidgets.containsKey(tabIndex)) {
-      return _cachedTabWidgets[tabIndex]!;
+    final tabKey = '$tabIndex-${activeEventId ?? 'all'}-$effectiveSlug';
+    if (_cachedTabWidgets.containsKey(tabKey)) {
+      return _cachedTabWidgets[tabKey]!;
     }
     final widget = _buildTabContent(
       tabIndex: tabIndex,
@@ -457,7 +458,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
       activeEventId: activeEventId,
       initialEvent: initialEvent,
     );
-    _cachedTabWidgets[tabIndex] = widget;
+    _cachedTabWidgets[tabKey] = widget;
     return widget;
   }
 
@@ -474,6 +475,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
         return CampaignReportsScreen(
           key: ValueKey('reports_${effectiveSlug}_${activeEventId ?? 'all'}'),
           initialEvent: initialEvent,
+          initialEventId: activeEventId,
           lockedCompanySlug: effectiveSlug,
           lockedCompanyName: companyDisplayName,
           isEmbedded: true,
