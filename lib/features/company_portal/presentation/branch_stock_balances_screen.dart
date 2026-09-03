@@ -84,6 +84,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
         widget.initialEventId!.isNotEmpty) {
       setState(() {
         _selectedEventId = widget.initialEventId;
+        _controllers.clear();
       });
     }
   }
@@ -99,10 +100,17 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
   }
 
   TextEditingController _getOrCreateController(String key, int initialValue) {
-    if (!_controllers.containsKey(key)) {
-      _controllers[key] = TextEditingController(text: '$initialValue');
+    final existing = _controllers[key];
+    if (existing == null) {
+      final ctrl = TextEditingController(text: '$initialValue');
+      _controllers[key] = ctrl;
+      return ctrl;
     }
-    return _controllers[key]!;
+    // Auto-update if previous value was 0 and Firestore now loaded real stock
+    if (!_isSaving && existing.text == '0' && initialValue > 0) {
+      existing.text = '$initialValue';
+    }
+    return existing;
   }
 
   Future<void> _saveAllBalances({
@@ -135,9 +143,20 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
       final effectiveSlug = widget.lockedCompanySlug ?? events.first.companySlug;
 
       final cellAllocations = <String, int>{};
+      for (final event in events) {
+        for (final branchName in branches) {
+          for (final gift in masterGifts) {
+            final giftKey = gift.id.isNotEmpty ? gift.id : gift.giftName;
+            final cellKey = '${event.id}_${branchName}_$giftKey';
+            final controller = _controllers[cellKey];
+            final val = controller?.text.trim().toIntOrNull() ?? 0;
+            cellAllocations[cellKey] = val;
+          }
+        }
+      }
       for (final entry in _controllers.entries) {
         final val = entry.value.text.trim().toIntOrNull();
-        if (val != null) {
+        if (val != null && !cellAllocations.containsKey(entry.key)) {
           cellAllocations[entry.key] = val;
         }
       }
@@ -148,6 +167,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
         masterGifts: masterGifts,
         cellAllocations: cellAllocations,
         claimedCache: _claimedCache,
+        branches: branches,
         notes: isAr ? 'تغذية وتثبيت الرصيد من شاشة الأرصدة' : 'Stock quota sync from Branch Balances',
         performedBy: 'مدير الشركة',
       );
@@ -709,10 +729,15 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
     }
   }
 
-  void _applyBulkDistribution(List<String> branches, List<EventModel> events) {
+  void _applyBulkDistribution(List<String> branches, List<EventModel> events, List<CompanyGiftModel> masterGifts) {
     final qty = _bulkQtyController.text.trim().toIntOrNull();
     final isAr = ref.isArabic;
-    if (_selectedBulkGiftKey == null) {
+    final effectiveGiftKey = _selectedBulkGiftKey ??
+        (masterGifts.isNotEmpty
+            ? (masterGifts.first.id.isNotEmpty ? masterGifts.first.id : masterGifts.first.giftName)
+            : null);
+
+    if (effectiveGiftKey == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -739,12 +764,11 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
     }
 
     setState(() {
+      _selectedBulkGiftKey = effectiveGiftKey;
       for (final event in events) {
         for (final branchName in branches) {
-          final cellKey = '${event.id}_${branchName}_$_selectedBulkGiftKey';
-          if (_controllers.containsKey(cellKey)) {
-            _controllers[cellKey]!.text = '$qty';
-          }
+          final cellKey = '${event.id}_${branchName}_$effectiveGiftKey';
+          _getOrCreateController(cellKey, qty).text = '$qty';
         }
       }
     });
@@ -755,7 +779,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
           isAr ? 'تم تطبيق كمية ($qty) على كافة الفروع المحددة للصنف' : 'Applied ($qty) to all branches for selected gift',
           style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.teal[700],
+        backgroundColor: const Color(0xFF006C50),
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
       ),
@@ -977,10 +1001,58 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
     // For the active wave, determine the latest settlement date cutoff
     final DateTime? activeWaveCutoff = settlements.isNotEmpty ? settlements.first.settledAt : null;
 
+    // Determine effective gifts for the selected campaign vs all campaigns
+    final List<CompanyGiftModel> effectiveGifts;
+    if (events.length == 1) {
+      final singleEvent = events.first;
+      final campaignGiftKeys = <String>{};
+      for (final p in singleEvent.allocatedPrizes) {
+        if (p.giftId.isNotEmpty) campaignGiftKeys.add(p.giftId.toLowerCase().trim());
+        if (p.name.isNotEmpty) campaignGiftKeys.add(p.name.toLowerCase().trim());
+      }
+      for (final r in singleEvent.promotionalRules) {
+        if (r.linkedGiftId != null && r.linkedGiftId!.isNotEmpty) {
+          campaignGiftKeys.add(r.linkedGiftId!.toLowerCase().trim());
+        }
+        for (final lg in r.linkedGifts) {
+          if (lg.giftId.isNotEmpty) campaignGiftKeys.add(lg.giftId.toLowerCase().trim());
+          if (lg.giftName.isNotEmpty) campaignGiftKeys.add(lg.giftName.toLowerCase().trim());
+        }
+      }
+
+      if (campaignGiftKeys.isNotEmpty) {
+        final matched = masterGifts.where((g) {
+          final gId = g.id.toLowerCase().trim();
+          final gName = g.giftName.toLowerCase().trim();
+          return campaignGiftKeys.contains(gId) || campaignGiftKeys.contains(gName);
+        }).toList();
+
+        effectiveGifts = matched.isNotEmpty ? matched : masterGifts;
+      } else {
+        effectiveGifts = masterGifts;
+      }
+    } else {
+      effectiveGifts = masterGifts;
+    }
+
     // Build quick transaction disbursed map: branchName -> (giftKey / normGiftName / normGiftId -> int count)
     final Map<String, Map<String, int>> txBranchDisbursedMap = {};
     for (final doc in txDocs) {
       final data = doc.data() as Map<String, dynamic>;
+
+      // Strictly isolate transactions to the active campaign when scoped
+      if (events.length == 1) {
+        final targetCampId = events.first.id;
+        final docCampId = (data['campaignId'] ?? data['event_id'] ?? data['campaign_id'] ?? data['eventId'] ?? '').toString().trim();
+        if (docCampId.isNotEmpty && docCampId != targetCampId) {
+          continue; // Belongs to another campaign of the same brand
+        }
+      } else if (_selectedEventId != null && _selectedEventId!.isNotEmpty) {
+        final docCampId = (data['campaignId'] ?? data['event_id'] ?? data['campaign_id'] ?? data['eventId'] ?? '').toString().trim();
+        if (docCampId.isNotEmpty && docCampId != _selectedEventId) {
+          continue;
+        }
+      }
 
       // Filter out transactions created on or before the latest settlement cutoff
       if (activeWaveCutoff != null) {
@@ -1084,7 +1156,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
 
     for (final event in events) {
       for (final branchName in allBranches) {
-        for (final gift in masterGifts) {
+        for (final gift in effectiveGifts) {
           final giftKey = gift.id.isNotEmpty ? gift.id : gift.giftName;
           final normGiftName = gift.giftName.trim().toLowerCase();
           final normGiftId = gift.id.trim().toLowerCase();
@@ -1097,7 +1169,9 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
             final pId = p.giftId.trim().toLowerCase();
             final pBranch = p.branchName.trim().toLowerCase();
             final isGiftMatch = pName == normGiftName || (normGiftId.isNotEmpty && pId == normGiftId);
-            final isBranchMatch = pBranch == branchName.toLowerCase() || (branchName == (isAr ? 'كافة الفروع / عام' : 'All Branches') && pBranch.isEmpty);
+            final isBranchMatch = _matchesBranchName(p.branchName, branchName) ||
+                pBranch == branchName.toLowerCase() ||
+                (branchName == (isAr ? 'كافة الفروع / عام' : 'All Branches') && pBranch.isEmpty);
             if (isGiftMatch && isBranchMatch) {
               matchedPrize = p;
               break;
@@ -1125,18 +1199,14 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
             }
           }
 
-          final allocated = matchedPrize?.allocatedQuantity ?? 0;
-          final remaining = matchedPrize?.remainingQuantity ?? 0;
-          final rawClaimed = (activeWaveCutoff == null && matchedPrize != null)
-              ? (allocated - remaining).clamp(0, allocated)
-              : (matchedPrize != null ? (allocated - remaining).clamp(0, allocated) : 0);
-          final claimed = txClaimed > rawClaimed ? txClaimed : rawClaimed;
+          _claimedCache[cellKey] = txClaimed;
 
-          _claimedCache[cellKey] = claimed;
-          _getOrCreateController(cellKey, allocated);
+          final initialAlloc = matchedPrize?.allocatedQuantity ?? 0;
+          final controller = _getOrCreateController(cellKey, initialAlloc);
+          final currentAlloc = controller.text.trim().toIntOrNull() ?? initialAlloc;
 
-          totalAllocatedStock += allocated;
-          totalClaimedStock += claimed;
+          totalAllocatedStock += currentAlloc;
+          totalClaimedStock += txClaimed;
         }
       }
     }
@@ -1151,9 +1221,9 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
         : (totalAllocatedStock - totalClaimedStock).clamp(0, totalAllocatedStock);
 
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(12, 12, 12, 96),
+      padding: const EdgeInsets.all(20),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // 1. Header Banner & Save Action
           _buildHeaderCard(
@@ -1164,7 +1234,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
             isHi: isHi,
             events: events,
             allEvents: allEvents,
-            masterGifts: masterGifts,
+            masterGifts: effectiveGifts,
             branches: allBranches,
             coveredBranchesCount: allBranches.length,
             totalAllocated: totalAllocatedStock,
@@ -1250,17 +1320,17 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
             ),
 
           // 2. Quick Bulk Distribution Toolbar (active mode only)
-          if (_selectedSettlement == null && masterGifts.isNotEmpty)
+          if (_selectedSettlement == null && effectiveGifts.isNotEmpty)
             _buildBulkDistributionBar(
               colorScheme: colorScheme,
               strings: strings,
               isAr: isAr,
-              masterGifts: masterGifts,
+              masterGifts: effectiveGifts,
               branches: allBranches,
               events: events,
             ),
 
-          if (_selectedSettlement == null && masterGifts.isNotEmpty)
+          if (_selectedSettlement == null && effectiveGifts.isNotEmpty)
             const SizedBox(height: 16),
 
           // 3. Search & View Mode Switcher
@@ -1341,7 +1411,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
           const SizedBox(height: 16),
 
           // 4. Main Balances View (Matrix Grid vs Cards)
-          if (masterGifts.isEmpty)
+          if (effectiveGifts.isEmpty)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(36),
@@ -1370,7 +1440,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
               strings: strings,
               isAr: isAr,
               events: events,
-              masterGifts: masterGifts,
+              masterGifts: effectiveGifts,
               branches: filteredBranches,
             )
           else
@@ -1379,11 +1449,11 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
               strings: strings,
               isAr: isAr,
               events: events,
-              masterGifts: masterGifts,
+              masterGifts: effectiveGifts,
               branches: filteredBranches,
             ),
 
-          const SizedBox(height: 30),
+          const SizedBox(height: 36),
 
           // Bottom Floating Save Bar
           Center(
@@ -1392,7 +1462,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                   ? null
                   : () => _saveAllBalances(
                         events: events,
-                        masterGifts: masterGifts,
+                        masterGifts: effectiveGifts,
                         branches: allBranches,
                       ),
               icon: _isSaving
@@ -2151,7 +2221,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
         );
 
         final applyBtn = FilledButton.icon(
-          onPressed: () => _applyBulkDistribution(branches, events),
+          onPressed: () => _applyBulkDistribution(branches, events, masterGifts),
           icon: const Icon(Icons.bolt_rounded, size: 16),
           label: Text(
             strings.applyToAllBranchesBtn,
@@ -2167,14 +2237,16 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
 
         final zeroBtn = OutlinedButton.icon(
           onPressed: () {
-            if (_selectedBulkGiftKey != null) {
+            final effectiveGiftKey = _selectedBulkGiftKey ??
+                (masterGifts.isNotEmpty
+                    ? (masterGifts.first.id.isNotEmpty ? masterGifts.first.id : masterGifts.first.giftName)
+                    : null);
+            if (effectiveGiftKey != null) {
               setState(() {
                 for (final event in events) {
                   for (final branchName in branches) {
-                    final cellKey = '${event.id}_${branchName}_$_selectedBulkGiftKey';
-                    if (_controllers.containsKey(cellKey)) {
-                      _controllers[cellKey]!.text = '0';
-                    }
+                    final cellKey = '${event.id}_${branchName}_$effectiveGiftKey';
+                    _getOrCreateController(cellKey, 0).text = '0';
                   }
                 }
               });
@@ -2539,7 +2611,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
     final cells = <Widget>[
       // 1. Branch Name Cell
       Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: EdgeInsets.only(left: 14, right: 14, top: 14, bottom: isLast ? 22 : 14),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2580,7 +2652,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
 
         cells.add(
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            padding: EdgeInsets.only(left: 10, right: 10, top: 10, bottom: isLast ? 22 : 10),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -2604,9 +2676,9 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                     ),
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: colorScheme.surfaceContainerLow,
                     borderRadius: BorderRadius.circular(8),
@@ -2661,7 +2733,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
 
         cells.add(
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            padding: EdgeInsets.only(left: 10, right: 10, top: 10, bottom: isLast ? 22 : 10),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -2701,9 +2773,9 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                     ),
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: colorScheme.surfaceContainerLow,
                     borderRadius: BorderRadius.circular(8),
@@ -2755,7 +2827,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
     cells.addAll([
       // Total Quota
       Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        padding: EdgeInsets.only(left: 8, right: 8, top: 14, bottom: isLast ? 22 : 14),
         child: Center(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -2772,7 +2844,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
       ),
       // Claimed
       Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        padding: EdgeInsets.only(left: 8, right: 8, top: 14, bottom: isLast ? 22 : 14),
         child: Center(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -2789,7 +2861,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
       ),
       // Remaining
       Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        padding: EdgeInsets.only(left: 8, right: 8, top: 14, bottom: isLast ? 22 : 14),
         child: Center(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -2806,7 +2878,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
       ),
       // Depletion Rate
       Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        padding: EdgeInsets.only(left: 10, right: 10, top: 14, bottom: isLast ? 22 : 14),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,

@@ -54,6 +54,7 @@ class ClientReceiptUploadScreen extends ConsumerStatefulWidget {
 
 class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadScreen> {
   EventModel? _activeEvent;
+  List<EventModel> _availableCompanyEvents = [];
   bool _isLoadingEvent = true;
   String? _errorMessage;
   StreamSubscription? _eventSubscription;
@@ -71,6 +72,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
     super.initState();
     if (widget.event != null) {
       _activeEvent = widget.event;
+      _availableCompanyEvents = [widget.event!];
       _isLoadingEvent = false;
     }
     _subscribeToLiveEvent();
@@ -96,57 +98,23 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
 
   void _subscribeToLiveEvent() {
     _eventSubscription?.cancel();
-    try {
-      final firestore = ref.read(firestoreProvider);
-      final targetEventId = widget.initialEventId ?? widget.event?.id;
-      final slug = (widget.companySlug ?? widget.event?.companySlug ?? '').trim().toLowerCase();
+    final targetEventId = widget.initialEventId;
+    final slug = (widget.companySlug ?? '').trim().toLowerCase();
 
-      if (slug.isEmpty && (targetEventId == null || targetEventId.isEmpty)) {
+    if (slug.isEmpty && (targetEventId == null || targetEventId.isEmpty)) {
+      if (widget.event != null) {
         setState(() {
-          _activeEvent = null;
-          _errorMessage = 'رابط الحملة غير متوفر أو غير مكتمل.';
+          _activeEvent = widget.event;
+          _availableCompanyEvents = [widget.event!];
           _isLoadingEvent = false;
+          _errorMessage = null;
         });
         return;
       }
-
-      // 1. If explicit eventId is provided, listen directly to that specific event document
-      if (targetEventId != null && targetEventId.isNotEmpty) {
-        _eventSubscription = firestore
-            .collection('events')
-            .doc(targetEventId)
-            .snapshots()
-            .listen(
-          (doc) {
-            if (!mounted) return;
-            if (doc.exists && doc.data() != null) {
-              setState(() {
-                _activeEvent = EventModel.fromFirestore(doc);
-                _isLoadingEvent = false;
-                _errorMessage = null;
-              });
-            } else {
-              _fallbackToSlugStream(slug);
-            }
-          },
-          onError: (e) {
-            if (!mounted) return;
-            _fallbackToSlugStream(slug);
-          },
-        );
-        return;
-      }
-
-      _fallbackToSlugStream(slug);
-    } catch (_) {}
-  }
-
-  void _fallbackToSlugStream(String slug) {
-    _eventSubscription?.cancel();
-    if (slug.isEmpty) {
       setState(() {
         _activeEvent = null;
-        _errorMessage = 'يرجى استخدام الرابط المخصص للحملة للبدء.';
+        _availableCompanyEvents = [];
+        _errorMessage = 'رابط الحملة غير متوفر أو غير مكتمل.';
         _isLoadingEvent = false;
       });
       return;
@@ -162,103 +130,106 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           if (docs.isEmpty) {
             setState(() {
               _activeEvent = null;
+              _availableCompanyEvents = [];
               _errorMessage = 'لا يوجد أي فعاليات مسجلة حالياً.';
               _isLoadingEvent = false;
             });
             return;
           }
 
-        // Convert all valid event models
-        final events = docs.map((d) {
-          try {
-            return EventModel.fromFirestore(d);
-          } catch (_) {
-            return null;
+          // Convert all valid event models
+          final events = docs.map((d) {
+            try {
+              return EventModel.fromFirestore(d);
+            } catch (_) {
+              return null;
+            }
+          }).whereType<EventModel>().toList();
+
+          // 1. If targetEventId was provided, find that specific event first
+          EventModel? initialMatched;
+          if (targetEventId != null && targetEventId.isNotEmpty) {
+            initialMatched = events.cast<EventModel?>().firstWhere(
+              (e) => e!.id == targetEventId,
+              orElse: () => null,
+            );
           }
-        }).whereType<EventModel>().toList();
 
-        // 1. Try match by document ID == slug
-        EventModel? matched = events.cast<EventModel?>().firstWhere(
-          (e) => e!.id == slug,
-          orElse: () => null,
-        );
+          // 2. Identify target company key/slug
+          final effectiveSlug = (initialMatched != null && initialMatched.companySlug.isNotEmpty)
+              ? initialMatched.companySlug.trim().toLowerCase()
+              : (slug.isNotEmpty ? slug : (initialMatched?.targetCompany.toLowerCase().trim() ?? ''));
 
-        // 2. Try match by companySlug == slug or targetCompany slug == slug
-        if (matched == null) {
-          final slugMatches = events.where((e) =>
-              e.companySlug.trim().toLowerCase() == slug ||
-              SlugUtils.toSlug(e.targetCompany).toLowerCase() == slug).toList();
-          if (slugMatches.isNotEmpty) {
-            slugMatches.sort((a, b) {
-              if (a.isActive != b.isActive) {
-                return a.isActive ? -1 : 1;
-              }
-              final aDate = a.createdAt ?? a.startDate ?? DateTime.fromMillisecondsSinceEpoch(0);
-              final bDate = b.createdAt ?? b.startDate ?? DateTime.fromMillisecondsSinceEpoch(0);
-              return bDate.compareTo(aDate);
-            });
-            matched = slugMatches.first;
-          }
-        }
+          // 3. Find all campaigns for this company (active and promoter active)
+          List<EventModel> companyEvents = events.where((e) {
+            final eSlug = e.companySlug.trim().toLowerCase();
+            final eTargetSlug = SlugUtils.toSlug(e.targetCompany).toLowerCase();
+            final eTargetName = e.targetCompany.trim().toLowerCase();
+            final matchesCompany = eSlug == effectiveSlug ||
+                eTargetSlug == effectiveSlug ||
+                eTargetName == effectiveSlug ||
+                e.id == effectiveSlug ||
+                (effectiveSlug.isNotEmpty && (eTargetName.contains(effectiveSlug) || effectiveSlug.contains(eTargetName)));
+            return matchesCompany && e.isActive && e.isPromoterActive;
+          }).toList();
 
-        // 3. Try match by targetCompany contains or equal to slug
-        if (matched == null) {
-          final companyMatches = events.where((e) =>
-            e.targetCompany.trim().toLowerCase() == slug ||
-            e.targetCompany.trim().toLowerCase().contains(slug) ||
-            slug.contains(e.targetCompany.trim().toLowerCase())
-          ).toList();
-          if (companyMatches.isNotEmpty) {
-            companyMatches.sort((a, b) {
-              if (a.isActive != b.isActive) {
-                return a.isActive ? -1 : 1;
-              }
-              final aDate = a.createdAt ?? a.startDate ?? DateTime.fromMillisecondsSinceEpoch(0);
-              final bDate = b.createdAt ?? b.startDate ?? DateTime.fromMillisecondsSinceEpoch(0);
-              return bDate.compareTo(aDate);
-            });
-            matched = companyMatches.first;
-          }
-        }
-
-        // 4. Fallback to any active event if none found
-        if (matched == null) {
-          final activeList = events.where((e) => e.isActive).toList();
-          if (activeList.isNotEmpty) {
-            activeList.sort((a, b) {
-              final aDate = a.createdAt ?? a.startDate ?? DateTime.fromMillisecondsSinceEpoch(0);
-              final bDate = b.createdAt ?? b.startDate ?? DateTime.fromMillisecondsSinceEpoch(0);
-              return bDate.compareTo(aDate);
-            });
-            matched = activeList.first;
-          }
-        }
-
-        if (matched != null) {
-          setState(() {
-            _activeEvent = matched;
-            _isLoadingEvent = false;
-            _errorMessage = null;
+          // Sort by creation date descending
+          companyEvents.sort((a, b) {
+            final aDate = a.createdAt ?? a.startDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+            final bDate = b.createdAt ?? b.startDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+            return bDate.compareTo(aDate);
           });
-        } else {
+
+          // Fallback if no promoter-active campaigns found
+          if (companyEvents.isEmpty && initialMatched != null) {
+            companyEvents = [initialMatched];
+          }
+
+          if (companyEvents.isNotEmpty) {
+            // Determine active event
+            EventModel selected;
+            if (_activeEvent != null && companyEvents.any((e) => e.id == _activeEvent!.id)) {
+              selected = companyEvents.firstWhere((e) => e.id == _activeEvent!.id);
+            } else if (initialMatched != null && companyEvents.any((e) => e.id == initialMatched!.id)) {
+              selected = companyEvents.firstWhere((e) => e.id == initialMatched!.id);
+            } else {
+              selected = companyEvents.first;
+            }
+
+            setState(() {
+              _availableCompanyEvents = companyEvents;
+              _activeEvent = selected;
+              _isLoadingEvent = false;
+              _errorMessage = null;
+            });
+          } else {
+            setState(() {
+              _availableCompanyEvents = [];
+              _activeEvent = null;
+              _errorMessage = 'لا توجد حملة مفعالة لهذه الشركة حالياً.';
+              _isLoadingEvent = false;
+            });
+          }
+        },
+        onError: (e) {
+          if (!mounted) return;
           setState(() {
-            _errorMessage = 'لا توجد حملة مفعالة لهذه الشركة حالياً.';
+            _errorMessage = AppErrorHandler.getFriendlyMessage(
+              e,
+              defaultMessage: 'حدث خطأ أثناء تحميل بيانات الحملة من الخادم.',
+            );
             _isLoadingEvent = false;
           });
-        }
-      },
-      onError: (e) {
-        if (!mounted) return;
+        },
+      );
+    } catch (e) {
+      if (mounted) {
         setState(() {
-          _errorMessage = AppErrorHandler.getFriendlyMessage(
-            e,
-            defaultMessage: 'حدث خطأ أثناء تحميل بيانات الحملة من الخادم.',
-          );
+          _errorMessage = 'حدث خطأ أثناء الاتصال بالخادم.';
           _isLoadingEvent = false;
         });
-      },
-    );
-    } catch (_) {}
+      }
+    }
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -1252,6 +1223,133 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                               ],
                             ),
                           ),
+
+                          // 1.5. Dynamic Campaign Selector (Active when company has multiple active campaigns)
+                          if (_availableCompanyEvents.length > 1) ...[
+                            SizedBox(height: isMobile ? 14 : 18),
+                            Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: isMobile ? 12 : 16,
+                                vertical: isMobile ? 10 : 12,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: colorScheme.primary.withValues(alpha: 0.35),
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(5),
+                                        decoration: BoxDecoration(
+                                          color: colorScheme.primary.withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Icon(
+                                          Icons.layers_rounded,
+                                          size: 16,
+                                          color: colorScheme.primary,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          isAr ? 'اختر الحملة / العرض المستهدف للفاتورة:' : 'Select Target Offer / Campaign:',
+                                          style: GoogleFonts.cairo(
+                                            fontSize: isMobile ? 12 : 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: colorScheme.onSurface,
+                                          ),
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: colorScheme.primaryContainer,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          '${_availableCompanyEvents.length} ${isAr ? 'عروض متاحة' : 'Offers'}',
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: colorScheme.onPrimaryContainer,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  DropdownButtonFormField<String>(
+                                    initialValue: _activeEvent?.id,
+                                    isExpanded: true,
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                      filled: true,
+                                      fillColor: colorScheme.surface,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide(color: colorScheme.outlineVariant),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.7)),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide(color: colorScheme.primary, width: 2),
+                                      ),
+                                    ),
+                                    items: _availableCompanyEvents.map((ev) {
+                                      final minSpendStr = ev.minimumSpend > 0
+                                          ? ' (${isAr ? 'حد أدنى' : 'Min'}: ${ev.minimumSpend.toInt()} ${activeCountry.currencySymbolFor(strings.languageCode)})'
+                                          : '';
+                                      return DropdownMenuItem<String>(
+                                        value: ev.id,
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              ev.gameType == 'wheel' ? Icons.donut_large_rounded : Icons.card_giftcard_rounded,
+                                              size: 16,
+                                              color: colorScheme.primary,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                '${ev.eventName}$minSpendStr',
+                                                style: GoogleFonts.cairo(
+                                                  fontSize: isMobile ? 12 : 13,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: colorScheme.onSurface,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }).toList(),
+                                    onChanged: (selectedId) {
+                                      if (selectedId != null && selectedId != _activeEvent?.id) {
+                                        final newActive = _availableCompanyEvents.firstWhere((e) => e.id == selectedId);
+                                        setState(() {
+                                          _activeEvent = newActive;
+                                          _resetFormForNextCustomer();
+                                        });
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
 
                           SizedBox(height: isMobile ? 18 : 24),
 

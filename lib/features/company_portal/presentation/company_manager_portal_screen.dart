@@ -253,6 +253,17 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
       return matchSlug || matchName;
     }).toList();
 
+    // Resolve company logo from initialEvent or any companyEvent
+    String companyLogoUrl = initialEvent?.companyLogoUrl ?? '';
+    if (companyLogoUrl.isEmpty) {
+      for (final e in companyEvents) {
+        if (e.companyLogoUrl.isNotEmpty) {
+          companyLogoUrl = e.companyLogoUrl;
+          break;
+        }
+      }
+    }
+
     final bool isManagerSuspended = (initialEvent != null && (!initialEvent.isActive || !initialEvent.isManagerActive)) ||
         (companyEvents.isNotEmpty && companyEvents.every((e) => !e.isActive || !e.isManagerActive));
 
@@ -294,6 +305,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
               )
             : null,
         subtitle: '$companyDisplayName • ${strings.partnerPortalBadge}',
+        companyLogoUrl: companyLogoUrl,
         customActions: isMobile
             ? null
             : [
@@ -328,6 +340,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
               textTheme: textTheme,
               strings: strings,
               companyName: companyDisplayName,
+              companyLogoUrl: companyLogoUrl,
               effectiveSlug: effectiveSlug,
               activeEventId: activeEventId,
               campaignsCount: companyEvents.length,
@@ -398,6 +411,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                 textTheme: textTheme,
                 strings: strings,
                 companyName: companyDisplayName,
+                companyLogoUrl: companyLogoUrl,
                 effectiveSlug: effectiveSlug,
                 activeEventId: activeEventId,
                 campaignsCount: companyEvents.length,
@@ -522,6 +536,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     required TextTheme textTheme,
     required AppStrings strings,
     required String companyName,
+    required String companyLogoUrl,
     required String effectiveSlug,
     required String? activeEventId,
     required int campaignsCount,
@@ -557,7 +572,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
           maxWidth: 275.0,
           alignment: AlignmentDirectional.topStart,
           child: SizedBox(
-            width: _isSidebarExpanded ? 275.0 : 76.0,
+            width: 275.0,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -587,22 +602,46 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                                 width: 36,
                                 height: 36,
                                 decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      colorScheme.primary,
-                                      colorScheme.secondary,
-                                    ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
+                                  color: companyLogoUrl.isNotEmpty ? Colors.white : null,
+                                  gradient: companyLogoUrl.isEmpty
+                                      ? LinearGradient(
+                                          colors: [
+                                            colorScheme.primary,
+                                            colorScheme.secondary,
+                                          ],
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                        )
+                                      : null,
                                   borderRadius: BorderRadius.circular(10),
+                                  border: companyLogoUrl.isNotEmpty
+                                      ? Border.all(
+                                          color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+                                          width: 1,
+                                        )
+                                      : null,
                                 ),
-                                child: Center(
-                                  child: Icon(
-                                    Icons.business_rounded,
-                                    color: colorScheme.onPrimary,
-                                    size: 18,
-                                  ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(9),
+                                  child: companyLogoUrl.isNotEmpty
+                                      ? Image.network(
+                                          companyLogoUrl,
+                                          fit: BoxFit.contain,
+                                          errorBuilder: (context, error, stackTrace) => Center(
+                                            child: Icon(
+                                              Icons.business_rounded,
+                                              color: colorScheme.primary,
+                                              size: 20,
+                                            ),
+                                          ),
+                                        )
+                                      : Center(
+                                          child: Icon(
+                                            Icons.business_rounded,
+                                            color: colorScheme.onPrimary,
+                                            size: 18,
+                                          ),
+                                        ),
                                 ),
                               ),
                               const SizedBox(width: 10),
@@ -918,6 +957,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     required TextTheme textTheme,
     required AppStrings strings,
     required String companyName,
+    required String companyLogoUrl,
     required String effectiveSlug,
     required String? activeEventId,
     required int campaignsCount,
@@ -951,15 +991,39 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(10),
+                        width: 48,
+                        height: 48,
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
+                          color: companyLogoUrl.isNotEmpty ? Colors.white : Colors.white.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(12),
+                          border: companyLogoUrl.isNotEmpty
+                              ? Border.all(
+                                  color: Colors.white.withValues(alpha: 0.8),
+                                  width: 1.5,
+                                )
+                              : null,
                         ),
-                        child: const Icon(
-                          Icons.business_rounded,
-                          color: Colors.white,
-                          size: 26,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(11),
+                          child: companyLogoUrl.isNotEmpty
+                              ? Image.network(
+                                  companyLogoUrl,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (context, error, stackTrace) => const Center(
+                                    child: Icon(
+                                      Icons.business_rounded,
+                                      color: Colors.white,
+                                      size: 26,
+                                    ),
+                                  ),
+                                )
+                              : const Center(
+                                  child: Icon(
+                                    Icons.business_rounded,
+                                    color: Colors.white,
+                                    size: 26,
+                                  ),
+                                ),
                         ),
                       ),
                       IconButton(

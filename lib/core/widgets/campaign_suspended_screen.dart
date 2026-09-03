@@ -227,9 +227,12 @@ class _CampaignSuspendedScreenState extends ConsumerState<CampaignSuspendedScree
                 child: Icon(Icons.lock_outline_rounded, size: 15, color: colorScheme.onPrimaryContainer),
               ),
               const SizedBox(width: 8),
-              Text(
-                isPromoter ? strings.promoterPortalLabel : strings.managerPortalLabel,
-                style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+              Flexible(
+                child: Text(
+                  isPromoter ? strings.promoterPortalLabel : strings.managerPortalLabel,
+                  style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),

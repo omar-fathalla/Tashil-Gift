@@ -669,7 +669,9 @@ class EventModel {
     final seenKeys = <String>{};
     final result = <AllocatedPrize>[];
     for (final prize in list) {
-      final key = '${prize.branchId}_${prize.giftId}_${prize.name}';
+      final bKey = prize.branchId.isNotEmpty ? prize.branchId : prize.branchName.trim().toLowerCase();
+      final gKey = prize.giftId.isNotEmpty ? prize.giftId : prize.name.trim().toLowerCase();
+      final key = '${bKey}_$gKey';
       if (seenKeys.add(key)) {
         result.add(prize);
       }

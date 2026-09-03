@@ -63,7 +63,7 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
   });
 
   @override
-  Size get preferredSize => const Size.fromHeight(56);
+  Size get preferredSize => const Size.fromHeight(64);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -82,7 +82,7 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
       return SafeArea(
         bottom: false,
         child: Container(
-          height: 54,
+          height: 56,
           decoration: BoxDecoration(
             color: colorScheme.surfaceContainerLow,
             border: Border(
@@ -158,6 +158,7 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
   }
 
     return Container(
+      height: 64,
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerLow,
         border: Border(
@@ -169,7 +170,7 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
       ),
       padding: const EdgeInsets.symmetric(
         horizontal: 16,
-        vertical: 8,
+        vertical: 4,
       ),
       child: Row(
         children: [
@@ -189,29 +190,68 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(8),
+                      width: 40,
+                      height: 40,
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            colorScheme.primary,
-                            colorScheme.tertiary,
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
+                        color: (companyLogoUrl != null && companyLogoUrl!.isNotEmpty)
+                            ? Colors.white
+                            : null,
+                        gradient: (companyLogoUrl == null || companyLogoUrl!.isEmpty)
+                            ? LinearGradient(
+                                colors: [
+                                  colorScheme.primary,
+                                  colorScheme.tertiary,
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              )
+                            : null,
                         borderRadius: BorderRadius.circular(12),
+                        border: (companyLogoUrl != null && companyLogoUrl!.isNotEmpty)
+                            ? Border.all(
+                                color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+                                width: 1,
+                              )
+                            : null,
                         boxShadow: [
                           BoxShadow(
-                            color: colorScheme.primary.withValues(alpha: 0.3),
+                            color: colorScheme.primary.withValues(alpha: 0.2),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
                         ],
                       ),
-                      child: const Icon(
-                        Icons.hub_rounded,
-                        color: Colors.white,
-                        size: 22,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(11),
+                        child: (companyLogoUrl != null && companyLogoUrl!.isNotEmpty)
+                            ? Image.network(
+                                companyLogoUrl!,
+                                fit: BoxFit.contain,
+                                errorBuilder: (context, error, stackTrace) => Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        colorScheme.primary,
+                                        colorScheme.tertiary,
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                    borderRadius: BorderRadius.circular(11),
+                                  ),
+                                  child: const Icon(
+                                    Icons.business_rounded,
+                                    color: Colors.white,
+                                    size: 22,
+                                  ),
+                                ),
+                              )
+                            : const Icon(
+                                Icons.hub_rounded,
+                                color: Colors.white,
+                                size: 22,
+                              ),
                       ),
                     ),
                     const SizedBox(width: 10),

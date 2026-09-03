@@ -1342,7 +1342,6 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
               child: ConstrainedBox(
                 constraints: BoxConstraints(
                   minWidth: availableWidth,
-                  maxWidth: baseTotalWidth * scale,
                 ),
                 child: Table(
                   columnWidths: columnWidths,

@@ -478,6 +478,14 @@ class CompanyGiftsService {
     await syncCompanyGiftsAvailableQuantities(slug);
   }
 
+  /// Helper to match branch names with fuzzy normalization (stripping city parentheticals and "فرع")
+  static bool _matchesBranchName(String b1, String b2) {
+    if (b1.trim().toLowerCase() == b2.trim().toLowerCase()) return true;
+    final c1 = b1.replaceAll(RegExp(r'\s*\([^)]*\)'), '').replaceAll(RegExp(r'فرع\s+'), '').trim().toLowerCase();
+    final c2 = b2.replaceAll(RegExp(r'\s*\([^)]*\)'), '').replaceAll(RegExp(r'فرع\s+'), '').trim().toLowerCase();
+    return c1 == c2 || b1.toLowerCase().contains(c2) || b2.toLowerCase().contains(c1);
+  }
+
   /// High-performance bulk synchronization for multiple branch prize allocations across campaigns.
   /// Executes atomically with single read & batch write operations in < 500ms.
   Future<int> bulkUpdateBranchPrizeAllocations({
@@ -486,6 +494,7 @@ class CompanyGiftsService {
     required List<CompanyGiftModel> masterGifts,
     required Map<String, int> cellAllocations,
     required Map<String, int> claimedCache,
+    List<String> branches = const [],
     String notes = '',
     String performedBy = 'مدير الشركة',
   }) async {
@@ -510,18 +519,46 @@ class CompanyGiftsService {
 
       bool eventModified = false;
 
-      final eventBranches = event.branchNames.isNotEmpty ? event.branchNames : ['الفرع الرئيسي'];
+      // Resiliently gather all target branch names across all sources
+      final Set<String> targetBranches = {};
+      targetBranches.addAll(branches.map((b) => b.trim()).where((b) => b.isNotEmpty));
+      targetBranches.addAll(event.branchNames.map((b) => b.trim()).where((b) => b.isNotEmpty));
+      for (final p in prizes) {
+        if (p.branchName.trim().isNotEmpty) targetBranches.add(p.branchName.trim());
+      }
+      for (final key in cellAllocations.keys) {
+        if (key.startsWith('${event.id}_')) {
+          final rest = key.substring('${event.id}_'.length);
+          final lastUnderscore = rest.lastIndexOf('_');
+          if (lastUnderscore > 0) {
+            final bName = rest.substring(0, lastUnderscore).trim();
+            if (bName.isNotEmpty) targetBranches.add(bName);
+          }
+        }
+      }
+      if (targetBranches.isEmpty) {
+        targetBranches.add('الفرع الرئيسي');
+      }
 
       for (final gift in masterGifts) {
         final giftKey = gift.id.isNotEmpty ? gift.id : gift.giftName;
         final targetGiftKeyNorm = giftKey.trim().toLowerCase();
 
-        for (final branchName in eventBranches) {
+        for (final branchName in targetBranches) {
           final cellKey = '${event.id}_${branchName}_$giftKey';
-          if (!cellAllocations.containsKey(cellKey)) continue;
+          int? newAllocatedQuantity = cellAllocations[cellKey];
+          if (newAllocatedQuantity == null) {
+            final altKey = '${event.id}_${branchName}_${gift.giftName}';
+            newAllocatedQuantity = cellAllocations[altKey];
+            if (newAllocatedQuantity == null && gift.id.isNotEmpty) {
+              final altKey2 = '${event.id}_${branchName}_${gift.id}';
+              newAllocatedQuantity = cellAllocations[altKey2];
+            }
+          }
 
-          final newAllocatedQuantity = cellAllocations[cellKey] ?? 0;
-          final claimed = claimedCache[cellKey] ?? 0;
+          if (newAllocatedQuantity == null) continue;
+
+          final claimed = claimedCache[cellKey] ?? claimedCache['${event.id}_${branchName}_${gift.giftName}'] ?? 0;
 
           if (newAllocatedQuantity < claimed) {
             throw Exception('لا يمكن تعيين رصيد فرع ($branchName) لصنف (${gift.giftName}) أقل من المنصرف ($claimed قطعة)');
@@ -537,7 +574,7 @@ class CompanyGiftsService {
             final pGiftIdNorm = p.giftId.trim().toLowerCase();
             final pNameNorm = p.name.trim().toLowerCase();
 
-            final branchMatches = pBranchNorm == targetBranchNorm;
+            final branchMatches = pBranchNorm == targetBranchNorm || _matchesBranchName(p.branchName, branchName);
             final giftMatches = pGiftIdNorm == targetGiftKeyNorm ||
                 pNameNorm == targetGiftKeyNorm ||
                 pGiftIdNorm == gift.id.toLowerCase() ||
@@ -623,8 +660,16 @@ class CompanyGiftsService {
       }
 
       if (eventModified) {
+        final updatedBranches = <String>{};
+        updatedBranches.addAll(event.branchNames);
+        for (final b in targetBranches) {
+          if (b != 'كافة الفروع / عام' && b != 'All Branches' && b != 'الفرع الرئيسي') {
+            updatedBranches.add(b);
+          }
+        }
         batch.update(eventRef, {
           'allocatedPrizes': prizes.map((p) => p.toMap()).toList(),
+          if (updatedBranches.isNotEmpty) 'branchNames': updatedBranches.toList(),
         });
       }
     }
