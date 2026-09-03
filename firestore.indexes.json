@@ -20,6 +20,14 @@
       "collectionGroup": "receipts_transactions",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "campaignId", "order": "ASCENDING" },
+        { "fieldPath": "receipt_number", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "receipts_transactions",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "companySlug", "order": "ASCENDING" },
         { "fieldPath": "is_valid", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }

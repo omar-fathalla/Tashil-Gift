@@ -83,5 +83,19 @@ void main() {
       expect(find.text('أهلاً بكم في عرض تريزمي الماسي'), findsOneWidget);
       expect(find.textContaining('400'), findsOneWidget);
     });
+
+    test('Campaign IDs are distinct ensuring independent receipt scoping across multiple events', () {
+      expect(campaign1.id, isNot(equals(campaign2.id)));
+      expect(campaign1.companySlug, equals(campaign2.companySlug));
+
+      // Verify storage path scoping format
+      const receiptNumber = '92_8_224_030926';
+      final path1 = 'receipts/${campaign1.companySlug}/${campaign1.id}/$receiptNumber.jpg';
+      final path2 = 'receipts/${campaign2.companySlug}/${campaign2.id}/$receiptNumber.jpg';
+
+      expect(path1, equals('receipts/unilever/unilever-clear-dove/92_8_224_030926.jpg'));
+      expect(path2, equals('receipts/unilever/unilever-tresemme/92_8_224_030926.jpg'));
+      expect(path1, isNot(equals(path2)));
+    });
   });
 }

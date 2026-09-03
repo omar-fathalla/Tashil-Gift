@@ -603,12 +603,13 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         return;
       }
 
-      // Check for existing receipt to update/upsert
+      // Check for existing receipt in this specific campaign to update/upsert
       DocumentSnapshot<Map<String, dynamic>>? existingDoc;
       if (receiptNumber.isNotEmpty) {
         final existing = await firestore
             .collection('receipts_transactions')
             .where('receipt_number', isEqualTo: receiptNumber)
+            .where('campaignId', isEqualTo: _activeEvent!.id)
             .limit(1)
             .get();
 
@@ -617,7 +618,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         }
       }
 
-      // 2. Upload image to Firebase Storage named by Receipt Number
+      // 2. Upload image to Firebase Storage named by Receipt Number and Campaign ID
       setState(() {
         _aiPhaseText = '2/3 جاري حفظ صورة الفاتورة في التخزين السحابي...';
       });
@@ -626,7 +627,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       final cleanReceiptNumber = (receiptNumber.isNotEmpty ? receiptNumber : "INV_${DateTime.now().millisecondsSinceEpoch}")
           .replaceAll(RegExp(r'[/\\?%*:|"<>]'), '_');
       
-      final storagePath = 'receipts/${_activeEvent!.companySlug}/$cleanReceiptNumber.jpg';
+      final storagePath = 'receipts/${_activeEvent!.companySlug}/${_activeEvent!.id}/$cleanReceiptNumber.jpg';
 
       try {
         final storage = ref.read(firebaseStorageProvider);
@@ -1787,7 +1788,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       final receiptNumber = result.receiptNumber.trim();
       final cleanReceiptNumber = (receiptNumber.isNotEmpty ? receiptNumber : "REJ_${DateTime.now().millisecondsSinceEpoch}")
           .replaceAll(RegExp(r'[/\\?%*:|"<>]'), '_');
-      final storagePath = 'receipts/${activeEvent.companySlug}/$cleanReceiptNumber.jpg';
+      final storagePath = 'receipts/${activeEvent.companySlug}/${activeEvent.id}/$cleanReceiptNumber.jpg';
 
       String imageUrl = '';
       try {
@@ -1797,6 +1798,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           contentType: 'image/jpeg',
           customMetadata: {
             'receiptNumber': receiptNumber,
+            'campaignId': activeEvent.id,
             'companySlug': activeEvent.companySlug,
             'targetCompany': activeEvent.targetCompany,
             'totalValue': totalValue.toString(),
@@ -1821,6 +1823,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         final existing = await firestore
             .collection('receipts_transactions')
             .where('receipt_number', isEqualTo: receiptNumber)
+            .where('campaignId', isEqualTo: activeEvent.id)
             .limit(1)
             .get();
         if (existing.docs.isNotEmpty) {
