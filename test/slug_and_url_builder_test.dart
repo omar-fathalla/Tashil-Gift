@@ -35,24 +35,23 @@ void main() {
   });
 
   group('AppUrlBuilder Tests', () {
-    test('Builds promoter URL correctly with slug and eventId', () {
+    test('Builds clean promoter URL correctly with slug and eventId for social sharing', () {
       final url = AppUrlBuilder.buildPromoterUrl('almarai', eventId: 'evt123');
+      expect(url, contains('/c/almarai?event=evt123'));
+    });
+
+    test('Builds promoter URL correctly with hash when cleanUrl is false', () {
+      final url = AppUrlBuilder.buildPromoterUrl('almarai', eventId: 'evt123', cleanUrl: false);
       expect(url, contains('/#/c/almarai?event=evt123'));
     });
 
-    test('Builds promoter URL correctly without eventId', () {
-      final url = AppUrlBuilder.buildPromoterUrl('almarai');
-      expect(url, contains('/#/c/almarai'));
-      expect(url.contains('?event='), isFalse);
-    });
-
-    test('Builds manager portal URL correctly with slug and eventId', () {
+    test('Builds clean manager portal URL correctly with slug and eventId for social sharing', () {
       final url = AppUrlBuilder.buildManagerPortalUrl('almarai', eventId: 'evt123');
-      expect(url, contains('/#/portal/almarai?event=evt123'));
+      expect(url, contains('/portal/almarai?event=evt123'));
     });
 
-    test('Builds manager portal URL correctly without eventId', () {
-      final url = AppUrlBuilder.buildManagerPortalUrl('almarai');
+    test('Builds manager portal URL correctly with hash when cleanUrl is false', () {
+      final url = AppUrlBuilder.buildManagerPortalUrl('almarai', cleanUrl: false);
       expect(url, contains('/#/portal/almarai'));
       expect(url.contains('?event='), isFalse);
     });

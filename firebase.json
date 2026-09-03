@@ -9,6 +9,9 @@
       "rules": "storage.rules"
     }
   ],
+  "functions": {
+    "source": "functions"
+  },
   "hosting": {
     "public": "build/web",
     "ignore": [
@@ -28,6 +31,30 @@
       }
     ],
     "rewrites": [
+      {
+        "source": "/portal/**",
+        "function": "sharePreview"
+      },
+      {
+        "source": "/c/**",
+        "function": "sharePreview"
+      },
+      {
+        "source": "/p/**",
+        "function": "sharePreview"
+      },
+      {
+        "source": "/ep/**",
+        "function": "sharePreview"
+      },
+      {
+        "source": "/event/**",
+        "function": "sharePreview"
+      },
+      {
+        "source": "/share/**",
+        "function": "sharePreview"
+      },
       {
         "source": "**",
         "destination": "/index.html"

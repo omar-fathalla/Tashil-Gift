@@ -24,36 +24,50 @@ class AppUrlBuilder {
   }
 
   /// Builds a promoter / customer submission URL.
-  /// e.g. https://tashil-gift.web.app/#/c/almarai?event=xyz
-  static String buildPromoterUrl(String companySlug, {String? eventId, bool forceProduction = false}) {
+  /// When [cleanUrl] is true (default for sharing), generates path without hash (e.g. https://tashil-gift.web.app/c/almarai?event=xyz)
+  /// which enables WhatsApp and social crawlers to dynamically fetch the company brand logo.
+  static String buildPromoterUrl(
+    String companySlug, {
+    String? eventId,
+    bool forceProduction = false,
+    bool cleanUrl = true,
+  }) {
     final baseUrl = getBaseUrl(forceProduction: forceProduction);
     final cleanSlug = companySlug.trim().toLowerCase();
+    final prefix = cleanUrl ? '' : '/#';
     if (cleanSlug.isEmpty && eventId != null && eventId.isNotEmpty) {
-      return '$baseUrl/#/event/$eventId';
+      return '$baseUrl$prefix/event/$eventId';
     }
     if (cleanSlug.isEmpty) {
       return baseUrl;
     }
     if (eventId != null && eventId.isNotEmpty) {
-      return '$baseUrl/#/c/$cleanSlug?event=$eventId';
+      return '$baseUrl$prefix/c/$cleanSlug?event=$eventId';
     }
-    return '$baseUrl/#/c/$cleanSlug';
+    return '$baseUrl$prefix/c/$cleanSlug';
   }
 
   /// Builds a company manager / partner portal URL.
-  /// e.g. https://tashil-gift.web.app/#/portal/almarai?event=xyz
-  static String buildManagerPortalUrl(String companySlug, {String? eventId, bool forceProduction = false}) {
+  /// When [cleanUrl] is true (default for sharing), generates path without hash (e.g. https://tashil-gift.web.app/portal/almarai?event=xyz)
+  /// which enables WhatsApp and social crawlers to dynamically fetch the company brand logo.
+  static String buildManagerPortalUrl(
+    String companySlug, {
+    String? eventId,
+    bool forceProduction = false,
+    bool cleanUrl = true,
+  }) {
     final baseUrl = getBaseUrl(forceProduction: forceProduction);
     final cleanSlug = companySlug.trim().toLowerCase();
+    final prefix = cleanUrl ? '' : '/#';
     if (cleanSlug.isEmpty && eventId != null && eventId.isNotEmpty) {
-      return '$baseUrl/#/portal/$eventId';
+      return '$baseUrl$prefix/portal/$eventId';
     }
     if (cleanSlug.isEmpty) {
       return baseUrl;
     }
     if (eventId != null && eventId.isNotEmpty) {
-      return '$baseUrl/#/portal/$cleanSlug?event=$eventId';
+      return '$baseUrl$prefix/portal/$cleanSlug?event=$eventId';
     }
-    return '$baseUrl/#/portal/$cleanSlug';
+    return '$baseUrl$prefix/portal/$cleanSlug';
   }
 }
