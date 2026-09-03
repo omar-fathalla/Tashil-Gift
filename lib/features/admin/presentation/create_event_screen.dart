@@ -2556,7 +2556,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               ),
               content: SingleChildScrollView(
                 child: SizedBox(
-                  width: 540,
+                  width: 580,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -2568,6 +2568,10 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       ),
                       const SizedBox(height: 6),
                       SegmentedButton<String>(
+                        style: SegmentedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                        ),
                         segments: [
                           ButtonSegment(
                             value: 'by_quantity',
@@ -2820,7 +2824,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 10),
+                            const SizedBox(width: 12),
                             Expanded(
                               child: DropdownButtonFormField<String>(
                                 initialValue: rewardType,
@@ -2849,131 +2853,171 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                           ],
                         ),
                       ] else ...[
-                        // Spend Range & Tolerance Fields
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextFormField(
-                                controller: minSpendController,
-                                keyboardType: TextInputType.number,
-                                decoration: InputDecoration(
-                                  labelText: strings.minSpendRangeLabel,
-                                  hintText: '95',
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                                  isDense: true,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: TextFormField(
-                                controller: maxSpendController,
-                                keyboardType: TextInputType.number,
-                                decoration: InputDecoration(
-                                  labelText: strings.maxSpendRangeLabel,
-                                  hintText: '139',
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                                  isDense: true,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                initialValue: rewardType,
-                                decoration: InputDecoration(
-                                  labelText: strings.rewardTypeLabel,
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                                  isDense: true,
-                                ),
-                                items: [
-                                  DropdownMenuItem(value: 'voucher', child: Text(strings.voucherRewardLabel)),
-                                  DropdownMenuItem(value: 'free_product', child: Text(strings.freeProductRewardLabel)),
-                                  DropdownMenuItem(value: 'game_spin', child: Text(strings.gameSpinRewardLabel)),
+                        // Spend Range Row (Min & Max Spend)
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade50.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.amber.shade200),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.tune_rounded, size: 16, color: Color(0xFFB45309)),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'نطاق القيمة المالية وسماحية الخصم:',
+                                    style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF92400E)),
+                                  ),
                                 ],
-                                onChanged: (val) {
-                                  if (val != null) {
-                                    setDialogState(() {
-                                      rewardType = val;
-                                      if (rewardType == 'voucher' && dialogLinkedGifts.isEmpty && targetVoucherAmt > 0) {
-                                        dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(targetVoucherAmt, _companyGifts);
-                                      }
-                                    });
-                                  }
-                                },
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextFormField(
-                                controller: discountToleranceController,
-                                keyboardType: TextInputType.number,
-                                decoration: InputDecoration(
-                                  labelText: strings.discountToleranceLabel,
-                                  hintText: '5',
-                                  helperText: strings.discountToleranceHint,
-                                  helperMaxLines: 2,
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                                  isDense: true,
-                                  prefixIcon: const Icon(Icons.price_check_rounded, size: 18),
-                                ),
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: minSpendController,
+                                      keyboardType: TextInputType.number,
+                                      decoration: InputDecoration(
+                                        labelText: 'الحد الأدنى (من ج.م)',
+                                        hintText: '95',
+                                        prefixIcon: const Icon(Icons.arrow_forward_rounded, size: 16),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                        isDense: true,
+                                        fillColor: Colors.white,
+                                        filled: true,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: maxSpendController,
+                                      keyboardType: TextInputType.number,
+                                      decoration: InputDecoration(
+                                        labelText: 'الحد الأقصى (إلى ج.م)',
+                                        hintText: '139 (أو اتركه فارغاً)',
+                                        prefixIcon: const Icon(Icons.arrow_back_rounded, size: 16),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                        isDense: true,
+                                        fillColor: Colors.white,
+                                        filled: true,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        // Quick range suggestion chips
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          children: [
-                            ActionChip(
-                              label: const Text('🏷️ نطاق 95 - 139 ج.م (فواتشر 25)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
-                              onPressed: () {
-                                setDialogState(() {
-                                  minSpendController.text = '95';
-                                  maxSpendController.text = '139';
-                                  discountToleranceController.text = '5';
-                                  rewardAmtController.text = '25';
-                                  rewardValController.text = 'قسيمة مشتريات بقيمة 25 ج.م';
-                                  rewardType = 'voucher';
-                                  dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(25.0, _companyGifts);
-                                });
-                              },
-                            ),
-                            ActionChip(
-                              label: const Text('🏷️ نطاق 140 - 189 ج.م (فواتشر 50)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
-                              onPressed: () {
-                                setDialogState(() {
-                                  minSpendController.text = '140';
-                                  maxSpendController.text = '189';
-                                  discountToleranceController.text = '5';
-                                  rewardAmtController.text = '50';
-                                  rewardValController.text = 'قسيمة مشتريات بقيمة 50 ج.م';
-                                  rewardType = 'voucher';
-                                  dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(50.0, _companyGifts);
-                                });
-                              },
-                            ),
-                            ActionChip(
-                              label: const Text('🏷️ نطاق 190+ ج.م (فواتشر 75)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
-                              onPressed: () {
-                                setDialogState(() {
-                                  minSpendController.text = '190';
-                                  maxSpendController.text = '';
-                                  discountToleranceController.text = '10';
-                                  rewardAmtController.text = '75';
-                                  rewardValController.text = 'قسيمة مشتريات بقيمة 75 ج.م';
-                                  rewardType = 'voucher';
-                                  dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(75.0, _companyGifts);
-                                });
-                              },
-                            ),
-                          ],
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: DropdownButtonFormField<String>(
+                                      initialValue: rewardType,
+                                      decoration: InputDecoration(
+                                        labelText: strings.rewardTypeLabel,
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                        isDense: true,
+                                        fillColor: Colors.white,
+                                        filled: true,
+                                      ),
+                                      items: [
+                                        DropdownMenuItem(value: 'voucher', child: Text(strings.voucherRewardLabel)),
+                                        DropdownMenuItem(value: 'free_product', child: Text(strings.freeProductRewardLabel)),
+                                        DropdownMenuItem(value: 'game_spin', child: Text(strings.gameSpinRewardLabel)),
+                                      ],
+                                      onChanged: (val) {
+                                        if (val != null) {
+                                          setDialogState(() {
+                                            rewardType = val;
+                                            if (rewardType == 'voucher' && dialogLinkedGifts.isEmpty && targetVoucherAmt > 0) {
+                                              dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(targetVoucherAmt, _companyGifts);
+                                            }
+                                          });
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: discountToleranceController,
+                                      keyboardType: TextInputType.number,
+                                      decoration: InputDecoration(
+                                        labelText: 'سماحية الخصم (ج.م)',
+                                        hintText: '5',
+                                        prefixIcon: const Icon(Icons.price_check_rounded, size: 16),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                        isDense: true,
+                                        fillColor: Colors.white,
+                                        filled: true,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                '💡 تتيح السماحية قبول الفواتير حتى لو انخفض الصافي بعد الخصومات (مثال: 95 ج.م بدلاً من 100 ج.م)',
+                                style: GoogleFonts.cairo(fontSize: 10.5, color: Colors.brown.shade700),
+                              ),
+                              const SizedBox(height: 8),
+                              // Quick range suggestion chips
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                children: [
+                                  ActionChip(
+                                    backgroundColor: Colors.white,
+                                    label: const Text('🏷️ نطاق 95 - 139 ج.م (فواتشر 25)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF0F766E))),
+                                    onPressed: () {
+                                      setDialogState(() {
+                                        minSpendController.text = '95';
+                                        maxSpendController.text = '139';
+                                        discountToleranceController.text = '5';
+                                        rewardAmtController.text = '25';
+                                        rewardValController.text = 'قسيمة مشتريات بقيمة 25 ج.م';
+                                        rewardType = 'voucher';
+                                        dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(25.0, _companyGifts);
+                                      });
+                                    },
+                                  ),
+                                  ActionChip(
+                                    backgroundColor: Colors.white,
+                                    label: const Text('🏷️ نطاق 140 - 189 ج.م (فواتشر 50)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFFB45309))),
+                                    onPressed: () {
+                                      setDialogState(() {
+                                        minSpendController.text = '140';
+                                        maxSpendController.text = '189';
+                                        discountToleranceController.text = '5';
+                                        rewardAmtController.text = '50';
+                                        rewardValController.text = 'قسيمة مشتريات بقيمة 50 ج.م';
+                                        rewardType = 'voucher';
+                                        dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(50.0, _companyGifts);
+                                      });
+                                    },
+                                  ),
+                                  ActionChip(
+                                    backgroundColor: Colors.white,
+                                    label: const Text('🏷️ نطاق 190+ ج.م (فواتشر 75)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF1D4ED8))),
+                                    onPressed: () {
+                                      setDialogState(() {
+                                        minSpendController.text = '190';
+                                        maxSpendController.text = '';
+                                        discountToleranceController.text = '10';
+                                        rewardAmtController.text = '75';
+                                        rewardValController.text = 'قسيمة مشتريات بقيمة 75 ج.م';
+                                        rewardType = 'voucher';
+                                        dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(75.0, _companyGifts);
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                       const SizedBox(height: 12),
