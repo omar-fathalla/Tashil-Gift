@@ -2778,6 +2778,19 @@ class AppStrings {
   String get bySpendCondition => _t(ar: 'حسب القيمة (إجمالي المبلغ)', en: 'By Spend (Total EGP)', hi: 'खर्च के अनुसार (कुल राशि)');
   String get comboSpendCondition => _t(ar: 'حزمة كومبو (شراء علامات معاً بقيمة محددة)', en: 'Combo Bundle (Brands Together for Target Spend)', hi: 'कॉम्बो बंडल (लक्षित खर्च के लिए एक साथ ब्रांड)');
   String get minSpendLabel => _t(ar: 'الحد الأدنى لقيمة المشتريات (ج.م):', en: 'Minimum Spend Amount (EGP):', hi: 'न्यूनतम खरीद राशि (EGP):');
+  String get minSpendRangeLabel => _t(ar: 'الحد الأدنى للنطاق (من ج.م):', en: 'Min Spend (From EGP):', hi: 'न्यूनतम खर्च (EGP से):');
+  String get maxSpendRangeLabel => _t(ar: 'الحد الأقصى للنطاق (إلى ج.م - اختياري):', en: 'Max Spend (To EGP - Optional):', hi: 'अधिकतम खर्च (EGP तक - वैकल्पिक):');
+  String get discountToleranceLabel => _t(ar: 'سماحية خصومات الكاشير (ج.م):', en: 'Discount Tolerance (EGP):', hi: 'छूट सहनशीलता (EGP):');
+  String get discountToleranceHint => _t(
+    ar: 'مثال: 5 ج.م لسماح الفواتير التي تبلغ 95 ج.م بدلاً من 100 ج.م بسبب الخصم',
+    en: 'e.g. 5 EGP tolerance allows 95 EGP receipts instead of 100 EGP due to discounts',
+    hi: 'उदा. 5 EGP छूट के कारण 100 EGP के बजाय 95 EGP रसीद की अनुमति देता है',
+  );
+  String get oralBundleToleranceTitle => _t(
+    ar: '🦷 حزم العناية بالفم بنطاق الأسعار والخصومات (95-140-190 ج.م)',
+    en: '🦷 Oral Care Bundles with Discount Ranges (95-140-190 EGP)',
+    hi: '🦷 मौखिक देखभाल बंडल मूल्य सीमा के साथ (95-140-190 EGP)',
+  );
   String get requiredBrandsLabel => _t(ar: 'العلامات التجارية المشروطة معاً في الفاتورة:', en: 'Required Brands Together in Receipt:', hi: 'रसीद में एक साथ आवश्यक ब्रांड:');
   String get selectFromCatalogBtn => _t(ar: 'اختيار من الكتالوج', en: 'Select from Catalog', hi: 'कैटलॉग से चुनें');
   String get chooseProductsFromCatalogTitle => _t(ar: 'اختيار الأصناف والباركودات المعتمدة من كتالوج الشركة', en: 'Select Approved Products & Barcodes from Catalog', hi: 'कैटलॉग से स्वीकृत उत्पाद और बारकोड चुनें');

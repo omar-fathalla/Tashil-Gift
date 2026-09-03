@@ -1597,9 +1597,9 @@ class PromotionalRuleMatcher {
       final isSpendGroup = group.any((r) => r.isSpendBased);
 
       if (isSpendGroup) {
-        // Sort descending by minSpend (highest spend tier first: e.g. 200 EGP before 150 EGP before 100 EGP)
+        // Sort descending by effectiveMinSpend (highest spend tier first: e.g. 200 EGP before 150 EGP before 100 EGP)
         final sortedGroup = List<PromotionalRuleItem>.from(group)
-          ..sort((a, b) => b.minSpend.compareTo(a.minSpend));
+          ..sort((a, b) => b.effectiveMinSpend.compareTo(a.effectiveMinSpend));
 
         for (final rule in sortedGroup) {
           // Check combo brand requirement (e.g. Signal AND Closeup together)
@@ -1657,10 +1657,18 @@ class PromotionalRuleMatcher {
             }
           }
 
-          if (rule.minSpend > 0 && totalEligibleSpend >= rule.minSpend) {
+          final effectiveMin = rule.effectiveMinSpend;
+          final bool qualifiesMin = effectiveMin > 0 && totalEligibleSpend >= effectiveMin;
+          final bool qualifiesMax = rule.maxSpend == null || rule.maxSpend! <= 0 || totalEligibleSpend <= (rule.maxSpend! + rule.discountTolerance);
+
+          if (qualifiesMin && qualifiesMax) {
             int count = 1;
-            if (rule.allowMultipliers || allowCampaignMultipliers) {
-              count = totalEligibleSpend ~/ rule.minSpend;
+            if (rule.hasSpendRange) {
+              // Bounded bracket range (e.g. 95 to 139 EGP) qualifies as 1 bracket match
+              count = 1;
+            } else if (rule.allowMultipliers || allowCampaignMultipliers) {
+              final divisor = rule.minSpend > 0 ? rule.minSpend : effectiveMin;
+              count = divisor > 0 ? (totalEligibleSpend ~/ divisor) : 1;
               if (count < 1) count = 1;
             }
 
@@ -1823,13 +1831,15 @@ class PromotionalRuleMatcher {
           }
 
           final missingBrands = rule.requiredBrands.where((b) => !foundBrands.contains(b)).toList();
+          final effectiveMin = rule.effectiveMinSpend;
           if (missingBrands.isNotEmpty) {
             reasons.add(
               '${rule.ruleTitle}: يشترط العرض شراء منتجات (${rule.requiredBrands.join(" و ")}) معاً في نفس الفاتورة. ينقص الفاتورة منتجات من (${missingBrands.join("، ")}).',
             );
-          } else if (rule.minSpend > 0 && currentSpend < rule.minSpend) {
+          } else if (effectiveMin > 0 && currentSpend < effectiveMin) {
+            final toleranceText = rule.discountTolerance > 0 ? ' (مع سماحية ${rule.discountTolerance.toInt()} ج.م)' : '';
             reasons.add(
-              '${rule.ruleTitle}: إجمالي مشتريات المنتجات المشروطة (${currentSpend.toInt()} ج.م) أقل من الحد الأدنى المطلوب للعرض (${rule.minSpend.toInt()} ج.م).',
+              '${rule.ruleTitle}: إجمالي مشتريات المنتجات المشروطة (${currentSpend.toInt()} ج.م) أقل من الحد الأدنى المطلوب للعرض (${rule.minSpend.toInt()} ج.م$toleranceText).',
             );
           }
         } else {
@@ -1839,9 +1849,11 @@ class PromotionalRuleMatcher {
               currentSpend += (p.price > 0 ? p.price : (p.originalPrice ?? 0.0)) * getEffectiveProductQuantity(p);
             }
           }
-          if (currentSpend > 0 && rule.minSpend > 0 && currentSpend < rule.minSpend) {
+          final effectiveMin = rule.effectiveMinSpend;
+          if (currentSpend > 0 && effectiveMin > 0 && currentSpend < effectiveMin) {
+            final toleranceText = rule.discountTolerance > 0 ? ' (مع سماحية ${rule.discountTolerance.toInt()} ج.م)' : '';
             reasons.add(
-              '${rule.ruleTitle}: إجمالي قيمة المشتريات المؤهلة (${currentSpend.toInt()} ج.م) أقل من الحد الأدنى للعرض (${rule.minSpend.toInt()} ج.م).',
+              '${rule.ruleTitle}: إجمالي قيمة المشتريات المؤهلة (${currentSpend.toInt()} ج.م) أقل من الحد الأدنى للعرض (${rule.minSpend.toInt()} ج.م$toleranceText).',
             );
           }
         }

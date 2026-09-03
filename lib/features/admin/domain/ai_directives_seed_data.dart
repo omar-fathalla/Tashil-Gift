@@ -713,6 +713,27 @@ class AiDirectivesSeedData {
           tags: ['oral-care-bundle', 'signal-closeup-combo', 'spend-based-rules', 'combo-spend-100-150-200', 'catalog-barcodes-binding', 'air-33'],
           lastUpdated: '2026-09-02',
         ),
+
+        const AiDirectiveModel(
+          id: 'AIR-34',
+          code: 'SPEND_RANGE_AND_CASHIER_DISCOUNT_TOLERANCE_STANDARD',
+          orderIndex: 34,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار نطاقات الإنفاق المالي وسماحية خصومات الكاشير (Spend Range & Cashier Discount Tolerance Standard)',
+          titleEn: 'Spend Range & Cashier Discount Tolerance Promotional Architecture',
+          descriptionAr:
+              'إتاحة تعريف نطاقات إنفاق مالية مرنة (من minSpend إلى maxSpend) وسماحية للخصومات (discountTolerance) لضمان عدم حرمان العميل من استحقاق العرض عند نزول الصافي الفعلي بعد خصومات الكاشير إلى (95-99 ج.م أو 140-149 ج.م أو 190-199 ج.م).',
+          descriptionEn:
+              'Enables flexible promotional spend ranges (from minSpend to maxSpend) and cashier discount tolerances (discountTolerance) to guarantee customers qualify for rewards even when net post-discount cashier spend drops slightly below round thresholds (e.g. 99 EGP for a 100 EGP offer).',
+          logicAr:
+              '1. احتساب الحد الأدنى الفعال: effectiveMinSpend = (minSpend - discountTolerance).clamp(0, infinity).\n2. مطابقة النطاق المقيد (Bounded Bracket): إذا تم تحديد maxSpend، فإن الفاتورة تتأهل إذا كان (totalSpend >= effectiveMinSpend && totalSpend <= maxSpend + discountTolerance).\n3. فرز المستويات تنازلياً: الترتيب التنازلي بحسب effectiveMinSpend لضمان تقييم المستويات الأعلى أولاً.\n4. رسائل الشروط غير المستوفاة: توضيح قيمة السماحية الممنوحة بالجنيه في تقرير الفحص الذكي للشفافية الكاملة.',
+          logicEn:
+              '1. Effective Min Calculation: effectiveMinSpend = (minSpend - discountTolerance).clamp(0, infinity).\n2. Bounded Bracket Matching: if maxSpend is defined, qualifies when totalSpend >= effectiveMinSpend && totalSpend <= maxSpend + discountTolerance.\n3. Descending Sort: sorts spend tiers by effectiveMinSpend descending to prioritize higher bracket matches.\n4. Informative Rejection: includes tolerance amount in unfulfilled condition reports for complete transparency.',
+          exampleInput: 'فاتورة فتح الله ماركت: 1 كلوس اب صافي 50 ج + 1 سيجنال صافي 49 ج = 99 ج.م (شرط العرض: 100 ج بسماحية 5 ج)',
+          exampleOutput: 'تأهيل الفاتورة بنجاح ومنح فواتشر بقيمة 25 ج.م دون رفض الفاتورة لفارق 1 جنيه.',
+          tags: ['spend-range', 'discount-tolerance', 'cashier-discounts', 'oral-care-ranges', 'tolerance-margin', 'air-34'],
+          lastUpdated: '2026-09-03',
+        ),
       ];
 }
 

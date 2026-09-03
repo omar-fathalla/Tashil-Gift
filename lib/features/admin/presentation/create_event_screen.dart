@@ -1786,6 +1786,85 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       );
       setState(() => _promotionalRules.add(newRule));
       _syncPromptFromRules(showSnackbar: false);
+    } else if (presetKey == 'oral_bundle_range_all') {
+      final oralProducts = _companyProducts.where((p) {
+        final n = p.productName.toLowerCase();
+        return n.contains('سيجنال') || n.contains('كلوس') || n.contains('signal') || n.contains('close');
+      }).toList();
+
+      final decomposed25 = CampaignAiAssistantService.decomposeVoucherAmount(25.0, _companyGifts);
+      final decomposed50 = CampaignAiAssistantService.decomposeVoucherAmount(50.0, _companyGifts);
+      final decomposed75 = CampaignAiAssistantService.decomposeVoucherAmount(75.0, _companyGifts);
+
+      final rule1 = PromotionalRuleItem(
+        id: 'rule_${_promotionalRules.length + 1}',
+        ruleTitle: 'حزمة العناية بالفم 1 (Signal + Closeup معاً: نطاق 95 إلى 139 ج.م) -> فواتشر 25 ج.م',
+        triggerProduct: 'معجون أسنان سيجنال، معجون أسنان كلوس اب، Signal Toothpaste, Closeup Toothpaste',
+        conditionType: 'combo_spend',
+        minSpend: 95.0,
+        maxSpend: 139.99,
+        discountTolerance: 5.0,
+        matchMode: 'AND',
+        requiredBrands: ['سيجنال', 'كلوس اب'],
+        selectedProductIds: oralProducts.map((p) => p.id).toList(),
+        selectedBarcodes: oralProducts.map((p) => p.barcode).where((b) => b.isNotEmpty).toList(),
+        selectedProductNames: oralProducts.map((p) => p.productName).toList(),
+        rewardType: 'voucher',
+        rewardValue: 'قسيمة مشتريات بقيمة 25 ج.م',
+        rewardAmount: 25.0,
+        allowMultipliers: false,
+        linkedGifts: decomposed25,
+        linkedGiftId: decomposed25.firstOrNull?.giftId,
+        linkedGiftName: decomposed25.firstOrNull?.giftName,
+      );
+
+      final rule2 = PromotionalRuleItem(
+        id: 'rule_${_promotionalRules.length + 2}',
+        ruleTitle: 'حزمة العناية بالفم 2 (Signal + Closeup معاً: نطاق 140 إلى 189 ج.م) -> فواتشر 50 ج.م',
+        triggerProduct: 'معجون أسنان سيجنال، معجون أسنان كلوس اب، Signal Toothpaste, Closeup Toothpaste',
+        conditionType: 'combo_spend',
+        minSpend: 140.0,
+        maxSpend: 189.99,
+        discountTolerance: 5.0,
+        matchMode: 'AND',
+        requiredBrands: ['سيجنال', 'كلوس اب'],
+        selectedProductIds: oralProducts.map((p) => p.id).toList(),
+        selectedBarcodes: oralProducts.map((p) => p.barcode).where((b) => b.isNotEmpty).toList(),
+        selectedProductNames: oralProducts.map((p) => p.productName).toList(),
+        rewardType: 'voucher',
+        rewardValue: 'قسيمة مشتريات بقيمة 50 ج.م',
+        rewardAmount: 50.0,
+        allowMultipliers: false,
+        linkedGifts: decomposed50,
+        linkedGiftId: decomposed50.firstOrNull?.giftId,
+        linkedGiftName: decomposed50.firstOrNull?.giftName,
+      );
+
+      final rule3 = PromotionalRuleItem(
+        id: 'rule_${_promotionalRules.length + 3}',
+        ruleTitle: 'حزمة العناية بالفم 3 (Signal أو Closeup: نطاق 190+ ج.م) -> فواتشر 75 ج.م',
+        triggerProduct: 'معجون أسنان سيجنال، معجون أسنان كلوس اب، Signal Toothpaste, Closeup Toothpaste',
+        conditionType: 'by_spend',
+        minSpend: 190.0,
+        discountTolerance: 10.0,
+        matchMode: 'OR',
+        requiredBrands: ['سيجنال', 'كلوس اب'],
+        selectedProductIds: oralProducts.map((p) => p.id).toList(),
+        selectedBarcodes: oralProducts.map((p) => p.barcode).where((b) => b.isNotEmpty).toList(),
+        selectedProductNames: oralProducts.map((p) => p.productName).toList(),
+        rewardType: 'voucher',
+        rewardValue: 'قسيمة مشتريات بقيمة 75 ج.م',
+        rewardAmount: 75.0,
+        allowMultipliers: true,
+        linkedGifts: decomposed75,
+        linkedGiftId: decomposed75.firstOrNull?.giftId,
+        linkedGiftName: decomposed75.firstOrNull?.giftName,
+      );
+
+      setState(() {
+        _promotionalRules.addAll([rule1, rule2, rule3]);
+      });
+      _syncPromptFromRules(showSnackbar: false);
     }
   }
 
@@ -2413,6 +2492,16 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           ? existingRule.minSpend.toInt().toString()
           : (existingRule?.minSpend ?? 100.0).toInt().toString(),
     );
+    final maxSpendController = TextEditingController(
+      text: existingRule?.maxSpend != null && existingRule!.maxSpend! > 0
+          ? existingRule.maxSpend!.toInt().toString()
+          : '',
+    );
+    final discountToleranceController = TextEditingController(
+      text: existingRule != null && existingRule.discountTolerance > 0
+          ? existingRule.discountTolerance.toInt().toString()
+          : '5',
+    );
     final rewardValController = TextEditingController(text: existingRule?.rewardValue ?? '');
     final rewardAmtController = TextEditingController(text: (existingRule?.rewardAmount ?? 0.0).toString());
     String conditionType = existingRule?.conditionType ?? 'by_quantity';
@@ -2717,9 +2806,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         const SizedBox(height: 12),
                       ],
 
-                      Row(
-                        children: [
-                          if (conditionType == 'by_quantity')
+                      if (conditionType == 'by_quantity') ...[
+                        Row(
+                          children: [
                             Expanded(
                               child: TextFormField(
                                 controller: minQtyController,
@@ -2730,48 +2819,163 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                   isDense: true,
                                 ),
                               ),
-                            )
-                          else
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                initialValue: rewardType,
+                                decoration: InputDecoration(
+                                  labelText: strings.rewardTypeLabel,
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                  isDense: true,
+                                ),
+                                items: [
+                                  DropdownMenuItem(value: 'voucher', child: Text(strings.voucherRewardLabel)),
+                                  DropdownMenuItem(value: 'free_product', child: Text(strings.freeProductRewardLabel)),
+                                  DropdownMenuItem(value: 'game_spin', child: Text(strings.gameSpinRewardLabel)),
+                                ],
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setDialogState(() {
+                                      rewardType = val;
+                                      if (rewardType == 'voucher' && dialogLinkedGifts.isEmpty && targetVoucherAmt > 0) {
+                                        dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(targetVoucherAmt, _companyGifts);
+                                      }
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ] else ...[
+                        // Spend Range & Tolerance Fields
+                        Row(
+                          children: [
                             Expanded(
                               child: TextFormField(
                                 controller: minSpendController,
                                 keyboardType: TextInputType.number,
                                 decoration: InputDecoration(
-                                  labelText: strings.minSpendLabel,
-                                  hintText: '100',
+                                  labelText: strings.minSpendRangeLabel,
+                                  hintText: '95',
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                                   isDense: true,
                                 ),
                               ),
                             ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              initialValue: rewardType,
-                              decoration: InputDecoration(
-                                labelText: strings.rewardTypeLabel,
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                                isDense: true,
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextFormField(
+                                controller: maxSpendController,
+                                keyboardType: TextInputType.number,
+                                decoration: InputDecoration(
+                                  labelText: strings.maxSpendRangeLabel,
+                                  hintText: '139',
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                  isDense: true,
+                                ),
                               ),
-                              items: [
-                                DropdownMenuItem(value: 'voucher', child: Text(strings.voucherRewardLabel)),
-                                DropdownMenuItem(value: 'free_product', child: Text(strings.freeProductRewardLabel)),
-                                DropdownMenuItem(value: 'game_spin', child: Text(strings.gameSpinRewardLabel)),
-                              ],
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setDialogState(() {
-                                    rewardType = val;
-                                    if (rewardType == 'voucher' && dialogLinkedGifts.isEmpty && targetVoucherAmt > 0) {
-                                      dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(targetVoucherAmt, _companyGifts);
-                                    }
-                                  });
-                                }
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                initialValue: rewardType,
+                                decoration: InputDecoration(
+                                  labelText: strings.rewardTypeLabel,
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                  isDense: true,
+                                ),
+                                items: [
+                                  DropdownMenuItem(value: 'voucher', child: Text(strings.voucherRewardLabel)),
+                                  DropdownMenuItem(value: 'free_product', child: Text(strings.freeProductRewardLabel)),
+                                  DropdownMenuItem(value: 'game_spin', child: Text(strings.gameSpinRewardLabel)),
+                                ],
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setDialogState(() {
+                                      rewardType = val;
+                                      if (rewardType == 'voucher' && dialogLinkedGifts.isEmpty && targetVoucherAmt > 0) {
+                                        dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(targetVoucherAmt, _companyGifts);
+                                      }
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: discountToleranceController,
+                                keyboardType: TextInputType.number,
+                                decoration: InputDecoration(
+                                  labelText: strings.discountToleranceLabel,
+                                  hintText: '5',
+                                  helperText: strings.discountToleranceHint,
+                                  helperMaxLines: 2,
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                  isDense: true,
+                                  prefixIcon: const Icon(Icons.price_check_rounded, size: 18),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        // Quick range suggestion chips
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            ActionChip(
+                              label: const Text('🏷️ نطاق 95 - 139 ج.م (فواتشر 25)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
+                              onPressed: () {
+                                setDialogState(() {
+                                  minSpendController.text = '95';
+                                  maxSpendController.text = '139';
+                                  discountToleranceController.text = '5';
+                                  rewardAmtController.text = '25';
+                                  rewardValController.text = 'قسيمة مشتريات بقيمة 25 ج.م';
+                                  rewardType = 'voucher';
+                                  dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(25.0, _companyGifts);
+                                });
                               },
                             ),
-                          ),
-                        ],
-                      ),
+                            ActionChip(
+                              label: const Text('🏷️ نطاق 140 - 189 ج.م (فواتشر 50)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
+                              onPressed: () {
+                                setDialogState(() {
+                                  minSpendController.text = '140';
+                                  maxSpendController.text = '189';
+                                  discountToleranceController.text = '5';
+                                  rewardAmtController.text = '50';
+                                  rewardValController.text = 'قسيمة مشتريات بقيمة 50 ج.م';
+                                  rewardType = 'voucher';
+                                  dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(50.0, _companyGifts);
+                                });
+                              },
+                            ),
+                            ActionChip(
+                              label: const Text('🏷️ نطاق 190+ ج.م (فواتشر 75)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
+                              onPressed: () {
+                                setDialogState(() {
+                                  minSpendController.text = '190';
+                                  maxSpendController.text = '';
+                                  discountToleranceController.text = '10';
+                                  rewardAmtController.text = '75';
+                                  rewardValController.text = 'قسيمة مشتريات بقيمة 75 ج.م';
+                                  rewardType = 'voucher';
+                                  dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(75.0, _companyGifts);
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 12),
 
                       TextFormField(
@@ -3077,6 +3281,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     final trigger = triggerController.text.trim();
                     final minQty = int.tryParse(minQtyController.text.trim()) ?? 1;
                     final minSpend = double.tryParse(minSpendController.text.trim()) ?? 0.0;
+                    final maxSpend = double.tryParse(maxSpendController.text.trim());
+                    final discountTolerance = double.tryParse(discountToleranceController.text.trim()) ?? 0.0;
                     final rewardVal = rewardValController.text.trim();
                     final rewardAmt = double.tryParse(rewardAmtController.text.trim()) ?? 0.0;
 
@@ -3098,6 +3304,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       minQuantity: minQty,
                       conditionType: conditionType,
                       minSpend: minSpend,
+                      maxSpend: maxSpend != null && maxSpend > 0 ? maxSpend : null,
+                      discountTolerance: discountTolerance,
                       matchMode: matchMode,
                       requiredBrands: requiredBrands,
                       selectedProductIds: selectedProductIds,
@@ -5540,6 +5748,10 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         ],
                       ),
                       items: const [
+                        DropdownMenuItem(
+                          value: 'oral_bundle_range_all',
+                          child: Text('✨🦷 إدراج حزم العناية بالفم الثلاثة بنطاق الأسعار والخصومات (95-140-190 ج.م)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Colors.teal)),
+                        ),
                         DropdownMenuItem(
                           value: 'oral_bundle_100',
                           child: Text('🦷 حزمة العناية بالفم 1: سيجنال + كلوس اب معاً ≥ 100 ج.م -> فواتشر 25 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),

@@ -77,6 +77,8 @@ class PromotionalRuleItem {
   final int minQuantity;
   final String conditionType; // 'by_quantity' | 'by_spend' | 'combo_spend'
   final double minSpend; // e.g. 100.0, 150.0, 200.0 if conditionType is by_spend or combo_spend
+  final double? maxSpend; // Optional upper limit for spend range (e.g. 139.99 or 140.0)
+  final double discountTolerance; // Optional discount tolerance in EGP (e.g. 5.0 EGP allows 95 EGP on 100 EGP rule)
   final String matchMode; // 'OR' | 'AND' (for combo bundles, 'AND' requires presence of all required brands/items)
   final List<String> requiredBrands; // e.g. ['سيجنال', 'كلوس اب'] or ['Signal', 'Closeup']
   final List<String> selectedProductIds; // Specific company_products IDs selected from catalog
@@ -97,6 +99,8 @@ class PromotionalRuleItem {
     this.minQuantity = 1,
     this.conditionType = 'by_quantity',
     this.minSpend = 0.0,
+    this.maxSpend,
+    this.discountTolerance = 0.0,
     this.matchMode = 'OR',
     this.requiredBrands = const [],
     this.selectedProductIds = const [],
@@ -115,6 +119,12 @@ class PromotionalRuleItem {
 
   /// Whether this rule is evaluated based on total monetary spend (e.g. >= 100 EGP) rather than piece count
   bool get isSpendBased => conditionType == 'by_spend' || conditionType == 'combo_spend' || minSpend > 0;
+
+  /// Whether this rule defines a bounded spend range (e.g. 95 to 139 EGP)
+  bool get hasSpendRange => isSpendBased && maxSpend != null && maxSpend! > minSpend;
+
+  /// Effective minimum spend taking discount tolerance into account
+  double get effectiveMinSpend => (minSpend - discountTolerance).clamp(0.0, double.infinity);
 
   /// Whether this rule requires multiple brands or products together (e.g. Signal + Closeup combo)
   bool get isCombo => conditionType == 'combo_spend' || (matchMode == 'AND' && requiredBrands.length > 1);
@@ -138,11 +148,21 @@ class PromotionalRuleItem {
   /// Human-readable summary of the condition
   String get conditionSummaryText {
     final spendInt = minSpend == minSpend.roundToDouble() ? minSpend.toInt() : minSpend;
+    final toleranceText = discountTolerance > 0 ? ' (سماحية خصومات ${discountTolerance.toInt()} ج.م)' : '';
+    if (hasSpendRange) {
+      final maxSpendInt = maxSpend == maxSpend!.roundToDouble() ? maxSpend!.toInt() : maxSpend;
+      if (isCombo) {
+        final brandsList = requiredBrands.isNotEmpty ? requiredBrands.join(' و ') : triggerProduct;
+        return 'شراء بقيمة من $spendInt إلى $maxSpendInt ج.م من ($brandsList معاً)$toleranceText';
+      } else {
+        return 'شراء بقيمة من $spendInt إلى $maxSpendInt ج.م من [$triggerProduct]$toleranceText';
+      }
+    }
     if (isCombo) {
       final brandsList = requiredBrands.isNotEmpty ? requiredBrands.join(' و ') : triggerProduct;
-      return 'شراء بقيمة $spendInt ج.م أو أكثر من ($brandsList معاً)';
+      return 'شراء بقيمة $spendInt ج.م أو أكثر من ($brandsList معاً)$toleranceText';
     } else if (isSpendBased) {
-      return 'شراء بقيمة $spendInt ج.م أو أكثر من [$triggerProduct]';
+      return 'شراء بقيمة $spendInt ج.م أو أكثر من [$triggerProduct]$toleranceText';
     } else {
       return 'شراء كمية ($minQuantity) أو أكثر من [$triggerProduct]';
     }
@@ -202,6 +222,8 @@ class PromotionalRuleItem {
       minQuantity: (data['minQuantity'] as num?)?.toInt() ?? 1,
       conditionType: data['conditionType']?.toString() ?? 'by_quantity',
       minSpend: (data['minSpend'] as num?)?.toDouble() ?? 0.0,
+      maxSpend: (data['maxSpend'] as num?)?.toDouble(),
+      discountTolerance: (data['discountTolerance'] as num?)?.toDouble() ?? 0.0,
       matchMode: data['matchMode']?.toString() ?? 'OR',
       requiredBrands: parsedRequiredBrands,
       selectedProductIds: parsedSelectedProductIds,
@@ -228,6 +250,8 @@ class PromotionalRuleItem {
       'minQuantity': minQuantity,
       'conditionType': conditionType,
       'minSpend': minSpend,
+      if (maxSpend != null && maxSpend! > 0) 'maxSpend': maxSpend,
+      if (discountTolerance > 0) 'discountTolerance': discountTolerance,
       'matchMode': matchMode,
       if (requiredBrands.isNotEmpty) 'requiredBrands': requiredBrands,
       if (selectedProductIds.isNotEmpty) 'selectedProductIds': selectedProductIds,
@@ -250,6 +274,8 @@ class PromotionalRuleItem {
     int? minQuantity,
     String? conditionType,
     double? minSpend,
+    double? maxSpend,
+    double? discountTolerance,
     String? matchMode,
     List<String>? requiredBrands,
     List<String>? selectedProductIds,
@@ -270,6 +296,8 @@ class PromotionalRuleItem {
       minQuantity: minQuantity ?? this.minQuantity,
       conditionType: conditionType ?? this.conditionType,
       minSpend: minSpend ?? this.minSpend,
+      maxSpend: maxSpend ?? this.maxSpend,
+      discountTolerance: discountTolerance ?? this.discountTolerance,
       matchMode: matchMode ?? this.matchMode,
       requiredBrands: requiredBrands ?? this.requiredBrands,
       selectedProductIds: selectedProductIds ?? this.selectedProductIds,
