@@ -776,6 +776,27 @@ class AiDirectivesSeedData {
           tags: ['arabic-normalization', 'phonetic-matching', 'campaign-attribution', 'pos-quirks', 'title-unification', 'air-36'],
           lastUpdated: '2026-09-04',
         ),
+
+        const AiDirectiveModel(
+          id: 'AIR-37',
+          code: 'PHYSICAL_PACK_PIECE_COUNT_VS_MONETARY_SPEND_ISOLATION_STANDARD',
+          orderIndex: 37,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار الفصل الصارم بين حصر القطع الفيزيائية للبندل واحتساب الإنفاق المالي (Physical Pack Piece Count vs Monetary Spend Isolation Standard)',
+          titleEn: 'Physical Pack Piece Count vs Monetary Spend Isolation Standard',
+          descriptionAr:
+              'الفصل التام بين احتساب عدد القطع الفيزيائية للبندل (Physical Piece Count) في عروض الكميات (مثل 2 قطعة) وبين احتساب القيمة المالية المنفقة (Monetary Spend) في عروض الإنفاق (مثل 200 ج.م). يُحظر تماماً ضرب سعر العبوة في عدد القطع الفيزيائية المحسوبة من البندل (2 ق / 2 قطعة)، حيث يُمثل سعر الصنف في الفاتورة القيمة الإجمالية للعبوة ولا يجوز مضاعفته مالياً، لمنع تضخيم الإنفاق ومضاعفة الجوائز عن طريق الخطأ.',
+          descriptionEn:
+              'Enforces strict mathematical isolation between physical bundle piece counts (for quantity-based offers) and actual monetary spend (for spend-based offers). Prohibits multiplying unit item price by effective bundle piece count, ensuring receipt spend strictly reflects actual money paid and preventing false multiplier duplication on promotional vouchers.',
+          logicAr:
+              '1. عزل المتغيرات: يقتصر دور دالة getEffectiveProductQuantity على حصر القطع الفيزيائية (Piece Count) لتقييم عروض الكمية (minQuantity).\n2. اعتماد الإنفاق الفعلي (actualLineSpend): في كافة عروض الإنفاق (isSpendBased / by_spend / combo_spend)، يُحسب الإنفاق الفعلي لكل صنف بناءً على إجمالي السطر (totalPrice) أو (price * quantity) دون ضربه في معامل البندل.\n3. التوزيع النسبي للاستهلاك: عند استهلاك صنف جزئياً بين قواعد متعددة، يُخصم الإنفاق بنسبة القطع المتبقية (remaining / totalEffectiveQty).\n4. السقف المالي الحاكم (Target Company Spend Cap): يُحظر تماماً أن يتجاوز إجمالي الإنفاق المؤهل المحسوب (totalEligibleSpend) إجمالي مشتريات منتجات الشركة الفعلية في الفاتورة (targetCompanyTotal).\n5. الحفاظ على دقة المضاعف (Multiplier Integrity): ضمان استحقاق العميل لمضاعف 1× فقط للفواتير التي لا تتجاوز ضعف الحد الأدنى، ومنع منح مضاعف 2× غير مستحق.',
+          logicEn:
+              '1. Scope Isolation: getEffectiveProductQuantity is strictly restricted to physical piece counting for quantity-based rules (minQuantity).\n2. Actual Line Spend: all spend-based rules calculate product spend strictly via actualLineSpend (totalPrice or price * quantity) without inflating by bundle multiplier.\n3. Proportional Spend Deduction: partial product consumption across tiers deducts spend proportionally to remaining physical pieces.\n4. Strict Financial Spend Cap: totalEligibleSpend is strictly clamped by targetCompanyTotal to ensure mathematical impossibility of exceeding receipt total.\n5. Multiplier Integrity: guarantees receipts within 1x spend bracket never trigger unintended 2x multiplier.',
+          exampleInput: 'فاتورة جملة ماركت بـ 228 ج.م تحتوي على: 1 فرشاة سيجنال *2 ق بسعر 44 ج.م، و 2 معجون كلوس اب * 2 قطعة بسعر 92 ج.م (إجمالي 184 ج.م)',
+          exampleOutput: 'احتساب الإنفاق الفعلي بـ 228 ج.م ومطابقة قاعدة الـ 200 ج.م بمضاعف 1× فقط (قسيمة 75 ج.م)، ومنع احتسابها بـ 456 ج.م ومضاعف 2× بالخطأ.',
+          tags: ['spend-vs-quantity', 'unit-economics', 'twin-bundle', 'multiplier-isolation', 'air-37', 'oral-care'],
+          lastUpdated: '2026-09-04',
+        ),
       ];
 }
 

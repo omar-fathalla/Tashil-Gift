@@ -145,5 +145,39 @@ void main() {
       expect(results.first.rule.id, 'rule_oral_200');
       expect(results.first.rule.rewardValue, 'قسيمة مشتريات بقيمة 75 ج.م');
     });
+
+    test('AIR-37 Invariant: Twin Bundle names (*2 ق and * 2 قطعة) in 228 EGP receipt must award exactly 1x (75 EGP), never 2x (150 EGP)', () {
+      final List<ExtractedProductItem> receiptItems = [
+        ExtractedProductItem(
+          name: '(سيجنال فرشاة نظافة ثلاثية *2 ق (خصم 20',
+          barcode: '6221155091628',
+          quantity: 1,
+          price: 44.0,
+          isTargetCompany: true,
+        ),
+        ExtractedProductItem(
+          name: 'كلوس اب معجون اسنان ريد هوت 100مل * 2 قطعة',
+          barcode: '6221155607607',
+          quantity: 2,
+          price: 92.0,
+          isTargetCompany: true,
+        ),
+      ];
+
+      final results = PromotionalRuleMatcher.matchAllWithMultipliers(
+        promotionalRules: oralRules,
+        extractedProducts: receiptItems,
+        allowCampaignMultipliers: true,
+      );
+
+      expect(results.length, 1);
+      expect(results.first.rule.id, 'rule_oral_200');
+      // Must strictly be 1x multiplier, NOT 2x!
+      expect(results.first.multiplier, 1);
+      expect(results.first.totalRewardAmount, 75.0);
+      expect(results.first.multipliedLinkedGifts.length, 2);
+      expect(results.first.multipliedLinkedGifts[0].quantity, 1);
+      expect(results.first.multipliedLinkedGifts[1].quantity, 1);
+    });
   });
 }

@@ -39,6 +39,14 @@ void main() {
       expect(air29.titleAr, contains('أعمدة الكاشير المزدوجة'));
       expect(air29.tags, contains('gomla-market'));
       expect(air29.tags, contains('dual-column-pos'));
+
+      // Verify AIR-37 is present
+      final air37 = directives.firstWhere((d) => d.id == 'AIR-37');
+      expect(air37.code, 'PHYSICAL_PACK_PIECE_COUNT_VS_MONETARY_SPEND_ISOLATION_STANDARD');
+      expect(air37.orderIndex, 37);
+      expect(air37.category, AiDirectiveCategory.promotionalRules);
+      expect(air37.titleAr, contains('الفصل الصارم بين حصر القطع الفيزيائية'));
+      expect(air37.tags, contains('multiplier-isolation'));
     });
 
     test('AIR-22 (Fathalla Price Defense) and AIR-21 (POS Concatenation) are active', () {

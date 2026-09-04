@@ -34,6 +34,16 @@ class ExtractedProductItem {
   });
 
   double get totalPrice => price * quantity;
+
+  /// The actual monetary spend paid on this receipt line item.
+  /// Strictly prevents artificial spend inflation from physical bundle piece counts (AIR-37).
+  double get actualLineSpend {
+    if (totalPrice > 0) return totalPrice;
+    final q = quantity > 0 ? quantity : 1;
+    final p = price > 0 ? price : (originalPrice ?? 0.0);
+    return p * q;
+  }
+
   bool get hasDiscount =>
       discountAmount > 0 ||
       discountPercent > 0 ||
@@ -1715,8 +1725,7 @@ class PromotionalRuleMatcher {
           int matchedItemCount = 0;
           for (final p in effectiveProducts) {
             if (_matchesProduct(p, rule.triggerProduct, rule)) {
-              final price = p.price > 0 ? p.price : (p.originalPrice ?? 0.0);
-              totalSpend += price * getEffectiveProductQuantity(p);
+              totalSpend += p.actualLineSpend;
               matchedItemCount++;
             }
           }
@@ -1792,8 +1801,7 @@ class PromotionalRuleMatcher {
         if (_matchesProduct(p, matchedRule.triggerProduct, matchedRule)) {
           final qty = getEffectiveProductQuantity(p);
           totalTriggerQty += qty;
-          final price = p.price > 0 ? p.price : (p.originalPrice ?? 0.0);
-          totalTriggerSpend += price * qty;
+          totalTriggerSpend += p.actualLineSpend;
         }
       }
     }
@@ -1980,13 +1988,24 @@ class PromotionalRuleMatcher {
             final remaining = remainingItemQuantities[i] ?? 0;
             if (remaining > 0 &&
                 _matchesProduct(p, rule.triggerProduct, rule)) {
-              final double itemPrice = p.price > 0
-                  ? p.price
-                  : (p.originalPrice ?? 0.0);
-              totalEligibleSpend += itemPrice * remaining;
+              final totalEffectiveQty = getEffectiveProductQuantity(p);
+              final double actualFullItemSpend = p.actualLineSpend;
+              final double itemSpend = totalEffectiveQty > 0
+                  ? (actualFullItemSpend * (remaining / totalEffectiveQty))
+                  : actualFullItemSpend;
+
+              totalEligibleSpend += itemSpend;
               totalMatchedQty += remaining;
               matchingProductIndices.add(i);
             }
+          }
+
+          // Strict financial guard: total eligible spend on trigger products can never exceed
+          // target company total spend on the receipt (AIR-37).
+          if (result != null &&
+              result.targetCompanyTotal > 0 &&
+              totalEligibleSpend > result.targetCompanyTotal) {
+            totalEligibleSpend = result.targetCompanyTotal;
           }
 
           final isTopTierInGroup = sortedGroup.first.id == rule.id;
@@ -2181,9 +2200,7 @@ class PromotionalRuleMatcher {
               }
             }
             if (_matchesProduct(p, rule.triggerProduct, rule)) {
-              currentSpend +=
-                  (p.price > 0 ? p.price : (p.originalPrice ?? 0.0)) *
-                  getEffectiveProductQuantity(p);
+              currentSpend += p.actualLineSpend;
             }
           }
 
@@ -2207,9 +2224,7 @@ class PromotionalRuleMatcher {
           double currentSpend = 0.0;
           for (final p in products) {
             if (_matchesProduct(p, rule.triggerProduct, rule)) {
-              currentSpend +=
-                  (p.price > 0 ? p.price : (p.originalPrice ?? 0.0)) *
-                  getEffectiveProductQuantity(p);
+              currentSpend += p.actualLineSpend;
             }
           }
           final effectiveMin = rule.effectiveMinSpend;
