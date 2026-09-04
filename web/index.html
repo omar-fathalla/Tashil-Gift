@@ -50,6 +50,18 @@
 </head>
 <body>
   <script>
+    // Handle legacy hash URLs (e.g. /#/c/512?event=...) by converting them to clean path URLs before Flutter boots
+    (function() {
+      var hash = window.location.hash;
+      if (hash && (hash.startsWith('#/') || hash.startsWith('#!/'))) {
+        var cleanPath = hash.replace(/^#[!]?/, '');
+        if (cleanPath.startsWith('/')) {
+          window.history.replaceState(null, '', cleanPath);
+        }
+      }
+    })();
+  </script>
+  <script>
     // Proactively check and update service worker to avoid stale client-side caches
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(function(registrations) {

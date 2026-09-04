@@ -42,16 +42,23 @@ class MyApp extends ConsumerWidget {
       // If Flutter Web defaulted to '/' or empty (e.g. initial load without hash):
       if (raw == '/' || raw.isEmpty) {
         if (base.fragment.isNotEmpty) {
-          final frag = base.fragment.startsWith('/') ? base.fragment : '/${base.fragment}';
-          return Uri.parse(frag);
+          final frag = base.fragment.replaceFirst(RegExp(r'^!?/?'), '/');
+          final parsed = Uri.parse(frag);
+          if (parsed.queryParameters.isEmpty && base.queryParameters.isNotEmpty) {
+            return parsed.replace(queryParameters: base.queryParameters);
+          }
+          return parsed;
         } else if (base.path.isNotEmpty && base.path != '/') {
           final full = base.query.isNotEmpty ? '${base.path}?${base.query}' : base.path;
           return Uri.parse(full);
         }
       } else if (raw.startsWith('/#') || raw.startsWith('#')) {
-        final stripped = raw.replaceFirst(RegExp(r'^/#?'), '');
-        final clean = stripped.startsWith('/') ? stripped : '/$stripped';
-        return Uri.parse(clean);
+        final stripped = raw.replaceFirst(RegExp(r'^/?#?!?/?'), '/');
+        final parsed = Uri.parse(stripped);
+        if (parsed.queryParameters.isEmpty && base.queryParameters.isNotEmpty) {
+          return parsed.replace(queryParameters: base.queryParameters);
+        }
+        return parsed;
       }
     }
 
@@ -89,6 +96,10 @@ class MyApp extends ConsumerWidget {
       initialRoute: '/',
       onGenerateRoute: (settings) {
         final uri = _resolveRouteUri(settings);
+        final effectiveSettings = RouteSettings(
+          name: uri.toString(),
+          arguments: settings.arguments,
+        );
         
         // 1. Direct Event Link (/event/xyz or /e/xyz)
         if (uri.pathSegments.length >= 2 && (uri.pathSegments[0] == 'event' || uri.pathSegments[0] == 'e')) {
@@ -96,7 +107,7 @@ class MyApp extends ConsumerWidget {
           if (eventId.isEmpty) {
             return MaterialPageRoute(
               builder: (context) => const AuthScreen(),
-              settings: settings,
+              settings: effectiveSettings,
             );
           }
           return MaterialPageRoute(
@@ -104,7 +115,7 @@ class MyApp extends ConsumerWidget {
               companySlug: '',
               initialEventId: eventId,
             ),
-            settings: settings,
+            settings: effectiveSettings,
           );
         }
 
@@ -114,7 +125,7 @@ class MyApp extends ConsumerWidget {
           if (eventId.isEmpty) {
             return MaterialPageRoute(
               builder: (context) => const AuthScreen(),
-              settings: settings,
+              settings: effectiveSettings,
             );
           }
           return MaterialPageRoute(
@@ -123,7 +134,7 @@ class MyApp extends ConsumerWidget {
               initialEventId: eventId,
               isAgencyOpsMode: true,
             ),
-            settings: settings,
+            settings: effectiveSettings,
           );
         }
 
@@ -134,7 +145,7 @@ class MyApp extends ConsumerWidget {
           if (slug.isEmpty && (eventId == null || eventId.trim().isEmpty)) {
             return MaterialPageRoute(
               builder: (context) => const AuthScreen(),
-              settings: settings,
+              settings: effectiveSettings,
             );
           }
           return MaterialPageRoute(
@@ -142,7 +153,7 @@ class MyApp extends ConsumerWidget {
               companySlug: slug,
               initialEventId: eventId,
             ),
-            settings: settings,
+            settings: effectiveSettings,
           );
         }
 
@@ -154,7 +165,7 @@ class MyApp extends ConsumerWidget {
           if (slug.isEmpty && (eventId == null || eventId.trim().isEmpty)) {
             return MaterialPageRoute(
               builder: (context) => const AuthScreen(),
-              settings: settings,
+              settings: effectiveSettings,
             );
           }
           return MaterialPageRoute(
@@ -163,7 +174,7 @@ class MyApp extends ConsumerWidget {
               initialEventId: eventId,
               isAgencyOpsMode: true,
             ),
-            settings: settings,
+            settings: effectiveSettings,
           );
         }
 
@@ -175,7 +186,7 @@ class MyApp extends ConsumerWidget {
           if (slug.isEmpty && (eventId == null || eventId.trim().isEmpty)) {
             return MaterialPageRoute(
               builder: (context) => const AuthScreen(),
-              settings: settings,
+              settings: effectiveSettings,
             );
           }
           return MaterialPageRoute(
@@ -184,7 +195,7 @@ class MyApp extends ConsumerWidget {
               initialEventId: eventId,
               isAgencyOpsMode: false,
             ),
-            settings: settings,
+            settings: effectiveSettings,
           );
         }
 
@@ -194,7 +205,7 @@ class MyApp extends ConsumerWidget {
           case '/admin':
             return MaterialPageRoute(
               builder: (context) => const AdminAuthGuard(),
-              settings: settings,
+              settings: effectiveSettings,
             );
           case '/portal':
           case '/p':
@@ -204,7 +215,7 @@ class MyApp extends ConsumerWidget {
             if (slug.isEmpty && (eventId == null || eventId.trim().isEmpty)) {
               return MaterialPageRoute(
                 builder: (context) => const AuthScreen(),
-                settings: settings,
+                settings: effectiveSettings,
               );
             }
             return MaterialPageRoute(
@@ -212,7 +223,7 @@ class MyApp extends ConsumerWidget {
                 companySlug: slug,
                 initialEventId: eventId,
               ),
-              settings: settings,
+              settings: effectiveSettings,
             );
           case '/ops':
           case '/agency':
@@ -222,7 +233,7 @@ class MyApp extends ConsumerWidget {
             if (slug.isEmpty && (eventId == null || eventId.trim().isEmpty)) {
               return MaterialPageRoute(
                 builder: (context) => const AuthScreen(),
-                settings: settings,
+                settings: effectiveSettings,
               );
             }
             return MaterialPageRoute(
@@ -231,7 +242,7 @@ class MyApp extends ConsumerWidget {
                 initialEventId: eventId,
                 isAgencyOpsMode: true,
               ),
-              settings: settings,
+              settings: effectiveSettings,
             );
           case '/submit':
           case '/c':
@@ -242,7 +253,7 @@ class MyApp extends ConsumerWidget {
             if (slug.isEmpty && (eventId == null || eventId.trim().isEmpty)) {
               return MaterialPageRoute(
                 builder: (context) => const AuthScreen(),
-                settings: settings,
+                settings: effectiveSettings,
               );
             }
             return MaterialPageRoute(
@@ -250,14 +261,14 @@ class MyApp extends ConsumerWidget {
                 companySlug: slug,
                 initialEventId: eventId,
               ),
-              settings: settings,
+              settings: effectiveSettings,
             );
           case '':
           case '/':
           default:
             return MaterialPageRoute(
               builder: (context) => const AuthScreen(),
-              settings: settings,
+              settings: effectiveSettings,
             );
         }
       },

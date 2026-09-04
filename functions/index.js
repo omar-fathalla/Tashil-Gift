@@ -100,13 +100,6 @@ exports.sharePreview = functions.https.onRequest(async (req, res) => {
       pageDescription = welcomeDesc;
     }
 
-    // 5. Construct client-side SPA redirect URL with hash routing
-    let clientRedirectUrl = `https://tashil-gift.web.app/#${rawPath}`;
-    if (Object.keys(query).length > 0) {
-      const queryString = new URLSearchParams(query).toString();
-      clientRedirectUrl = `https://tashil-gift.web.app/#${rawPath}?${queryString}`;
-    }
-
     const escapedTitle = escapeHtml(pageTitle);
     const escapedDesc = escapeHtml(pageDescription);
     const escapedLogo = escapeHtml(companyLogoUrl);
@@ -118,10 +111,22 @@ exports.sharePreview = functions.https.onRequest(async (req, res) => {
     const html = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+  <base href="/">
   <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapedTitle}</title>
   <meta name="description" content="${escapedDesc}">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="${escapedTitle}">
+  <link rel="apple-touch-icon" href="/icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg"/>
+  <link rel="icon" type="image/png" href="/favicon.png"/>
 
   <!-- Open Graph / WhatsApp / Facebook -->
   <meta property="og:type" content="website">
@@ -140,71 +145,33 @@ exports.sharePreview = functions.https.onRequest(async (req, res) => {
   <meta name="twitter:description" content="${escapedDesc}">
   <meta name="twitter:image" content="${escapedLogo}">
 
-  <!-- Instant Client-Side SPA Redirect for Browsers -->
-  <meta http-equiv="refresh" content="0; url=${clientRedirectUrl}">
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      background: #f8fafc;
-      color: #1e293b;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      margin: 0;
-      padding: 20px;
-      text-align: center;
-      box-sizing: border-box;
-    }
-    .card {
-      background: white;
-      border-radius: 20px;
-      padding: 32px;
-      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-      max-width: 440px;
-      width: 100%;
-    }
-    .logo {
-      width: 80px;
-      height: 80px;
-      object-fit: contain;
-      border-radius: 16px;
-      margin-bottom: 16px;
-    }
-    .spinner {
-      width: 36px;
-      height: 36px;
-      border: 3.5px solid #e2e8f0;
-      border-top-color: #6366f1;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin: 20px auto 10px;
-    }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-    a {
-      color: #6366f1;
-      text-decoration: none;
-      font-weight: 600;
-    }
-  </style>
+  <link rel="manifest" href="/manifest.json">
 </head>
 <body>
-  <div class="card">
-    <img src="${escapedLogo}" alt="${escapedTitle}" class="logo" onerror="this.src='https://tashil-gift.web.app/icons/Icon-192.png'">
-    <h3 style="margin: 0 0 8px 0;">${escapedTitle}</h3>
-    <p style="margin: 0 0 16px 0; color: #64748b; font-size: 14px;">${escapedDesc}</p>
-    <div class="spinner"></div>
-    <p style="font-size: 13px; color: #94a3b8; margin: 12px 0 0 0;">
-      جاري التحويل تلقائياً... <br>
-      <a href="${clientRedirectUrl}">اضغط هنا إذا لم يتم تحويلك</a>
-    </p>
-  </div>
   <script>
-    window.location.replace("${clientRedirectUrl}");
+    // Handle legacy hash URLs (e.g. /#/c/512?event=...) by converting them to clean path URLs before Flutter boots
+    (function() {
+      var hash = window.location.hash;
+      if (hash && (hash.startsWith('#/') || hash.startsWith('#!/'))) {
+        var cleanPath = hash.replace(/^#[!]?/, '');
+        if (cleanPath.startsWith('/')) {
+          window.history.replaceState(null, '', cleanPath);
+        }
+      }
+    })();
   </script>
+  <script>
+    // Proactively check and update service worker to avoid stale client-side caches
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(registrations) {
+        for (var i = 0; i < registrations.length; i++) {
+          registrations[i].update();
+        }
+      });
+    }
+  </script>
+  <!-- Flutter Web Bootstrap -->
+  <script src="/flutter_bootstrap.js" async></script>
 </body>
 </html>`;
 

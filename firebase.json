@@ -76,6 +76,22 @@
         "function": "sharePreview"
       },
       {
+        "source": "/client/**",
+        "function": "sharePreview"
+      },
+      {
+        "source": "/promoter/**",
+        "function": "sharePreview"
+      },
+      {
+        "source": "/ops/**",
+        "function": "sharePreview"
+      },
+      {
+        "source": "/agency/**",
+        "function": "sharePreview"
+      },
+      {
         "source": "/p/**",
         "function": "sharePreview"
       },

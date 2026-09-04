@@ -55,5 +55,19 @@ void main() {
       expect(url, contains('/#/portal/almarai'));
       expect(url.contains('?event='), isFalse);
     });
+
+    test('Parses promoter clean path with query correctly into pathSegments and eventId', () {
+      final uri = Uri.parse('/c/512?event=6pvFoEgJiETHwhY7jYI4');
+      expect(uri.pathSegments, equals(['c', '512']));
+      expect(uri.queryParameters['event'], equals('6pvFoEgJiETHwhY7jYI4'));
+    });
+
+    test('Parses legacy hash route correctly into clean pathSegments and eventId', () {
+      const hash = '#/c/512?event=6pvFoEgJiETHwhY7jYI4';
+      final clean = hash.replaceFirst(RegExp(r'^/?#?!?/?'), '/');
+      final uri = Uri.parse(clean);
+      expect(uri.pathSegments, equals(['c', '512']));
+      expect(uri.queryParameters['event'], equals('6pvFoEgJiETHwhY7jYI4'));
+    });
   });
 }
