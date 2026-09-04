@@ -53,11 +53,58 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
   CampaignStockSettlementModel? _selectedSettlement;
   String _searchQuery = '';
 
+  // Golden Standard: Static Persistent In-Memory Caches for 0ms instant render across tab switches
+  static final Map<String, List<EventModel>> _persistentEventsCache = {};
+  static final Map<String, List<CompanyGiftModel>> _persistentGiftsCache = {};
+  static final Map<String, List<QueryDocumentSnapshot>> _persistentTxDocsCache = {};
+  static final Map<String, List<CampaignStockSettlementModel>> _persistentSettlementsCache = {};
+
   // In-memory cache for instant 0ms tab switching
   List<EventModel>? _cachedAllEvents;
   List<CompanyGiftModel>? _cachedMasterGifts;
   List<QueryDocumentSnapshot>? _cachedTxDocs;
   List<CampaignStockSettlementModel>? _cachedSettlements;
+
+  // Memoized stream lifecycle outside build()
+  String? _lastStreamsKey;
+  Stream<QuerySnapshot>? _eventsStream;
+  Stream<QuerySnapshot>? _giftsStream;
+  Stream<QuerySnapshot>? _settlementsStream;
+  Stream<QuerySnapshot>? _transactionsStream;
+
+  void _ensureStreams(FirebaseFirestore db, String targetSlug, {bool force = false}) {
+    final streamKey = targetSlug;
+
+    if (_lastStreamsKey != streamKey || force || _transactionsStream == null) {
+      _lastStreamsKey = streamKey;
+
+      if (_eventsStream == null || force) {
+        _eventsStream = targetSlug.isNotEmpty
+            ? db.collection('events').where('companySlug', isEqualTo: targetSlug).snapshots()
+            : db.collection('events').snapshots();
+      }
+
+      if (_giftsStream == null || force) {
+        _giftsStream = targetSlug.isNotEmpty
+            ? db.collection('company_gifts').where('companySlug', isEqualTo: targetSlug).snapshots()
+            : db.collection('company_gifts').snapshots();
+      }
+
+      if (_settlementsStream == null || force) {
+        Query settlementsQuery = db.collection('campaign_stock_settlements');
+        if (targetSlug.isNotEmpty) {
+          settlementsQuery = settlementsQuery.where('companySlug', isEqualTo: targetSlug);
+        }
+        _settlementsStream = settlementsQuery.snapshots();
+      }
+
+      Query txQuery = db.collection('receipts_transactions');
+      if (targetSlug.isNotEmpty) {
+        txQuery = txQuery.where('companySlug', isEqualTo: targetSlug);
+      }
+      _transactionsStream = txQuery.snapshots();
+    }
+  }
 
   // Controllers map: key = "${eventId}_${branchName}_${giftKey}"
   final Map<String, TextEditingController> _controllers = {};
@@ -822,35 +869,35 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
 
     final db = firestore;
     final targetSlug = widget.lockedCompanySlug?.toLowerCase().trim() ?? '';
+    _ensureStreams(db, targetSlug);
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
       body: SafeArea(
         child: StreamBuilder<QuerySnapshot>(
-          stream: targetSlug.isNotEmpty
-              ? db.collection('events').where('companySlug', isEqualTo: targetSlug).snapshots()
-              : db.collection('events').snapshots(),
+          stream: _eventsStream,
           builder: (context, eventsSnapshot) {
-            if (eventsSnapshot.connectionState == ConnectionState.waiting && !eventsSnapshot.hasData && _cachedAllEvents == null) {
-              return const Center(child: CircularProgressIndicator());
+            if (eventsSnapshot.hasData && eventsSnapshot.data!.docs.isNotEmpty) {
+              final mapped = eventsSnapshot.data!.docs
+                  .map((d) {
+                    try {
+                      return EventModel.fromFirestore(d);
+                    } catch (_) {
+                      return null;
+                    }
+                  })
+                  .whereType<EventModel>()
+                  .toList();
+              if (mapped.isNotEmpty) {
+                _persistentEventsCache[targetSlug] = mapped;
+                _cachedAllEvents = mapped;
+              }
             }
 
-            final eventDocs = eventsSnapshot.data?.docs ?? [];
-            final allEvents = eventDocs.isNotEmpty
-                ? eventDocs
-                    .map((d) {
-                      try {
-                        return EventModel.fromFirestore(d);
-                      } catch (_) {
-                        return null;
-                      }
-                    })
-                    .whereType<EventModel>()
-                    .toList()
-                : (_cachedAllEvents ?? []);
+            final allEvents = _persistentEventsCache[targetSlug] ?? _cachedAllEvents ?? [];
 
-            if (allEvents.isNotEmpty) {
-              _cachedAllEvents = allEvents;
+            if (eventsSnapshot.connectionState == ConnectionState.waiting && !eventsSnapshot.hasData && allEvents.isEmpty) {
+              return const Center(child: CircularProgressIndicator());
             }
 
             final events = _selectedEventId != null && _selectedEventId!.isNotEmpty
@@ -859,72 +906,64 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                     : allEvents)
                 : allEvents;
 
-            Query txQuery = db.collection('receipts_transactions');
-            if (targetSlug.isNotEmpty) {
-              txQuery = txQuery.where('companySlug', isEqualTo: targetSlug);
-            }
-
-            Query settlementsQuery = db.collection('campaign_stock_settlements');
-            if (targetSlug.isNotEmpty) {
-              settlementsQuery = settlementsQuery.where('companySlug', isEqualTo: targetSlug);
-            }
-
             return StreamBuilder<QuerySnapshot>(
-              stream: targetSlug.isNotEmpty
-                  ? db.collection('company_gifts').where('companySlug', isEqualTo: targetSlug).snapshots()
-                  : db.collection('company_gifts').snapshots(),
+              stream: _giftsStream,
               builder: (context, giftsSnapshot) {
-                if (giftsSnapshot.connectionState == ConnectionState.waiting && !giftsSnapshot.hasData && _cachedMasterGifts == null) {
+                if (giftsSnapshot.hasData && giftsSnapshot.data!.docs.isNotEmpty) {
+                  final mapped = giftsSnapshot.data!.docs
+                      .map((d) {
+                        try {
+                          return CompanyGiftModel.fromFirestore(d);
+                        } catch (_) {
+                          return null;
+                        }
+                      })
+                      .whereType<CompanyGiftModel>()
+                      .toList();
+                  if (mapped.isNotEmpty) {
+                    _persistentGiftsCache[targetSlug] = mapped;
+                    _cachedMasterGifts = mapped;
+                  }
+                }
+
+                final masterGifts = _persistentGiftsCache[targetSlug] ?? _cachedMasterGifts ?? [];
+
+                if (giftsSnapshot.connectionState == ConnectionState.waiting && !giftsSnapshot.hasData && masterGifts.isEmpty) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final giftDocs = giftsSnapshot.data?.docs ?? [];
-                final masterGifts = giftDocs.isNotEmpty
-                    ? giftDocs
-                        .map((d) {
-                          try {
-                            return CompanyGiftModel.fromFirestore(d);
-                          } catch (_) {
-                            return null;
-                          }
-                        })
-                        .whereType<CompanyGiftModel>()
-                        .toList()
-                    : (_cachedMasterGifts ?? []);
-
-                if (masterGifts.isNotEmpty) {
-                  _cachedMasterGifts = masterGifts;
-                }
-
                 return StreamBuilder<QuerySnapshot>(
-                  stream: settlementsQuery.snapshots(),
+                  stream: _settlementsStream,
                   builder: (context, settleSnapshot) {
-                    final settleDocs = settleSnapshot.data?.docs ?? [];
-                    final settlements = settleDocs.isNotEmpty
-                        ? settleDocs
-                            .map((d) {
-                              try {
-                                return CampaignStockSettlementModel.fromFirestore(d);
-                              } catch (_) {
-                                return null;
-                              }
-                            })
-                            .whereType<CampaignStockSettlementModel>()
-                            .toList()
-                        : (_cachedSettlements ?? []);
-
-                    settlements.sort((a, b) => b.settledAt.compareTo(a.settledAt));
-                    if (settlements.isNotEmpty) {
-                      _cachedSettlements = settlements;
+                    if (settleSnapshot.hasData && settleSnapshot.data!.docs.isNotEmpty) {
+                      final mapped = settleSnapshot.data!.docs
+                          .map((d) {
+                            try {
+                              return CampaignStockSettlementModel.fromFirestore(d);
+                            } catch (_) {
+                              return null;
+                            }
+                          })
+                          .whereType<CampaignStockSettlementModel>()
+                          .toList()
+                        ..sort((a, b) => b.settledAt.compareTo(a.settledAt));
+                      if (mapped.isNotEmpty) {
+                        _persistentSettlementsCache[targetSlug] = mapped;
+                        _cachedSettlements = mapped;
+                      }
                     }
 
+                    final settlements = _persistentSettlementsCache[targetSlug] ?? _cachedSettlements ?? [];
+
                     return StreamBuilder<QuerySnapshot>(
-                      stream: txQuery.snapshots(),
+                      stream: _transactionsStream,
                       builder: (context, txSnapshot) {
-                        final txDocs = txSnapshot.data?.docs ?? _cachedTxDocs ?? [];
                         if (txSnapshot.hasData && txSnapshot.data!.docs.isNotEmpty) {
+                          _persistentTxDocsCache[targetSlug] = txSnapshot.data!.docs;
                           _cachedTxDocs = txSnapshot.data!.docs;
                         }
+
+                        final txDocs = _persistentTxDocsCache[targetSlug] ?? _cachedTxDocs ?? txSnapshot.data?.docs ?? [];
 
                         return _buildBalancesContent(
                           context: context,

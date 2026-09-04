@@ -5,6 +5,7 @@ import 'package:al_mraay/core/localization/app_strings.dart';
 import 'package:al_mraay/core/localization/locale_provider.dart';
 import 'package:al_mraay/features/company_portal/presentation/company_manager_portal_screen.dart';
 import 'package:al_mraay/features/company_portal/presentation/company_vouchers_report_screen.dart';
+import 'package:al_mraay/features/company_portal/presentation/campaigns_comparison_analytics_screen.dart';
 import 'package:al_mraay/features/company_portal/presentation/company_prizes_stock_report_screen.dart';
 import 'package:al_mraay/features/admin/presentation/campaign_reports_screen.dart';
 import 'package:al_mraay/features/validation/presentation/invoices_log_screen.dart';
@@ -179,6 +180,33 @@ void main() {
 
       // Verify InvoicesLogScreen is rendered
       expect(find.byType(InvoicesLogScreen), findsOneWidget);
+    });
+
+    testWidgets('Tapping Campaigns Comparison tab in CompanyManagerPortalScreen switches view to CampaignsComparisonAnalyticsScreen', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            locale: Locale('ar'),
+            home: CompanyManagerPortalScreen(
+              companySlug: 'adco',
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      // Find the comparison item in the sidebar
+      final comparisonItem = find.byIcon(Icons.compare_arrows_outlined).first;
+      await tester.tap(comparisonItem);
+      await tester.pump();
+
+      // Verify CampaignsComparisonAnalyticsScreen is rendered
+      expect(find.byType(CampaignsComparisonAnalyticsScreen), findsOneWidget);
     });
 
     testWidgets('Tapping Vouchers tab in CompanyManagerPortalScreen switches view to CompanyVouchersReportScreen', (tester) async {

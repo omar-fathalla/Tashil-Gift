@@ -14,10 +14,12 @@ import '../../validation/presentation/invoices_log_screen.dart';
 import 'company_vouchers_report_screen.dart';
 import 'branch_stock_balances_screen.dart';
 import 'daily_branch_sales_screen.dart';
+import 'campaigns_comparison_analytics_screen.dart';
 import '../../../core/utils/url_builder.dart';
 import '../../../core/utils/slug_utils.dart';
 import '../../../core/widgets/campaign_suspended_screen.dart';
 import '../../auth/presentation/auth_screen.dart';
+import '../../client_portal/presentation/client_receipt_upload_screen.dart';
 
 /// Navigation destination model for Partner Portal Dashboard
 class _PortalNavItem {
@@ -46,11 +48,13 @@ class _PortalNavItem {
 class CompanyManagerPortalScreen extends ConsumerStatefulWidget {
   final String companySlug;
   final String? initialEventId;
+  final bool isAgencyOpsMode;
 
   const CompanyManagerPortalScreen({
     super.key,
     required this.companySlug,
     this.initialEventId,
+    this.isAgencyOpsMode = false,
   });
 
   @override
@@ -59,7 +63,7 @@ class CompanyManagerPortalScreen extends ConsumerStatefulWidget {
 
 class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPortalScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  int _selectedTab = 0; // 0 = Analytics & Insights, 1 = Invoice Audit Feed, 2 = Vouchers, 3 = Prizes & Stock Balance
+  int _selectedTab = 0;
   final Set<int> _loadedTabs = {0}; // Lazy loading set: only render tabs when requested
   final Map<String, Widget> _cachedTabWidgets = {}; // High performance memoized tab widget cache (0ms instant tab switching)
   bool _isSidebarExpanded = true;
@@ -67,17 +71,39 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
   @override
   void didUpdateWidget(covariant CompanyManagerPortalScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.companySlug != widget.companySlug || oldWidget.initialEventId != widget.initialEventId) {
+    if (oldWidget.companySlug != widget.companySlug ||
+        oldWidget.initialEventId != widget.initialEventId ||
+        oldWidget.isAgencyOpsMode != widget.isAgencyOpsMode) {
       _cachedTabWidgets.clear();
     }
   }
 
   void _copyPortalLink(BuildContext context, AppStrings strings, String effectiveSlug, String? eventId) {
-    final url = AppUrlBuilder.buildManagerPortalUrl(effectiveSlug, eventId: eventId);
+    if (widget.isAgencyOpsMode) {
+      _copyAgencyOpsLink(context, strings, effectiveSlug, eventId);
+    } else {
+      _copyBrandExecutiveLink(context, strings, effectiveSlug, eventId);
+    }
+  }
+
+  void _copyAgencyOpsLink(BuildContext context, AppStrings strings, String effectiveSlug, String? eventId) {
+    final url = AppUrlBuilder.buildAgencyOpsUrl(effectiveSlug, eventId: eventId);
     Clipboard.setData(ClipboardData(text: url));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${strings.managerPortalLinkCopied}: $url'),
+        content: Text('${strings.agencyOpsLinkCopied}: $url'),
+        backgroundColor: Colors.purple.shade700,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _copyBrandExecutiveLink(BuildContext context, AppStrings strings, String effectiveSlug, String? eventId) {
+    final url = AppUrlBuilder.buildBrandExecutiveUrl(effectiveSlug, eventId: eventId);
+    Clipboard.setData(ClipboardData(text: url));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${strings.brandExecutiveLinkCopied}: $url'),
         backgroundColor: Colors.indigo.shade700,
         behavior: SnackBarBehavior.floating,
       ),
@@ -97,27 +123,77 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
   }
 
   List<_PortalNavItem> _getNavItems(AppStrings strings, bool isAr, bool isHi) {
+    if (widget.isAgencyOpsMode) {
+      return [
+        _PortalNavItem(
+          index: 0,
+          icon: Icons.receipt_long_outlined,
+          selectedIcon: Icons.receipt_long_rounded,
+          title: strings.invoicesAuditTitle,
+          subtitle: isAr ? 'سجل الفواتير وتدقيق المشتريات' : (isHi ? 'इनवॉइस ऑडिट और लॉग्स' : 'Invoices Audit & Live Logs'),
+          tooltip: isAr ? 'متابعة وتدقيق فواتير اليوم المرفوعة من الفروع' : 'Review live receipts from branches',
+          accentColor: const Color(0xFF006C50),
+        ),
+        _PortalNavItem(
+          index: 1,
+          icon: Icons.account_balance_wallet_outlined,
+          selectedIcon: Icons.account_balance_wallet_rounded,
+          title: strings.branchBalancesNavTitle,
+          subtitle: strings.branchBalancesNavSubtitle,
+          tooltip: strings.branchBalancesNavTooltip,
+          accentColor: const Color(0xFF0284C7),
+        ),
+        _PortalNavItem(
+          index: 2,
+          icon: Icons.confirmation_number_outlined,
+          selectedIcon: Icons.confirmation_number_rounded,
+          title: strings.vouchersNavTitle,
+          subtitle: strings.vouchersNavSubtitle,
+          tooltip: strings.vouchersNavTooltip,
+          accentColor: const Color(0xFFD97706),
+        ),
+        _PortalNavItem(
+          index: 3,
+          icon: Icons.point_of_sale_outlined,
+          selectedIcon: Icons.point_of_sale_rounded,
+          title: strings.dailyBranchSalesNavTitle,
+          subtitle: strings.dailyBranchSalesNavSubtitle,
+          tooltip: strings.dailyBranchSalesNavTooltip,
+          accentColor: const Color(0xFF2563EB),
+        ),
+      ];
+    }
+
     return [
       _PortalNavItem(
         index: 0,
         icon: Icons.analytics_outlined,
         selectedIcon: Icons.analytics_rounded,
         title: strings.analyticsTitle,
-        subtitle: isAr ? 'المؤشرات والتحليلات والمبيعات' : (isHi ? 'एनालिटिक्स और प्रदर्शन' : 'KPIs, Analytics & Sales'),
+        subtitle: isAr ? 'المؤشرات والتحليلات والـ ROI' : (isHi ? 'एनालिटिक्स और प्रदर्शन' : 'KPIs, Analytics & Sales'),
         tooltip: isAr ? 'التقارير والتحليلات التفاعلية الشاملة للشركة' : 'Comprehensive Analytics & Reports',
         accentColor: const Color(0xFF6750A4),
       ),
       _PortalNavItem(
         index: 1,
+        icon: Icons.compare_arrows_outlined,
+        selectedIcon: Icons.compare_arrows_rounded,
+        title: strings.campaignsComparisonNavTitle,
+        subtitle: strings.campaignsComparisonNavSubtitle,
+        tooltip: strings.campaignsComparisonNavTooltip,
+        accentColor: const Color(0xFF006C51),
+      ),
+      _PortalNavItem(
+        index: 2,
         icon: Icons.receipt_long_outlined,
         selectedIcon: Icons.receipt_long_rounded,
         title: strings.invoicesAuditTitle,
         subtitle: isAr ? 'سجل الفواتير وتدقيق المنتجات والـ CSV' : (isHi ? 'इनवॉइस ऑडिट और निर्यात' : 'Invoices Audit, Fraud & CSV Export'),
         tooltip: isAr ? 'سجل الفواتير وتدقيق المنتجات والمبيعات وعمليات التصدير' : 'Invoices Log, Product Audit & CSV',
-        accentColor: const Color(0xFF006C50),
+        accentColor: const Color(0xFF0284C7),
       ),
       _PortalNavItem(
-        index: 2,
+        index: 3,
         icon: Icons.point_of_sale_outlined,
         selectedIcon: Icons.point_of_sale_rounded,
         title: strings.dailyBranchSalesNavTitle,
@@ -126,22 +202,31 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
         accentColor: const Color(0xFF2563EB),
       ),
       _PortalNavItem(
-        index: 3,
+        index: 4,
         icon: Icons.account_balance_wallet_outlined,
         selectedIcon: Icons.account_balance_wallet_rounded,
         title: strings.branchBalancesNavTitle,
         subtitle: strings.branchBalancesNavSubtitle,
         tooltip: strings.branchBalancesNavTooltip,
-        accentColor: const Color(0xFF0284C7),
+        accentColor: const Color(0xFF7C3AED),
       ),
       _PortalNavItem(
-        index: 4,
+        index: 5,
         icon: Icons.confirmation_number_outlined,
         selectedIcon: Icons.confirmation_number_rounded,
         title: strings.vouchersNavTitle,
         subtitle: strings.vouchersNavSubtitle,
         tooltip: strings.vouchersNavTooltip,
         accentColor: const Color(0xFFD97706),
+      ),
+      _PortalNavItem(
+        index: 6,
+        icon: Icons.phone_android_rounded,
+        selectedIcon: Icons.phone_android_rounded,
+        title: strings.livePromoterSimulationNavTitle,
+        subtitle: strings.livePromoterSimulationNavSubtitle,
+        tooltip: strings.livePromoterSimulationNavTooltip,
+        accentColor: const Color(0xFF0D9488),
       ),
     ];
   }
@@ -264,12 +349,15 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
       }
     }
 
-    final bool isManagerSuspended = (initialEvent != null && (!initialEvent.isActive || !initialEvent.isManagerActive)) ||
-        (companyEvents.isNotEmpty && companyEvents.every((e) => !e.isActive || !e.isManagerActive));
+    final bool isSuspended = widget.isAgencyOpsMode
+        ? ((initialEvent != null && (!initialEvent.isActive || !initialEvent.isAgencyActive)) ||
+            (companyEvents.isNotEmpty && companyEvents.every((e) => !e.isActive || !e.isAgencyActive)))
+        : ((initialEvent != null && (!initialEvent.isActive || !initialEvent.isManagerActive)) ||
+            (companyEvents.isNotEmpty && companyEvents.every((e) => !e.isActive || !e.isManagerActive)));
 
-    if (isManagerSuspended) {
+    if (isSuspended) {
       return CampaignSuspendedScreen(
-        portalType: SuspendedPortalType.manager,
+        portalType: widget.isAgencyOpsMode ? SuspendedPortalType.agency : SuspendedPortalType.manager,
         event: initialEvent ?? (companyEvents.isNotEmpty ? companyEvents.first : null),
         companySlug: effectiveSlug,
         companyName: companyDisplayName,
@@ -304,7 +392,9 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                 onPressed: () => _scaffoldKey.currentState?.openDrawer(),
               )
             : null,
-        subtitle: '$companyDisplayName • ${strings.partnerPortalBadge}',
+        subtitle: widget.isAgencyOpsMode
+            ? '$companyDisplayName • ${strings.agencyOpsPortalLabel}'
+            : '$companyDisplayName • ${strings.brandExecutivePortalLabel}',
         companyLogoUrl: companyLogoUrl,
         customActions: isMobile
             ? null
@@ -319,13 +409,23 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                   ),
                 ),
                 const SizedBox(width: 4),
-                // Copy Portal Link quick button
+                // Copy Agency Ops Link quick button
                 Tooltip(
-                  message: strings.copyManagerPortalLink,
+                  message: strings.copyAgencyOpsLink,
                   child: IconButton.filledTonal(
-                    icon: const Icon(Icons.share_rounded, size: 18),
+                    icon: const Icon(Icons.store_mall_directory_rounded, size: 18),
                     padding: const EdgeInsets.all(8),
-                    onPressed: () => _copyPortalLink(context, strings, effectiveSlug, activeEventId),
+                    onPressed: () => _copyAgencyOpsLink(context, strings, effectiveSlug, activeEventId),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                // Copy Brand Executive Master Link quick button
+                Tooltip(
+                  message: strings.copyBrandExecutiveLink,
+                  child: IconButton.filledTonal(
+                    icon: const Icon(Icons.business_center_rounded, size: 18),
+                    padding: const EdgeInsets.all(8),
+                    onPressed: () => _copyBrandExecutiveLink(context, strings, effectiveSlug, activeEventId),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -353,7 +453,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
       // Mobile Bottom Navigation Bar for quick thumb-reach switching
       bottomNavigationBar: isMobile
           ? NavigationBar(
-              selectedIndex: _selectedTab.clamp(0, 5),
+              selectedIndex: _selectedTab.clamp(0, navItems.length - 1),
               onDestinationSelected: (idx) {
                 setState(() {
                   _selectedTab = idx;
@@ -365,36 +465,12 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
               height: 65,
               labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
               destinations: [
-                NavigationDestination(
-                  icon: const Icon(Icons.analytics_outlined),
-                  selectedIcon: const Icon(Icons.analytics_rounded),
-                  label: isAr ? 'التقارير' : (isHi ? 'रिपोर्ट' : 'Reports'),
-                ),
-                NavigationDestination(
-                  icon: const Icon(Icons.receipt_long_outlined),
-                  selectedIcon: const Icon(Icons.receipt_long_rounded),
-                  label: isAr ? 'الفواتير' : (isHi ? 'इनवॉइस' : 'Invoices'),
-                ),
-                NavigationDestination(
-                  icon: const Icon(Icons.point_of_sale_outlined),
-                  selectedIcon: const Icon(Icons.point_of_sale_rounded),
-                  label: isAr ? 'المبيعات' : (isHi ? 'दैनिक बिक्री' : 'Daily Sales'),
-                ),
-                NavigationDestination(
-                  icon: const Icon(Icons.account_balance_wallet_outlined),
-                  selectedIcon: const Icon(Icons.account_balance_wallet_rounded),
-                  label: isAr ? 'الأرصدة' : (isHi ? 'बैलेंस' : 'Balances'),
-                ),
-                NavigationDestination(
-                  icon: const Icon(Icons.confirmation_number_outlined),
-                  selectedIcon: const Icon(Icons.confirmation_number_rounded),
-                  label: isAr ? 'القسائم' : (isHi ? 'वाउचर' : 'Vouchers'),
-                ),
-                NavigationDestination(
-                  icon: const Icon(Icons.mark_chat_unread_outlined),
-                  selectedIcon: const Icon(Icons.mark_chat_unread_rounded),
-                  label: isAr ? 'العملاء والواتساب' : (isHi ? 'ग्राहक' : 'Customers'),
-                ),
+                for (final item in navItems)
+                  NavigationDestination(
+                    icon: Icon(item.icon),
+                    selectedIcon: Icon(item.selectedIcon),
+                    label: item.title,
+                  ),
               ],
             )
           : null,
@@ -427,7 +503,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  for (int i = 0; i < 6; i++)
+                  for (int i = 0; i < navItems.length; i++)
                     Offstage(
                       offstage: _selectedTab != i,
                       child: TickerMode(
@@ -439,6 +515,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                                 companyDisplayName: companyDisplayName,
                                 activeEventId: activeEventId,
                                 initialEvent: initialEvent,
+                                companyEvents: companyEvents,
                               )
                             : const SizedBox.shrink(),
                       ),
@@ -460,20 +537,28 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     required String companyDisplayName,
     required String? activeEventId,
     required EventModel? initialEvent,
+    required List<EventModel> companyEvents,
   }) {
-    final tabKey = '$tabIndex-${activeEventId ?? 'all'}-$effectiveSlug';
+    final String tabKey;
+    if (!widget.isAgencyOpsMode && tabIndex == 1) {
+      // Comparison Analytics benchmarks all campaigns of the company; keep stable across single-campaign selector
+      tabKey = '1-comparison-$effectiveSlug';
+    } else {
+      tabKey = '$tabIndex-${activeEventId ?? 'all'}-$effectiveSlug-${widget.isAgencyOpsMode}';
+    }
     if (_cachedTabWidgets.containsKey(tabKey)) {
       return _cachedTabWidgets[tabKey]!;
     }
-    final widget = _buildTabContent(
+    final widgetContent = _buildTabContent(
       tabIndex: tabIndex,
       effectiveSlug: effectiveSlug,
       companyDisplayName: companyDisplayName,
       activeEventId: activeEventId,
       initialEvent: initialEvent,
+      companyEvents: companyEvents,
     );
-    _cachedTabWidgets[tabKey] = widget;
-    return widget;
+    _cachedTabWidgets[tabKey] = widgetContent;
+    return widgetContent;
   }
 
   /// Builds tab content on-demand (Zero CPU/memory overhead for unvisited tabs)
@@ -483,7 +568,46 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     required String companyDisplayName,
     required String? activeEventId,
     required EventModel? initialEvent,
+    required List<EventModel> companyEvents,
   }) {
+    if (widget.isAgencyOpsMode) {
+      switch (tabIndex) {
+        case 0:
+          return InvoicesLogScreen(
+            key: ValueKey('agency_invoices_${effectiveSlug}_${activeEventId ?? 'all'}'),
+            initialEventId: activeEventId,
+            lockedCompanySlug: effectiveSlug,
+            lockedCompanyName: companyDisplayName,
+            isEmbedded: true,
+          );
+        case 1:
+          return BranchStockBalancesScreen(
+            key: ValueKey('agency_balances_${effectiveSlug}_${activeEventId ?? 'all'}'),
+            initialEventId: activeEventId,
+            lockedCompanySlug: effectiveSlug,
+            lockedCompanyName: companyDisplayName,
+            isEmbedded: true,
+          );
+        case 2:
+          return CompanyVouchersReportScreen(
+            key: ValueKey('agency_vouchers_${effectiveSlug}_${activeEventId ?? 'all'}'),
+            initialEventId: activeEventId,
+            lockedCompanySlug: effectiveSlug,
+            lockedCompanyName: companyDisplayName,
+            isEmbedded: true,
+          );
+        case 3:
+          return DailyBranchSalesScreen(
+            key: ValueKey('agency_daily_sales_${effectiveSlug}_${activeEventId ?? 'all'}'),
+            initialEventId: activeEventId,
+            lockedCompanySlug: effectiveSlug,
+          );
+        default:
+          return const SizedBox.shrink();
+      }
+    }
+
+    // Brand Executive Master Mode:
     switch (tabIndex) {
       case 0:
         return CampaignReportsScreen(
@@ -495,6 +619,15 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
           isEmbedded: true,
         );
       case 1:
+        return CampaignsComparisonAnalyticsScreen(
+          key: ValueKey('comparison_$effectiveSlug'),
+          lockedCompanySlug: effectiveSlug,
+          lockedCompanyName: companyDisplayName,
+          initialEventId: activeEventId,
+          companyEvents: companyEvents,
+          isEmbedded: true,
+        );
+      case 2:
         return InvoicesLogScreen(
           key: ValueKey('invoices_${effectiveSlug}_${activeEventId ?? 'all'}'),
           initialEventId: activeEventId,
@@ -502,13 +635,13 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
           lockedCompanyName: companyDisplayName,
           isEmbedded: true,
         );
-      case 2:
+      case 3:
         return DailyBranchSalesScreen(
           key: ValueKey('daily_sales_${effectiveSlug}_${activeEventId ?? 'all'}'),
           initialEventId: activeEventId,
           lockedCompanySlug: effectiveSlug,
         );
-      case 3:
+      case 4:
         return BranchStockBalancesScreen(
           key: ValueKey('balances_${effectiveSlug}_${activeEventId ?? 'all'}'),
           initialEventId: activeEventId,
@@ -516,7 +649,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
           lockedCompanyName: companyDisplayName,
           isEmbedded: true,
         );
-      case 4:
+      case 5:
         return CompanyVouchersReportScreen(
           key: ValueKey('vouchers_${effectiveSlug}_${activeEventId ?? 'all'}'),
           initialEventId: activeEventId,
@@ -524,9 +657,114 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
           lockedCompanyName: companyDisplayName,
           isEmbedded: true,
         );
+      case 6:
+        return _buildLivePromoterSimulationTab(
+          context: context,
+          colorScheme: Theme.of(context).colorScheme,
+          effectiveSlug: effectiveSlug,
+          activeEventId: activeEventId,
+          initialEvent: initialEvent,
+          isAr: AppStrings.of(ref).isAr,
+        );
       default:
         return const SizedBox.shrink();
     }
+  }
+
+  Widget _buildLivePromoterSimulationTab({
+    required BuildContext context,
+    required ColorScheme colorScheme,
+    required String effectiveSlug,
+    required String? activeEventId,
+    required EventModel? initialEvent,
+    required bool isAr,
+  }) {
+    return Container(
+      color: colorScheme.surfaceContainerLowest,
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Hero Explainer Badge
+              Container(
+                constraints: const BoxConstraints(maxWidth: 500),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                margin: const EdgeInsets.only(bottom: 18),
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: colorScheme.primary.withValues(alpha: 0.25)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.phone_android_rounded, color: colorScheme.primary, size: 28),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isAr ? 'محاكاة رحلة البروموتر في الفرع (Live Simulation)' : 'In-Store Promoter Live Simulation',
+                            style: GoogleFonts.cairo(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13.5,
+                              color: colorScheme.onPrimaryContainer,
+                            ),
+                          ),
+                          Text(
+                            isAr
+                                ? 'هذه هي الشاشة المباشرة التي يستخدمها البروموتر والمتسوق داخل السوبرماركت لرفع الفواتير وتوزيع الهدايا.'
+                                : 'Live preview of the in-store receipt upload and gift distribution screen.',
+                            style: GoogleFonts.cairo(
+                              fontSize: 11.5,
+                              color: colorScheme.onPrimaryContainer.withValues(alpha: 0.85),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Mockup Smartphone Device Frame
+              Container(
+                width: 390,
+                height: 844,
+                decoration: BoxDecoration(
+                  color: colorScheme.surface,
+                  borderRadius: BorderRadius.circular(36),
+                  border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.8), width: 3.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.12),
+                      blurRadius: 28,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(32),
+                  child: MediaQuery(
+                    data: MediaQuery.of(context).copyWith(
+                      size: const Size(390, 844),
+                      padding: const EdgeInsets.only(top: 24, bottom: 20),
+                    ),
+                    child: ClientReceiptUploadScreen(
+                      event: initialEvent,
+                      companySlug: effectiveSlug,
+                      initialEventId: activeEventId,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   /// Builds the desktop collapsible dashboard navigation sidebar (Right side in Arabic RTL, Left in English/Hindi LTR)
@@ -1099,10 +1337,19 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                   ),
                   const SizedBox(height: 8),
                   OutlinedButton.icon(
-                    icon: const Icon(Icons.share_rounded, size: 16),
-                    label: Text(strings.copyManagerPortalLink),
+                    icon: const Icon(Icons.store_mall_directory_rounded, size: 16),
+                    label: Text(strings.copyAgencyOpsLink),
                     onPressed: () {
-                      _copyPortalLink(context, strings, effectiveSlug, activeEventId);
+                      _copyAgencyOpsLink(context, strings, effectiveSlug, activeEventId);
+                      Navigator.of(context).pop();
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.business_center_rounded, size: 16),
+                    label: Text(strings.copyBrandExecutiveLink),
+                    onPressed: () {
+                      _copyBrandExecutiveLink(context, strings, effectiveSlug, activeEventId);
                       Navigator.of(context).pop();
                     },
                   ),

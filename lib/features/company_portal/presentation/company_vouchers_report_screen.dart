@@ -123,11 +123,60 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
   double? _selectedVoucherDenomFilter;
   final TextEditingController _branchSearchController = TextEditingController();
 
+  // Golden Standard: Static Persistent In-Memory Caches for 0ms instant render across tab switches
+  static final Map<String, List<EventModel>> _persistentEventsCache = {};
+  static final Map<String, List<QueryDocumentSnapshot>> _persistentGiftsCache = {};
+  static final Map<String, List<QueryDocumentSnapshot>> _persistentTxDocsCache = {};
+  static final Map<String, List<BranchModel>> _persistentBranchesCache = {};
+
   // In-memory cache for instant 0ms tab switching
   List<EventModel>? _cachedAllEvents;
   List<QueryDocumentSnapshot>? _cachedGiftsDocs;
   List<QueryDocumentSnapshot>? _cachedTxDocs;
   List<BranchModel>? _cachedDbBranches;
+
+  // Memoized stream lifecycle outside build()
+  String? _lastStreamsKey;
+  Stream<QuerySnapshot>? _eventsStream;
+  Stream<QuerySnapshot>? _giftsStream;
+  Stream<QuerySnapshot>? _txStream;
+  Stream<QuerySnapshot>? _branchesStream;
+
+  void _ensureStreams(FirebaseFirestore db, String effectiveSlug, {bool force = false}) {
+    final streamKey = effectiveSlug;
+
+    if (_lastStreamsKey != streamKey || force || _txStream == null) {
+      _lastStreamsKey = streamKey;
+
+      if (_eventsStream == null || force) {
+        Query eventsQuery = db.collection('events');
+        if (effectiveSlug.isNotEmpty) {
+          eventsQuery = eventsQuery.where('companySlug', isEqualTo: effectiveSlug);
+        }
+        _eventsStream = eventsQuery.snapshots();
+      }
+
+      if (_giftsStream == null || force) {
+        Query giftsQuery = db.collection('company_gifts');
+        if (effectiveSlug.isNotEmpty) {
+          giftsQuery = giftsQuery.where('companySlug', isEqualTo: effectiveSlug);
+        }
+        _giftsStream = giftsQuery.snapshots();
+      }
+
+      if (_txStream == null || force) {
+        Query txQuery = db.collection('receipts_transactions');
+        if (effectiveSlug.isNotEmpty) {
+          txQuery = txQuery.where('companySlug', isEqualTo: effectiveSlug);
+        }
+        _txStream = txQuery.snapshots();
+      }
+
+      if (_branchesStream == null || force) {
+        _branchesStream = db.collection('branches').snapshots();
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -414,57 +463,43 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
 
     final db = firestore;
     final effectiveSlug = widget.lockedCompanySlug?.trim().toLowerCase() ?? '';
-
-    Query eventsQuery = db.collection('events');
-    if (effectiveSlug.isNotEmpty) {
-      eventsQuery = eventsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug!.trim());
-    }
-
-    Query giftsQuery = db.collection('company_gifts');
-    if (effectiveSlug.isNotEmpty) {
-      giftsQuery = giftsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug!.trim());
-    }
-
-    Query txQuery = db.collection('receipts_transactions');
-    if (effectiveSlug.isNotEmpty) {
-      txQuery = txQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug!.trim());
-    }
+    _ensureStreams(db, effectiveSlug);
 
     return StreamBuilder<QuerySnapshot>(
-      stream: eventsQuery.snapshots(),
+      stream: _eventsStream,
       builder: (context, eventsSnapshot) {
         return StreamBuilder<QuerySnapshot>(
-          stream: giftsQuery.snapshots(),
+          stream: _giftsStream,
           builder: (context, giftsSnapshot) {
             return StreamBuilder<QuerySnapshot>(
-              stream: txQuery.snapshots(),
+              stream: _txStream,
               builder: (context, txSnapshot) {
                 return StreamBuilder<QuerySnapshot>(
-                  stream: db.collection('branches').snapshots(),
+                  stream: _branchesStream,
                   builder: (context, branchesSnapshot) {
+                    if (eventsSnapshot.hasData && eventsSnapshot.data!.docs.isNotEmpty) {
+                      final mapped = eventsSnapshot.data!.docs.map((d) {
+                        try {
+                          return EventModel.fromFirestore(d);
+                        } catch (_) {
+                          return null;
+                        }
+                      }).whereType<EventModel>().toList();
+                      if (mapped.isNotEmpty) {
+                        _persistentEventsCache[effectiveSlug] = mapped;
+                        _cachedAllEvents = mapped;
+                      }
+                    }
+
+                    final allEvents = _persistentEventsCache[effectiveSlug] ?? _cachedAllEvents ?? [];
+
                     if (eventsSnapshot.connectionState == ConnectionState.waiting &&
                         !eventsSnapshot.hasData &&
-                        _cachedAllEvents == null) {
+                        allEvents.isEmpty) {
                       return const Center(child: CircularProgressIndicator());
                     }
 
-                    final eventDocs = eventsSnapshot.data?.docs;
-                    final allEvents = (eventDocs != null && eventDocs.isNotEmpty)
-                        ? eventDocs.map((d) {
-                              try {
-                                return EventModel.fromFirestore(d);
-                              } catch (_) {
-                                return null;
-                              }
-                            }).whereType<EventModel>().toList()
-                        : (_cachedAllEvents ?? []);
-
-                    if (allEvents.isNotEmpty) {
-                      _cachedAllEvents = allEvents;
-                    }
-
                     // Resolve Company Scoping
-                    final effectiveSlug = widget.lockedCompanySlug?.trim().toLowerCase() ?? '';
                     final effectiveCompanyName = widget.lockedCompanyName?.trim() ??
                         (effectiveSlug.isNotEmpty ? SlugUtils.formatSlugToName(effectiveSlug) : '');
 
@@ -477,10 +512,11 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                       return matchSlug || matchName;
                     }).toList();
 
-                    final giftDocs = giftsSnapshot.data?.docs ?? _cachedGiftsDocs ?? [];
                     if (giftsSnapshot.hasData && giftsSnapshot.data!.docs.isNotEmpty) {
+                      _persistentGiftsCache[effectiveSlug] = giftsSnapshot.data!.docs;
                       _cachedGiftsDocs = giftsSnapshot.data!.docs;
                     }
+                    final giftDocs = _persistentGiftsCache[effectiveSlug] ?? _cachedGiftsDocs ?? giftsSnapshot.data?.docs ?? [];
 
                     final masterGifts = giftDocs.map((d) {
                           try {
@@ -490,25 +526,26 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                           }
                         }).whereType<CompanyGiftModel>().toList();
 
-                    final txDocs = txSnapshot.data?.docs ?? _cachedTxDocs ?? [];
                     if (txSnapshot.hasData && txSnapshot.data!.docs.isNotEmpty) {
+                      _persistentTxDocsCache[effectiveSlug] = txSnapshot.data!.docs;
                       _cachedTxDocs = txSnapshot.data!.docs;
                     }
+                    final txDocs = _persistentTxDocsCache[effectiveSlug] ?? _cachedTxDocs ?? txSnapshot.data?.docs ?? [];
 
-                    final branchDocs = branchesSnapshot.data?.docs;
-                    final dbBranches = (branchDocs != null && branchDocs.isNotEmpty)
-                        ? branchDocs.map((d) {
-                              try {
-                                return BranchModel.fromFirestore(d);
-                              } catch (_) {
-                                return null;
-                              }
-                            }).whereType<BranchModel>().toList()
-                        : (_cachedDbBranches ?? []);
-
-                    if (dbBranches.isNotEmpty) {
-                      _cachedDbBranches = dbBranches;
+                    if (branchesSnapshot.hasData && branchesSnapshot.data!.docs.isNotEmpty) {
+                      final mapped = branchesSnapshot.data!.docs.map((d) {
+                        try {
+                          return BranchModel.fromFirestore(d);
+                        } catch (_) {
+                          return null;
+                        }
+                      }).whereType<BranchModel>().toList();
+                      if (mapped.isNotEmpty) {
+                        _persistentBranchesCache['all'] = mapped;
+                        _cachedDbBranches = mapped;
+                      }
                     }
+                    final dbBranches = _persistentBranchesCache['all'] ?? _cachedDbBranches ?? [];
 
                     return _buildVouchersView(
                       context: context,

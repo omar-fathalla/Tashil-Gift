@@ -45,7 +45,43 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
   String _searchQuery = '';
   bool _isBackfilling = false;
   bool _isExporting = false;
+  // Golden Standard: Static Persistent In-Memory Caches for 0ms instant render across tab switches
+  static final Map<String, List<DailyBranchSalesModel>> _persistentSalesCache = {};
+  static final Map<String, List<EventModel>> _persistentEventsCache = {};
+  static final Map<String, List<CompanyGiftModel>> _persistentGiftsCache = {};
+  static final Map<String, List<Map<String, dynamic>>> _persistentTxCache = {};
+
   List<DailyBranchSalesModel>? _lastLoadedRecords;
+
+  // Memoized stream lifecycle outside build()
+  String? _lastStreamsKey;
+  Stream<QuerySnapshot>? _eventsStream;
+  Stream<List<CompanyGiftModel>>? _giftsStream;
+  Stream<QuerySnapshot>? _transactionsStream;
+
+  void _ensureStreams(FirebaseFirestore activeDb, String effectiveSlug, {bool force = false}) {
+    final streamKey = effectiveSlug;
+
+    if (_lastStreamsKey != streamKey || force || _transactionsStream == null) {
+      _lastStreamsKey = streamKey;
+
+      if (_eventsStream == null || force) {
+        _eventsStream = effectiveSlug.isNotEmpty
+            ? activeDb.collection('events').where('companySlug', isEqualTo: effectiveSlug).snapshots()
+            : activeDb.collection('events').snapshots();
+      }
+
+      if (_giftsStream == null || force) {
+        _giftsStream = ref.read(companyGiftsServiceProvider).giftsStream(effectiveSlug);
+      }
+
+      Query transactionsQuery = activeDb.collection('receipts_transactions');
+      if (effectiveSlug.isNotEmpty) {
+        transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: effectiveSlug);
+      }
+      _transactionsStream = transactionsQuery.snapshots();
+    }
+  }
 
   @override
   void initState() {
@@ -290,17 +326,25 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
       );
     }
 
+    _ensureStreams(activeDb, effectiveSlug);
+
     return StreamBuilder<QuerySnapshot>(
-      stream: effectiveSlug.isNotEmpty
-          ? activeDb.collection('events').where('companySlug', isEqualTo: effectiveSlug).snapshots()
-          : activeDb.collection('events').snapshots(),
+      stream: _eventsStream,
       builder: (context, eventsSnap) {
-        if (eventsSnap.connectionState == ConnectionState.waiting && !eventsSnap.hasData && _lastLoadedRecords == null) {
-          return const Center(child: CircularProgressIndicator());
+        if (eventsSnap.hasData && eventsSnap.data!.docs.isNotEmpty) {
+          _persistentEventsCache[effectiveSlug] = eventsSnap.data!.docs
+              .map((d) {
+                try {
+                  return EventModel.fromFirestore(d);
+                } catch (_) {
+                  return null;
+                }
+              })
+              .whereType<EventModel>()
+              .toList();
         }
 
-        final eventDocs = eventsSnap.data?.docs ?? [];
-        final companyEvents = eventDocs
+        final companyEvents = _persistentEventsCache[effectiveSlug] ?? (eventsSnap.data?.docs ?? [])
             .map((d) {
               try {
                 return EventModel.fromFirestore(d);
@@ -320,26 +364,33 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
 
         final targetEventId = isAllCampaigns ? null : currentEvent?.id;
         final targetDateStr = _isAllDays ? null : _formatDateStr(_selectedDate);
+        final cacheKey = '${effectiveSlug}_${targetEventId ?? 'all'}_${targetDateStr ?? 'all'}';
 
         return StreamBuilder<List<CompanyGiftModel>>(
-          stream: ref.watch(companyGiftsServiceProvider).giftsStream(effectiveSlug),
+          stream: _giftsStream,
           builder: (context, giftsSnap) {
-            final masterGifts = giftsSnap.data ?? [];
-
-            Query transactionsQuery = activeDb.collection('receipts_transactions');
-            if (effectiveSlug.isNotEmpty) {
-              transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: effectiveSlug);
+            if (giftsSnap.hasData && giftsSnap.data!.isNotEmpty) {
+              _persistentGiftsCache[effectiveSlug] = giftsSnap.data!;
             }
+            final masterGifts = giftsSnap.data ?? _persistentGiftsCache[effectiveSlug] ?? [];
 
             return StreamBuilder<QuerySnapshot>(
-              stream: transactionsQuery.snapshots(),
+              stream: _transactionsStream,
               builder: (context, txSnap) {
-                if (txSnap.connectionState == ConnectionState.waiting && !txSnap.hasData && _lastLoadedRecords == null) {
-                  return const Center(child: CircularProgressIndicator());
+                if (txSnap.hasData) {
+                  final docs = txSnap.data!.docs;
+                  final mapped = docs.map((d) => d.data() as Map<String, dynamic>).toList();
+                  if (mapped.isNotEmpty || !_persistentTxCache.containsKey(cacheKey)) {
+                    _persistentTxCache[cacheKey] = mapped;
+                  }
                 }
 
-                final txDocs = txSnap.data?.docs ?? [];
-                final rawTransactions = txDocs.map((d) => d.data() as Map<String, dynamic>).toList();
+                final rawTransactions = _persistentTxCache[cacheKey] ?? (txSnap.data?.docs ?? []).map((d) => d.data() as Map<String, dynamic>).toList();
+                final cachedSales = _persistentSalesCache[cacheKey];
+
+                if (txSnap.connectionState == ConnectionState.waiting && !txSnap.hasData && _lastLoadedRecords == null && cachedSales == null) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
                 final companyEventIds = companyEvents.map((d) => d.id).toSet();
                 final companyEventNames = <String, String>{
@@ -359,19 +410,22 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
                   }
                 }
 
-                final displayRecords = DailySalesAggregationService.aggregateTransactionsData(
-                  rawTransactions: rawTransactions,
-                  companySlug: effectiveSlug,
-                  campaignId: targetEventId,
-                  targetDateStr: targetDateStr,
-                  companyBranches: companyBranches,
-                  companyEventIds: companyEventIds,
-                  companyEventNames: companyEventNames,
-                  companyTargetNames: companyTargetNames,
-                );
+                final displayRecords = (rawTransactions.isNotEmpty || cachedSales == null)
+                    ? DailySalesAggregationService.aggregateTransactionsData(
+                        rawTransactions: rawTransactions,
+                        companySlug: effectiveSlug,
+                        campaignId: targetEventId,
+                        targetDateStr: targetDateStr,
+                        companyBranches: companyBranches,
+                        companyEventIds: companyEventIds,
+                        companyEventNames: companyEventNames,
+                        companyTargetNames: companyTargetNames,
+                      )
+                    : cachedSales;
 
                 if (displayRecords.isNotEmpty || rawTransactions.isNotEmpty) {
                   _lastLoadedRecords = displayRecords;
+                  _persistentSalesCache[cacheKey] = displayRecords;
                 }
 
                 return _buildContent(

@@ -123,15 +123,37 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
     try {
       final firestore = ref.read(firestoreProvider);
 
-      _eventSubscription = firestore.collection('events').snapshots().listen(
-        (snapshot) {
+      // ⚡ Server-Side Scoped Query (Pillar 3): Stream only events for this specific company
+      Query<Map<String, dynamic>> query = firestore.collection('events');
+      if (slug.isNotEmpty) {
+        query = query.where('companySlug', isEqualTo: slug);
+      }
+
+      _eventSubscription = query.snapshots().listen(
+        (snapshot) async {
           if (!mounted) return;
-          final docs = snapshot.docs;
+          var docs = snapshot.docs;
+          
+          // Fallback if scoped query returned empty but targetEventId is provided
+          if (docs.isEmpty && targetEventId != null && targetEventId.isNotEmpty) {
+            final singleDoc = await firestore.collection('events').doc(targetEventId).get();
+            if (singleDoc.exists && mounted) {
+              final singleEvent = EventModel.fromFirestore(singleDoc);
+              setState(() {
+                _availableCompanyEvents = [singleEvent];
+                _activeEvent = singleEvent;
+                _isLoadingEvent = false;
+                _errorMessage = null;
+              });
+              return;
+            }
+          }
+
           if (docs.isEmpty) {
             setState(() {
               _activeEvent = null;
               _availableCompanyEvents = [];
-              _errorMessage = 'لا يوجد أي فعاليات مسجلة حالياً.';
+              _errorMessage = 'لا يوجد أي فعاليات مسجلة لهذه الشركة حالياً.';
               _isLoadingEvent = false;
             });
             return;
@@ -385,29 +407,30 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       final bytes = await _receiptImage!.readAsBytes();
       final mimeType = _receiptImage!.mimeType ?? 'image/jpeg';
 
-      // Fetch company product barcodes catalog if available
+      // Fetch company product barcodes catalog and branch signatures concurrently in parallel
       List<String> registeredBarcodes = [];
       Map<String, String> catalogBarcodeMap = {};
+      List<BranchModel> chainBranches = [];
+
       try {
-        final catalogItems = await productsService.getProductsForCompany(_activeEvent!.companySlug);
+        final results = await Future.wait([
+          productsService.getProductsForCompany(_activeEvent!.companySlug).catchError((_) => <CompanyProductItem>[]),
+          ref.read(retailChainsServiceProvider).getBranchesForEvent(
+            retailChainId: _activeEvent!.retailChainId,
+            branchIds: _activeEvent!.branchIds,
+            branchNames: _activeEvent!.branchNames,
+          ).catchError((_) => <BranchModel>[]),
+        ]);
+
+        final catalogItems = results[0] as List<CompanyProductItem>;
+        chainBranches = results[1] as List<BranchModel>;
+
         registeredBarcodes = catalogItems.map((e) => "${e.productName} (${e.barcode})").toList();
         catalogBarcodeMap = {
           for (final item in catalogItems)
             if (item.productName.isNotEmpty && item.barcode.isNotEmpty)
               item.productName: item.barcode,
         };
-      } catch (_) {}
-
-      // Fetch retail chain branch signatures if available for deterministic anti-fraud matching
-      List<BranchModel> chainBranches = [];
-      try {
-        chainBranches = await ref
-            .read(retailChainsServiceProvider)
-            .getBranchesForEvent(
-              retailChainId: _activeEvent!.retailChainId,
-              branchIds: _activeEvent!.branchIds,
-              branchNames: _activeEvent!.branchNames,
-            );
       } catch (_) {}
 
       // Run Gemini AI analysis

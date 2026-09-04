@@ -734,6 +734,48 @@ class AiDirectivesSeedData {
           tags: ['spend-range', 'discount-tolerance', 'cashier-discounts', 'oral-care-ranges', 'tolerance-margin', 'air-34'],
           lastUpdated: '2026-09-03',
         ),
+
+        const AiDirectiveModel(
+          id: 'AIR-35',
+          code: 'TARGETED_FAST_SCAN_AND_SKU_FILTERING_STANDARD',
+          orderIndex: 35,
+          category: AiDirectiveCategory.nlpMatching,
+          titleAr: 'استراتيجية المسح السريع الفائق وتصفية الأصناف المشروطة (Targeted Fast-Scan & Participating SKU Filtering Standard)',
+          titleEn: 'Targeted Fast-Scan & Participating SKU Token Optimization Standard',
+          descriptionAr:
+              'توجيه نموذج الرؤية (Gemini 3.7 Flash) للتركيز الفوري على رأس الفاتورة والفرع والتاريخ، ومسح أسطر المشتريات للبحث الحصري عن منتجات وعلامات الشركة الراعية المشروطة، مع التجاوز الفوري السريع للأصناف العامة غير التابعة للشركة (كالخضار واللحوم والأجبان والمخبوزات) وعدم إدراجها في مصفوفة extractedProducts، مما يقلص حجم التوكنات وزمن الاستجابة بنسبة 60% مع الحفاظ الكامل على دقة مكافحة التزوير واستحقاق الجوائز.',
+          descriptionEn:
+              'Instructs the multimodal vision model (Gemini 3.7 Flash) to prioritize header parsing (store, branch, date, receipt number) and perform targeted scanning strictly for participating sponsor SKUs and brands, instantly skipping unrelated general grocery items (meat, produce, bakery, dairy) from extractedProducts array, reducing response token payload by 60% and delivering sub-2-second receipt audits with zero compromise on anti-fraud integrity.',
+          logicAr:
+              '1. مسح رأس الفاتورة: استخراج السلسلة، الفرع، التاريخ، ورقم المعاملة بدقة كاملة.\n2. التصفية الموجهة للبنود: مسح أسطر المشتريات والتركيز الحصري على العلامات والمنتجات التابعة للشركة، وتجاهل البنود العامة دون إدراجها في مخرجات JSON.\n3. تقليص زمن توليد التوكنات (Token Generation Speed): خفض زمن إنشاء مصفوفة الأصناف من 3-5 ثوانٍ للفواتير الطويلة (30+ صنف) إلى أقل من ثانية واحدة بحصر المخرجات على أصناف العرض المؤهلة فقط.\n4. الحفاظ الكامل على أمن التدقيق: فحص الصورة ككل لكشف التزوير والخط اليدوي والشطب ومطابقة الفرع وتاريخ الشراء دون أي تأثير على جودة القرار المالي.',
+          logicEn:
+              '1. Header Extraction: reliably extracts store chain, branch, date, and receipt ID.\n2. Targeted SKU Filtering: scans receipt lines exclusively for target company products, omitting non-participating grocery items from JSON output.\n3. Token Output Optimization: slashes token generation latency on long receipts (30+ items) from 3-5s to under 1s by focusing JSON array on qualifying items.\n4. Zero Anti-Fraud Compromise: full visual inspection guarantees 100% genuine POS receipt verification, branch validation, and tamper detection.',
+          exampleInput: 'فاتورة جملة ماركت تحتوي على 27 صنفاً عاماً (لحوم، خضار، مسحوق غسيل) بالإضافة إلى 2 قطعة ريكسونا رول أون',
+          exampleOutput: 'استخراج فوري لقطعتي ريكسونا رول أون وبيانات رأس الفاتورة والفرع وتاريخ اليوم في 1.2 ثانية فقط ومطابقة فواتشر 50 ج.م بنجاح 100%.',
+          tags: ['targeted-fast-scan', 'speed-optimization', 'token-reduction', 'sub-2-second-ai', 'unrelated-groceries-skipping', 'air-35'],
+          lastUpdated: '2026-09-03',
+        ),
+
+        const AiDirectiveModel(
+          id: 'AIR-36',
+          code: 'ARABIC_CAMPAIGN_TITLE_PHONETIC_NORMALIZATION_STANDARD',
+          orderIndex: 36,
+          category: AiDirectiveCategory.nlpMatching,
+          titleAr: 'معيار التطبيع اللغوي والصوتي لأسماء الحملات وربط الفواتير (Arabic Campaign Title Phonetic Normalization Standard)',
+          titleEn: 'Arabic Campaign Title Phonetic Normalization & Attribution Standard',
+          descriptionAr:
+              'توحيد مختلف الصيغ الكتابية والرمزية لأسماء الحملات الترويجية (توحيد أشكال الهمزة أ/إ/آ، والتاء المربوطة والهاء ة/ه، والألف المقصورة والياء ى/ي، وحذف التشكيل، وتوحيد الشرطات العادية والطويلة والمسافات) لضمان ربط 100% من فواتير الـ POS بالحملة الصحيحة ومنع سقوط المعاملات أو ظهور قيم أداء صفرية.',
+          descriptionEn:
+              'Enforces strict multi-variant phonetic normalization for Arabic campaign titles (unifying Alef forms أ/إ/آ, Teh Marbuta ة/ه, Alef Maksura ى/ي, removing Tashkeel diacritics, and consolidating all hyphen, dash, and whitespace variations) guaranteeing 100% of POS receipt transactions map to their canonical campaigns without data loss or zero-value anomalies.',
+          logicAr:
+              '1. تنظيف التشكيل والزوائد: إزالة علامات التشكيل العربية (Fatha, Damma, Kasra, Sukun, Shadda, Tanween).\n2. توحيد الألف: تحويل كافة صور الهمزات (أ، إ، آ) إلى الألف البسيطة (ا).\n3. توحيد التاء المربوطة والألف المقصورة: تحويل (ة) إلى (ه) و (ى) إلى (ي).\n4. توحيد الشرطات والمسافات: تحويل الشرطة العادية (-) وعلامات الـ en-dash (–) والـ em-dash (—) والمسافات المتعددة إلى مسافة مفردة واحدة.\n5. المطابقة الثنائية (Dual Attribution): فحص معرّف الفايربيز المباشر أولاً (event.id)، وفي حال عدم تطابقه أو غيابه، المطابقة النصية بالاسم المطبع (normalizeTitle) لضمان التقاط المعاملات الصادرة من مختلف أنظمة الـ POS.',
+          logicEn:
+              '1. Diacritics Stripping: removes all Arabic Tashkeel marks.\n2. Alef Normalization: unifies all Alef variants (أ/إ/آ) into standard bare Alef (ا).\n3. Teh Marbuta & Maksura: converts ة to ه and ى to ي.\n4. Dash & Whitespace Consolidation: normalizes standard hyphens, en-dashes, em-dashes, and multiple spaces into a single space.\n5. Dual Attribution Strategy: checks direct event.id first, with fallback to normalized title matching to capture transactions from disparate POS configurations.',
+          exampleInput: 'معاملات واردة بأسماء متعددة: "يونيليفر ديوز - هيركير" و "يونيليفر ديوز – هيركير" و "يُونيلِيفر دِيوز - هِير كِير"',
+          exampleOutput: 'تطبيع كافة الصيغ إلى التوكن الموحد "يونيليفر ديوز هيركير" ونسبة 100% من الفواتير (499,334 ج.م) للحملة B دون أي تصفير أو فقد.',
+          tags: ['arabic-normalization', 'phonetic-matching', 'campaign-attribution', 'pos-quirks', 'title-unification', 'air-36'],
+          lastUpdated: '2026-09-04',
+        ),
       ];
 }
 

@@ -3444,6 +3444,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         endDate: _endDate,
         isActive: widget.eventToEdit?.isActive ?? true,
         isPromoterActive: widget.eventToEdit?.isPromoterActive ?? true,
+        isAgencyActive: widget.eventToEdit?.isAgencyActive ?? true,
         isManagerActive: widget.eventToEdit?.isManagerActive ?? true,
         gameType: _selectedGameType,
         allocatedPrizes: () {

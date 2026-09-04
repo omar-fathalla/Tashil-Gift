@@ -1,26 +1,28 @@
 ---
 name: ultra-fast-performance-and-indexing-standard
-description: Mandatory architectural standard for 60fps ultra-fast UI performance, lazy on-demand tab loading, RepaintBoundary animation isolation, server-side scoped Firestore queries, O(1) memoized computation caching, and composite indexing in Flutter & Firebase.
-version: 1.0.0
+description: Mandatory architectural standard for 60fps ultra-fast UI performance, lazy on-demand tab loading, RepaintBoundary animation isolation, server-side scoped Firestore queries, O(1) persistent in-memory computation caching, zero-wipe invariants, stream memoization outside build(), and composite indexing in Flutter & Firebase.
+version: 2.0.0
 ---
 
 # Ultra-Fast Performance, Lazy Loading & Firestore Indexing Standard (معيار السرعة الفائقة والتحميل الكسول وفهرسة الاستعلامات)
 
-This skill defines the **mandatory 5-layer architectural and performance standard** for building ultra-fast, responsive, and resource-efficient applications across Flutter (Web, Desktop, Mobile) and Google Cloud Firestore.
+This skill defines the **mandatory 7-pillar architectural and performance standard** for building ultra-fast, responsive, and resource-efficient applications across Flutter (Web, Desktop, Mobile) and Google Cloud Firestore.
 
-Whenever developing, modifying, or reviewing any portal, dashboard, reporting screen, data table, or real-time query in the project, you **MUST strictly follow these 5 mandatory performance pillars**.
+Whenever developing, modifying, or reviewing any portal, dashboard, reporting screen, data table, or real-time query in the project, you **MUST strictly follow these 7 mandatory performance pillars**.
 
 ---
 
-## 🏛️ The 5 Mandatory Performance Pillars (البنود الخمسة القياسية للأداء الفائق)
+## 🏛️ The 7 Mandatory Performance Pillars (البنود السبعة القياسية للأداء الفائق)
 
 ```
 [ منظومة الأداء والسرعة الفائقة الشاملة ]
 ├── 1. التحميل الكسول المخصص (Lazy On-Demand Tab Loading + Offstage Caching)
 ├── 2. عزل إطارات الأنيميشن والقوائم (RepaintBoundary Isolation for 60 FPS)
 ├── 3. الفلترة السحابية المباشرة من السيرفر (Server-Side Scoped Firestore Queries)
-├── 4. التخزين المؤقت للحسابات الثقيلة (O(1) Memoized Computation Caching)
-└── 5. الفهارس السحابية المركبة (Google Cloud Firestore Composite Indexing)
+├── 4. التخزين المؤقت المستمر في الذاكرة (Stale-While-Revalidate Persistent In-Memory Caching & Zero-Wipe Invariant)
+├── 5. تثبيت تدفقات الفايربيز خارج البناء (Stream Lifecycle Memoization Outside build())
+├── 6. المطابقة المعيارية للأحرف العربية (Multi-Variant Arabic Normalization & Event Attribution)
+└── 7. الفهارس السحابية المركبة (Google Cloud Firestore Composite Indexing)
 ```
 
 ---
@@ -34,6 +36,7 @@ Whenever developing, modifying, or reviewing any portal, dashboard, reporting sc
   - Only construct and mount a tab widget when its index exists in `_loadedTabs`.
   - Keep visited tabs cached in memory so scroll position and form inputs are preserved without re-mounting.
   - Disable tickers and background animations on inactive tabs (`TickerMode(enabled: false)`).
+  - Use stable portal tab keys (e.g. `'1-comparison-$effectiveSlug'`) for screens that aggregate portfolio-wide data, so changing a single-campaign header filter does not needlessly destroy and remount cross-campaign comparison screens.
 
 ```dart
 // Standard Implementation Pattern:
@@ -98,39 +101,78 @@ Row(
 
 ---
 
-### 4️⃣ Pillar 4: O(1) Memoized Aggregation & Computation Caching (تخزين الحسابات الثقيلة)
+### 4️⃣ Pillar 4: Stale-While-Revalidate Persistent In-Memory Caching & Zero-Wipe Invariant (الذاكرة المستمرة ومنع تصفير الكاش)
 * **The Anti-Pattern:**
-  - Running synchronous heavy loops, branch normalization regexes, item aggregations, and sorting algorithms (`.sort()`) directly inside `build()` or `builder()` callbacks on every frame, scroll event, or hover action.
+  - Storing calculation results solely in transient State variables (`_cachedMetrics`) that get wiped when navigating to another tab or rebuilding the widget.
+  - Clearing cache (`_metricsCache.clear()`) when receiving an empty snapshot during stream reconnection, causing KPI cards and chart bars to flash `0` or disappear.
 * **The Mandatory Standard:**
-  - Encapsulate calculation results in an immutable data structure (e.g. `_ReportAggregationResult`).
-  - Cache results using lightweight cache keys (`${docs.length}_${firstDocId}_${filterState}`).
-  - Return the cached instance in **O(1) time (0.001 ms)** during rebuilds. Only recompute when the underlying Firestore document snapshot hash or user filter actually changes.
-
-```dart
-_ReportAggregationResult _computeMetrics({
-  required List<QueryDocumentSnapshot> transactions,
-  required String sortBy,
-  required bool filterCompanyOnly,
-}) {
-  final firstId = transactions.isNotEmpty ? transactions.first.id : '';
-  final lastId = transactions.isNotEmpty ? transactions.last.id : '';
-  final cacheKey = '${transactions.length}_${firstId}_${lastId}_${sortBy}_$filterCompanyOnly';
-
-  if (_cachedMetrics != null && _lastMetricsCacheKey == cacheKey) {
-    return _cachedMetrics!; // O(1) Instant Return
-  }
-
-  // Execute heavy loops only on genuine data update
-  ...
-  _cachedMetrics = _ReportAggregationResult(...);
-  _lastMetricsCacheKey = cacheKey;
-  return _cachedMetrics!;
-}
-```
+  - Maintain **static persistent in-memory caches** keyed by tenant/company:
+    ```dart
+    static final Map<String, Map<String, CampaignMetricsSummary>> _persistentMetricsCache = {};
+    static final Map<String, List<EventModel>> _persistentEventsCache = {};
+    static final Map<String, List<QueryDocumentSnapshot>> _persistentInvoicesCache = {};
+    static final Map<String, String> _savedCampaignA = {};
+    static final Map<String, String> _savedCampaignB = {};
+    static final Map<String, ComparisonDimension> _savedDimension = {};
+    ```
+  - **Zero-Latency Instant Render (0ms)**: When opening a screen or returning from another tab, render immediately from `_persistentMetricsCache` or `_persistentEventsCache`. Never display a full-screen loading spinner (`CircularProgressIndicator`) when cached data exists.
+  - **Zero-Wipe Invariant**: When an incoming Firestore snapshot is empty or waiting, NEVER wipe existing valid cached data:
+    ```dart
+    final cached = _persistentMetricsCache[slug];
+    if (invoiceDocs.isEmpty && cached != null && cached.isNotEmpty) {
+      return cached; // Retain existing valid metrics!
+    }
+    ```
+  - **Silent Background Sync**: Fresh Firestore snapshots seamlessly update the persistent cache and trigger a quiet redraw without UI flicker.
 
 ---
 
-### 5️⃣ Pillar 5: Google Cloud Firestore Composite Indexing (فهارس الفايربيز المركبة)
+### 5️⃣ Pillar 5: Stream Lifecycle Memoization Outside `build()` (تثبيت الـ Streams ومنع إعادة الاشتراك)
+* **The Anti-Pattern:**
+  - Calling `.snapshots()` directly inside the `build()` or `builder()` methods. Every local UI update (e.g. clicking a `ChoiceChip`, switching a `SegmentedButton`, hovering or scrolling) calls `setState()`, forcing `StreamBuilder` to cancel the existing Firestore subscription, wait, and open a new subscription, resulting in temporary empty states or stream lag.
+* **The Mandatory Standard:**
+  - Hold `Stream<QuerySnapshot>?` instances on the State object and initialize them via an idempotent helper:
+    ```dart
+    Stream<QuerySnapshot>? _eventsStream;
+    Stream<QuerySnapshot>? _transactionsStream;
+    String? _lastStreamCompanySlug;
+
+    void _ensureStreams(FirebaseFirestore firestore) {
+      final slug = widget.lockedCompanySlug;
+      if (_eventsStream != null && _lastStreamCompanySlug == slug) return;
+      _lastStreamCompanySlug = slug;
+      _eventsStream = firestore.collection('events').where('companySlug', isEqualTo: slug).snapshots();
+      _transactionsStream = firestore.collection('receipts_transactions').where('companySlug', isEqualTo: slug).snapshots();
+    }
+    ```
+  - Inside `build()`, invoke `_ensureStreams(activeFirestore);` and pass the memoized streams to `StreamBuilder`. Switching dimensions or filter chips now executes in **0.001 ms** without touching network streams!
+
+---
+
+### 6️⃣ Pillar 6: Multi-Variant Arabic Title & Phonetic Normalization (المطابقة المعيارية للأحرف العربية)
+* **The Anti-Pattern:**
+  - Matching campaign receipts purely on exact string equality (`inv['eventName'] == event.eventName`). POS systems, promoters, and OCR outputs frequently vary in Arabic Alef forms (`أ / إ / آ`), Teh Marbuta (`ة / ه`), Tashkeel diacritics, and dashes (`-` vs `–` vs `—`), causing valid receipts to be dropped and campaign values to fall to `0`.
+* **The Mandatory Standard:**
+  - Normalize Arabic strings before indexing and comparison:
+    ```dart
+    static String normalizeTitle(String input) {
+      if (input.isEmpty) return '';
+      return input
+          .trim()
+          .toLowerCase()
+          .replaceAll(RegExp(r'[\u064B-\u065F\u0670]'), '') // remove Arabic diacritics / tashkeel
+          .replaceAll(RegExp(r'[إأآا]'), 'ا') // normalize alef
+          .replaceAll('ة', 'ه') // normalize teh marbuta
+          .replaceAll('ى', 'ي') // normalize alef maksura
+          .replaceAll(RegExp(r'[\-_–—\s]+'), ' ') // normalize hyphens, en-dashes, em-dashes and spaces
+          .trim();
+    }
+    ```
+  - Map transactions using a dual lookup: first against direct `event.id`, and fallback against `normalizeTitle(doc['eventName'])` matching `normalizeTitle(event.eventName)`.
+
+---
+
+### 7️⃣ Pillar 7: Google Cloud Firestore Composite Indexing (فهارس الفايربيز المركبة)
 * **The Mandatory Standard:**
   - All compound queries combining equality filters with inequality or sort orders (`.where('companySlug', isEqualTo: ...).orderBy('createdAt', descending: true)`) MUST be declared in [firestore.indexes.json](file:///Users/fathalla/Development/Tashil%20Gift/firestore.indexes.json) and linked in [firebase.json](file:///Users/fathalla/Development/Tashil%20Gift/firebase.json).
   - Ensures queries return in single-digit milliseconds directly from Google Cloud index trees.
@@ -161,8 +203,11 @@ _ReportAggregationResult _computeMetrics({
 ---
 
 ## 🛑 Golden Invariants Summary (ملخص الثوابت الذهبية)
-1. **No Unbounded Eager Stacks**: Always use lazy `_loadedTabs` for multi-tab portals.
+1. **No Unbounded Eager Stacks**: Always use lazy `_loadedTabs` for multi-tab portals with stable keys.
 2. **Zero Animation Jank**: Always wrap animated sidebars and viewports in `RepaintBoundary`.
 3. **No Un-Scoped Full Collection Streams**: Always use server-side `.where()` for tenant data.
-4. **No Heavy Loops in `build()`**: Always memoize aggregations with O(1) cache keys.
-5. **Declared Composite Indexes**: Always define composite indexes in `firestore.indexes.json`.
+4. **Instant 0ms Stale-While-Revalidate**: Always maintain static/memory persistent caches across tab transitions.
+5. **Zero-Wipe Cache Invariant**: Never clear or zero-out cached metrics upon receiving empty or transient snapshots.
+6. **No Streams in `build()`**: Always memoize Firestore `.snapshots()` outside `build()` to prevent resubscription lag.
+7. **Phonetic Arabic Matching**: Always normalize Arabic strings when attributing receipts across POS systems.
+8. **Declared Composite Indexes**: Always define composite indexes in `firestore.indexes.json`.

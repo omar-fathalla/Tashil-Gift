@@ -86,9 +86,55 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
   String _productSortBy = 'QTY'; // 'QTY', 'REVENUE', 'NAME'
   bool _onlyCompanyProductsFilter = true; // Strict company products filtering
 
+  // Golden Standard: Static Persistent In-Memory Caches for 0ms instant render across tab switches
+  static final Map<String, _ReportAggregationResult> _persistentMetricsCache = {};
+  static final Map<String, List<EventModel>> _persistentEventsCache = {};
+  static final Map<String, List<BranchModel>> _persistentBranchesCache = {};
+  static final Map<String, List<QueryDocumentSnapshot>> _persistentTransactionsCache = {};
+
   // Memoization cache for lightning-fast UI rendering
   _ReportAggregationResult? _cachedMetrics;
   String? _lastMetricsCacheKey;
+
+  // Memoized stream lifecycle outside build()
+  String? _lastStreamsKey;
+  Stream<List<BranchModel>>? _branchesStream;
+  Stream<QuerySnapshot>? _eventsStream;
+  Stream<QuerySnapshot>? _transactionsStream;
+
+  void _ensureStreams(FirebaseFirestore firestore, {bool force = false}) {
+    final effectiveSlug = widget.lockedCompanySlug ?? 'all';
+    final effectiveEventId = _selectedEvent?.id ?? (_selectedEventId != null && _selectedEventId != 'ALL' && _selectedEventId != 'all' ? _selectedEventId : 'all');
+    final streamKey = '${effectiveSlug}_$effectiveEventId';
+
+    if (_lastStreamsKey != streamKey || force || _transactionsStream == null) {
+      _lastStreamsKey = streamKey;
+
+      if (_branchesStream == null || force) {
+        try {
+          _branchesStream = ref.read(retailChainsServiceProvider).getAllBranchesStream();
+        } catch (_) {
+          _branchesStream = Stream.value([]);
+        }
+      }
+
+      if (_eventsStream == null || force) {
+        Query eventsQuery = firestore.collection('events');
+        if (widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty) {
+          eventsQuery = eventsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug);
+        }
+        _eventsStream = eventsQuery.snapshots();
+      }
+
+      Query transactionsQuery = firestore.collection('receipts_transactions');
+      if (effectiveEventId != 'all' && effectiveEventId != null && effectiveEventId.isNotEmpty) {
+        transactionsQuery = transactionsQuery.where('campaignId', isEqualTo: effectiveEventId);
+      } else if (widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty) {
+        transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug);
+      }
+      _transactionsStream = transactionsQuery.snapshots();
+    }
+  }
 
   // Branch & Retail Chain Analytics Controls
   String _branchAggregationLevel = 'BRANCH'; // 'BRANCH' vs 'CHAIN'
@@ -204,28 +250,30 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
       );
     }
 
-    Stream<List<BranchModel>> branchesStream;
-    try {
-      branchesStream = ref.watch(retailChainsServiceProvider).getAllBranchesStream();
-    } catch (_) {
-      branchesStream = Stream.value([]);
-    }
+    _ensureStreams(firestore);
+    final eventsKey = widget.lockedCompanySlug ?? 'all';
+    final effectiveEventId = _selectedEvent?.id ?? (_selectedEventId != null && _selectedEventId != 'ALL' && _selectedEventId != 'all' ? _selectedEventId : null);
+    final persistentKey = '${widget.lockedCompanySlug ?? 'all'}_${effectiveEventId ?? 'all'}';
 
     return StreamBuilder<List<BranchModel>>(
-      stream: branchesStream,
+      stream: _branchesStream,
       builder: (context, branchesSnapshot) {
-        final dbBranches = branchesSnapshot.data ?? [];
+        if (branchesSnapshot.hasData && branchesSnapshot.data!.isNotEmpty) {
+          _persistentBranchesCache['all'] = branchesSnapshot.data!;
+        }
+        final dbBranches = branchesSnapshot.data ?? _persistentBranchesCache['all'] ?? [];
         final isLocked = widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty;
 
-        Query eventsQuery = firestore.collection('events');
-        if (isLocked) {
-          eventsQuery = eventsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug);
-        }
-
         return StreamBuilder<QuerySnapshot>(
-          stream: eventsQuery.snapshots(),
+          stream: _eventsStream,
           builder: (context, eventsSnapshot) {
-            final allEvents = (eventsSnapshot.data?.docs ?? [])
+            if (eventsSnapshot.hasData && eventsSnapshot.data!.docs.isNotEmpty) {
+              _persistentEventsCache[eventsKey] = eventsSnapshot.data!.docs
+                  .map((doc) => EventModel.fromFirestore(doc))
+                  .toList();
+            }
+
+            final allEvents = _persistentEventsCache[eventsKey] ?? (eventsSnapshot.data?.docs ?? [])
                 .map((doc) => EventModel.fromFirestore(doc))
                 .toList();
 
@@ -255,19 +303,25 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
               }
             }
 
-            final effectiveEventId = _selectedEvent?.id ?? (_selectedEventId != null && _selectedEventId != 'ALL' && _selectedEventId != 'all' ? _selectedEventId : null);
-
-            Query transactionsQuery = firestore.collection('receipts_transactions');
-            if (effectiveEventId != null && effectiveEventId.isNotEmpty) {
-              transactionsQuery = transactionsQuery.where('campaignId', isEqualTo: effectiveEventId);
-            } else if (isLocked && widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty) {
-              transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug);
-            }
-
             return StreamBuilder<QuerySnapshot>(
-              stream: transactionsQuery.snapshots(),
+              stream: _transactionsStream,
               builder: (context, transactionsSnapshot) {
-                if (transactionsSnapshot.connectionState == ConnectionState.waiting && !transactionsSnapshot.hasData && _cachedMetrics == null) {
+                if (transactionsSnapshot.hasData) {
+                  final docs = transactionsSnapshot.data!.docs;
+                  // Zero-wipe invariant: never wipe cached data with empty transient data
+                  if (docs.isNotEmpty || !_persistentTransactionsCache.containsKey(persistentKey)) {
+                    _persistentTransactionsCache[persistentKey] = docs;
+                  }
+                }
+
+                final cachedDocs = _persistentTransactionsCache[persistentKey];
+                final cachedResult = _persistentMetricsCache[persistentKey];
+
+                if (transactionsSnapshot.connectionState == ConnectionState.waiting &&
+                    !transactionsSnapshot.hasData &&
+                    _cachedMetrics == null &&
+                    cachedResult == null &&
+                    cachedDocs == null) {
                   return Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -283,7 +337,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
                   );
                 }
 
-                final allTransactions = transactionsSnapshot.data?.docs ?? [];
+                final allTransactions = cachedDocs ?? transactionsSnapshot.data?.docs ?? [];
 
                 // Filter transactions according to selected event or locked company
                 final filteredTransactions = allTransactions.where((doc) {
@@ -467,6 +521,9 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
       topProductName: topProductName,
     );
     _lastMetricsCacheKey = cacheKey;
+    final effectiveEventId = _selectedEvent?.id ?? (_selectedEventId != null && _selectedEventId != 'ALL' && _selectedEventId != 'all' ? _selectedEventId : null);
+    final persistentKey = '${widget.lockedCompanySlug ?? 'all'}_${effectiveEventId ?? 'all'}';
+    _persistentMetricsCache[persistentKey] = _cachedMetrics!;
     return _cachedMetrics!;
   }
 

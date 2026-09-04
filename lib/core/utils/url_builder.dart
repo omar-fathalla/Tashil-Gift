@@ -47,6 +47,47 @@ class AppUrlBuilder {
     return '$baseUrl$prefix/c/$cleanSlug';
   }
 
+  /// Builds an Agency Operations & Field Management Portal URL.
+  /// Used by agency supervisors to manage branch stock, vouchers, and live receipts.
+  /// Generates path (e.g. https://tashil-gift.web.app/ops/unilever?event=xyz).
+  static String buildAgencyOpsUrl(
+    String companySlug, {
+    String? eventId,
+    bool forceProduction = false,
+    bool cleanUrl = true,
+  }) {
+    final baseUrl = getBaseUrl(forceProduction: forceProduction);
+    final cleanSlug = companySlug.trim().toLowerCase();
+    final prefix = cleanUrl ? '' : '/#';
+    if (cleanSlug.isEmpty && eventId != null && eventId.isNotEmpty) {
+      return '$baseUrl$prefix/ops/$eventId';
+    }
+    if (cleanSlug.isEmpty) {
+      return baseUrl;
+    }
+    if (eventId != null && eventId.isNotEmpty) {
+      return '$baseUrl$prefix/ops/$cleanSlug?event=$eventId';
+    }
+    return '$baseUrl$prefix/ops/$cleanSlug';
+  }
+
+  /// Builds a permanent Brand Executive Master Portal URL for company directors.
+  /// Permanent master link across all past, active, and future campaigns.
+  /// Generates path (e.g. https://tashil-gift.web.app/portal/unilever).
+  static String buildBrandExecutiveUrl(
+    String companySlug, {
+    String? eventId,
+    bool forceProduction = false,
+    bool cleanUrl = true,
+  }) {
+    return buildManagerPortalUrl(
+      companySlug,
+      eventId: eventId,
+      forceProduction: forceProduction,
+      cleanUrl: cleanUrl,
+    );
+  }
+
   /// Builds a company manager / partner portal URL.
   /// When [cleanUrl] is true (default for sharing), generates path without hash (e.g. https://tashil-gift.web.app/portal/almarai?event=xyz)
   /// which enables WhatsApp and social crawlers to dynamically fetch the company brand logo.

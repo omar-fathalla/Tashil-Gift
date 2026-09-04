@@ -518,7 +518,11 @@ class AiReceiptService {
         'في فواتير السلاسل المطبوعة بأعمدة تفصيلية (مثل: جملة ماركت، سبينس، كارفور، هايبر وان):\n'
         '- عمود "السعر" المطبوع (مثل 69.00) يمثل سعر بيع القطعة الواحدة بالفعل (Single Unit Price).\n'
         '- عمود "القيمة" المطبوع (مثل 138.00) يمثل إجمالي السطر (Line Total = السعر × الكمية).\n'
-        '- يُمنع منعاً باتاً قسمة عمود "السعر" على الكمية مرة أخرى (فإذا كان السعر 69.00 والكمية 2 والقيمة 138.00، يكون price = 69.00 و totalLinePrice = 138.00 وليس 34.50).',
+        '- يُمنع منعاً باتاً قسمة عمود "السعر" على الكمية مرة أخرى (فإذا كان السعر 69.00 والكمية 2 والقيمة 138.00، يكون price = 69.00 و totalLinePrice = 138.00 وليس 34.50).\n\n'
+        '⚡ استراتيجية المسح السريع الفائق وتصفية الأصناف (Targeted Fast-Scan Policy):\n'
+        '1. افحص رأس الفاتورة (Header) لاستخراج السلسلة، الفرع، التاريخ، ورقم الفاتورة.\n'
+        '2. عند فحص بنود المشتريات: ركز حصراً على أسطر منتجات الشركة الراعية المشروطة في الحملة، وتجاوز فورياً أي أصناف غذائية أو استهلاكية عامة غير تابعة للشركة (مثل: اللحوم، الخضار، الفاكهة، المخبوزات، الأجبان، البقوليات، الشوكولاتة، المنظفات غير التابعة) دون إدراجها في قائمة extractedProducts.\n'
+        '3. أدرج في قائمة extractedProducts فقط المنتجات التابعة للشركة الراعية مع أسعارها الدقيقة وكمياتها لتقليص زمن الاستجابة وزيادة السرعة لأقصى حد.',
       ),
       generationConfig: GenerationConfig(
         responseMimeType: 'application/json',
@@ -581,7 +585,7 @@ class AiReceiptService {
             ),
             'extractedProducts': Schema.array(
               description:
-                  'List of all individual items/products found on the receipt with names, strictly single unit prices, quantities, and matched barcodes.',
+                  'List of target company promoted products found on the receipt with strictly single unit prices, quantities, and matched barcodes. Skip unrelated general grocery items to maximize response speed.',
               items: Schema.object(
                 properties: {
                   'name': Schema.string(
@@ -896,6 +900,10 @@ $productsCondition
 $promotionalRulesCondition
 $chancesCondition
 
+🛑 استراتيجية الفلترة الموجهة والمسح السريع الفائق (Targeted Fast-Scan Strategy):
+- ركز فورياً على رأس الفاتورة (Header) لاستخراج السلسلة والفرع وتاريخ الشراء ورقم الفاتورة.
+- عند قراءة أسطر المشتريات: ركز حصراً على أسطر منتجات وعلامات الشركة الراعية المشروطة، وتجاهل أي أسطر عامة أخرى (كاللحوم والخضار والفاكهة والمخبوزات والمنظفات غير التابعة) ولا تدرجها في extractedProducts، وذلك لتسريع الاستجابة والتركيز على منتجات العرض فقط.
+
 🛑 تعليمات مكافحة التزوير والرفض الأمني (Anti-Fraud & Genuine Receipt Policy):
 - [بون الكاشير الإلكتروني]: الفواتير المقبولة فقط (isValid = true) هي بونات الكاشير الحرارية أو الإلكترونية المطبوعة آلياً من أنظمة ونقاط البيع المعتمدة (Thermal POS Receipts).
 - [ملاحظات وهوامش البروموتر/الكاشير]: إذا كان أصل الفاتورة بون كاشير مطبوع إلكترونياً، وتوجد عليه كتابة يدوية في الهوامش أو الرأس مثل "تم تسليم الهدية" أو توقيع أو علامة استلام أو رقم تليفون أو علامات صح، فهذا بون كاشير أصلي معتمد وسليم (isThermalPosReceipt = true و isHandwritten = false و isTampered = false) ويجب قبوله.
@@ -930,6 +938,10 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         6. $promotionalRulesCondition
         7. احسب الإجمالي المؤهل للحملة في حقل (targetCompanyTotal).
         8. $chancesCondition
+        
+        🛑 استراتيجية الفلترة الموجهة والمسح السريع الفائق (Targeted Fast-Scan Strategy):
+        - ركز فورياً على رأس الفاتورة (Header) لاستخراج السلسلة والفرع وتاريخ الشراء ورقم الفاتورة.
+        - عند قراءة أسطر المشتريات: ركز حصراً على أسطر منتجات وعلامات الشركة الراعية المشروطة، وتجاهل أي أسطر عامة أخرى (كاللحوم والخضار والفاكهة والمخبوزات والمنظفات غير التابعة) ولا تدرجها في extractedProducts، وذلك لتسريع الاستجابة والتركيز على منتجات العرض فقط.
         
         🛑 تعليمات مكافحة التزوير والرفض الأمني (Anti-Fraud & Genuine Receipt Policy):
         - [بون الكاشير الإلكتروني]: الفواتير المقبولة فقط (isValid = true) هي بونات الكاشير الحرارية أو الإلكترونية المطبوعة آلياً من أنظمة ونقاط البيع المعتمدة (Thermal POS Receipts).

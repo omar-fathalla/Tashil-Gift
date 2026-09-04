@@ -2907,6 +2907,224 @@ class AppStrings {
   String get sendAndOpenWhatsApp => _t(ar: 'إرسال وفتح واتساب', en: 'Send & Open WhatsApp', hi: 'व्हाट्सएप भेजें और खोलें');
   String get skipToNextCustomer => _t(ar: 'تخطي للعميل التالي', en: 'Skip to Next Customer', hi: 'अगले ग्राहक पर जाएं');
   String get dispatchCompleted => _t(ar: 'اكتمل إرسال الحملة بنجاح لكافة العملاء المحددِين!', en: 'Campaign dispatch completed successfully for all targeted customers!', hi: 'सभी लक्षित ग्राहकों के लिए अभियान सफलतापूर्वक पूरा हुआ!');
+
+  // ---------------------------------------------------------------------------
+  // 22. 3-Tier Enterprise Portal Hierarchy (منظومة البوابات الثلاثية)
+  // ---------------------------------------------------------------------------
+  String get agencyOpsPortalLabel => _t(
+    ar: 'بوابة شركة الدعاية والعمليات',
+    en: 'Agency Operations Portal',
+    hi: 'एजेंसी ऑपरेशन्स पोर्टल',
+  );
+  String get brandExecutivePortalLabel => _t(
+    ar: 'البوابة التنفيذية للعلامة التجارية',
+    en: 'Brand Executive Master Portal',
+    hi: 'ब्रांड एक्जीक्यूटिव मास्टर पोर्टल',
+  );
+  String get agencyOpsPortalToggleTooltipActive => _t(
+    ar: 'بوابة شركة الدعاية والعمليات مفعلة حالياً - اضغط لتعليق صلاحية الوصول',
+    en: 'Agency operations portal is active - tap to pause access',
+    hi: 'एजेंसी पोर्टल सक्रिय है - पहुंच रोकने के लिए टैप करें',
+  );
+  String get agencyOpsPortalToggleTooltipPaused => _t(
+    ar: 'بوابة شركة الدعاية والعمليات متوقفة - اضغط لإعادة تفعيلها فورياً',
+    en: 'Agency operations portal is paused - tap to reactivate immediately',
+    hi: 'एजेंसी पोर्टल रुका हुआ है - तुरंत सक्रिय करने के लिए टैप करें',
+  );
+  String get copyAgencyOpsLink => _t(
+    ar: 'نسخ رابط بوابة شركة الدعاية',
+    en: 'Copy Agency Ops Link',
+    hi: 'एजेंसी पोर्टल लिंक कॉपी करें',
+  );
+  String get copyBrandExecutiveLink => _t(
+    ar: 'نسخ رابط مدير الشركة الدائم',
+    en: 'Copy Brand Executive Link',
+    hi: 'ब्रांड एक्जीक्यूटिव लिंक कॉपी करें',
+  );
+  String get previewAgencyOpsPortal => _t(
+    ar: 'معاينة بوابة الدعاية والعمليات',
+    en: 'Preview Agency Ops Portal',
+    hi: 'एजेंसी पोर्टल पूर्वावलोकन',
+  );
+  String get previewBrandExecutivePortal => _t(
+    ar: 'معاينة البوابة التنفيذية للشركة',
+    en: 'Preview Brand Executive Portal',
+    hi: 'ब्रांड मास्टर पोर्टल पूर्वावलोकन',
+  );
+  String get livePromoterSimulationNavTitle => _t(
+    ar: 'محاكاة تطبيق البروموتر الميداني',
+    en: 'Live Promoter In-Store Simulation',
+    hi: 'लाइव प्रमोटर सिमुलेशन',
+  );
+  String get livePromoterSimulationNavSubtitle => _t(
+    ar: 'معاينة حية لتجربة المتسوق والبروموتر في رفع الفواتير واستلام الجوائز',
+    en: 'Live preview of in-store customer & promoter receipt scanning flow',
+    hi: 'इन-स्टोर प्रमोटर रसीद स्कैनिंग का लाइव पूर्वावलोकन',
+  );
+  String get livePromoterSimulationNavTooltip => _t(
+    ar: 'تجربة ومعاينة رحلة البروموتر والعميل في السوبرماركت مباشرة داخل البوابة',
+    en: 'Experience in-store customer scanning journey directly inside executive portal',
+    hi: 'कार्यकारी पोर्टल के अंदर इन-स्टोर प्रमोटर यात्रा का अनुभव करें',
+  );
+  String get agencyOpsLinkCopied => _t(
+    ar: 'تم نسخ رابط بوابة شركة الدعاية والعمليات الميدانية بنجاح',
+    en: 'Agency Field Operations Portal link copied successfully',
+    hi: 'एजेंसी ऑपरेशन्स पोर्टल लिंक कॉपी किया गया',
+  );
+  String get brandExecutiveLinkCopied => _t(
+    ar: 'تم نسخ الرابط التنفيذي لمدير الشركة (الدائم لجميع الحملات) بنجاح',
+    en: 'Brand Executive Master Portal link (Permanent across all campaigns) copied',
+    hi: 'ब्रांड एक्जीक्यूटिव मास्टर पोर्टल लिंक कॉपी किया गया',
+  );
+  String get promoterPortalTooltip => _t(
+    ar: 'نسخ رابط العميل والبروموتر المباشر لرفع الفواتير وتجربة الألعاب واستلام الجوائز',
+    en: 'Copy direct Promoter / Client submission link to scan receipts & play games',
+    hi: 'रसीद स्कैन करने और गेम खेलने के लिए प्रमोटर लिंक कॉपी करें',
+  );
+  String get agencyOpsPortalTooltip => _t(
+    ar: 'نسخ رابط بوابة شركة الدعاية والعمليات (متابعة الأرصدة وسجل الفواتير وقسائم الشراء)',
+    en: 'Copy Agency Operations Portal link (Stock, Vouchers & Invoices Audit)',
+    hi: 'एजेंसी ऑपरेशन्स पोर्टल लिंक कॉपी करें',
+  );
+  String get brandExecutivePortalTooltip => _t(
+    ar: 'نسخ رابط البوابة التنفيذية للعلامة التجارية (مؤشرات الـ ROI وتحليلات جميع الحملات)',
+    en: 'Copy Brand Executive Master Portal link (ROI KPIs & All Campaigns Analytics)',
+    hi: 'ब्रांड मास्टर पोर्टल लिंक कॉपी करें',
+  );
+
+  // ---------------------------------------------------------------------------
+  // 23. Campaigns Comparison & Intelligence Analytics (مقارنة وتحليلات الحملات)
+  // ---------------------------------------------------------------------------
+  String get campaignsComparisonNavTitle => _t(
+    ar: 'مقارنة وتحليلات الحملات',
+    en: 'Campaigns Comparison & Benchmarks',
+    hi: 'अभियान तुलना और बेंचमार्क',
+  );
+  String get campaignsComparisonNavSubtitle => _t(
+    ar: 'مقارنة المبيعات، الفواتير، والعملاء بين حملات الشركة',
+    en: 'Benchmark revenue, receipts & shoppers across brand campaigns',
+    hi: 'ब्रांड अभियानों में राजस्व, रसीदों और ग्राहकों की तुलना करें',
+  );
+  String get campaignsComparisonNavTooltip => _t(
+    ar: 'مقارنة أداء حملات الشركة المختلفة وتحليل نسب النمو والفرق',
+    en: 'Compare company campaigns performance, growth rates and ROI deltas',
+    hi: 'कंपनी के अभियानों के प्रदर्शन और विकास दर की तुलना करें',
+  );
+  String get campaignComparisonScreenTitle => _t(
+    ar: 'مقارنة وتحليلات أداء الحملات الترويجية',
+    en: 'Campaigns Benchmark & Intelligence Analytics',
+    hi: 'प्रचार अभियान तुलनात्मक बुद्धिमत्ता और विश्लेषण',
+  );
+  String get campaignComparisonScreenSubtitle => _t(
+    ar: 'تحليل مقارن تفصيلي للإيرادات، الفواتير، عدد المنتجات المباعة، والمتسوقين الفريدين',
+    en: 'Detailed comparative intelligence of sales, invoices, units sold and unique customers',
+    hi: 'बिक्री, इनवॉइस, बेची गई इकाइयों और ग्राहकों का विस्तृत तुलनात्मक विश्लेषण',
+  );
+  String get headToHeadComparisonTab => _t(
+    ar: 'مقارنة مباشرة بين حملتين (A vs B)',
+    en: 'Head-to-Head Comparison (A vs B)',
+    hi: 'आमने-सामने तुलना (A vs B)',
+  );
+  String get allCampaignsPortfolioTab => _t(
+    ar: 'مصفوفة مقارنة جميع الحملات',
+    en: 'All Campaigns Portfolio Benchmark',
+    hi: 'सभी अभियानों का पोर्टफोलियो बेंचमार्क',
+  );
+  String get selectCampaignA => _t(
+    ar: 'الحملة الأولى (A)',
+    en: 'Primary Campaign (A)',
+    hi: 'पहला अभियान (A)',
+  );
+  String get selectCampaignB => _t(
+    ar: 'الحملة المقارنة (B)',
+    en: 'Benchmark Campaign (B)',
+    hi: 'तुलनात्मक अभियान (B)',
+  );
+  String get sameCampaignWarning => _t(
+    ar: 'يرجى اختيار حملتين مختلفتين لمشاهدة نسب المقارنة والفروق بدقة',
+    en: 'Please select two different campaigns for accurate benchmark analysis',
+    hi: 'सटीक बेंचमार्क विश्लेषण के लिए कृपया दो अलग-अलग अभियानों का चयन करें',
+  );
+  String get needAtLeastTwoCampaigns => _t(
+    ar: 'تتطلب صفحة المقارنة وجود حملتين ترويجيتين على الأقل للشركة',
+    en: 'At least two company campaigns are required for benchmark comparisons',
+    hi: 'तुलनात्मक विश्लेषण के लिए कम से कम दो अभियानों की आवश्यकता है',
+  );
+  String get metricDifferenceLabel => _t(
+    ar: 'الفارق / نسبة النمو',
+    en: 'Delta / Variance',
+    hi: 'अंतर / परिवर्तन दर',
+  );
+  String get winningCampaignTag => _t(
+    ar: 'الحملة المتفوقة',
+    en: 'Leading Campaign',
+    hi: 'अग्रणी अभियान',
+  );
+  String get tiedCampaignsTag => _t(
+    ar: 'أداء متماثل / تعادل',
+    en: 'Even / Tied Performance',
+    hi: 'समान प्रदर्शन',
+  );
+  String get uniqueShoppersLabel => _t(
+    ar: 'المتسوقون والعملاء الفريدون',
+    en: 'Unique Shoppers & Customers',
+    hi: 'अद्वितीय खरीदार और ग्राहक',
+  );
+  String get avgBasketSpendLabel => _t(
+    ar: 'متوسط قيمة سلة المشتريات',
+    en: 'Average Basket Spend',
+    hi: 'औसत बास्केट खर्च',
+  );
+  String get totalProductsSoldLabel => _t(
+    ar: 'إجمالي المنتجات والقطع المباعة',
+    en: 'Total Units Sold',
+    hi: 'कुल बेची गई इकाइयाँ',
+  );
+  String get totalRevenueLabel => _t(
+    ar: 'إجمالي المبيعات المحققة',
+    en: 'Total Promo Sales Revenue',
+    hi: 'कुल प्रचार बिक्री राजस्व',
+  );
+  String get disbursedPrizesValueLabel => _t(
+    ar: 'قيمة الجوائز وقسائم الشراء',
+    en: 'Claimed Rewards & Vouchers Value',
+    hi: 'वितरित पुरस्कार और वाउचर मूल्य',
+  );
+  String get exportComparisonExcel => _t(
+    ar: 'تصدير التقرير المقارن Excel',
+    en: 'Export Benchmark Excel',
+    hi: 'तुलनात्मक एक्सेल निर्यात करें',
+  );
+  String get exportComparisonCsv => _t(
+    ar: 'تصدير التقرير المقارن CSV',
+    en: 'Export Benchmark CSV',
+    hi: 'तुलनात्मक सीएसवी निर्यात करें',
+  );
+  String get comparisonBarChartTitle => _t(
+    ar: 'المقارنة البيانية المزدوجة لأداء الحملتين',
+    en: 'Dual Grouped Benchmark Bar Chart',
+    hi: 'दोहरा समूहीकृत बार चार्ट',
+  );
+  String get comparisonDimensionRevenue => _t(
+    ar: 'المبيعات المالية',
+    en: 'Revenue',
+    hi: 'राजस्व',
+  );
+  String get comparisonDimensionInvoices => _t(
+    ar: 'عدد الفواتير',
+    en: 'Invoices Count',
+    hi: 'इनवॉइस संख्या',
+  );
+  String get comparisonDimensionProducts => _t(
+    ar: 'عدد المنتجات',
+    en: 'Products Sold',
+    hi: 'उत्पाद मात्रा',
+  );
+  String get comparisonDimensionShoppers => _t(
+    ar: 'عدد العملاء',
+    en: 'Unique Shoppers',
+    hi: 'ग्राहक संख्या',
+  );
 }
 
 

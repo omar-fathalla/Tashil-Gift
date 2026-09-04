@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +7,7 @@ import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'core/localization/locale_provider.dart';
 import 'core/services/firebase_service.dart';
+import 'core/utils/app_url_strategy.dart';
 import 'features/auth/presentation/auth_screen.dart';
 import 'features/admin/presentation/admin_dashboard_screen.dart';
 import 'features/client_portal/presentation/client_receipt_upload_screen.dart';
@@ -13,6 +15,7 @@ import 'features/company_portal/presentation/company_manager_portal_screen.dart'
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  configureAppPathUrlStrategy();
   
   // Initialize Firebase with the mock/configured options.
   await Firebase.initializeApp(
@@ -28,6 +31,32 @@ void main() async {
 
 class MyApp extends ConsumerWidget {
   const MyApp({super.key});
+
+  /// Resolves the actual route URI whether loaded via clean path, legacy hash (#),
+  /// or directly in the browser address bar on Flutter Web.
+  Uri _resolveRouteUri(RouteSettings settings) {
+    var raw = settings.name ?? '/';
+
+    if (kIsWeb) {
+      final base = Uri.base;
+      // If Flutter Web defaulted to '/' or empty (e.g. initial load without hash):
+      if (raw == '/' || raw.isEmpty) {
+        if (base.fragment.isNotEmpty) {
+          final frag = base.fragment.startsWith('/') ? base.fragment : '/${base.fragment}';
+          return Uri.parse(frag);
+        } else if (base.path.isNotEmpty && base.path != '/') {
+          final full = base.query.isNotEmpty ? '${base.path}?${base.query}' : base.path;
+          return Uri.parse(full);
+        }
+      } else if (raw.startsWith('/#') || raw.startsWith('#')) {
+        final stripped = raw.replaceFirst(RegExp(r'^/#?'), '');
+        final clean = stripped.startsWith('/') ? stripped : '/$stripped';
+        return Uri.parse(clean);
+      }
+    }
+
+    return Uri.parse(raw);
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -59,7 +88,7 @@ class MyApp extends ConsumerWidget {
       },
       initialRoute: '/',
       onGenerateRoute: (settings) {
-        final uri = Uri.parse(settings.name ?? '/');
+        final uri = _resolveRouteUri(settings);
         
         // 1. Direct Event Link (/event/xyz or /e/xyz)
         if (uri.pathSegments.length >= 2 && (uri.pathSegments[0] == 'event' || uri.pathSegments[0] == 'e')) {
@@ -79,7 +108,7 @@ class MyApp extends ConsumerWidget {
           );
         }
 
-        // 2. Direct Event Manager Portal Link (/event-portal/xyz or /ep/xyz)
+        // 2. Direct Event Operations Portal Link (/event-portal/xyz or /ep/xyz)
         if (uri.pathSegments.length >= 2 && (uri.pathSegments[0] == 'event-portal' || uri.pathSegments[0] == 'ep')) {
           final eventId = uri.pathSegments[1].trim();
           if (eventId.isEmpty) {
@@ -92,13 +121,14 @@ class MyApp extends ConsumerWidget {
             builder: (context) => CompanyManagerPortalScreen(
               companySlug: '',
               initialEventId: eventId,
+              isAgencyOpsMode: true,
             ),
             settings: settings,
           );
         }
 
-        // 3. Promoter & Customer submission link (/c/unilever or /client/adco)
-        if (uri.pathSegments.length >= 2 && (uri.pathSegments[0] == 'c' || uri.pathSegments[0] == 'client')) {
+        // 3. Promoter & In-Store submission link (/c/unilever or /client/adco or /promoter/512)
+        if (uri.pathSegments.length >= 2 && (uri.pathSegments[0] == 'c' || uri.pathSegments[0] == 'client' || uri.pathSegments[0] == 'promoter')) {
           final slug = uri.pathSegments[1].trim();
           final eventId = uri.queryParameters['event'] ?? uri.queryParameters['id'];
           if (slug.isEmpty && (eventId == null || eventId.trim().isEmpty)) {
@@ -116,9 +146,9 @@ class MyApp extends ConsumerWidget {
           );
         }
 
-        // 4. Company Manager & Partner Portal link (/portal/unilever or /p/juhayna)
+        // 4. Agency Operations & Field Management Portal link (/ops/unilever or /agency/adco or /operations/512)
         if (uri.pathSegments.length >= 2 &&
-            (uri.pathSegments[0] == 'portal' || uri.pathSegments[0] == 'p' || uri.pathSegments[0] == 'company')) {
+            (uri.pathSegments[0] == 'ops' || uri.pathSegments[0] == 'agency' || uri.pathSegments[0] == 'operations')) {
           final slug = uri.pathSegments[1].trim();
           final eventId = uri.queryParameters['event'] ?? uri.queryParameters['id'];
           if (slug.isEmpty && (eventId == null || eventId.trim().isEmpty)) {
@@ -131,6 +161,28 @@ class MyApp extends ConsumerWidget {
             builder: (context) => CompanyManagerPortalScreen(
               companySlug: slug,
               initialEventId: eventId,
+              isAgencyOpsMode: true,
+            ),
+            settings: settings,
+          );
+        }
+
+        // 5. Brand Executive Master Portal link (/portal/unilever or /p/juhayna or /brand/512 or /company/adco)
+        if (uri.pathSegments.length >= 2 &&
+            (uri.pathSegments[0] == 'portal' || uri.pathSegments[0] == 'p' || uri.pathSegments[0] == 'brand' || uri.pathSegments[0] == 'company')) {
+          final slug = uri.pathSegments[1].trim();
+          final eventId = uri.queryParameters['event'] ?? uri.queryParameters['id'];
+          if (slug.isEmpty && (eventId == null || eventId.trim().isEmpty)) {
+            return MaterialPageRoute(
+              builder: (context) => const AuthScreen(),
+              settings: settings,
+            );
+          }
+          return MaterialPageRoute(
+            builder: (context) => CompanyManagerPortalScreen(
+              companySlug: slug,
+              initialEventId: eventId,
+              isAgencyOpsMode: false,
             ),
             settings: settings,
           );
@@ -162,9 +214,29 @@ class MyApp extends ConsumerWidget {
               ),
               settings: settings,
             );
+          case '/ops':
+          case '/agency':
+          case '/operations':
+            final slug = (uri.queryParameters['company'] ?? uri.queryParameters['slug'] ?? '').trim();
+            final eventId = uri.queryParameters['event'] ?? uri.queryParameters['id'];
+            if (slug.isEmpty && (eventId == null || eventId.trim().isEmpty)) {
+              return MaterialPageRoute(
+                builder: (context) => const AuthScreen(),
+                settings: settings,
+              );
+            }
+            return MaterialPageRoute(
+              builder: (context) => CompanyManagerPortalScreen(
+                companySlug: slug,
+                initialEventId: eventId,
+                isAgencyOpsMode: true,
+              ),
+              settings: settings,
+            );
           case '/submit':
           case '/c':
           case '/client':
+          case '/promoter':
             final slug = (uri.queryParameters['company'] ?? uri.queryParameters['slug'] ?? '').trim();
             final eventId = uri.queryParameters['event'] ?? uri.queryParameters['id'];
             if (slug.isEmpty && (eventId == null || eventId.trim().isEmpty)) {

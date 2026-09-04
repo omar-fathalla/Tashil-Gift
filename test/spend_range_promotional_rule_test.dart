@@ -199,7 +199,82 @@ void main() {
         expect(matches.length, equals(1));
         expect(matches.first.rule.id, equals('rule_strict_tolerance'));
         expect(matches.first.totalRewardAmount, equals(25.0));
-      },
-    );
+      });
+
+    test('Receipt with 2 distinct Rexona roll-on lines (69 EGP + 79 EGP) matches rule_5 (50 EGP voucher)', () {
+      final deodorantRules = [
+        PromotionalRuleItem(
+          id: 'rule_1',
+          ruleTitle: 'عرض كلير 360 مل',
+          triggerProduct: 'كلير 360 مل',
+          minQuantity: 1,
+          rewardType: 'free_product',
+          rewardValue: 'كلير ٩٠ مل هديه',
+          rewardAmount: 0,
+        ),
+        PromotionalRuleItem(
+          id: 'rule_2',
+          ruleTitle: 'عرض تريزيمي 400 مل (شراء 2 قطعة) -> هدية تريزيمي 250 مل',
+          triggerProduct: 'تريزيمي 400 مل، تريزيمى شامبو + بلسم 400 ملى',
+          minQuantity: 2,
+          rewardType: 'free_product',
+          rewardValue: 'تريزيمي 250 مل هديه',
+          rewardAmount: 0,
+        ),
+        PromotionalRuleItem(
+          id: 'rule_3',
+          ruleTitle: 'عرض اسبراي ريكسونا أو أكس (قطعة واحدة) -> فواتشر 50 ج.م',
+          triggerProduct: 'اسبراي ريكسونا، اسبراي أكس، مزيل عرق ريكسونا اسبراي، مزيل عرق أكس اسبراي',
+          minQuantity: 1,
+          rewardType: 'voucher',
+          rewardValue: 'قسيمة مشتريات بقيمة 50 ج.م',
+          rewardAmount: 50.0,
+        ),
+        PromotionalRuleItem(
+          id: 'rule_4',
+          ruleTitle: 'عرض اسبراي ريكسونا أو أكس (قطعتين أو شرنك مزدوج) -> فواتشر 125 ج.م',
+          triggerProduct: 'اسبراي ريكسونا، اسبراي أكس، مزيل عرق ريكسونا اسبراي، مزيل عرق أكس اسبراي',
+          minQuantity: 2,
+          rewardType: 'voucher',
+          rewardValue: 'قسيمة مشتريات بقيمة 125 ج.م',
+          rewardAmount: 125.0,
+        ),
+        PromotionalRuleItem(
+          id: 'rule_5',
+          ruleTitle: 'عرض رول أون ريكسونا أو أكس (قطعتين) -> فواتشر 50 ج.م',
+          triggerProduct: 'رول أون ريكسونا، رول أون أكس، ريكسونا رول اون، ريكسونا روول اون، مزيل عرق ريكسونا رول، مزيل عرق أكس رول',
+          minQuantity: 2,
+          rewardType: 'voucher',
+          rewardValue: 'قسيمة مشتريات بقيمة 50 ج.م',
+          rewardAmount: 50.0,
+        ),
+      ];
+
+      final products = [
+        ExtractedProductItem(
+          name: 'ريكسونا رول اون رجالي غير مرئي 50 مل (خس)',
+          quantity: 1,
+          price: 69.0,
+          barcode: '6221155210180',
+          isTargetCompany: true,
+        ),
+        ExtractedProductItem(
+          name: 'ريكسونا رول اون رجالي ادفانسد غير مرئي 50',
+          quantity: 1,
+          price: 79.0,
+          barcode: '6221155149305',
+          isTargetCompany: true,
+        ),
+      ];
+
+      final matches = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: products,
+        promotionalRules: deodorantRules,
+      );
+
+      expect(matches.length, equals(1));
+      expect(matches.first.rule.id, equals('rule_5'));
+      expect(matches.first.totalRewardAmount, equals(50.0));
+    });
   });
 }

@@ -66,7 +66,7 @@ void main() {
       expect(find.text('Powered by Switch Point Smart Systems'), findsOneWidget);
     });
 
-    testWidgets('SwitchPointFooter renders ultra-compact icons-only layout on mobile screen (390x844)', (WidgetTester tester) async {
+    testWidgets('SwitchPointFooter is completely hidden on mobile and tablet screens (<900px)', (WidgetTester tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
@@ -80,19 +80,11 @@ void main() {
         ),
       );
 
-      // On mobile, text labels are not rendered in the main row to save vertical space
+      // On mobile and tablet (< 900px), footer is completely hidden
+      expect(find.byType(SwitchPointFooter), findsOneWidget);
       expect(find.text(SwitchPointInfo.supportEmail), findsNothing);
       expect(find.text(SwitchPointInfo.websiteDisplay), findsNothing);
-      expect(find.text('WhatsApp Egypt'), findsNothing);
-      expect(find.text('WhatsApp UAE'), findsNothing);
-
-      // Instead, compact icons and badges are rendered
-      expect(find.byIcon(Icons.public_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.mail_outline_rounded), findsOneWidget);
-      expect(find.text('EG'), findsOneWidget);
-      expect(find.text('UAE'), findsOneWidget);
-      expect(find.text('2026 Switch Point'), findsOneWidget);
-      expect(find.text('Powered by Switch Point'), findsOneWidget);
+      expect(find.byIcon(Icons.public_rounded), findsNothing);
     });
   });
 }

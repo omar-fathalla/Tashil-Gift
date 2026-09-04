@@ -462,8 +462,9 @@ class EventModel {
   final bool isActive;
   final DateTime? createdAt;
 
-  /// Independent control toggles for Promoter and Company Manager Portals
+  /// Independent control toggles for Promoter, Agency Operations, and Brand Executive Portals
   final bool isPromoterActive;
+  final bool isAgencyActive;
   final bool isManagerActive;
 
   /// The raw natural language promotional idea typed by admin
@@ -520,6 +521,7 @@ class EventModel {
     this.isActive = true,
     this.createdAt,
     this.isPromoterActive = true,
+    this.isAgencyActive = true,
     this.isManagerActive = true,
     this.promotionalIdea = '',
     this.aiValidationSummary = '',
@@ -657,6 +659,7 @@ class EventModel {
               ? data['createdAt'] as DateTime
               : null,
       isPromoterActive: data['isPromoterActive'] ?? (data['isActive'] ?? true),
+      isAgencyActive: data['isAgencyActive'] ?? (data['isActive'] ?? true),
       isManagerActive: data['isManagerActive'] ?? (data['isActive'] ?? true),
       promotionalIdea: data['promotionalIdea']?.toString() ?? '',
       aiValidationSummary: data['aiValidationSummary']?.toString() ?? '',
@@ -724,6 +727,7 @@ class EventModel {
       'isActive': isActive,
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
       'isPromoterActive': isPromoterActive,
+      'isAgencyActive': isAgencyActive,
       'isManagerActive': isManagerActive,
       'promotionalIdea': promotionalIdea,
       'aiValidationSummary': aiValidationSummary,
@@ -759,6 +763,7 @@ class EventModel {
     bool? isActive,
     DateTime? createdAt,
     bool? isPromoterActive,
+    bool? isAgencyActive,
     bool? isManagerActive,
     String? promotionalIdea,
     String? aiValidationSummary,
@@ -792,6 +797,7 @@ class EventModel {
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
       isPromoterActive: isPromoterActive ?? this.isPromoterActive,
+      isAgencyActive: isAgencyActive ?? this.isAgencyActive,
       isManagerActive: isManagerActive ?? this.isManagerActive,
       promotionalIdea: promotionalIdea ?? this.promotionalIdea,
       aiValidationSummary: aiValidationSummary ?? this.aiValidationSummary,

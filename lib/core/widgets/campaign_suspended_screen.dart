@@ -12,6 +12,7 @@ import '../../features/admin/domain/event_model.dart';
 /// Portal Type enumeration to tailor the suspended message & visual theme
 enum SuspendedPortalType {
   promoter,
+  agency,
   manager,
 }
 
@@ -198,13 +199,30 @@ class _CampaignSuspendedScreenState extends ConsumerState<CampaignSuspendedScree
     final isMobile = screenWidth < 600;
 
     final bool isPromoter = widget.portalType == SuspendedPortalType.promoter;
+    final bool isAgency = widget.portalType == SuspendedPortalType.agency;
     final targetCompanyName = widget.companyName ?? widget.event?.targetCompany ?? 'الشركة الراعية';
     final targetLogoUrl = widget.event?.companyLogoUrl ?? '';
     final targetEventName = widget.event?.eventName ?? '';
 
-    final heroTitle = isPromoter ? strings.promoterSuspendedTitle : strings.managerSuspendedTitle;
-    final heroMessage = isPromoter ? strings.promoterSuspendedMessage : strings.managerSuspendedMessage;
-    final heroIcon = isPromoter ? Icons.pause_circle_filled_rounded : Icons.lock_clock_rounded;
+    final heroTitle = isPromoter
+        ? strings.promoterSuspendedTitle
+        : (isAgency
+            ? (isAr ? 'تم تعليق صلاحية الوصول لبوابة العمليات وشركة الدعاية' : 'Agency Operations Portal Access Suspended')
+            : strings.managerSuspendedTitle);
+    final heroMessage = isPromoter
+        ? strings.promoterSuspendedMessage
+        : (isAgency
+            ? (isAr
+                ? 'تم إيقاف صلاحية إدارة الأرصدة وسجل الفواتير لهذه الحملة مؤقتاً. يرجى مراجعة إدارة النظام المركزية لإعادة التفعيل.'
+                : 'Access to branch stock and invoice management is temporarily paused. Contact central administration for reactivation.')
+            : strings.managerSuspendedMessage);
+    final heroIcon = isPromoter
+        ? Icons.pause_circle_filled_rounded
+        : (isAgency ? Icons.store_mall_directory_rounded : Icons.lock_clock_rounded);
+
+    final portalLabel = isPromoter
+        ? strings.promoterPortalLabel
+        : (isAgency ? strings.agencyOpsPortalLabel : strings.brandExecutivePortalLabel);
 
     return Directionality(
       textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
@@ -229,7 +247,7 @@ class _CampaignSuspendedScreenState extends ConsumerState<CampaignSuspendedScree
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
-                  isPromoter ? strings.promoterPortalLabel : strings.managerPortalLabel,
+                  portalLabel,
                   style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
                   overflow: TextOverflow.ellipsis,
                 ),

@@ -73,13 +73,26 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     );
   }
 
-  void _copyCompanyManagerPortalLink(BuildContext context, String slug, {String? eventId}) {
-    final url = AppUrlBuilder.buildManagerPortalUrl(slug, eventId: eventId);
+  void _copyAgencyOpsLink(BuildContext context, String slug, {String? eventId}) {
+    final url = AppUrlBuilder.buildAgencyOpsUrl(slug, eventId: eventId);
     Clipboard.setData(ClipboardData(text: url));
     final strings = AppStrings.of(ref);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${strings.managerPortalLinkCopied}: $url'),
+        content: Text('${strings.agencyOpsLinkCopied}: $url'),
+        backgroundColor: Colors.purple.shade700,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _copyBrandExecutiveLink(BuildContext context, String slug, {String? eventId}) {
+    final url = AppUrlBuilder.buildBrandExecutiveUrl(slug, eventId: eventId);
+    Clipboard.setData(ClipboardData(text: url));
+    final strings = AppStrings.of(ref);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${strings.brandExecutiveLinkCopied}: $url'),
         backgroundColor: Colors.indigo.shade700,
         behavior: SnackBarBehavior.floating,
       ),
@@ -1507,11 +1520,11 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     spacing: 12,
                     runSpacing: 10,
                     children: [
-                      // 1. Promoter & Client Portal Switch
+                      // 1. Promoter & In-Store Portal Switch
                       _buildPortalControlTile(
                         context,
                         title: strings.promoterPortalLabel,
-                        subtitle: isAr ? 'رابط رفع الفواتير والجوائز' : 'Receipts & Games Link',
+                        subtitle: isAr ? 'رابط رفع الفواتير والجوائز بالفرع' : 'In-Store Promoter & Receipts',
                         icon: Icons.qr_code_scanner_rounded,
                         isActive: event.isActive && event.isPromoterActive,
                         colorScheme: colorScheme,
@@ -1525,11 +1538,29 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                           }
                         },
                       ),
-                      // 2. Company Manager Portal Switch
+                      // 2. Agency Operations Portal Switch
                       _buildPortalControlTile(
                         context,
-                        title: strings.managerPortalLabel,
-                        subtitle: isAr ? 'رابط التقارير والتحليلات' : 'Analytics & Audit Link',
+                        title: strings.agencyOpsPortalLabel,
+                        subtitle: isAr ? 'رابط العمليات والأرصدة والفواتير' : 'Agency Field Ops & Stock',
+                        icon: Icons.store_mall_directory_rounded,
+                        isActive: event.isActive && event.isAgencyActive,
+                        colorScheme: colorScheme,
+                        isAr: isAr,
+                        tooltip: event.isAgencyActive
+                            ? strings.agencyOpsPortalToggleTooltipActive
+                            : strings.agencyOpsPortalToggleTooltipPaused,
+                        onChanged: (val) async {
+                          if (firestore != null) {
+                            await firestore.collection('events').doc(event.id).update({'isAgencyActive': val});
+                          }
+                        },
+                      ),
+                      // 3. Brand Executive Master Portal Switch
+                      _buildPortalControlTile(
+                        context,
+                        title: strings.brandExecutivePortalLabel,
+                        subtitle: isAr ? 'رابط العلامة التجارية والـ ROI' : 'Brand Executive & ROI',
                         icon: Icons.business_center_rounded,
                         isActive: event.isActive && event.isManagerActive,
                         colorScheme: colorScheme,
@@ -1577,9 +1608,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
 
                 // 2. Copy Promoter / Client Link
                 Tooltip(
-                  message: isAr
-                      ? 'نسخ رابط العميل والبروموتر المباشر لرفع الفواتير وتجربة الألعاب واستلام الجوائز'
-                      : 'Copy direct Promoter / Client submission link to scan receipts & play games',
+                  message: strings.promoterPortalTooltip,
                   waitDuration: const Duration(milliseconds: 400),
                   child: FilledButton.tonalIcon(
                     onPressed: () => _copyPromoterLink(context, companySlug, eventId: event.id),
@@ -1592,16 +1621,31 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   ),
                 ),
 
-                // 3. Copy Company Manager Portal Link
+                // 3. Copy Agency Operations Link
                 Tooltip(
-                  message: isAr
-                      ? 'نسخ رابط بوابة مدير الشركة المخصص (شامل التحليلات وسجل الفواتير والتدقيق لجميع حملات الشركة)'
-                      : 'Copy scoped Company Manager Portal link (Analytics + Invoices Audit)',
+                  message: strings.agencyOpsPortalTooltip,
                   waitDuration: const Duration(milliseconds: 400),
                   child: FilledButton.tonalIcon(
-                    onPressed: () => _copyCompanyManagerPortalLink(context, companySlug, eventId: event.id),
+                    onPressed: () => _copyAgencyOpsLink(context, companySlug, eventId: event.id),
+                    icon: const Icon(Icons.store_mall_directory_rounded, size: 18),
+                    label: Text(strings.copyAgencyOpsLink, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13)),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.purple.shade50,
+                      foregroundColor: Colors.purple.shade900,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+
+                // 4. Copy Brand Executive Master Link
+                Tooltip(
+                  message: strings.brandExecutivePortalTooltip,
+                  waitDuration: const Duration(milliseconds: 400),
+                  child: FilledButton.tonalIcon(
+                    onPressed: () => _copyBrandExecutiveLink(context, companySlug, eventId: event.id),
                     icon: const Icon(Icons.business_center_rounded, size: 18),
-                    label: Text(strings.copyManagerPortalLink, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13)),
+                    label: Text(strings.copyBrandExecutiveLink, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13)),
                     style: FilledButton.styleFrom(
                       backgroundColor: colorScheme.secondaryContainer,
                       foregroundColor: colorScheme.onSecondaryContainer,
@@ -1611,11 +1655,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   ),
                 ),
 
-                // 4. Preview Company Manager Portal
+                // 5. Preview Agency Operations Portal
                 Tooltip(
-                  message: isAr
-                      ? 'معاينة بوابة مدير الشركة الراعية واستعراض التقارير وسجل الفواتير'
-                      : 'Live preview of scoped Company Manager Portal',
+                  message: isAr ? 'معاينة بوابة شركة الدعاية والعمليات واستعراض الأرصدة والفواتير' : 'Live preview of Agency Operations Portal',
                   waitDuration: const Duration(milliseconds: 400),
                   child: OutlinedButton.icon(
                     onPressed: () {
@@ -1624,12 +1666,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                           builder: (context) => CompanyManagerPortalScreen(
                             companySlug: companySlug,
                             initialEventId: event.id,
+                            isAgencyOpsMode: true,
                           ),
                         ),
                       );
                     },
-                    icon: const Icon(Icons.dashboard_customize_rounded, size: 18),
-                    label: Text(strings.previewManagerPortal, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13)),
+                    icon: const Icon(Icons.store_mall_directory_rounded, size: 18),
+                    label: Text(strings.previewAgencyOpsPortal, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13)),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1637,7 +1680,34 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   ),
                 ),
 
-                // 5. Preview Client / Promoter Mobile App
+                // 6. Preview Brand Executive Master Portal
+                Tooltip(
+                  message: isAr
+                      ? 'معاينة البوابة التنفيذية للعلامة التجارية واستعراض الـ ROI ومحاكاة البروموتر'
+                      : 'Live preview of Brand Executive Master Portal',
+                  waitDuration: const Duration(milliseconds: 400),
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => CompanyManagerPortalScreen(
+                            companySlug: companySlug,
+                            initialEventId: event.id,
+                            isAgencyOpsMode: false,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.dashboard_customize_rounded, size: 18),
+                    label: Text(strings.previewBrandExecutivePortal, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+
+                // 7. Preview Client / Promoter Mobile App
                 Tooltip(
                   message: isAr ? 'معاينة تجربة العميل والبروموتر في رفع وفحص الفاتورة' : 'Live preview of client mobile web app',
                   waitDuration: const Duration(milliseconds: 400),

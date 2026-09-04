@@ -100,13 +100,52 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // 1. Natural START (Right in Arabic RTL / Left in English LTR): Sleek Mobile Menu
-            if (leading != null)
-              leading!
-            else if (showMobileMenu)
+            // 1. Natural START: Company / Brand Logo
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (leading != null) ...[
+                  leading!,
+                  const SizedBox(width: 4),
+                ],
+                _buildMobileLogo(context, colorScheme),
+              ],
+            ),
+
+            // 2. Middle: The 3 In-Store Action Icons (Brief, Gift Stock, Invoices Log)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: customActions != null && customActions!.isNotEmpty
+                    ? Center(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: customActions!,
+                          ),
+                        ),
+                      )
+                    : Text(
+                        subtitle ?? (isAr ? SwitchPointInfo.companyNameAr : SwitchPointInfo.companyName),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.cairo(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.onSurface,
+                        ),
+                      ),
+              ),
+            ),
+
+            // 3. Natural END: Sleek 3-Lines Mobile Menu (Language, Country, Dark Mode)
+            if (showMobileMenu)
               IconButton(
                 icon: const Icon(Icons.menu_rounded, size: 24),
-                tooltip: isAr ? 'القائمة الرئيسية والإعدادات' : 'Menu & Settings',
+                tooltip: isAr ? 'القائمة والإعدادات (اللغة، الدولة، المظهر)' : 'Menu & Settings',
                 color: colorScheme.primary,
                 visualDensity: VisualDensity.compact,
                 padding: const EdgeInsets.all(6),
@@ -118,39 +157,13 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
                       context,
                       subtitle: subtitle,
                       companyLogoUrl: companyLogoUrl,
-                      customActions: customActions,
+                      customActions: null,
                     );
                   }
                 },
               )
             else
               const SizedBox(width: 36),
-
-            // 2. Middle: Clean Title / Subtitle Badge
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: Text(
-                  subtitle ?? (isAr ? SwitchPointInfo.companyNameAr : SwitchPointInfo.companyName),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.cairo(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.onSurface,
-                  ),
-                ),
-              ),
-            ),
-
-            // 3. Natural END (Left in Arabic RTL / Right in English LTR): Switch Point Mini Brand Logo
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildMobileLogo(context, colorScheme),
-              ],
-            ),
           ],
         ),
       ),
@@ -597,11 +610,14 @@ class SwitchPointFooter extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final isMobile = MediaQuery.of(context).size.width < 600;
+    final screenWidth = MediaQuery.of(context).size.width;
 
-    if (isMobile && hideOnMobile) {
+    // Completely remove/hide footer on mobile and tablet (< 900px) per user guidelines
+    if (screenWidth < 900 || hideOnMobile) {
       return const SizedBox.shrink();
     }
+
+    final isMobile = screenWidth < 600;
 
     return Directionality(
       textDirection: TextDirection.ltr,

@@ -55,6 +55,45 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
   DateTimeRange? _customDateRange;
   final Set<String> _expandedDocIds = <String>{};
 
+  // Golden Standard: Static Persistent In-Memory Caches for 0ms instant render across tab switches
+  static final Map<String, List<QueryDocumentSnapshot>> _persistentInvoicesCache = {};
+  static final Map<String, Map<String, EventModel>> _persistentEventsCache = {};
+
+  // Memoized stream lifecycle outside build()
+  String? _lastStreamsKey;
+  Stream<QuerySnapshot>? _eventsStream;
+  Stream<QuerySnapshot>? _transactionsStream;
+
+  // Memoized computation caches
+  String? _lastAllInvoicesCacheKey;
+  List<Map<String, dynamic>>? _cachedAllInvoices;
+
+  void _ensureStreams(FirebaseFirestore? firestore, {bool force = false}) {
+    if (firestore == null) return;
+    final isLocked = widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty;
+    final effectiveKey = '${widget.lockedCompanySlug ?? 'all'}_$_selectedCampaignId';
+
+    if (_lastStreamsKey != effectiveKey || force || _transactionsStream == null) {
+      _lastStreamsKey = effectiveKey;
+
+      if (_eventsStream == null || force) {
+        Query eventsQuery = firestore.collection('events');
+        if (isLocked) {
+          eventsQuery = eventsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug);
+        }
+        _eventsStream = eventsQuery.snapshots();
+      }
+
+      Query transactionsQuery = firestore.collection('receipts_transactions');
+      if (_selectedCampaignId != 'ALL' && _selectedCampaignId != 'all' && _selectedCampaignId.isNotEmpty) {
+        transactionsQuery = transactionsQuery.where('campaignId', isEqualTo: _selectedCampaignId);
+      } else if (isLocked) {
+        transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug);
+      }
+      _transactionsStream = transactionsQuery.snapshots();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -895,46 +934,51 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     }
 
     final activeFirestore = firestore;
-    final isLocked = widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty;
+    _ensureStreams(activeFirestore);
 
-    Query eventsQuery = activeFirestore.collection('events');
-    if (isLocked) {
-      eventsQuery = eventsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug);
-    }
+    final eventsKey = widget.lockedCompanySlug ?? 'all';
+    final txKey = '${widget.lockedCompanySlug ?? 'all'}_$_selectedCampaignId';
 
-    // Clean M3 Scaffold with NO duplicate AppBar
+    // Clean M3 Scaffold with NO duplicate AppBar & 0ms instant cached rendering
     return Scaffold(
       backgroundColor: colorScheme.surface,
       body: StreamBuilder<QuerySnapshot>(
-        stream: eventsQuery.snapshots(),
+        stream: _eventsStream,
         builder: (context, eventsSnapshot) {
-          final eventDocs = eventsSnapshot.data?.docs ?? [];
-          final eventsMap = <String, EventModel>{};
-          for (final doc in eventDocs) {
-            try {
-              eventsMap[doc.id] = EventModel.fromFirestore(doc);
-            } catch (_) {}
+          if (eventsSnapshot.hasData && eventsSnapshot.data!.docs.isNotEmpty) {
+            final eventDocs = eventsSnapshot.data!.docs;
+            final map = <String, EventModel>{};
+            for (final doc in eventDocs) {
+              try {
+                map[doc.id] = EventModel.fromFirestore(doc);
+              } catch (_) {}
+            }
+            _persistentEventsCache[eventsKey] = map;
           }
-
-          Query transactionsQuery = activeFirestore.collection('receipts_transactions');
-          if (_selectedCampaignId != 'ALL' && _selectedCampaignId != 'all' && _selectedCampaignId.isNotEmpty) {
-            transactionsQuery = transactionsQuery.where('campaignId', isEqualTo: _selectedCampaignId);
-          } else if (isLocked) {
-            transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug);
-          }
+          final eventsMap = _persistentEventsCache[eventsKey] ?? const {};
 
           return StreamBuilder<QuerySnapshot>(
-            stream: transactionsQuery.snapshots(),
+            stream: _transactionsStream,
             builder: (context, transactionsSnapshot) {
-              if (transactionsSnapshot.hasError) {
+              if (transactionsSnapshot.hasData) {
+                final docs = transactionsSnapshot.data!.docs;
+                // Zero-wipe invariant: never clear existing cached records with empty transient data
+                if (docs.isNotEmpty || !_persistentInvoicesCache.containsKey(txKey)) {
+                  _persistentInvoicesCache[txKey] = docs;
+                }
+              }
+
+              final cachedDocs = _persistentInvoicesCache[txKey];
+
+              if (transactionsSnapshot.hasError && cachedDocs == null) {
                 return Center(child: Text('${strings.error}: ${transactionsSnapshot.error}'));
               }
 
-              if (!transactionsSnapshot.hasData) {
+              if (transactionsSnapshot.connectionState == ConnectionState.waiting && cachedDocs == null) {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              final rawDocs = transactionsSnapshot.data?.docs ?? [];
+              final rawDocs = cachedDocs ?? transactionsSnapshot.data?.docs ?? [];
               return _buildInvoicesView(
                 context: context,
                 activeCountry: activeCountry,
@@ -988,59 +1032,68 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
           .toList();
     }
 
-    // Map documents to enriched representations with canonical branch resolution
-    final allInvoices = rawDocs.map((doc) {
-      final data = doc.data() as Map<String, dynamic>;
-      final campaignId = data['campaignId']?.toString() ?? '';
-      final event = eventsMap[campaignId];
-      final eventName = event?.eventName ?? (data['campaignName']?.toString() ?? (isAr ? 'حملة عامة' : 'General Campaign'));
+    // Map documents to enriched representations with canonical branch resolution (O(1) memoized cache)
+    final allInvoicesCacheKey = '${rawDocs.length}_${rawDocs.isEmpty ? "" : rawDocs.first.id}_${rawDocs.isEmpty ? "" : rawDocs.last.id}_${eventsMap.length}_${canonicalBranches.length}_$isAr';
+    final List<Map<String, dynamic>> allInvoices;
+    if (_lastAllInvoicesCacheKey == allInvoicesCacheKey && _cachedAllInvoices != null) {
+      allInvoices = _cachedAllInvoices!;
+    } else {
+      allInvoices = rawDocs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        final campaignId = data['campaignId']?.toString() ?? '';
+        final event = eventsMap[campaignId];
+        final eventName = event?.eventName ?? (data['campaignName']?.toString() ?? (isAr ? 'حملة عامة' : 'General Campaign'));
 
-      final eventBranches = (event != null && event.branchNames.isNotEmpty)
-          ? event.branchNames
-          : canonicalBranches;
+        final eventBranches = (event != null && event.branchNames.isNotEmpty)
+            ? event.branchNames
+            : canonicalBranches;
 
-      final rawBranch = (data['branch_detected'] ?? data['branch'] ?? '').toString().trim();
-      final canonicalBranch = _normalizeBranchName(rawBranch, eventBranches, isAr);
+        final rawBranch = (data['branch_detected'] ?? data['branch'] ?? '').toString().trim();
+        final canonicalBranch = _normalizeBranchName(rawBranch, eventBranches, isAr);
 
-      DateTime? date;
-      if (data['timestamp'] is Timestamp) {
-        date = (data['timestamp'] as Timestamp).toDate();
-      } else if (data['timestamp'] is String) {
-        date = DateTime.tryParse(data['timestamp']);
-      }
-
-      String formattedDate = 'N/A';
-      if (date != null) {
-        formattedDate = DateFormat('yyyy-MM-dd hh:mm a').format(date);
-      } else if (data['receipt_date'] != null) {
-        final rawStr = data['receipt_date'].toString().trim();
-        final parsed = DateTime.tryParse(rawStr);
-        if (parsed != null) {
-          formattedDate = DateFormat('yyyy-MM-dd hh:mm a').format(parsed);
-        } else {
-          formattedDate = rawStr;
+        DateTime? date;
+        if (data['timestamp'] is Timestamp) {
+          date = (data['timestamp'] as Timestamp).toDate();
+        } else if (data['timestamp'] is String) {
+          date = DateTime.tryParse(data['timestamp']);
         }
-      }
 
-      return {
-        'id': doc.id,
-        ...data,
-        'date': date,
-        'formattedDate': formattedDate,
-        'eventName': eventName,
-        'campaignId': campaignId,
-        'raw_branch': rawBranch,
-        'canonical_branch': canonicalBranch,
-        'branch_detected': canonicalBranch,
-      };
-    }).toList()
-      ..sort((a, b) {
-        final tsA = a['date'] as DateTime?;
-        final tsB = b['date'] as DateTime?;
-        if (tsA == null) return 1;
-        if (tsB == null) return -1;
-        return tsB.compareTo(tsA);
-      });
+        String formattedDate = 'N/A';
+        if (date != null) {
+          formattedDate = DateFormat('yyyy-MM-dd hh:mm a').format(date);
+        } else if (data['receipt_date'] != null) {
+          final rawStr = data['receipt_date'].toString().trim();
+          final parsed = DateTime.tryParse(rawStr);
+          if (parsed != null) {
+            formattedDate = DateFormat('yyyy-MM-dd hh:mm a').format(parsed);
+          } else {
+            formattedDate = rawStr;
+          }
+        }
+
+        return {
+          'id': doc.id,
+          ...data,
+          'date': date,
+          'formattedDate': formattedDate,
+          'eventName': eventName,
+          'campaignId': campaignId,
+          'raw_branch': rawBranch,
+          'canonical_branch': canonicalBranch,
+          'branch_detected': canonicalBranch,
+        };
+      }).toList()
+        ..sort((a, b) {
+          final tsA = a['date'] as DateTime?;
+          final tsB = b['date'] as DateTime?;
+          if (tsA == null) return 1;
+          if (tsB == null) return -1;
+          return tsB.compareTo(tsA);
+        });
+
+      _cachedAllInvoices = allInvoices;
+      _lastAllInvoicesCacheKey = allInvoicesCacheKey;
+    }
 
     // 3. Dropdown list of branches: STRICTLY CANONICAL BRANCHES
     final List<String> sortedBranches;

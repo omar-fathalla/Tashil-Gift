@@ -127,24 +127,30 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       final mimeType = _receiptImage!.mimeType ?? 'image/jpeg'; 
 
       // Fetch company catalog products & barcodes
-      final catalogItems = await productsService.getProductsForCompany(activeEvent.companySlug);
-      final registeredBarcodes = catalogItems.map((e) => "${e.productName} (${e.barcode})").toList();
-      final catalogBarcodeMap = {
-        for (final item in catalogItems)
-          if (item.productName.isNotEmpty && item.barcode.isNotEmpty)
-            item.productName: item.barcode,
-      };
-      
-      // Fetch retail chain branch signatures if available for deterministic anti-fraud matching
+      // Fetch company product barcodes catalog and branch signatures concurrently in parallel
+      List<String> registeredBarcodes = [];
+      Map<String, String> catalogBarcodeMap = {};
       List<BranchModel> chainBranches = [];
+
       try {
-        chainBranches = await ref
-            .read(retailChainsServiceProvider)
-            .getBranchesForEvent(
-              retailChainId: activeEvent.retailChainId,
-              branchIds: activeEvent.branchIds,
-              branchNames: activeEvent.branchNames,
-            );
+        final results = await Future.wait([
+          productsService.getProductsForCompany(activeEvent.companySlug).catchError((_) => <CompanyProductItem>[]),
+          ref.read(retailChainsServiceProvider).getBranchesForEvent(
+            retailChainId: activeEvent.retailChainId,
+            branchIds: activeEvent.branchIds,
+            branchNames: activeEvent.branchNames,
+          ).catchError((_) => <BranchModel>[]),
+        ]);
+
+        final catalogItems = results[0] as List<CompanyProductItem>;
+        chainBranches = results[1] as List<BranchModel>;
+
+        registeredBarcodes = catalogItems.map((e) => "${e.productName} (${e.barcode})").toList();
+        catalogBarcodeMap = {
+          for (final item in catalogItems)
+            if (item.productName.isNotEmpty && item.barcode.isNotEmpty)
+              item.productName: item.barcode,
+        };
       } catch (_) {}
       
       final result = await aiService.analyzeReceiptImage(
