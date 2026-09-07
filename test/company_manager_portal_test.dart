@@ -254,21 +254,42 @@ void main() {
 
       await tester.pump();
 
-      // Verify mobile bottom navigation bar renders
-      expect(find.byType(NavigationBar), findsOneWidget);
+      // Verify squished bottom navigation bar is removed
+      expect(find.byType(NavigationBar), findsNothing);
       expect(find.byType(CampaignReportsScreen), findsOneWidget);
       expect(tester.takeException(), isNull);
 
-      // Tap on Vouchers tab on mobile navigation bar
-      final vouchersSegment = find.descendant(
-        of: find.byType(NavigationBar),
-        matching: find.byIcon(Icons.confirmation_number_outlined),
-      );
-      await tester.tap(vouchersSegment);
+      // Verify mobile menu button is present in header
+      final menuBtn = find.byIcon(Icons.menu_rounded);
+      expect(menuBtn, findsOneWidget);
+
+      // Tap on menu button to open drawer
+      await tester.tap(menuBtn);
       await tester.pumpAndSettle();
 
-      // Verify CompanyVouchersReportScreen is rendered
-      expect(find.byType(CompanyVouchersReportScreen), findsOneWidget);
+      // Verify Drawer is opened with zero layout overflow
+      expect(find.byType(Drawer), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      // Scroll down in drawer to reveal Settings ExpansionTile if below fold
+      await tester.drag(find.byType(ListView), const Offset(0, -300));
+      await tester.pumpAndSettle();
+
+      // Verify Settings section is titled 'الإعدادات' (no English) and is collapsed by default
+      expect(find.text('الإعدادات'), findsOneWidget);
+      expect(find.text('الإعدادات والمظهر (Settings)'), findsNothing);
+
+      // Tap on Settings to expand it
+      await tester.tap(find.text('الإعدادات'));
+      await tester.pumpAndSettle();
+
+      // Scroll further down to see expanded content
+      await tester.drag(find.byType(ListView), const Offset(0, -200));
+      await tester.pumpAndSettle();
+
+      // Verify language and country settings are revealed upon expansion
+      expect(find.text('لغة الواجهة'), findsOneWidget);
+      expect(find.text('الدولة والعملة المعتمدة'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -333,7 +354,7 @@ void main() {
       expect(SlugUtils.toSlug('أدكو'), equals('adco'));
     });
 
-    testWidgets('CompanyManagerPortalScreen with empty slug and null event renders AuthScreen instead of arbitrary fallback', (tester) async {
+    testWidgets('CompanyManagerPortalScreen with empty slug and null event never renders AuthScreen or triggers admin redirect', (tester) async {
       await tester.pumpWidget(
         const ProviderScope(
           child: MaterialApp(
@@ -345,7 +366,12 @@ void main() {
       );
 
       await tester.pump();
-      expect(find.byType(AuthScreen), findsOneWidget);
+      // On frame 0 without events, it shows a clean loading indicator or suspended screen, never AuthScreen
+      expect(find.byType(AuthScreen), findsNothing);
+      expect(
+        find.byType(CircularProgressIndicator),
+        findsOneWidget,
+      );
     });
   });
 }

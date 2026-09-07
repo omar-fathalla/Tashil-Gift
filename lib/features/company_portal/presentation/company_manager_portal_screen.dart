@@ -8,6 +8,9 @@ import '../../../core/services/firebase_service.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../core/widgets/switch_point_branding.dart';
+import '../../../core/constants/country_currency_config.dart';
+import '../../../core/constants/app_version_config.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../admin/domain/event_model.dart';
 import '../../admin/presentation/campaign_reports_screen.dart';
 import '../../validation/presentation/invoices_log_screen.dart';
@@ -18,7 +21,6 @@ import 'campaigns_comparison_analytics_screen.dart';
 import '../../../core/utils/url_builder.dart';
 import '../../../core/utils/slug_utils.dart';
 import '../../../core/widgets/campaign_suspended_screen.dart';
-import '../../auth/presentation/auth_screen.dart';
 import '../../client_portal/presentation/client_receipt_upload_screen.dart';
 
 /// Navigation destination model for Partner Portal Dashboard
@@ -311,7 +313,23 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
         : widget.companySlug.trim();
 
     if (effectiveSlug.isEmpty && initialEvent == null) {
-      return const AuthScreen();
+      if (allDocs.isEmpty) {
+        return Scaffold(
+          backgroundColor: colorScheme.surface,
+          body: Center(
+            child: CircularProgressIndicator(
+              color: colorScheme.primary,
+            ),
+          ),
+        );
+      }
+      return CampaignSuspendedScreen(
+        portalType: widget.isAgencyOpsMode ? SuspendedPortalType.agency : SuspendedPortalType.manager,
+        event: null,
+        companySlug: widget.companySlug,
+        companyName: isAr ? 'الحملة غير متوفرة' : (isHi ? 'अभियान उपलब्ध नहीं है' : 'Campaign Not Found'),
+        onRefresh: () => setState(() {}),
+      );
     }
 
     String companyDisplayName = initialEvent?.targetCompany ?? '';
@@ -374,106 +392,67 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
         key: _scaffoldKey,
         backgroundColor: colorScheme.surface,
         appBar: SwitchPointHeader(
-        leading: isMobile
-            ? IconButton(
-                icon: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
+          subtitle: widget.isAgencyOpsMode
+              ? '$companyDisplayName • ${strings.agencyOpsPortalLabel}'
+              : '$companyDisplayName • ${strings.brandExecutivePortalLabel}',
+          companyLogoUrl: companyLogoUrl,
+          onMobileMenuPressed: isMobile ? () => _scaffoldKey.currentState?.openDrawer() : null,
+          customActions: isMobile
+              ? null
+              : [
+                  // Copy Promoter Link quick button
+                  Tooltip(
+                    message: strings.copyPromoterLink,
+                    child: IconButton.filledTonal(
+                      icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
+                      padding: const EdgeInsets.all(8),
+                      onPressed: () => _copyPromoterLink(context, strings, effectiveSlug, activeEventId),
+                    ),
                   ),
-                  child: Icon(
-                    Icons.dashboard_customize_rounded,
-                    color: colorScheme.primary,
-                    size: 20,
+                  const SizedBox(width: 4),
+                  // Copy Agency Ops Link quick button
+                  Tooltip(
+                    message: strings.copyAgencyOpsLink,
+                    child: IconButton.filledTonal(
+                      icon: const Icon(Icons.store_mall_directory_rounded, size: 18),
+                      padding: const EdgeInsets.all(8),
+                      onPressed: () => _copyAgencyOpsLink(context, strings, effectiveSlug, activeEventId),
+                    ),
                   ),
-                ),
-                tooltip: isAr ? 'قائمة لوحة التحكم' : 'Dashboard Menu',
-                onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                  const SizedBox(width: 4),
+                  // Copy Brand Executive Master Link quick button
+                  Tooltip(
+                    message: strings.copyBrandExecutiveLink,
+                    child: IconButton.filledTonal(
+                      icon: const Icon(Icons.business_center_rounded, size: 18),
+                      padding: const EdgeInsets.all(8),
+                      onPressed: () => _copyBrandExecutiveLink(context, strings, effectiveSlug, activeEventId),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+        ),
+
+        // Mobile Drawer for seamless phone navigation (Opens from Right in RTL, Left in LTR)
+        drawer: isMobile
+            ? _buildMobileDrawer(
+                context: context,
+                colorScheme: colorScheme,
+                textTheme: textTheme,
+                strings: strings,
+                companyName: companyDisplayName,
+                companyLogoUrl: companyLogoUrl,
+                effectiveSlug: effectiveSlug,
+                activeEventId: activeEventId,
+                campaignsCount: companyEvents.length,
+                navItems: navItems,
+                isAr: isAr,
+                isHi: isHi,
               )
             : null,
-        subtitle: widget.isAgencyOpsMode
-            ? '$companyDisplayName • ${strings.agencyOpsPortalLabel}'
-            : '$companyDisplayName • ${strings.brandExecutivePortalLabel}',
-        companyLogoUrl: companyLogoUrl,
-        customActions: isMobile
-            ? null
-            : [
-                // Copy Promoter Link quick button
-                Tooltip(
-                  message: strings.copyPromoterLink,
-                  child: IconButton.filledTonal(
-                    icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
-                    padding: const EdgeInsets.all(8),
-                    onPressed: () => _copyPromoterLink(context, strings, effectiveSlug, activeEventId),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                // Copy Agency Ops Link quick button
-                Tooltip(
-                  message: strings.copyAgencyOpsLink,
-                  child: IconButton.filledTonal(
-                    icon: const Icon(Icons.store_mall_directory_rounded, size: 18),
-                    padding: const EdgeInsets.all(8),
-                    onPressed: () => _copyAgencyOpsLink(context, strings, effectiveSlug, activeEventId),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                // Copy Brand Executive Master Link quick button
-                Tooltip(
-                  message: strings.copyBrandExecutiveLink,
-                  child: IconButton.filledTonal(
-                    icon: const Icon(Icons.business_center_rounded, size: 18),
-                    padding: const EdgeInsets.all(8),
-                    onPressed: () => _copyBrandExecutiveLink(context, strings, effectiveSlug, activeEventId),
-                  ),
-                ),
-                const SizedBox(width: 8),
-              ],
-      ),
 
-      // Mobile Drawer for seamless phone navigation (Opens from Right in RTL, Left in LTR)
-      drawer: isMobile
-          ? _buildMobileDrawer(
-              context: context,
-              colorScheme: colorScheme,
-              textTheme: textTheme,
-              strings: strings,
-              companyName: companyDisplayName,
-              companyLogoUrl: companyLogoUrl,
-              effectiveSlug: effectiveSlug,
-              activeEventId: activeEventId,
-              campaignsCount: companyEvents.length,
-              navItems: navItems,
-              isAr: isAr,
-              isHi: isHi,
-            )
-          : null,
-
-      // Mobile Bottom Navigation Bar for quick thumb-reach switching
-      bottomNavigationBar: isMobile
-          ? NavigationBar(
-              selectedIndex: _selectedTab.clamp(0, navItems.length - 1),
-              onDestinationSelected: (idx) {
-                setState(() {
-                  _selectedTab = idx;
-                  _loadedTabs.add(idx);
-                });
-              },
-              backgroundColor: colorScheme.surfaceContainerLow,
-              elevation: 3,
-              height: 65,
-              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-              destinations: [
-                for (final item in navItems)
-                  NavigationDestination(
-                    icon: Icon(item.icon),
-                    selectedIcon: Icon(item.selectedIcon),
-                    label: item.title,
-                  ),
-              ],
-            )
-          : null,
+        // No squished bottom navigation bar! All pages and settings are inside the drawer menu
+        bottomNavigationBar: null,
 
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1291,11 +1270,31 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
               ),
             ),
 
-            // Navigation Items
+            // Navigation Items & Settings
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.all(14),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 children: [
+                  // Section 1: Dashboard Pages
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8, top: 4),
+                    child: Row(
+                      children: [
+                        Icon(Icons.dashboard_rounded, size: 16, color: colorScheme.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            isAr ? 'الصفحات ولوحات المتابعة' : (isHi ? 'डैशबोर्ड और रिपोर्ट' : 'Dashboards & Reports'),
+                            style: GoogleFonts.cairo(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   for (final item in navItems)
                     _buildSidebarItemTile(
                       item: item,
@@ -1310,23 +1309,191 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                         Navigator.of(context).pop();
                       },
                     ),
-                ],
-              ),
-            ),
 
-            // Drawer Footer
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 10),
+                    child: Divider(height: 1),
                   ),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+
+                  // Section 2: Preferences & Settings (الإعدادات) - Collapsed by default
+                  Theme(
+                    data: Theme.of(context).copyWith(
+                      dividerColor: Colors.transparent,
+                    ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: ExpansionTile(
+                          initiallyExpanded: false,
+                          shape: const Border(),
+                          collapsedShape: const Border(),
+                          tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                          leading: Icon(
+                            Icons.settings_rounded,
+                            size: 20,
+                            color: colorScheme.secondary,
+                          ),
+                          title: Text(
+                            isAr ? 'الإعدادات' : (isHi ? 'सेटिंग्स' : 'Settings'),
+                            style: GoogleFonts.cairo(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          subtitle: Text(
+                            isAr ? 'اللغة والدولة والمظهر' : (isHi ? 'भाषा, देश और थीम' : 'Language, country & theme'),
+                            style: GoogleFonts.cairo(
+                              fontSize: 10.5,
+                              color: colorScheme.outline,
+                            ),
+                          ),
+                          children: [
+                            const Divider(height: 16),
+                            // Language Selector
+                            Row(
+                              children: [
+                                Icon(Icons.translate_rounded, size: 15, color: colorScheme.primary),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    isAr ? 'لغة الواجهة' : (isHi ? 'ऐप भाषा' : 'Language'),
+                                    style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: AppLanguage.values.map((lang) {
+                                final isSelected = ref.watch(localeProvider).languageCode == lang.code;
+                                return ChoiceChip(
+                                  avatar: Text(lang.flagEmoji, style: const TextStyle(fontSize: 13)),
+                                  label: Text(
+                                    lang.label,
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 11,
+                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                    ),
+                                  ),
+                                  selected: isSelected,
+                                  onSelected: (val) {
+                                    if (val) ref.setLocale(lang.code);
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                            const SizedBox(height: 14),
+
+                            // Country & Currency Selector
+                            Row(
+                              children: [
+                                Icon(Icons.payments_rounded, size: 15, color: colorScheme.secondary),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    isAr ? 'الدولة والعملة المعتمدة' : (isHi ? 'देश और मुद्रा' : 'Country & Currency'),
+                                    style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: CountryCurrencyConfig.supportedCountries.map((country) {
+                                final activeCountry = ref.watch(activeCountryProvider);
+                                final currentLangCode = ref.watch(localeProvider).languageCode;
+                                final isSelected = activeCountry.code == country.code;
+                                return ChoiceChip(
+                                  avatar: Text(country.flagEmoji, style: const TextStyle(fontSize: 13)),
+                                  label: Text(
+                                    '${country.name(currentLangCode)} (${country.currencySymbolFor(currentLangCode)})',
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 11,
+                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                    ),
+                                  ),
+                                  selected: isSelected,
+                                  onSelected: (val) {
+                                    if (val) ref.read(activeCountryProvider.notifier).state = country;
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                            const SizedBox(height: 10),
+
+                            // Dark / Light Theme Mode
+                            Builder(builder: (ctx) {
+                              final themeMode = ref.watch(themeModeProvider);
+                              final isDark = themeMode == ThemeMode.dark ||
+                                  (themeMode == ThemeMode.system && Theme.of(ctx).brightness == Brightness.dark);
+                              return SwitchListTile(
+                                contentPadding: EdgeInsets.zero,
+                                dense: true,
+                                secondary: Icon(
+                                  isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                                  color: isDark ? Colors.amber : colorScheme.primary,
+                                  size: 20,
+                                ),
+                                title: Text(
+                                  isAr
+                                      ? (isDark ? 'الوضع الداكن (مفعل)' : 'الوضع الفاتح (مفعل)')
+                                      : (isHi
+                                          ? (isDark ? 'डार्क मोड (सक्रिय)' : 'लाइट मोड (सक्रिय)')
+                                          : (isDark ? 'Dark Mode (Active)' : 'Light Mode (Active)')),
+                                  style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                                subtitle: Text(
+                                  isAr ? 'تبديل المظهر بين الوضع الليلي والنهاري' : (isHi ? 'दिन और रात के मोड के बीच स्विच करें' : 'Toggle between Dark and Light mode'),
+                                  style: GoogleFonts.cairo(fontSize: 10, color: colorScheme.onSurfaceVariant),
+                                ),
+                                value: isDark,
+                                onChanged: (val) {
+                                  ref.read(themeModeProvider.notifier).state = val ? ThemeMode.dark : ThemeMode.light;
+                                },
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 10),
+                    child: Divider(height: 1),
+                  ),
+
+                  // Section 3: Quick Portal Links
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Icon(Icons.link_rounded, size: 16, color: colorScheme.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            isAr ? 'مشاركة روابط البوابات' : (isHi ? 'पोर्टल लिंक साझा करें' : 'Share Portal Links'),
+                            style: GoogleFonts.cairo(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   OutlinedButton.icon(
                     icon: const Icon(Icons.qr_code_scanner_rounded, size: 16),
                     label: Text(strings.copyPromoterLink),
@@ -1353,6 +1520,19 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                       Navigator.of(context).pop();
                     },
                   ),
+                  const SizedBox(height: 16),
+
+                  // App Version Info
+                  Center(
+                    child: Text(
+                      'Tashil Gift ${AppVersionConfig.versionDisplay} (Build #${AppVersionConfig.buildNumber})',
+                      style: GoogleFonts.cairo(
+                        fontSize: 10.5,
+                        color: colorScheme.outline,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                 ],
               ),
             ),

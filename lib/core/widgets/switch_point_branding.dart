@@ -63,14 +63,14 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
   });
 
   @override
-  Size get preferredSize => const Size.fromHeight(64);
+  Size get preferredSize => const Size.fromHeight(60);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 600;
+    final isMobile = screenWidth < 900;
     final themeMode = ref.watch(themeModeProvider);
     final isDark = themeMode == ThemeMode.dark ||
         (themeMode == ThemeMode.system && theme.brightness == Brightness.dark);
@@ -82,7 +82,7 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
       return SafeArea(
         bottom: false,
         child: Container(
-          height: 56,
+          height: 60,
           decoration: BoxDecoration(
             color: colorScheme.surfaceContainerLow,
             border: Border(
@@ -93,82 +93,136 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
             ),
           ),
           padding: const EdgeInsets.symmetric(
-            horizontal: 8,
+            horizontal: 10,
             vertical: 4,
           ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            // 1. Natural START: Company / Brand Logo
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (leading != null) ...[
-                  leading!,
-                  const SizedBox(width: 4),
-                ],
-                _buildMobileLogo(context, colorScheme),
+          child: Row(
+            children: [
+              if (leading != null) ...[
+                leading!,
+                const SizedBox(width: 6),
               ],
-            ),
 
-            // 2. Middle: The 3 In-Store Action Icons (Brief, Gift Stock, Invoices Log)
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: customActions != null && customActions!.isNotEmpty
-                    ? Center(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
+              // 1. Natural START: Brand Logo + Platform Name + Subtitle (على إيدك اليمين في العربي)
+              Expanded(
+                child: InkWell(
+                  onTap: () => SwitchPointInfo.launchLink(SwitchPointInfo.websiteUrl),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildMobileLogo(context, colorScheme),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisAlignment: MainAxisAlignment.center,
-                            children: customActions!,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      SwitchPointInfo.platformName,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                        color: colorScheme.primary,
+                                        letterSpacing: 0.3,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Tooltip(
+                                    message: AppVersionConfig.tooltipText,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.primaryContainer,
+                                        borderRadius: BorderRadius.circular(5),
+                                      ),
+                                      child: Text(
+                                        AppVersionConfig.versionDisplay,
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: colorScheme.onPrimaryContainer,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Text(
+                                subtitle ?? (isAr ? SwitchPointInfo.companyNameAr : SwitchPointInfo.companyName),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                                style: GoogleFonts.cairo(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      )
-                    : Text(
-                        subtitle ?? (isAr ? SwitchPointInfo.companyNameAr : SwitchPointInfo.companyName),
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.cairo(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.onSurface,
-                        ),
-                      ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-            ),
 
-            // 3. Natural END: Sleek 3-Lines Mobile Menu (Language, Country, Dark Mode)
-            if (showMobileMenu)
-              IconButton(
-                icon: const Icon(Icons.menu_rounded, size: 24),
-                tooltip: isAr ? 'القائمة والإعدادات (اللغة، الدولة، المظهر)' : 'Menu & Settings',
-                color: colorScheme.primary,
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.all(6),
-                onPressed: () {
-                  if (onMobileMenuPressed != null) {
-                    onMobileMenuPressed!();
-                  } else {
-                    SwitchPointMobileMenuSheet.show(
-                      context,
-                      subtitle: subtitle,
-                      companyLogoUrl: companyLogoUrl,
-                      customActions: null,
-                    );
-                  }
-                },
-              )
-            else
-              const SizedBox(width: 36),
-          ],
+              // 2. Middle: In-Store Custom Action Icons (if any)
+              if (customActions != null && customActions!.isNotEmpty) ...[
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: customActions!,
+                ),
+                const SizedBox(width: 4),
+              ],
+
+              // 3. Natural END: Sleek Menu Button (على إيدك الشمال في العربي)
+              if (showMobileMenu)
+                IconButton(
+                  icon: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.menu_rounded,
+                      size: 22,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                  tooltip: isAr ? 'القائمة الرئيسية والإعدادات' : 'Menu & Settings',
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.all(4),
+                  onPressed: () {
+                    if (onMobileMenuPressed != null) {
+                      onMobileMenuPressed!();
+                    } else {
+                      SwitchPointMobileMenuSheet.show(
+                        context,
+                        subtitle: subtitle,
+                        companyLogoUrl: companyLogoUrl,
+                        customActions: null,
+                      );
+                    }
+                  },
+                )
+              else
+                const SizedBox(width: 36),
+            ],
+          ),
         ),
-      ),
-    );
-  }
+      );
+    }
 
     return Container(
       height: 64,

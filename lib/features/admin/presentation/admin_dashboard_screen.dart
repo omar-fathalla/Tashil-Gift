@@ -1603,8 +1603,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
                     label: Text(strings.copyPromoterLink, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13)),
                     style: FilledButton.styleFrom(
+                      backgroundColor: colorScheme.primaryContainer,
+                      foregroundColor: colorScheme.onPrimaryContainer,
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.2)),
+                      ),
                     ),
                   ),
                 ),

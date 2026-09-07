@@ -58,6 +58,10 @@ void main() {
 
   group('SwitchPoint Country & Currency Selector Widget Tests', () {
     testWidgets('Renders default Egypt badge and allows switching country', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(

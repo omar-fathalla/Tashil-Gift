@@ -26,6 +26,10 @@ void main() {
 
   group('SwitchPoint Header & Footer Widget Tests', () {
     testWidgets('SwitchPointHeader renders brand name, subtitle, and Theme toggle button', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(

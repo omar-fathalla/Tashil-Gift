@@ -23,9 +23,18 @@ class AppUrlBuilder {
     return productionDomain;
   }
 
+  /// Returns true if currently running in a local web development environment (localhost / 127.0.0.1).
+  static bool get isLocalhost {
+    if (kIsWeb) {
+      final origin = Uri.base.origin.toLowerCase();
+      return origin.contains('localhost') || origin.contains('127.0.0.1');
+    }
+    return false;
+  }
+
   /// Builds a promoter / customer submission URL.
-  /// When [cleanUrl] is true (default for sharing), generates path without hash (e.g. https://tashil-gift.web.app/c/almarai?event=xyz)
-  /// which enables WhatsApp and social crawlers to dynamically fetch the company brand logo.
+  /// In production, generates clean path without hash (e.g. https://tashil-gift.web.app/c/almarai?event=xyz).
+  /// On local dev server (localhost), automatically uses hash prefix (/#/c/...) so Flutter's shelf server doesn't 404.
   static String buildPromoterUrl(
     String companySlug, {
     String? eventId,
@@ -34,7 +43,8 @@ class AppUrlBuilder {
   }) {
     final baseUrl = getBaseUrl(forceProduction: forceProduction);
     final cleanSlug = companySlug.trim().toLowerCase();
-    final prefix = cleanUrl ? '' : '/#';
+    final useClean = forceProduction || (!isLocalhost && cleanUrl);
+    final prefix = useClean ? '' : '/#';
     if (cleanSlug.isEmpty && eventId != null && eventId.isNotEmpty) {
       return '$baseUrl$prefix/event/$eventId';
     }
@@ -58,7 +68,8 @@ class AppUrlBuilder {
   }) {
     final baseUrl = getBaseUrl(forceProduction: forceProduction);
     final cleanSlug = companySlug.trim().toLowerCase();
-    final prefix = cleanUrl ? '' : '/#';
+    final useClean = forceProduction || (!isLocalhost && cleanUrl);
+    final prefix = useClean ? '' : '/#';
     if (cleanSlug.isEmpty && eventId != null && eventId.isNotEmpty) {
       return '$baseUrl$prefix/ops/$eventId';
     }
@@ -99,7 +110,8 @@ class AppUrlBuilder {
   }) {
     final baseUrl = getBaseUrl(forceProduction: forceProduction);
     final cleanSlug = companySlug.trim().toLowerCase();
-    final prefix = cleanUrl ? '' : '/#';
+    final useClean = forceProduction || (!isLocalhost && cleanUrl);
+    final prefix = useClean ? '' : '/#';
     if (cleanSlug.isEmpty && eventId != null && eventId.isNotEmpty) {
       return '$baseUrl$prefix/portal/$eventId';
     }
