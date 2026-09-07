@@ -879,6 +879,118 @@ void main() {
       expect(bundle.combinedLinkedGifts.first.giftName, 'فواتشر 50 جنيه');
       expect(bundle.combinedLinkedGifts.first.quantity, 3); // Exactly 3 vouchers of 50 EGP (NEVER 6x 50 + 3x 25)
     });
+
+    test('AIR-38 & Rule 5: Customer Receipt from Fathalla Market with "ريكسونا رول 50مل" (Quantity 2 @ 158 EGP) matches Rule 5 and awards 50 EGP Voucher', () {
+      final userReceiptItems = [
+        ExtractedProductItem(
+          name: 'كلوس اب 100مل احم',
+          price: 50.0,
+          originalPrice: 57.0,
+          discountAmount: 7.0,
+          quantity: 1,
+          isTargetCompany: true,
+        ),
+        ExtractedProductItem(
+          name: 'ريكسونا رول 50مل', // Truncated by Fathalla POS without "أون" or "مزيل عرق"
+          price: 79.0,
+          originalPrice: 79.0,
+          discountAmount: 0.0,
+          quantity: 2,
+          isTargetCompany: true,
+        ),
+      ];
+
+      // Campaign rules with standard trigger keywords having "رول أون"
+      final campaignRules = [
+        PromotionalRuleItem(
+          id: 'rule_1',
+          ruleTitle: 'عرض كلير 360 مل',
+          triggerProduct: 'كلير 360 مل',
+          minQuantity: 1,
+          rewardType: 'free_product',
+          rewardValue: 'كلير ٩٠ مل هديه',
+          rewardAmount: 0.0,
+          allowMultipliers: true,
+        ),
+        PromotionalRuleItem(
+          id: 'rule_2',
+          ruleTitle: 'عرض تريزيمي 400 مل (شراء 2 قطعة) -> هدية تريزيمي 250 مل',
+          triggerProduct: 'تريزيمي 400 مل',
+          minQuantity: 2,
+          rewardType: 'free_product',
+          rewardValue: 'تريزيمي 250 مل هديه',
+          rewardAmount: 0.0,
+          allowMultipliers: true,
+        ),
+        PromotionalRuleItem(
+          id: 'rule_3',
+          ruleTitle: 'عرض اسبراي ريكسونا أو أكس (قطعة واحدة) -> فواتشر 50 ج.م',
+          triggerProduct: 'اسبراي ريكسونا، اسبراي أكس',
+          minQuantity: 1,
+          rewardType: 'voucher',
+          rewardValue: 'قسيمة مشتريات بقيمة 50 ج.م',
+          rewardAmount: 50.0,
+          allowMultipliers: true,
+          linkedGifts: [
+            LinkedGiftAllocation(giftId: 'g_50', giftName: 'فواتشر 50 جنيه', quantity: 1, unitValue: 50.0, giftType: 'voucher'),
+          ],
+        ),
+        PromotionalRuleItem(
+          id: 'rule_4',
+          ruleTitle: 'عرض اسبراي ريكسونا أو أكس (قطعتين أو شرنك مزدوج) -> فواتشر 125 ج.م',
+          triggerProduct: 'اسبراي ريكسونا، اسبراي أكس، مزيل عرق ريكسونا اسبراي، مزيل عرق أكس اسبراي',
+          minQuantity: 2,
+          rewardType: 'voucher',
+          rewardValue: 'قسيمة مشتريات بقيمة 125 ج.م',
+          rewardAmount: 125.0,
+          allowMultipliers: true,
+          linkedGifts: [
+            LinkedGiftAllocation(giftId: 'g_50', giftName: 'فواتشر 50 جنيه', quantity: 2, unitValue: 50.0, giftType: 'voucher'),
+            LinkedGiftAllocation(giftId: 'g_25', giftName: 'فواتشر 25 جنيه', quantity: 1, unitValue: 25.0, giftType: 'voucher'),
+          ],
+        ),
+        PromotionalRuleItem(
+          id: 'rule_5',
+          ruleTitle: 'عرض رول أون ريكسونا أو أكس (قطعتين) -> فواتشر 50 ج.م',
+          triggerProduct: 'رول أون ريكسونا، رول أون أكس، ريكسونا رول اون، ريكسونا روول اون، مزيل عرق ريكسونا رول، مزيل عرق أكس رول',
+          minQuantity: 2,
+          rewardType: 'voucher',
+          rewardValue: 'قسيمة مشتريات بقيمة 50 ج.م',
+          rewardAmount: 50.0,
+          allowMultipliers: true,
+          linkedGifts: [
+            LinkedGiftAllocation(giftId: 'g_50', giftName: 'فواتشر 50 جنيه', quantity: 1, unitValue: 50.0, giftType: 'voucher'),
+          ],
+        ),
+      ];
+
+      final matchedResults = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: userReceiptItems,
+        promotionalRules: campaignRules,
+        allowCampaignMultipliers: true,
+      );
+
+      // Verify that exactly ONE rule matched (Rule 5)
+      expect(matchedResults.length, 1);
+      final match = matchedResults.first;
+      expect(match.rule.id, 'rule_5');
+      expect(match.multiplier, 1); // 2 pieces / 2 minQuantity = 1
+      expect(match.totalRewardAmount, 50.0);
+
+      // Verify the composite bundle
+      final bundle = CompositePromotionalBundle.fromMatchedRules(matchedResults);
+      expect(bundle.totalVoucherValue, 50.0);
+      expect(bundle.combinedLinkedGifts.length, 1);
+      expect(bundle.combinedLinkedGifts.first.giftName, 'فواتشر 50 جنيه');
+      expect(bundle.combinedLinkedGifts.first.quantity, 1);
+
+      // Verify unfulfilled reasons is empty (receipt is 100% accepted)
+      final unfulfilled = PromotionalRuleMatcher.getUnfulfilledPromotionReasons(
+        extractedProducts: userReceiptItems,
+        promotionalRules: campaignRules,
+      );
+      expect(unfulfilled, isEmpty);
+    });
   });
 }
 

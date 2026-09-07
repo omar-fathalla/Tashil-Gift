@@ -701,6 +701,8 @@ class AiReceiptService {
   Future<AiReceiptAnalysisResult> analyzeReceiptImage(
     Uint8List imageBytes,
     String mimeType, {
+    List<Uint8List> additionalImagesBytes = const [],
+    List<String> additionalMimeTypes = const [],
     required String targetCompany,
     required double minimumSpend,
     List<String> requiredProducts = const [],
@@ -720,7 +722,33 @@ class AiReceiptService {
   }) async {
     final stopwatch = Stopwatch()..start();
     try {
-      final imagePart = DataPart(mimeType, imageBytes);
+      final List<Part> allImageParts = [
+        DataPart(mimeType, imageBytes),
+      ];
+      for (int i = 0; i < additionalImagesBytes.length; i++) {
+        final mType = i < additionalMimeTypes.length
+            ? additionalMimeTypes[i]
+            : mimeType;
+        allImageParts.add(DataPart(mType, additionalImagesBytes[i]));
+      }
+
+      String multiPartInstructions = '';
+      if (additionalImagesBytes.isNotEmpty) {
+        final totalParts = allImageParts.length;
+        multiPartInstructions = '''
+
+🧩 تعليمات دمج وتدقيق الفاتورة المقسمة على عدة أجزاء (Multi-Part Long Receipt Stitching & Deduplication):
+- المرفق يحتوي على ($totalParts) صور متتالية لنفس الفاتورة الطويلة تم التقاطها على أجزاء متتابعة من الأعلى إلى الأسفل:
+  * الجزء 1 (الصورة الأولى): رأس الفاتورة (Header) واسم السلسلة والفرع ورقم البون وتاريخ الشراء والأسطر العلوية.
+  * الأجزاء الوسطى (إن وجدت): استكمال أسطر المنتجات المشتراة.
+  * الجزء الأخير (الصورة رقم $totalParts): الأسطر الأخيرة، إجماليات الفاتورة الكلية، وتذييل الباركود (Footer).
+- [قاعدة منع تكرار الأسطر المتداخلة عند فواصل الصور (Cross-Seam Deduplication)]:
+  * قد تتداخل بعض أسطر المشتريات بين نهاية صورة وبداية الصورة التالية بسبب تراكب لقطات الكاميرا لضمان عدم ضياع أي صنف.
+  * يجب عليك تدقيق أرقام الباركود وأسماء الأصناف وأسعارها بدقة؛ إذا تكرر نفس السطر بنفس الباركود/السعر في نهاية جزء وبداية الجزء التالي، احسبه مرة واحدة فقط ولا تضاعفه.
+- [دمج سلة مشتريات الشركة الراعية]:
+  * قم بجمع كافة المنتجات المؤهلة المشروطة للشركة الراعية الموزعة عبر جميع الأجزاء ($totalParts صور) في سلة واحدة مجمعة متكاملة في (extractedProducts)، مع احتساب (targetCompanyTotal) بدقة.
+''';
+      }
 
       final productsCondition = requiredProducts.isNotEmpty
           ? 'تنبيه خاص بالمنتجات المشروطة بالعرض: المنتجات المشمولة في هذا العرض هي فقط: [${requiredProducts.join("، ")}]. يجب أن تحتوي الفاتورة على واحد أو أكثر من هذه المنتجات المحددة، ويجب أن يتم حساب إجمالي (targetCompanyTotal) بناءً على أسعار هذه المنتجات المشترطة المحددة فقط وتجاهل أي منتجات أخرى حتى لو كانت تابعة لنفس الشركة لكنها ليست ضمن هذه القائمة.'
@@ -908,7 +936,7 @@ $branchCondition
 $catalogCondition
 $productsCondition
 $promotionalRulesCondition
-$chancesCondition
+$chancesCondition$multiPartInstructions
 
 🛑 استراتيجية الفلترة الموجهة والمسح السريع الفائق (Targeted Fast-Scan Strategy):
 - ركز فورياً على رأس الفاتورة (Header) لاستخراج السلسلة والفرع وتاريخ الشراء ورقم الفاتورة.
@@ -947,7 +975,7 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         5. $productsCondition
         6. $promotionalRulesCondition
         7. احسب الإجمالي المؤهل للحملة في حقل (targetCompanyTotal).
-        8. $chancesCondition
+        8. $chancesCondition$multiPartInstructions
         
         🛑 استراتيجية الفلترة الموجهة والمسح السريع الفائق (Targeted Fast-Scan Strategy):
         - ركز فورياً على رأس الفاتورة (Header) لاستخراج السلسلة والفرع وتاريخ الشراء ورقم الفاتورة.
@@ -990,20 +1018,20 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
       try {
         response = await _model
             .generateContent([
-              Content.multi([prompt, imagePart]),
+              Content.multi([prompt, ...allImageParts]),
             ])
             .timeout(const Duration(seconds: 30));
       } catch (e1) {
         try {
           response = await _fallbackModel1
               .generateContent([
-                Content.multi([prompt, imagePart]),
+                Content.multi([prompt, ...allImageParts]),
               ])
               .timeout(const Duration(seconds: 30));
         } catch (e2) {
           response = await _fallbackModel2
               .generateContent([
-                Content.multi([prompt, imagePart]),
+                Content.multi([prompt, ...allImageParts]),
               ])
               .timeout(const Duration(seconds: 30));
         }
@@ -2379,6 +2407,11 @@ class PromotionalRuleMatcher {
     'جديد',
     'قديم',
     'شكل',
+    'اون',
+    'أون',
+    'on',
+    'مزيل',
+    'عرق',
   };
 
   static const Set<String> _brandRoots = {
@@ -2751,8 +2784,8 @@ class PromotionalRuleMatcher {
     str = str.replaceAll(RegExp(r'\bحر\b'), 'حريمي');
     str = str.replaceAll(RegExp(r'\bرج\b'), 'رجالي');
     str = str.replaceAll(
-      RegExp(r'روول|رووول|roll\s*on|roll-on|rollon'),
-      'رول اون',
+      RegExp(r'رول\s*اون|روول\s*اون|رول\s*أون|روول\s*أون|roll\s*on|roll-on|rollon|روول|رووول'),
+      'رول',
     );
     str = str.replaceAll(
       RegExp(r'اسبرى|اسبري|اسبراى|سبراي|سبراى|بخاخ|body\s*spray'),

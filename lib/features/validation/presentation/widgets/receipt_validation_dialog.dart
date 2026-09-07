@@ -201,6 +201,7 @@ Future<void> showReceiptValidationReportDialog({
   double? requiredMinimum,
   String? currencySymbol,
   String? imageUrl,
+  List<String>? imageUrls,
   bool isDuplicate = false,
   VoidCallback? onClose,
 }) {
@@ -230,6 +231,7 @@ Future<void> showReceiptValidationReportDialog({
         requiredMinimum: requiredMinimum,
         currencySymbol: currencySymbol,
         imageUrl: imageUrl,
+        imageUrls: imageUrls,
         isDuplicate: isDuplicate,
         onClose: onClose,
       );
@@ -249,6 +251,7 @@ class ReceiptValidationReportDialog extends StatelessWidget {
   final double? requiredMinimum;
   final String? currencySymbol;
   final String? imageUrl;
+  final List<String>? imageUrls;
   final bool isDuplicate;
   final VoidCallback? onClose;
 
@@ -265,6 +268,7 @@ class ReceiptValidationReportDialog extends StatelessWidget {
     this.requiredMinimum,
     this.currencySymbol,
     this.imageUrl,
+    this.imageUrls,
     this.isDuplicate = false,
     this.onClose,
   });
@@ -460,7 +464,24 @@ class ReceiptValidationReportDialog extends StatelessWidget {
                                               ? '$totalValue $curr (${strings.isAr ? "المطلوب" : "Required"}: $requiredMinimum $curr)'
                                               : '$totalValue $curr',
                                         ),
-                                      if (imageUrl != null && imageUrl!.isNotEmpty)
+                                      if (imageUrls != null && imageUrls!.isNotEmpty) ...[
+                                        if (imageUrls!.length > 1)
+                                          for (int i = 0; i < imageUrls!.length; i++)
+                                            _buildImagePreviewChip(
+                                              context,
+                                              imageUrls![i],
+                                              label: strings.isAr ? 'معاينة جزء ${i + 1}' : 'View Part ${i + 1}',
+                                              allUrls: imageUrls,
+                                              initialIndex: i,
+                                            )
+                                        else
+                                          _buildImagePreviewChip(
+                                            context,
+                                            imageUrls!.first,
+                                            allUrls: imageUrls,
+                                            initialIndex: 0,
+                                          ),
+                                      ] else if (imageUrl != null && imageUrl!.isNotEmpty)
                                         _buildImagePreviewChip(context, imageUrl!),
                                     ],
                                   ),
@@ -669,10 +690,21 @@ class ReceiptValidationReportDialog extends StatelessWidget {
     );
   }
 
-  Widget _buildImagePreviewChip(BuildContext context, String imgUrl) {
+  Widget _buildImagePreviewChip(
+    BuildContext context,
+    String imgUrl, {
+    String? label,
+    List<String>? allUrls,
+    int initialIndex = 0,
+  }) {
     final colorScheme = Theme.of(context).colorScheme;
     return InkWell(
-      onTap: () => _showFullImagePreview(context, imgUrl),
+      onTap: () => _showFullImagePreview(
+        context,
+        imgUrl,
+        allUrls: allUrls,
+        initialIndex: initialIndex,
+      ),
       borderRadius: BorderRadius.circular(10),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -687,7 +719,7 @@ class ReceiptValidationReportDialog extends StatelessWidget {
             Icon(Icons.image_search_rounded, size: 16, color: colorScheme.primary),
             const SizedBox(width: 6),
             Text(
-              'معاينة صورة الفاتورة',
+              label ?? 'معاينة صورة الفاتورة',
               style: GoogleFonts.cairo(
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
@@ -702,10 +734,23 @@ class ReceiptValidationReportDialog extends StatelessWidget {
     );
   }
 
-  void _showFullImagePreview(BuildContext context, String imgUrl) {
+  void _showFullImagePreview(
+    BuildContext context,
+    String imgUrl, {
+    List<String>? allUrls,
+    int initialIndex = 0,
+  }) {
     InteractiveReceiptViewerDialog.show(
       context,
       imageUrl: imgUrl,
+      imageUrls: allUrls,
+      initialIndex: initialIndex,
+      receiptNumber: receiptNumber,
+      storeName: storeChain,
+      branchName: branch,
+      date: receiptDate,
+      totalValue: totalValue,
+      currencySymbol: currencySymbol,
     );
   }
 }

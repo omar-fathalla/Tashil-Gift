@@ -797,6 +797,48 @@ class AiDirectivesSeedData {
           tags: ['spend-vs-quantity', 'unit-economics', 'twin-bundle', 'multiplier-isolation', 'air-37', 'oral-care'],
           lastUpdated: '2026-09-04',
         ),
+
+        const AiDirectiveModel(
+          id: 'AIR-38',
+          code: 'ROLL_ON_POS_TRUNCATION_AND_PHRASE_NORMALIZATION_STANDARD',
+          orderIndex: 38,
+          category: AiDirectiveCategory.nlpMatching,
+          titleAr: 'معيار استيعاب اختصارات طابعات الـ POS لمزيلات العرق الرول أون وحوكمة مطابقة العبارات (Roll-on POS Truncation & Phrase Normalization Standard)',
+          titleEn: 'Roll-on POS Receipt Name Truncation & Phrase Normalization Standard',
+          descriptionAr:
+              'معالجة واستيعاب سلوك طابعات كاشير السلاسل التجارية (مثل أسواق فتح الله وجملة ماركت) عند اختصار أسماء مزيلات العرق من نوع الرول أون بطباعة "ريكسونا رول" أو "اكس رول" دون ذكر كلمة "أون" أو "مزيل عرق". يضمن المعيار تصنيف كلمات "أون/اون/on" و"مزيل/عرق" ككلمات زائدة (Noise Words)، وتطبيع صيغ الرول أون، لمنع استبعاد أصناف الرول أون من شروط العروض الترويجية المستحقة.',
+          descriptionEn:
+              'Handles POS printer truncations across retail chains (e.g. Fathalla Market, Gomla Market) where roll-on deodorants are printed as "Rexona Roll" or "Axe Roll" without "on" or "deodorant". Classifies "on" and "deodorant" as optional noise words and normalizes roll-on variants, preventing false rejection of qualifying promotional receipts.',
+          logicAr:
+              '1. تصنيف كلمات الزوائد (Noise Words): إدراج كلمات (اون، أون، on، مزيل، عرق) ضمن قائمة _noiseWords لتجريدها من اشتراطات مطابقة العبارات الإلزامية.\n2. تطبيع صيغ الرول أون (Roll-on Normalization): توحيد كافة صور كتابة الرول أون (رول اون، رول أون، روول اون، roll on) إلى التوكن الموحد (رول) في دالة _normalize.\n3. صرامة العزل الفيزيائي (Category Guard): الحفاظ التام على عزل الرول أون عن الاسبراي (isProductRollOn vs isProductSpray) لمنع تداخل عروض الاسبراي (مثل 125 ج.م) مع الرول أون (50 ج.م).\n4. مرونة مطابقة البونات (POS Flexibility): السماح بمطابقة "ريكسونا رول" أو "رول ريكسونا" تلقائياً مع قواعد الرول أون حتى عند غياب كلمة "أون" في شروط الحملة أو في سطر الفاتورة.',
+          logicEn:
+              '1. Noise Words Classification: adds (اون, أون, on, مزيل, عرق) to _noiseWords so phrase matching does not fail when POS prints truncated names.\n2. Roll-on Normalization: unifies all roll-on writing variations into canonical token (رول) in _normalize.\n3. Physical Category Isolation Guard: preserves strict isolation between roll-on and spray deodorant rules.\n4. POS Flexibility: ensures "Rexona Roll" matches roll-on promotional rules seamlessly even when POS omits "on".',
+          exampleInput: 'سطر فاتورة من أسواق فتح الله: "ريكسونا رول 50مل" عدد 2 بسعر 79 ج.م (إجمالي 158 ج.م) مع قاعدة حملة مشروطة بـ "رول أون ريكسونا، رول أون أكس"',
+          exampleOutput: 'مطابقة الصنف بنجاح بنسبة 100% مع قاعدة الـ 50 ج.م (Rule 5) ومنح العميل فواتشر 50 جنيه، ومنع خروج رسالة "المنتجات المشتراة تابعة للشركة لكنها غير مشمولة في شروط العروض الترويجية الحالية".',
+          tags: ['roll-on', 'rexona', 'pos-truncation', 'nlp-matching', 'noise-words', 'fathalla-market', 'air-38'],
+          lastUpdated: '2026-09-07',
+        ),
+
+        const AiDirectiveModel(
+          id: 'AIR-39',
+          code: 'MULTI_PART_LONG_RECEIPT_STITCHING_AND_DEDUPLICATION_STANDARD',
+          orderIndex: 39,
+          category: AiDirectiveCategory.fraudSecurity,
+          titleAr: 'معيار دمج وفحص الفواتير الطويلة متعددة الأجزاء ومنع تكرار الفواصل (Multi-Part Long Receipt Stitching & Deduplication Standard)',
+          titleEn: 'Multi-Part Long Receipt Stitching, Cross-Frame Seam Resolution & Anti-Duplication Standard',
+          descriptionAr:
+              'معالجة وتحليل الفواتير الورقية الطويلة جداً (مثل فواتير فتح الله ماركت وهايبر ماركت التي تتعدى 70 صنفاً ونسبة طول إلى عرض تتجاوز 1:10) من خلال تقنية التصوير المتتابع للأجزاء (Header/Top -> Middle -> Footer/Barcode) حتى 4 صور متتالية، وتمريرها مجتمعة كـ Multi-Image Parts إلى Gemini 3.7 Flash مع التوجيه الصارم لدمج الفاتورة في سجل واحد، ومطابقة الرأس مع الذيل لمنع التزوير، وفحص الفواصل (Cross-frame seams) لمنع التكرار المزدوج للأصناف الواقعة على حدود الكاميرا.',
+          descriptionEn:
+              'Enables high-resolution, end-to-end audit of ultra-long retail POS receipts (e.g. 70+ line items with 1:10+ aspect ratio from Fathalla Market) via sequential multi-part image capture (Header -> Body -> Footer/Barcode up to 4 frames). Feeds all image parts concurrently to Gemini 3.7 Flash with strict cross-frame seam deduplication and header-to-footer cryptographic receipt chaining to eliminate vision downsampling degradation while preventing duplicate item counting across frame boundaries.',
+          logicAr:
+              '1. التقاط متعدد الأجزاء (Sequential Multi-Part Capture): السماح للمروج أو العميل بالتقاط حتى 4 أجزاء متتالية للفاتورة الطويلة (الجزء العلوي متضمناً الرأس والفرع والتاريخ ➔ الأجزاء الوسطى للأصناف ➔ الجزء السفلي متضمناً الإجمالي والباركود ورقم الإيصال).\n2. تدقيق متعدد الصور في جلسة استدلال واحدة (Multi-Image Content Payload): إرسال كافة أجزاء الصور إلى Gemini 3.7 Flash في طلب استدلال موحد دون تجزئة القرار المالي.\n3. حوكمة فواصل الكادرات ومنع التكرار (Cross-Seam Deduplication): توجيه الذكاء الاصطناعي لمعاملة الصور كأجزاء متتابعة لنفس الفاتورة الفيزيائية الواحدة، وحظر احتساب أي صنف يتكرر ظهوره في أسفل صورة وأعلى الصورة التالية بسبب تداخل زاوية التصوير.\n4. التحقق التكاملي ومنع التلفيق (Integrity Verification & Fraud Guard): التحقق من اتساق الخط والورق والإضاءة بين كافة الأجزاء، والربط الحتمي بين رأس الفاتورة ورقمها وإجماليها وباركودها السفلي لرفض أي محاولة لدمج صور من فواتير مختلفة.\n5. حفظ سحابي متوازي ومفهرس (Parallel Cloud Storage Upload): رفع كافة أجزاء الفاتورة بالتوازي بصيغة ..._part1.jpg و ..._part2.jpg وتخزين قائمة image_urls و storage_paths و parts_count في Firestore لتمكين فحص كافة الأجزاء بملء الشاشة والتقليب التفاعلي.',
+          logicEn:
+              '1. Sequential Multi-Part Capture: allows capture of up to 4 consecutive vertical receipt segments (Top/Header -> Body -> Bottom/Barcode).\n2. Unified Multi-Image Content Inference: streams all captured image bytes as Content parts to Gemini 3.7 Flash simultaneously, ensuring holistic financial decision-making.\n3. Cross-Frame Seam Deduplication: directs AI to recognize overlapping lines across consecutive camera shots and count each qualifying line item exactly once.\n4. Integrity & Anti-Fraud Verification: validates consistent POS paper, font, and lighting across all frames, rejecting spliced or mismatched receipts.\n5. Parallel Multi-Part Cloud Storage & Navigation: uploads all frames concurrently with sequential filenames (_part1, _part2) and persists image_urls array and parts_count in receipts_transactions for interactive inspection.',
+          exampleInput: 'فاتورة فتح الله ماركت بطول 80 سم تحتوي على 74 صنفاً، تم تصويرها على جزأين: جزء علوي يحتوي على اسم الفرع وتاريخ اليوم وأول 38 صنفاً، وجزء سفلي يحتوي على باقي الأصناف والإجمالي والباركود، مع ظهور سطر "2 ريكسونا رول أون" في نهاية الجزء الأول وبداية الجزء الثاني.',
+          exampleOutput: 'استخراج كامل ودقيق لبيانات الفاتورة بـ 74 صنفاً، ورصد الصنف المشترك وحصره كـ 2 قطعة فقط دون تكرار (عدم مضاعفته إلى 4 قطع)، والتحقق من رقم الفاتورة والباركود في الذيل، ورفع الجزأين للتخزين السحابي مع حفظ image_urls متكامل.',
+          tags: ['multi-part-receipt', 'long-receipt', 'seam-deduplication', 'fathalla-market', 'gemini-multimodal', 'high-resolution-ocr', 'air-39'],
+          lastUpdated: '2026-09-07',
+        ),
       ];
 }
 

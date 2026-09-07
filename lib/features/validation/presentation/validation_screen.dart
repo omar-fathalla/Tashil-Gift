@@ -36,7 +36,8 @@ class ValidationScreen extends ConsumerStatefulWidget {
 }
 
 class _ValidationScreenState extends ConsumerState<ValidationScreen> {
-  XFile? _receiptImage;
+  final List<XFile> _receiptImages = [];
+  int _selectedPreviewIndex = 0;
   bool _isAiLoading = false;
   EventModel? _activeEvent;
 
@@ -69,22 +70,39 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
     super.dispose();
   }
 
-  Future<void> _pickImage([ImageSource source = ImageSource.camera]) async {
+  Future<void> _pickImage([ImageSource source = ImageSource.camera, bool append = false]) async {
+    if (append && _receiptImages.length >= 4) {
+      final strings = AppStrings.of(ref);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(strings.maxPartsReachedAlert),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     try {
       final pickedFile = await _picker.pickImage(
         source: source,
-        maxWidth: 1200,
-        maxHeight: 1200,
-        imageQuality: 80,
+        maxWidth: 1400,
+        maxHeight: 1400,
+        imageQuality: 82,
       );
       if (pickedFile != null) {
         setState(() {
-          _receiptImage = pickedFile;
+          if (append) {
+            _receiptImages.add(pickedFile);
+            _selectedPreviewIndex = _receiptImages.length - 1;
+          } else {
+            _receiptImages
+              ..clear()
+              ..add(pickedFile);
+            _selectedPreviewIndex = 0;
+          }
         });
       }
     } catch (e) {
-      if (context.mounted) {
-        // ignore: use_build_context_synchronously
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error picking image: $e')),
         );
@@ -92,8 +110,110 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
     }
   }
 
+  void _showAddPartModal() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final strings = AppStrings.of(ref);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        final nextPartIndex = _receiptImages.length + 1;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  '${strings.addNextReceiptPartBtn} (${strings.partIndexLabel(nextPartIndex)})',
+                  style: GoogleFonts.cairo(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primaryContainer.withValues(alpha: 0.6),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.camera_alt_rounded, color: colorScheme.primary),
+                  ),
+                  title: Text(
+                    strings.captureNextPartCamera,
+                    style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _pickImage(ImageSource.camera, true);
+                  },
+                ),
+                const SizedBox(height: 8),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: colorScheme.secondaryContainer.withValues(alpha: 0.6),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.photo_library_rounded, color: colorScheme.secondary),
+                  ),
+                  title: Text(
+                    strings.pickNextPartGallery,
+                    style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _pickImage(ImageSource.gallery, true);
+                  },
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _removePart(int index) {
+    if (index >= 0 && index < _receiptImages.length) {
+      setState(() {
+        _receiptImages.removeAt(index);
+        if (_selectedPreviewIndex >= _receiptImages.length) {
+          _selectedPreviewIndex = math.max(0, _receiptImages.length - 1);
+        }
+      });
+    }
+  }
+
+  void _clearAllParts() {
+    setState(() {
+      _receiptImages.clear();
+      _selectedPreviewIndex = 0;
+    });
+  }
+
   Future<void> _processReceiptWithAI() async {
-    if (_receiptImage == null) {
+    if (_receiptImages.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please capture a receipt photo first.')),
       );
@@ -123,8 +243,20 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
 
       final aiService = ref.read(aiReceiptServiceProvider);
       final productsService = ref.read(companyProductsServiceProvider);
-      final bytes = await _receiptImage!.readAsBytes();
-      final mimeType = _receiptImage!.mimeType ?? 'image/jpeg'; 
+      
+      final primaryImage = _receiptImages.first;
+      final bytes = await primaryImage.readAsBytes();
+      final mimeType = primaryImage.mimeType ?? 'image/jpeg'; 
+
+      final List<Uint8List> additionalBytesList = [];
+      final List<String> additionalMimesList = [];
+      for (int i = 1; i < _receiptImages.length; i++) {
+        additionalBytesList.add(await _receiptImages[i].readAsBytes());
+        additionalMimesList.add(_receiptImages[i].mimeType ?? 'image/jpeg');
+      }
+
+      final allBytesList = [bytes, ...additionalBytesList];
+      final allImagesList = List<XFile>.from(_receiptImages);
 
       // Fetch company catalog products & barcodes
       // Fetch company product barcodes catalog and branch signatures concurrently in parallel
@@ -156,6 +288,8 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       final result = await aiService.analyzeReceiptImage(
         bytes, 
         mimeType,
+        additionalImagesBytes: additionalBytesList,
+        additionalMimeTypes: additionalMimesList,
         targetCompany: activeEvent.targetCompany,
         minimumSpend: activeEvent.minimumSpend,
         requiredProducts: activeEvent.requiredProducts,
@@ -175,6 +309,9 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       );
 
       final previewImgUrl = 'data:$mimeType;base64,${base64Encode(bytes)}';
+      final List<String> previewUrls = allBytesList
+          .map((b) => 'data:image/jpeg;base64,${base64Encode(b)}')
+          .toList();
 
       if (!result.isValid) {
         if (!mounted) return;
@@ -216,8 +353,8 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         // Asynchronously persist rejected transaction to Firestore & Storage for audit
         _recordRejectedReceipt(
           result: result,
-          bytes: bytes,
-          mimeType: mimeType,
+          allBytesList: allBytesList,
+          allImagesList: allImagesList,
           activeEvent: activeEvent,
           rejectionReason: rejectionReasonText,
           unfulfilledConditions: unfulfilledList,
@@ -237,6 +374,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           requiredMinimum: activeEvent.minimumSpend,
           currencySymbol: activeCountry.currencySymbol,
           imageUrl: previewImgUrl,
+          imageUrls: previewUrls,
         );
         return;
       }
@@ -261,8 +399,8 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         // Asynchronously persist rejected transaction to Firestore & Storage for audit
         _recordRejectedReceipt(
           result: result,
-          bytes: bytes,
-          mimeType: mimeType,
+          allBytesList: allBytesList,
+          allImagesList: allImagesList,
           activeEvent: activeEvent,
           rejectionReason: 'الحد الأدنى لقيمة المشتريات غير مستوفى ($totalValue / ${activeEvent.minimumSpend} ${activeCountry.currencySymbol})',
           unfulfilledConditions: unfulfilledList,
@@ -282,6 +420,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           requiredMinimum: activeEvent.minimumSpend,
           currencySymbol: activeCountry.currencySymbol,
           imageUrl: previewImgUrl,
+          imageUrls: previewUrls,
         );
         return;
       }
@@ -303,38 +442,55 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         }
       }
 
-      // 2. Upload image to Firebase Storage named by Receipt Number and Campaign ID
-      String imageUrl = '';
+      // 2. Upload images to Firebase Storage named by Receipt Number and Campaign ID
       final cleanReceiptNumber = (receiptNumber.isNotEmpty ? receiptNumber : "INV_${DateTime.now().millisecondsSinceEpoch}")
           .replaceAll(RegExp(r'[/\\?%*:|"<>]'), '_');
-      
-      final storagePath = 'receipts/${activeEvent.companySlug}/${activeEvent.id}/$cleanReceiptNumber.jpg';
 
-      try {
-        final storage = ref.read(firebaseStorageProvider);
-        final storageRef = storage.ref().child(storagePath);
-        final metadata = SettableMetadata(
-          contentType: 'image/jpeg',
-          customMetadata: {
-            'receiptNumber': receiptNumber,
-            'campaignId': activeEvent.id,
-            'companySlug': activeEvent.companySlug,
-            'targetCompany': activeEvent.targetCompany,
-            'totalValue': totalValue.toString(),
-            'uploadedAt': DateTime.now().toIso8601String(),
-          },
-        );
-        
-        if (kIsWeb) {
-          await storageRef.putData(bytes, metadata).timeout(const Duration(seconds: 15));
-        } else {
-          await storageRef.putFile(File(_receiptImage!.path), metadata).timeout(const Duration(seconds: 15));
-        }
-        imageUrl = await storageRef.getDownloadURL().timeout(const Duration(seconds: 10));
-      } catch (e) {
-        debugPrint('Storage upload skipped or timed out: $e');
-        imageUrl = 'data:$mimeType;base64,${base64Encode(bytes)}';
-      }
+      final List<String> uploadedImageUrls = [];
+      final List<String> uploadedStoragePaths = [];
+
+      await Future.wait(
+        List.generate(allBytesList.length, (index) async {
+          final partNum = index + 1;
+          final sPath = allBytesList.length == 1
+              ? 'receipts/${activeEvent.companySlug}/${activeEvent.id}/$cleanReceiptNumber.jpg'
+              : 'receipts/${activeEvent.companySlug}/${activeEvent.id}/${cleanReceiptNumber}_part$partNum.jpg';
+          try {
+            final storage = ref.read(firebaseStorageProvider);
+            final storageRef = storage.ref().child(sPath);
+            final metadata = SettableMetadata(
+              contentType: 'image/jpeg',
+              customMetadata: {
+                'receiptNumber': receiptNumber,
+                'campaignId': activeEvent.id,
+                'companySlug': activeEvent.companySlug,
+                'targetCompany': activeEvent.targetCompany,
+                'totalValue': totalValue.toString(),
+                'partIndex': '$partNum',
+                'totalParts': '${allBytesList.length}',
+                'uploadedAt': DateTime.now().toIso8601String(),
+              },
+            );
+
+            if (kIsWeb) {
+              await storageRef.putData(allBytesList[index], metadata).timeout(const Duration(seconds: 15));
+            } else {
+              await storageRef.putFile(File(allImagesList[index].path), metadata).timeout(const Duration(seconds: 15));
+            }
+            final url = await storageRef.getDownloadURL().timeout(const Duration(seconds: 10));
+            uploadedImageUrls.add(url);
+            uploadedStoragePaths.add(sPath);
+          } catch (e) {
+            debugPrint('Storage upload for part $partNum skipped or timed out: $e');
+            final fallbackUrl = 'data:image/jpeg;base64,${base64Encode(allBytesList[index])}';
+            uploadedImageUrls.add(fallbackUrl);
+            uploadedStoragePaths.add(sPath);
+          }
+        }),
+      );
+
+      final String primaryImageUrl = uploadedImageUrls.isNotEmpty ? uploadedImageUrls.first : previewImgUrl;
+      final String primaryStoragePath = uploadedStoragePaths.isNotEmpty ? uploadedStoragePaths.first : '';
 
       // Evaluate promotional rules using our robust multi-offer AI & NLP PromotionalRuleMatcher
       final matchedRulesList = PromotionalRuleMatcher.matchAllWithMultipliers(
@@ -366,8 +522,8 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         // Asynchronously persist rejected transaction to Firestore & Storage for audit
         _recordRejectedReceipt(
           result: result,
-          bytes: bytes,
-          mimeType: mimeType,
+          allBytesList: allBytesList,
+          allImagesList: allImagesList,
           activeEvent: activeEvent,
           rejectionReason: unfulfilledPromoList.isNotEmpty
               ? unfulfilledPromoList.join(' • ')
@@ -389,6 +545,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           requiredMinimum: activeEvent.minimumSpend,
           currencySymbol: activeCountry.currencySymbol,
           imageUrl: previewImgUrl,
+          imageUrls: previewUrls,
         );
         return;
       }
@@ -431,8 +588,11 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         'fraud_risk_score': result.fraudRiskScore,
         'fraud_reasons': result.fraudReasons,
         'retail_chain_name': activeEvent.retailChainName,
-        if (imageUrl.isNotEmpty) 'image_url': imageUrl,
-        if (imageUrl.isNotEmpty) 'storage_path': storagePath,
+        if (primaryImageUrl.isNotEmpty) 'image_url': primaryImageUrl,
+        if (primaryStoragePath.isNotEmpty) 'storage_path': primaryStoragePath,
+        if (uploadedImageUrls.length > 1) 'image_urls': uploadedImageUrls,
+        if (uploadedStoragePaths.length > 1) 'storage_paths': uploadedStoragePaths,
+        'parts_count': allBytesList.length,
         'promoter_id': ref.read(firebaseAuthProvider).currentUser?.uid,
         'campaignId': activeEvent.id,
         'companySlug': activeEvent.companySlug,
@@ -469,7 +629,8 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
 
       // Reset form
       setState(() {
-        _receiptImage = null;
+        _receiptImages.clear();
+        _selectedPreviewIndex = 0;
       });
 
       if (isExistingRecord) {
@@ -515,14 +676,16 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
             totalValue: totalValue,
             requiredMinimum: activeEvent.minimumSpend,
             currencySymbol: activeCountry.currencySymbol,
-            imageUrl: imageUrl.isNotEmpty ? imageUrl : previewImgUrl,
+            imageUrl: primaryImageUrl,
+            imageUrls: uploadedImageUrls.isNotEmpty ? uploadedImageUrls : previewUrls,
             isDuplicate: true,
           );
           return;
         }
       }
       setState(() {
-        _receiptImage = null;
+        _receiptImages.clear();
+        _selectedPreviewIndex = 0;
       });
 
       // Route based on game type configured in the campaign
@@ -640,7 +803,12 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
             ),
           ),
         );
-        if (mounted) setState(() => _receiptImage = null);
+        if (mounted) {
+          setState(() {
+            _receiptImages.clear();
+            _selectedPreviewIndex = 0;
+          });
+        }
       } else if (gameType == 'scratch') {
         await Navigator.of(context).push(
           MaterialPageRoute(
@@ -652,7 +820,12 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
             ),
           ),
         );
-        if (mounted) setState(() => _receiptImage = null);
+        if (mounted) {
+          setState(() {
+            _receiptImages.clear();
+            _selectedPreviewIndex = 0;
+          });
+        }
       } else {
         // Default: wheel
         await Navigator.of(context).push(
@@ -665,7 +838,12 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
             ),
           ),
         );
-        if (mounted) setState(() => _receiptImage = null);
+        if (mounted) {
+          setState(() {
+            _receiptImages.clear();
+            _selectedPreviewIndex = 0;
+          });
+        }
       }
 
     } catch (e) {
@@ -867,38 +1045,79 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
                               borderRadius: BorderRadius.circular(16),
                               color: colorScheme.surfaceContainerLowest,
                             ),
-                            child: _receiptImage == null 
+                            child: _receiptImages.isEmpty
                                 ? Center(
-                                    child: Wrap(
-                                      alignment: WrapAlignment.center,
-                                      spacing: 12,
-                                      runSpacing: 12,
-                                      children: [
-                                        FilledButton.icon(
-                                          onPressed: () => _pickImage(ImageSource.camera),
-                                          icon: const Icon(Icons.camera_alt_rounded),
-                                          label: Text(
-                                            strings.captureReceiptBtn,
-                                            style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.bold),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(20.0),
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Wrap(
+                                            alignment: WrapAlignment.center,
+                                            spacing: 12,
+                                            runSpacing: 12,
+                                            children: [
+                                              FilledButton.icon(
+                                                onPressed: () => _pickImage(ImageSource.camera),
+                                                icon: const Icon(Icons.camera_alt_rounded),
+                                                label: Text(
+                                                  strings.captureReceiptBtn,
+                                                  style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.bold),
+                                                ),
+                                                style: FilledButton.styleFrom(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                                ),
+                                              ),
+                                              FilledButton.tonalIcon(
+                                                onPressed: () => _pickImage(ImageSource.gallery),
+                                                icon: const Icon(Icons.photo_library_rounded),
+                                                label: Text(
+                                                  strings.pickFromGalleryAction,
+                                                  style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.bold),
+                                                ),
+                                                style: FilledButton.styleFrom(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                          style: FilledButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                          const SizedBox(height: 18),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                            decoration: BoxDecoration(
+                                              color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                                              borderRadius: BorderRadius.circular(12),
+                                              border: Border.all(
+                                                color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  Icons.lightbulb_outline_rounded,
+                                                  size: 16,
+                                                  color: colorScheme.primary,
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Flexible(
+                                                  child: Text(
+                                                    strings.longReceiptTip,
+                                                    style: GoogleFonts.cairo(
+                                                      fontSize: 12,
+                                                      color: colorScheme.onSurfaceVariant,
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                    textAlign: TextAlign.center,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                        ),
-                                        FilledButton.tonalIcon(
-                                          onPressed: () => _pickImage(ImageSource.gallery),
-                                          icon: const Icon(Icons.photo_library_rounded),
-                                          label: Text(
-                                            strings.pickFromGalleryAction,
-                                            style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.bold),
-                                          ),
-                                          style: FilledButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                          ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
                                   )
                                 : Stack(
@@ -907,23 +1126,192 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
                                       ClipRRect(
                                         borderRadius: BorderRadius.circular(14),
                                         child: kIsWeb
-                                            ? Image.network(_receiptImage!.path, fit: BoxFit.contain, width: double.infinity)
-                                            : Image.file(File(_receiptImage!.path), fit: BoxFit.contain, width: double.infinity),
+                                            ? Image.network(
+                                                _receiptImages[_selectedPreviewIndex].path,
+                                                fit: BoxFit.contain,
+                                                width: double.infinity,
+                                              )
+                                            : Image.file(
+                                                File(_receiptImages[_selectedPreviewIndex].path),
+                                                fit: BoxFit.contain,
+                                                width: double.infinity,
+                                              ),
                                       ),
+                                      // Part Badge on active preview
+                                      Positioned(
+                                        top: 10,
+                                        left: 10,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.black.withValues(alpha: 0.75),
+                                            borderRadius: BorderRadius.circular(20),
+                                            border: Border.all(
+                                              color: Colors.white.withValues(alpha: 0.2),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(
+                                                Icons.layers_rounded,
+                                                size: 14,
+                                                color: Color(0xFF818CF8),
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                strings.isAr
+                                                    ? 'جزء ${_selectedPreviewIndex + 1} من ${_receiptImages.length}'
+                                                    : 'Part ${_selectedPreviewIndex + 1} of ${_receiptImages.length}',
+                                                style: GoogleFonts.cairo(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      // Delete active part button
                                       Positioned(
                                         top: 8,
                                         right: 8,
-                                        child: IconButton.filled(
-                                          icon: const Icon(Icons.close_rounded, color: Colors.white),
-                                          style: IconButton.styleFrom(backgroundColor: colorScheme.error),
-                                          onPressed: () => setState(() => _receiptImage = null),
+                                        child: Tooltip(
+                                          message: strings.deletePartTooltip,
+                                          child: IconButton.filled(
+                                            icon: const Icon(Icons.close_rounded, color: Colors.white, size: 18),
+                                            style: IconButton.styleFrom(
+                                              backgroundColor: colorScheme.error,
+                                              padding: const EdgeInsets.all(6),
+                                            ),
+                                            onPressed: () => _removePart(_selectedPreviewIndex),
+                                          ),
                                         ),
-                                      )
+                                      ),
                                     ],
                                   ),
                           ),
-                          if (_receiptImage != null) ...[
-                            const SizedBox(height: 24),
+
+                          // Multi-Part Controls & Thumbnails Strip
+                          if (_receiptImages.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            // Thumbnail carousel when multiple parts exist
+                            if (_receiptImages.length > 1) ...[
+                              SizedBox(
+                                height: 74,
+                                child: ListView.separated(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: _receiptImages.length,
+                                  separatorBuilder: (context, _) => const SizedBox(width: 8),
+                                  itemBuilder: (context, index) {
+                                    final isSelected = index == _selectedPreviewIndex;
+                                    return InkWell(
+                                      onTap: () => setState(() => _selectedPreviewIndex = index),
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: Container(
+                                        width: 60,
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(10),
+                                          border: Border.all(
+                                            color: isSelected ? colorScheme.primary : colorScheme.outlineVariant,
+                                            width: isSelected ? 2.5 : 1,
+                                          ),
+                                          color: isSelected
+                                              ? colorScheme.primaryContainer.withValues(alpha: 0.3)
+                                              : colorScheme.surfaceContainerHighest,
+                                        ),
+                                        child: Stack(
+                                          fit: StackFit.expand,
+                                          children: [
+                                            ClipRRect(
+                                              borderRadius: BorderRadius.circular(8),
+                                              child: kIsWeb
+                                                  ? Image.network(
+                                                      _receiptImages[index].path,
+                                                      fit: BoxFit.cover,
+                                                    )
+                                                  : Image.file(
+                                                      File(_receiptImages[index].path),
+                                                      fit: BoxFit.cover,
+                                                    ),
+                                            ),
+                                            Positioned(
+                                              bottom: 2,
+                                              left: 2,
+                                              right: 2,
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(vertical: 1),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black.withValues(alpha: 0.75),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                ),
+                                                child: Text(
+                                                  strings.partIndexLabel(index + 1),
+                                                  style: GoogleFonts.cairo(
+                                                    fontSize: 10,
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                            ],
+
+                            // Add next part button & Clear all action
+                            Row(
+                              children: [
+                                if (_receiptImages.length < 4)
+                                  Expanded(
+                                    child: FilledButton.tonalIcon(
+                                      onPressed: _showAddPartModal,
+                                      icon: const Icon(Icons.add_a_photo_rounded, size: 18),
+                                      label: Text(
+                                        strings.addNextReceiptPartBtn,
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      style: FilledButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(vertical: 12),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                if (_receiptImages.length < 4) const SizedBox(width: 8),
+                                TextButton.icon(
+                                  onPressed: _clearAllParts,
+                                  icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+                                  label: Text(
+                                    strings.isAr ? 'مسح الكل' : 'Clear All',
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: colorScheme.error,
+                                    ),
+                                  ),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: colorScheme.error,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+
+                          if (_receiptImages.isNotEmpty) ...[
+                            const SizedBox(height: 20),
                             FilledButton.icon(
                               onPressed: _isAiLoading ? null : _processReceiptWithAI,
                               icon: _isAiLoading 
@@ -934,7 +1322,11 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
                                     )
                                   : const Icon(Icons.auto_awesome_rounded),
                               label: Text(
-                                _isAiLoading ? strings.auditingProgressText : strings.auditingAndStartingGame,
+                                _isAiLoading 
+                                    ? strings.auditingProgressText 
+                                    : (_receiptImages.length > 1 
+                                        ? strings.analyzeMultiPartsBtn(_receiptImages.length) 
+                                        : strings.auditingAndStartingGame),
                                 style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold),
                               ),
                               style: FilledButton.styleFrom(
@@ -959,8 +1351,8 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
 
   Future<void> _recordRejectedReceipt({
     required AiReceiptAnalysisResult result,
-    required Uint8List bytes,
-    required String mimeType,
+    required List<Uint8List> allBytesList,
+    required List<XFile> allImagesList,
     required EventModel activeEvent,
     required String rejectionReason,
     required List<String> unfulfilledConditions,
@@ -971,35 +1363,53 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       final receiptNumber = result.receiptNumber.trim();
       final cleanReceiptNumber = (receiptNumber.isNotEmpty ? receiptNumber : "REJ_${DateTime.now().millisecondsSinceEpoch}")
           .replaceAll(RegExp(r'[/\\?%*:|"<>]'), '_');
-      final storagePath = 'receipts/${activeEvent.companySlug}/${activeEvent.id}/$cleanReceiptNumber.jpg';
 
-      String imageUrl = '';
-      try {
-        final storage = ref.read(firebaseStorageProvider);
-        final storageRef = storage.ref().child(storagePath);
-        final metadata = SettableMetadata(
-          contentType: 'image/jpeg',
-          customMetadata: {
-            'receiptNumber': receiptNumber,
-            'campaignId': activeEvent.id,
-            'companySlug': activeEvent.companySlug,
-            'targetCompany': activeEvent.targetCompany,
-            'totalValue': totalValue.toString(),
-            'status': 'rejected',
-            'uploadedAt': DateTime.now().toIso8601String(),
-          },
-        );
+      final List<String> uploadedImageUrls = [];
+      final List<String> uploadedStoragePaths = [];
 
-        if (kIsWeb) {
-          await storageRef.putData(bytes, metadata).timeout(const Duration(seconds: 10));
-        } else if (_receiptImage != null) {
-          await storageRef.putFile(File(_receiptImage!.path), metadata).timeout(const Duration(seconds: 10));
-        }
-        imageUrl = await storageRef.getDownloadURL().timeout(const Duration(seconds: 8));
-      } catch (e) {
-        debugPrint('Storage upload for rejected receipt skipped or timed out: $e');
-        imageUrl = 'data:$mimeType;base64,${base64Encode(bytes)}';
-      }
+      await Future.wait(
+        List.generate(allBytesList.length, (index) async {
+          final partNum = index + 1;
+          final sPath = allBytesList.length == 1
+              ? 'receipts/${activeEvent.companySlug}/${activeEvent.id}/$cleanReceiptNumber.jpg'
+              : 'receipts/${activeEvent.companySlug}/${activeEvent.id}/${cleanReceiptNumber}_part$partNum.jpg';
+          try {
+            final storage = ref.read(firebaseStorageProvider);
+            final storageRef = storage.ref().child(sPath);
+            final metadata = SettableMetadata(
+              contentType: 'image/jpeg',
+              customMetadata: {
+                'receiptNumber': receiptNumber,
+                'campaignId': activeEvent.id,
+                'companySlug': activeEvent.companySlug,
+                'targetCompany': activeEvent.targetCompany,
+                'totalValue': totalValue.toString(),
+                'status': 'rejected',
+                'partIndex': '$partNum',
+                'totalParts': '${allBytesList.length}',
+                'uploadedAt': DateTime.now().toIso8601String(),
+              },
+            );
+
+            if (kIsWeb) {
+              await storageRef.putData(allBytesList[index], metadata).timeout(const Duration(seconds: 10));
+            } else if (index < allImagesList.length) {
+              await storageRef.putFile(File(allImagesList[index].path), metadata).timeout(const Duration(seconds: 10));
+            }
+            final url = await storageRef.getDownloadURL().timeout(const Duration(seconds: 8));
+            uploadedImageUrls.add(url);
+            uploadedStoragePaths.add(sPath);
+          } catch (e) {
+            debugPrint('Storage upload for rejected receipt part $partNum skipped or timed out: $e');
+            final fallbackUrl = 'data:image/jpeg;base64,${base64Encode(allBytesList[index])}';
+            uploadedImageUrls.add(fallbackUrl);
+            uploadedStoragePaths.add(sPath);
+          }
+        }),
+      );
+
+      final String primaryImageUrl = uploadedImageUrls.isNotEmpty ? uploadedImageUrls.first : '';
+      final String primaryStoragePath = uploadedStoragePaths.isNotEmpty ? uploadedStoragePaths.first : '';
 
       DocumentSnapshot<Map<String, dynamic>>? existingDoc;
       if (receiptNumber.isNotEmpty) {
@@ -1035,8 +1445,11 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         'fraud_risk_score': result.fraudRiskScore,
         'fraud_reasons': result.fraudReasons,
         'retail_chain_name': activeEvent.retailChainName,
-        if (imageUrl.isNotEmpty) 'image_url': imageUrl,
-        if (imageUrl.isNotEmpty) 'storage_path': storagePath,
+        if (primaryImageUrl.isNotEmpty) 'image_url': primaryImageUrl,
+        if (primaryStoragePath.isNotEmpty) 'storage_path': primaryStoragePath,
+        if (uploadedImageUrls.length > 1) 'image_urls': uploadedImageUrls,
+        if (uploadedStoragePaths.length > 1) 'storage_paths': uploadedStoragePaths,
+        'parts_count': allBytesList.length,
         'promoter_id': ref.read(firebaseAuthProvider).currentUser?.uid,
         'campaignId': activeEvent.id,
         'companySlug': activeEvent.companySlug,

@@ -1141,6 +1141,46 @@ class AppStrings {
     en: 'An error occurred while processing the receipt',
     hi: 'रसीद संसाधित करते समय एक त्रुटि हुई',
   );
+  String get addNextReceiptPartBtn => _t(
+    ar: 'إضافة جزء تالٍ للفاتورة الطويلة',
+    en: 'Add Next Part for Long Receipt',
+    hi: 'लंबी रसीद के लिए अगला भाग जोड़ें',
+  );
+  String get longReceiptTip => _t(
+    ar: 'إذا كانت الفاتورة طويلة، التقطها على 2 إلى 4 لقطات متتابعة لضمان دقة القراءة 100%.',
+    en: 'For long receipts, take 2 to 4 consecutive close-ups to ensure 100% reading accuracy.',
+    hi: 'लंबी रसीदों के लिए, 100% सटीकता सुनिश्चित करने के लिए 2 से 4 लगातार तस्वीरें लें।',
+  );
+  String partIndexLabel(int index) => _t(
+    ar: 'جزء $index',
+    en: 'Part $index',
+    hi: 'भाग $index',
+  );
+  String get deletePartTooltip => _t(
+    ar: 'حذف هذا الجزء',
+    en: 'Delete this part',
+    hi: 'इस भाग को हटाएं',
+  );
+  String analyzeMultiPartsBtn(int count) => _t(
+    ar: 'تدقيق الفاتورة بالذكاء الاصطناعي ($count أجزاء) 🎁',
+    en: 'Audit Receipt with AI ($count parts) 🎁',
+    hi: 'एआई से रसीद जांचें ($count भाग) 🎁',
+  );
+  String get maxPartsReachedAlert => _t(
+    ar: 'الحد الأقصى لأجزاء الفاتورة الواحدة هو 4 أجزاء متتالية.',
+    en: 'Maximum number of parts for a single receipt is 4 consecutive images.',
+    hi: 'एक रसीद के लिए अधिकतम भागों की संख्या 4 है।',
+  );
+  String get pickNextPartGallery => _t(
+    ar: 'اختيار جزء من الاستوديو',
+    en: 'Pick part from Gallery',
+    hi: 'गैलरी से भाग चुनें',
+  );
+  String get captureNextPartCamera => _t(
+    ar: 'تصوير الجزء بالكاميرا',
+    en: 'Capture part with Camera',
+    hi: 'कैمरे से भाग लें',
+  );
 
   // ---------------------------------------------------------------------------
   // 17. Receipt Validation Dialog & Unmet Conditions

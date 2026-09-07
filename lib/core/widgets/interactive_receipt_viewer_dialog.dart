@@ -8,6 +8,8 @@ import 'package:url_launcher/url_launcher.dart';
 /// and rotating receipt images across all desktop and mobile screens.
 class InteractiveReceiptViewerDialog extends StatefulWidget {
   final String imageUrl;
+  final List<String>? imageUrls;
+  final int initialIndex;
   final String? receiptNumber;
   final String? storeName;
   final String? branchName;
@@ -22,6 +24,8 @@ class InteractiveReceiptViewerDialog extends StatefulWidget {
   const InteractiveReceiptViewerDialog({
     super.key,
     required this.imageUrl,
+    this.imageUrls,
+    this.initialIndex = 0,
     this.receiptNumber,
     this.storeName,
     this.branchName,
@@ -38,6 +42,8 @@ class InteractiveReceiptViewerDialog extends StatefulWidget {
   static Future<void> show(
     BuildContext context, {
     required String imageUrl,
+    List<String>? imageUrls,
+    int initialIndex = 0,
     String? receiptNumber,
     String? storeName,
     String? branchName,
@@ -54,6 +60,8 @@ class InteractiveReceiptViewerDialog extends StatefulWidget {
       barrierColor: Colors.black.withValues(alpha: 0.8),
       builder: (ctx) => InteractiveReceiptViewerDialog(
         imageUrl: imageUrl,
+        imageUrls: imageUrls,
+        initialIndex: initialIndex,
         receiptNumber: receiptNumber,
         storeName: storeName,
         branchName: branchName,
@@ -79,10 +87,30 @@ class _InteractiveReceiptViewerDialogState
   int _quarterTurns = 0;
   double _currentScale = 1.0;
   TapDownDetails? _doubleTapDetails;
+  late int _currentPartIndex;
+
+  List<String> get _activeUrls {
+    if (widget.imageUrls != null && widget.imageUrls!.isNotEmpty) {
+      return widget.imageUrls!;
+    }
+    return [widget.imageUrl];
+  }
+
+  String get _currentImageUrl {
+    final urls = _activeUrls;
+    if (_currentPartIndex >= 0 && _currentPartIndex < urls.length) {
+      return urls[_currentPartIndex];
+    }
+    return widget.imageUrl;
+  }
 
   @override
   void initState() {
     super.initState();
+    _currentPartIndex = widget.initialIndex.clamp(
+      0,
+      (widget.imageUrls?.length ?? 1) > 0 ? (widget.imageUrls?.length ?? 1) - 1 : 0,
+    );
     _transformationController = TransformationController();
     _transformationController.addListener(_onTransformationChanged);
   }
@@ -170,8 +198,8 @@ class _InteractiveReceiptViewerDialogState
   }
 
   Future<void> _openImageInBrowser() async {
-    if (widget.imageUrl.startsWith('http')) {
-      final uri = Uri.parse(widget.imageUrl);
+    if (_currentImageUrl.startsWith('http')) {
+      final uri = Uri.parse(_currentImageUrl);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       }
@@ -549,8 +577,59 @@ class _InteractiveReceiptViewerDialogState
             onPressed: _rotateClockwise,
           ),
 
+          // ── Multi-Part Navigation (if receipt has multiple parts) ──
+          if (_activeUrls.length > 1) ...[
+            const SizedBox(width: 6),
+            Container(
+              height: 20,
+              width: 1,
+              color: Colors.white.withValues(alpha: 0.15),
+            ),
+            const SizedBox(width: 4),
+            _buildToolbarButton(
+              icon: isAr ? Icons.chevron_right_rounded : Icons.chevron_left_rounded,
+              tooltip: isAr ? 'الجزء السابق' : 'Previous Part',
+              onPressed: _currentPartIndex > 0
+                  ? () => setState(() {
+                        _currentPartIndex--;
+                        _resetZoom();
+                      })
+                  : () {},
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFF818CF8).withValues(alpha: 0.3),
+                ),
+              ),
+              child: Text(
+                isAr
+                    ? 'جزء ${_currentPartIndex + 1} من ${_activeUrls.length}'
+                    : 'Part ${_currentPartIndex + 1}/${_activeUrls.length}',
+                style: GoogleFonts.cairo(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF818CF8),
+                ),
+              ),
+            ),
+            _buildToolbarButton(
+              icon: isAr ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
+              tooltip: isAr ? 'الجزء التالي' : 'Next Part',
+              onPressed: _currentPartIndex < _activeUrls.length - 1
+                  ? () => setState(() {
+                        _currentPartIndex++;
+                        _resetZoom();
+                      })
+                  : () {},
+            ),
+          ],
+
           // ── Open In Browser Button ──
-          if (widget.imageUrl.startsWith('http')) ...[
+          if (_currentImageUrl.startsWith('http')) ...[
             const SizedBox(width: 4),
             _buildToolbarButton(
               icon: Icons.open_in_new_rounded,
@@ -591,13 +670,13 @@ class _InteractiveReceiptViewerDialogState
 
   /// Builds image with Base64, URL, Loading Progress, and Error Fallback support
   Widget _buildReceiptImage(ThemeData theme, bool isAr) {
-    if (widget.imageUrl.isEmpty) {
+    if (_currentImageUrl.isEmpty) {
       return _buildErrorState(isAr, 'لا توجد صورة مسجلة لهذه الفاتورة');
     }
 
-    if (widget.imageUrl.startsWith('data:image')) {
+    if (_currentImageUrl.startsWith('data:image')) {
       try {
-        final bytes = base64Decode(widget.imageUrl.split(',').last);
+        final bytes = base64Decode(_currentImageUrl.split(',').last);
         return Image.memory(
           bytes,
           fit: BoxFit.contain,
@@ -609,7 +688,7 @@ class _InteractiveReceiptViewerDialogState
     }
 
     return Image.network(
-      widget.imageUrl,
+      _currentImageUrl,
       fit: BoxFit.contain,
       loadingBuilder: (context, child, loadingProgress) {
         if (loadingProgress == null) return child;
@@ -680,7 +759,7 @@ class _InteractiveReceiptViewerDialogState
               style: GoogleFonts.cairo(fontSize: 12, color: Colors.white60),
               textAlign: TextAlign.center,
             ),
-            if (widget.imageUrl.startsWith('http')) ...[
+            if (_currentImageUrl.startsWith('http')) ...[
               const SizedBox(height: 16),
               FilledButton.tonalIcon(
                 onPressed: _openImageInBrowser,
