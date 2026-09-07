@@ -1271,13 +1271,16 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerLow,
+        color: colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.8),
+          width: 1.2,
+        ),
         boxShadow: [
           BoxShadow(
-            color: colorScheme.shadow.withValues(alpha: 0.03),
-            blurRadius: 14,
+            color: colorScheme.shadow.withValues(alpha: 0.05),
+            blurRadius: 16,
             offset: const Offset(0, 4),
           ),
         ],
@@ -1372,7 +1375,11 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   icon: Icons.apartment_rounded,
                   label: '${isAr ? "الشركة الراعية: " : "Company: "}${event.targetCompany}',
                   colorScheme: colorScheme,
-                  tooltip: isAr ? 'الشركة المصنعة وصاحبة الحملة' : 'Sponsor brand company',
+                  tooltip: isAr ? 'الشركة المصنعة وصاحبة الحملة الراعية' : 'Sponsor brand company',
+                  customBg: colorScheme.primary,
+                  customColor: colorScheme.onPrimary,
+                  customBorder: colorScheme.primary,
+                  isHero: true,
                 ),
                 if (event.retailChainName.isNotEmpty)
                   _buildMetadataPill(
@@ -1585,28 +1592,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
             Wrap(
               spacing: 10,
               runSpacing: 10,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                // 1. Internal Reports & Analytics View
-                Tooltip(
-                  message: isAr ? 'عرض تقارير وتحليلات الفواتير والمبيعات المحققة للحملة' : 'View invoices analytics & sales performance reports',
-                  waitDuration: const Duration(milliseconds: 400),
-                  child: FilledButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _selectedReportsEvent = event;
-                        _selectedIndex = 1;
-                      });
-                    },
-                    icon: const Icon(Icons.analytics_rounded, size: 18),
-                    label: Text(strings.viewReports, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13)),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-
-                // 2. Copy Promoter / Client Link
+                // 1. Copy Promoter / Client Link
                 Tooltip(
                   message: strings.promoterPortalTooltip,
                   waitDuration: const Duration(milliseconds: 400),
@@ -1621,7 +1609,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   ),
                 ),
 
-                // 3. Copy Agency Operations Link
+                // 2. Copy Agency Operations Link
                 Tooltip(
                   message: strings.agencyOpsPortalTooltip,
                   waitDuration: const Duration(milliseconds: 400),
@@ -1638,7 +1626,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   ),
                 ),
 
-                // 4. Copy Brand Executive Master Link
+                // 3. Copy Brand Executive Master Link
                 Tooltip(
                   message: strings.brandExecutivePortalTooltip,
                   waitDuration: const Duration(milliseconds: 400),
@@ -1655,88 +1643,106 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   ),
                 ),
 
-                // 5. Preview Agency Operations Portal
-                Tooltip(
-                  message: isAr ? 'معاينة بوابة شركة الدعاية والعمليات واستعراض الأرصدة والفواتير' : 'Live preview of Agency Operations Portal',
-                  waitDuration: const Duration(milliseconds: 400),
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => CompanyManagerPortalScreen(
-                            companySlug: companySlug,
-                            initialEventId: event.id,
-                            isAgencyOpsMode: true,
+                // 4. Previews Connected Icon Button Group (معاينات البوابات والتطبيق الميداني)
+                Container(
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.7), width: 1.2),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Preview Agency Operations Portal
+                      Tooltip(
+                        message: isAr
+                            ? 'معاينة بوابة شركة الدعاية والعمليات واستعراض الأرصدة والفواتير'
+                            : 'Live preview of Agency Operations Portal',
+                        waitDuration: const Duration(milliseconds: 400),
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => CompanyManagerPortalScreen(
+                                  companySlug: companySlug,
+                                  initialEventId: event.id,
+                                  isAgencyOpsMode: true,
+                                ),
+                              ),
+                            );
+                          },
+                          borderRadius: const BorderRadiusDirectional.horizontal(
+                            start: Radius.circular(11),
+                          ).resolve(Directionality.of(context)),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                            child: Icon(Icons.store_mall_directory_rounded, size: 19, color: colorScheme.primary),
                           ),
                         ),
-                      );
-                    },
-                    icon: const Icon(Icons.store_mall_directory_rounded, size: 18),
-                    label: Text(strings.previewAgencyOpsPortal, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13)),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
+                      ),
+                      Container(width: 1, height: 22, color: colorScheme.outlineVariant.withValues(alpha: 0.7)),
+                      // Preview Brand Executive Master Portal
+                      Tooltip(
+                        message: isAr
+                            ? 'معاينة البوابة التنفيذية للعلامة التجارية واستعراض الـ ROI ومحاكاة البروموتر'
+                            : 'Live preview of Brand Executive Master Portal',
+                        waitDuration: const Duration(milliseconds: 400),
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => CompanyManagerPortalScreen(
+                                  companySlug: companySlug,
+                                  initialEventId: event.id,
+                                  isAgencyOpsMode: false,
+                                ),
+                              ),
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                            child: Icon(Icons.dashboard_customize_rounded, size: 19, color: colorScheme.primary),
+                          ),
+                        ),
+                      ),
+                      Container(width: 1, height: 22, color: colorScheme.outlineVariant.withValues(alpha: 0.7)),
+                      // Preview Client / Promoter Mobile App
+                      Tooltip(
+                        message: isAr
+                            ? 'معاينة تجربة العميل والبروموتر في رفع وفحص الفاتورة'
+                            : 'Live preview of client mobile web app',
+                        waitDuration: const Duration(milliseconds: 400),
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => ClientReceiptUploadScreen(
+                                  event: event,
+                                  companySlug: companySlug,
+                                  initialEventId: event.id,
+                                ),
+                              ),
+                            );
+                          },
+                          borderRadius: const BorderRadiusDirectional.horizontal(
+                            end: Radius.circular(11),
+                          ).resolve(Directionality.of(context)),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                            child: Icon(Icons.phone_android_rounded, size: 19, color: colorScheme.primary),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
 
-                // 6. Preview Brand Executive Master Portal
+                // 5. Edit Campaign (Icon Only)
                 Tooltip(
-                  message: isAr
-                      ? 'معاينة البوابة التنفيذية للعلامة التجارية واستعراض الـ ROI ومحاكاة البروموتر'
-                      : 'Live preview of Brand Executive Master Portal',
+                  message: isAr ? 'تعديل الحملة: تعديل بيانات وشروط وبرومبت الفحص الذكي للحملة' : 'Edit campaign rules, target products & prompt',
                   waitDuration: const Duration(milliseconds: 400),
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => CompanyManagerPortalScreen(
-                            companySlug: companySlug,
-                            initialEventId: event.id,
-                            isAgencyOpsMode: false,
-                          ),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.dashboard_customize_rounded, size: 18),
-                    label: Text(strings.previewBrandExecutivePortal, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13)),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-
-                // 7. Preview Client / Promoter Mobile App
-                Tooltip(
-                  message: isAr ? 'معاينة تجربة العميل والبروموتر في رفع وفحص الفاتورة' : 'Live preview of client mobile web app',
-                  waitDuration: const Duration(milliseconds: 400),
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => ClientReceiptUploadScreen(
-                            event: event,
-                            companySlug: companySlug,
-                            initialEventId: event.id,
-                          ),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                    label: Text(strings.previewClientApp, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13)),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-
-                // 6. Edit Campaign
-                Tooltip(
-                  message: isAr ? 'تعديل بيانات وشروط وبرومبت الفحص الذكي للحملة' : 'Edit campaign rules, target products & prompt',
-                  waitDuration: const Duration(milliseconds: 400),
-                  child: OutlinedButton.icon(
+                  child: OutlinedButton(
                     onPressed: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
@@ -1744,62 +1750,46 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                         ),
                       );
                     },
-                    icon: const Icon(Icons.edit_note_rounded, size: 18),
-                    label: Text(isAr ? 'تعديل الحملة' : 'Edit Campaign', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13)),
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.8)),
                     ),
+                    child: Icon(Icons.edit_note_rounded, size: 20, color: colorScheme.primary),
                   ),
                 ),
 
-                // 7. Voucher Cards & Reset Action
+                // 6. Voucher Cards & Reset Action (Icon Only)
                 Tooltip(
                   message: isAr
-                      ? 'استعلام أرقام كروت الفواتشرات المسلمة، والبحث برقم الكارت، وإعادة التعيين'
+                      ? 'سجل وإعادة تعيين الفواتشرات: استعلام أرقام كروت الفواتشرات المسلمة، والبحث برقم الكارت، وإعادة التعيين'
                       : 'Audit claimed voucher serials & reset registry for reuse',
                   waitDuration: const Duration(milliseconds: 400),
-                  child: OutlinedButton.icon(
+                  child: OutlinedButton(
                     onPressed: () => VoucherSerialsManagementDialog.show(context, event),
-                    icon: Icon(Icons.confirmation_number_rounded, size: 18, color: Colors.amber.shade900),
-                    label: Text(
-                      isAr ? 'سجل وإعادة تعيين الفواتشرات' : 'Vouchers & Reset',
-                      style: GoogleFonts.cairo(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                        color: Colors.amber.shade900,
-                      ),
-                    ),
                     style: OutlinedButton.styleFrom(
                       backgroundColor: Colors.amber.shade50,
                       side: BorderSide(color: Colors.amber.shade300),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
+                    child: Icon(Icons.confirmation_number_rounded, size: 19, color: Colors.amber.shade900),
                   ),
                 ),
 
-                // 7. Delete Campaign
+                // 7. Delete Campaign (Icon Only)
                 Tooltip(
                   message: strings.deleteCampaignTooltip,
                   waitDuration: const Duration(milliseconds: 400),
-                  child: OutlinedButton.icon(
+                  child: OutlinedButton(
                     onPressed: () => _showDeleteCampaignDialog(context, event, strings, firestore),
-                    icon: Icon(Icons.delete_forever_rounded, size: 18, color: colorScheme.error),
-                    label: Text(
-                      strings.deleteCampaignBtn,
-                      style: GoogleFonts.cairo(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                        color: colorScheme.error,
-                      ),
-                    ),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: colorScheme.error,
                       side: BorderSide(color: colorScheme.error.withValues(alpha: 0.5)),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
+                    child: Icon(Icons.delete_forever_rounded, size: 19, color: colorScheme.error),
                   ),
                 ),
               ],
@@ -1818,30 +1808,51 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     Color? customBg,
     Color? customBorder,
     Color? customColor,
+    bool isHero = false,
   }) {
     return Tooltip(
       message: tooltip,
       waitDuration: const Duration(milliseconds: 400),
       child: Container(
         constraints: const BoxConstraints(maxWidth: 480),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: EdgeInsets.symmetric(
+          horizontal: isHero ? 14 : 10,
+          vertical: isHero ? 7 : 6,
+        ),
         decoration: BoxDecoration(
           color: customBg ?? colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: customBorder ?? colorScheme.outlineVariant.withValues(alpha: 0.5)),
+          borderRadius: BorderRadius.circular(isHero ? 12 : 10),
+          border: Border.all(
+            color: customBorder ?? colorScheme.outlineVariant.withValues(alpha: 0.5),
+            width: isHero ? 1.4 : 1.0,
+          ),
+          boxShadow: isHero
+              ? [
+                  BoxShadow(
+                    color: (customBg ?? colorScheme.primary).withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 15, color: customColor ?? colorScheme.primary),
-            const SizedBox(width: 6),
+            Icon(
+              icon,
+              size: isHero ? 17 : 15,
+              color: customColor ?? colorScheme.primary,
+            ),
+            const SizedBox(width: 7),
             Flexible(
               child: Text(
                 label,
                 style: GoogleFonts.cairo(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+                  fontSize: isHero ? 13 : 12,
+                  fontWeight: isHero ? FontWeight.bold : FontWeight.w600,
                   color: customColor ?? colorScheme.onSurface,
+                  letterSpacing: isHero ? 0.2 : 0,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

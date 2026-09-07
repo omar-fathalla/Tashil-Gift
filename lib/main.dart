@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'core/localization/locale_provider.dart';
@@ -21,10 +22,25 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // Restore persistent admin session before initial frame render to prevent spurious sign-out
+  String? initialAdminSession;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final rememberMe = prefs.getBool('remember_admin_me') ?? true;
+    final activeSession = prefs.getString('active_admin_session');
+    if (rememberMe && activeSession != null && isAuthorizedAdminEmail(activeSession)) {
+      initialAdminSession = activeSession.toLowerCase();
+    }
+  } catch (_) {}
   
   runApp(
-    const ProviderScope(
-      child: MyApp(),
+    ProviderScope(
+      overrides: [
+        if (initialAdminSession != null)
+          adminSessionEmailProvider.overrideWith((ref) => initialAdminSession),
+      ],
+      child: const MyApp(),
     ),
   );
 }
@@ -263,11 +279,17 @@ class MyApp extends ConsumerWidget {
               ),
               settings: effectiveSettings,
             );
+          case '/login':
+          case '/auth':
+            return MaterialPageRoute(
+              builder: (context) => const AuthScreen(),
+              settings: effectiveSettings,
+            );
           case '':
           case '/':
           default:
             return MaterialPageRoute(
-              builder: (context) => const AuthScreen(),
+              builder: (context) => const AdminAuthGuard(),
               settings: effectiveSettings,
             );
         }
@@ -285,7 +307,24 @@ class AdminAuthGuard extends ConsumerWidget {
     if (isAdmin) {
       return const AdminDashboardScreen();
     }
-    return const AuthScreen();
+
+    final authState = ref.watch(authStateStreamProvider);
+    return authState.when(
+      data: (user) {
+        if (user != null && isAuthorizedAdminEmail(user.email)) {
+          return const AdminDashboardScreen();
+        }
+        return const AuthScreen();
+      },
+      loading: () {
+        final sessionEmail = ref.watch(adminSessionEmailProvider);
+        if (sessionEmail != null && isAuthorizedAdminEmail(sessionEmail)) {
+          return const AdminDashboardScreen();
+        }
+        return const AuthScreen();
+      },
+      error: (error, stack) => const AuthScreen(),
+    );
   }
 }
 

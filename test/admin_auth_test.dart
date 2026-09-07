@@ -115,6 +115,29 @@ void main() {
       expect(find.byType(AuthScreen), findsOneWidget);
     });
 
+    testWidgets('AdminAuthGuard routes authenticated users to AdminDashboardScreen when session is active', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            adminSessionEmailProvider.overrideWith((ref) => 'support@switchpoint.com'),
+            isAdminProvider.overrideWithValue(true),
+            authStateStreamProvider.overrideWith((ref) => Stream.value(null)),
+          ],
+          child: const MaterialApp(
+            home: AdminAuthGuard(),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byType(AdminDashboardScreen), findsOneWidget);
+      expect(find.byType(AuthScreen), findsNothing);
+    });
+
     testWidgets('AdminDashboardScreen header removes AI speed test and Preview buttons and renders Profile Menu with Logout', (tester) async {
       tester.view.physicalSize = const Size(1280, 800);
       tester.view.devicePixelRatio = 1.0;

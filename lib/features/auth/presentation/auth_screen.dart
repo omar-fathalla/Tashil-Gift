@@ -36,7 +36,18 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       final savedEmail = prefs.getString('saved_admin_email');
       final savedPassword = prefs.getString('saved_admin_password');
       final rememberMePref = prefs.getBool('remember_admin_me') ?? true;
+      final activeSession = prefs.getString('active_admin_session');
+
       if (mounted) {
+        // If an active session exists with remember-me, bypass login screen immediately
+        if (rememberMePref && activeSession != null && isAuthorizedAdminEmail(activeSession)) {
+          ref.read(adminSessionEmailProvider.notifier).state = activeSession.toLowerCase();
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+          );
+          return;
+        }
+
         setState(() {
           _rememberMe = rememberMePref;
           if (savedEmail != null && savedEmail.isNotEmpty) {
@@ -85,6 +96,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           await prefs.remove('active_admin_session');
         }
       } catch (_) {}
+
+      // Explicitly update Riverpod session state immediately
+      ref.read(adminSessionEmailProvider.notifier).state = email.toLowerCase();
 
       // On success, navigate to the Admin Dashboard
       if (mounted) {
