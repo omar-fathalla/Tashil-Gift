@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/services/firebase_service.dart';
@@ -24,6 +25,7 @@ class ChooseGiftScreen extends ConsumerStatefulWidget {
   final int totalChances;
   final bool isDemo;
   final String? branchId;
+  final Map<String, String>? prizeImages;
 
   const ChooseGiftScreen({
     super.key,
@@ -33,6 +35,7 @@ class ChooseGiftScreen extends ConsumerStatefulWidget {
     this.totalChances = 1,
     this.isDemo = false,
     this.branchId,
+    this.prizeImages,
   });
 
   @override
@@ -47,6 +50,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
   late int _remainingChances;
   int _currentRound = 1;
   final List<String> _wonPrizes = [];
+  Map<String, String> _prizeImages = {};
 
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
@@ -54,6 +58,11 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
   @override
   void initState() {
     super.initState();
+    if (widget.prizeImages != null) {
+      _prizeImages = Map.from(widget.prizeImages!);
+    } else if (widget.eventId.isNotEmpty) {
+      _loadEventPrizeImages();
+    }
     _remainingChances = widget.totalChances > 0 ? widget.totalChances : 1;
     _items = widget.prizes.isNotEmpty
         ? widget.prizes
@@ -80,6 +89,46 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
   void dispose() {
     _pulseController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadEventPrizeImages() async {
+    try {
+      final doc = await FirebaseFirestore.instance.collection('events').doc(widget.eventId).get();
+      if (!doc.exists || !mounted) return;
+      final data = doc.data() ?? {};
+      final rawAllocated = data['allocatedPrizes'] as List<dynamic>? ?? [];
+      final Map<String, String> resolved = {};
+      for (final p in rawAllocated) {
+        if (p is Map<String, dynamic>) {
+          final name = (p['name'] ?? '').toString().trim();
+          final img = (p['imageUrl'] ?? '').toString().trim();
+          if (name.isNotEmpty && img.isNotEmpty) {
+            resolved[name] = img;
+          }
+        }
+      }
+      if (resolved.isNotEmpty && mounted) {
+        setState(() {
+          _prizeImages.addAll(resolved);
+        });
+      }
+    } catch (_) {}
+  }
+
+  String? _resolvePrizeImage(String prizeName) {
+    if (_prizeImages.containsKey(prizeName)) {
+      final img = _prizeImages[prizeName];
+      if (img != null && img.trim().isNotEmpty) return img.trim();
+    }
+    // Clean name comparison (e.g. without trailing emojis or spaces)
+    final cleanName = prizeName.replaceAll(RegExp(r'[\u{1F300}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]', unicode: true), '').trim();
+    for (final entry in _prizeImages.entries) {
+      final k = entry.key.replaceAll(RegExp(r'[\u{1F300}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]', unicode: true), '').trim();
+      if (k.isNotEmpty && (k == cleanName || cleanName.contains(k) || k.contains(cleanName))) {
+        if (entry.value.trim().isNotEmpty) return entry.value.trim();
+      }
+    }
+    return null;
   }
 
   IconData _getPrizeIcon(String prizeName) {
@@ -164,10 +213,13 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
 
       if (!mounted) return;
 
+      final imgUrl = _resolvePrizeImage(selectedPrize);
+
       await showWinnerCelebrationDialog(
         context: context,
         prizeName: selectedPrize,
         remainingChances: _remainingChances,
+        imageUrl: imgUrl,
         onNextChance: () {
           if (!mounted) return;
           setState(() {
@@ -516,19 +568,62 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                                 mainAxisSize: MainAxisSize.min,
                                                 mainAxisAlignment: MainAxisAlignment.center,
                                                 children: [
-                                                  // Prize Icon
-                                                  Container(
-                                                    width: isMobile ? 44 : 56,
-                                                    height: isMobile ? 44 : 56,
-                                                    decoration: BoxDecoration(
-                                                      shape: BoxShape.circle,
-                                                      color: accentColor.withValues(alpha: 0.12),
-                                                    ),
-                                                    child: Icon(
-                                                      prizeIcon,
-                                                      color: accentColor,
-                                                      size: isMobile ? 24 : 30,
-                                                    ),
+                                                  // Prize Image Thumbnail or Icon
+                                                  Builder(
+                                                    builder: (context) {
+                                                      final prizeImg = _resolvePrizeImage(prize);
+                                                      if (prizeImg != null && prizeImg.isNotEmpty) {
+                                                        return Container(
+                                                          width: isMobile ? 48 : 58,
+                                                          height: isMobile ? 48 : 58,
+                                                          decoration: BoxDecoration(
+                                                            borderRadius: BorderRadius.circular(10),
+                                                            border: Border.all(
+                                                              color: isSelected ? colorScheme.primary : colorScheme.outlineVariant.withValues(alpha: 0.5),
+                                                              width: isSelected ? 2 : 1,
+                                                            ),
+                                                            boxShadow: [
+                                                              BoxShadow(
+                                                                color: Colors.black.withValues(alpha: 0.04),
+                                                                blurRadius: 4,
+                                                                offset: const Offset(0, 2),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                          child: ClipRRect(
+                                                            borderRadius: BorderRadius.circular(9),
+                                                            child: Image.network(
+                                                              prizeImg,
+                                                              fit: BoxFit.cover,
+                                                              errorBuilder: (context, error, stackTrace) => Container(
+                                                                decoration: BoxDecoration(
+                                                                  shape: BoxShape.circle,
+                                                                  color: accentColor.withValues(alpha: 0.12),
+                                                                ),
+                                                                child: Icon(
+                                                                  prizeIcon,
+                                                                  color: accentColor,
+                                                                  size: isMobile ? 24 : 30,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        );
+                                                      }
+                                                      return Container(
+                                                        width: isMobile ? 44 : 56,
+                                                        height: isMobile ? 44 : 56,
+                                                        decoration: BoxDecoration(
+                                                          shape: BoxShape.circle,
+                                                          color: accentColor.withValues(alpha: 0.12),
+                                                        ),
+                                                        child: Icon(
+                                                          prizeIcon,
+                                                          color: accentColor,
+                                                          size: isMobile ? 24 : 30,
+                                                        ),
+                                                      );
+                                                    },
                                                   ),
 
                                                   SizedBox(height: isMobile ? 6 : 10),

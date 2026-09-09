@@ -24,17 +24,18 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
-      // Verify all 4 game titles exist
+      // Verify all 5 game titles exist
       expect(find.text('عجلة الحظ'), findsOneWidget);
       expect(find.text('امسح واربح'), findsOneWidget);
       expect(find.text('الصندوق الغامض'), findsOneWidget);
       expect(find.text('الهدية الفورية المباشرة'), findsOneWidget);
+      expect(find.text('اختر هديتك (شبكة الاختيارات)'), findsOneWidget);
 
-      // Verify "تجربة اللعبة (ديمو تفاعلي)" button is present for all 4 games
-      expect(find.text('تجربة اللعبة (ديمو تفاعلي)'), findsNWidgets(4));
+      // Verify "تجربة اللعبة (ديمو تفاعلي)" button is present for all 5 games
+      expect(find.text('تجربة اللعبة (ديمو تفاعلي)'), findsNWidgets(5));
 
-      // Verify "تجربة المؤثرات الصوتية" button is present for all 4 games
-      expect(find.text('تجربة المؤثرات الصوتية'), findsNWidgets(4));
+      // Verify "تجربة المؤثرات الصوتية" button is present for all 5 games
+      expect(find.text('تجربة المؤثرات الصوتية'), findsNWidgets(5));
     });
 
     testWidgets('GameDemoBanner renders DEMO chip, title, description, and exit button', (tester) async {

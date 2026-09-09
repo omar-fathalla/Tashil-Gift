@@ -216,6 +216,7 @@ class CompanyGiftModel {
   final int orderIndex; // Index for drag & drop custom sorting
   final List<GiftSupplyBatch> batches;
   final int lowStockThreshold;
+  final String? imageUrl;
   final DateTime? createdAt;
 
   CompanyGiftModel({
@@ -231,6 +232,7 @@ class CompanyGiftModel {
     this.orderIndex = 0,
     this.batches = const [],
     this.lowStockThreshold = 0,
+    this.imageUrl,
     this.createdAt,
   });
 
@@ -280,6 +282,7 @@ class CompanyGiftModel {
     int? orderIndex,
     List<GiftSupplyBatch>? batches,
     int? lowStockThreshold,
+    String? imageUrl,
     DateTime? createdAt,
   }) {
     return CompanyGiftModel(
@@ -295,6 +298,7 @@ class CompanyGiftModel {
       orderIndex: orderIndex ?? this.orderIndex,
       batches: batches ?? this.batches,
       lowStockThreshold: lowStockThreshold ?? this.lowStockThreshold,
+      imageUrl: imageUrl ?? this.imageUrl,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -327,6 +331,8 @@ class CompanyGiftModel {
     final totalQty = (data['totalQuantity'] as num?)?.toInt() ?? 0;
     final availQty = (data['availableQuantity'] as num?)?.toInt() ?? 0;
     final lowThresh = (data['lowStockThreshold'] as num?)?.toInt() ?? 0;
+    final rawImageUrl = (data['imageUrl'] as String?)?.trim();
+    final effectiveImageUrl = rawImageUrl != null && rawImageUrl.isNotEmpty ? rawImageUrl : null;
     
     DateTime? createdDate;
     final rawCreated = data['createdAt'];
@@ -376,6 +382,7 @@ class CompanyGiftModel {
       orderIndex: rawOrder,
       batches: parsedBatches,
       lowStockThreshold: lowThresh,
+      imageUrl: effectiveImageUrl,
       createdAt: createdDate,
     );
   }
@@ -398,6 +405,7 @@ class CompanyGiftModel {
       'orderIndex': orderIndex,
       'batches': batches.map((b) => b.toMap()).toList(),
       'lowStockThreshold': lowStockThreshold,
+      if (imageUrl != null && imageUrl!.isNotEmpty) 'imageUrl': imageUrl,
       if (createdAt != null) 'createdAt': Timestamp.fromDate(createdAt!),
     };
   }

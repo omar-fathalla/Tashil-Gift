@@ -2579,6 +2579,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         quantity: 1,
         unitValue: selectedGift.unitValue,
         giftType: selectedGift.giftType,
+        imageUrl: selectedGift.imageUrl,
       ));
     }
 
@@ -3421,6 +3422,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                           quantity: 1,
                                           unitValue: gift.unitValue,
                                           giftType: gift.giftType,
+                                          imageUrl: gift.imageUrl,
                                         ));
                                       }
                                     });
@@ -3650,6 +3652,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               unitValue: finalUnitValue,
               branchId: branchId,
               branchName: branchName,
+              imageUrl: matchedGift?.imageUrl ?? originalPrize?.imageUrl,
             );
           }
 
@@ -7000,6 +7003,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                               quantity: 1,
                               unitValue: selectedGift.unitValue,
                               giftType: selectedGift.giftType,
+                              imageUrl: selectedGift.imageUrl,
                             ),
                           );
                         }

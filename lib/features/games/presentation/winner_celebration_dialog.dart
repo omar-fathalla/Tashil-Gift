@@ -16,6 +16,7 @@ Future<void> showWinnerCelebrationDialog({
   double? unitValue,
   bool? isVoucher,
   List<LinkedGiftAllocation> linkedGifts = const [],
+  String? imageUrl,
 }) {
   return showGeneralDialog(
     context: context,
@@ -39,6 +40,7 @@ Future<void> showWinnerCelebrationDialog({
         unitValue: unitValue,
         isVoucher: isVoucher,
         linkedGifts: linkedGifts,
+        imageUrl: imageUrl,
       );
     },
   );
@@ -52,6 +54,7 @@ class WinnerCelebrationDialog extends ConsumerStatefulWidget {
   final double? unitValue;
   final bool? isVoucher;
   final List<LinkedGiftAllocation> linkedGifts;
+  final String? imageUrl;
 
   const WinnerCelebrationDialog({
     super.key,
@@ -62,6 +65,7 @@ class WinnerCelebrationDialog extends ConsumerStatefulWidget {
     this.unitValue,
     this.isVoucher,
     this.linkedGifts = const [],
+    this.imageUrl,
   });
 
   @override
@@ -357,22 +361,74 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                               ),
                               child: Column(
                                 children: [
-                                  // Icon (Ticket for Voucher, Gift box for physical prize)
-                                  Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: resolvedIsVoucher
-                                          ? const Color(0xFFFF8F00).withValues(alpha: 0.15)
-                                          : colorScheme.primary.withValues(alpha: 0.1),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      resolvedIsVoucher
-                                          ? Icons.confirmation_number_rounded
-                                          : Icons.card_giftcard_rounded,
-                                      size: 40,
-                                      color: resolvedIsVoucher ? const Color(0xFFFF8F00) : colorScheme.primary,
-                                    ),
+                                  // Icon or Product Image Thumbnail
+                                  Builder(
+                                    builder: (context) {
+                                      final effectiveImageUrl = (widget.imageUrl != null && widget.imageUrl!.isNotEmpty)
+                                          ? widget.imageUrl
+                                          : (widget.linkedGifts.isNotEmpty && widget.linkedGifts.first.imageUrl != null && widget.linkedGifts.first.imageUrl!.isNotEmpty
+                                              ? widget.linkedGifts.first.imageUrl
+                                              : null);
+
+                                      if (effectiveImageUrl != null && effectiveImageUrl.isNotEmpty) {
+                                        return Container(
+                                          width: 76,
+                                          height: 76,
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(20),
+                                            border: Border.all(
+                                              color: resolvedIsVoucher
+                                                  ? const Color(0xFFFF8F00).withValues(alpha: 0.5)
+                                                  : colorScheme.primary.withValues(alpha: 0.5),
+                                              width: 2,
+                                            ),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: (resolvedIsVoucher ? const Color(0xFFFF8F00) : colorScheme.primary).withValues(alpha: 0.2),
+                                                blurRadius: 12,
+                                                offset: const Offset(0, 4),
+                                              ),
+                                            ],
+                                          ),
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.circular(18),
+                                            child: Image.network(
+                                              effectiveImageUrl,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (context, error, stackTrace) => Container(
+                                                color: resolvedIsVoucher
+                                                    ? const Color(0xFFFF8F00).withValues(alpha: 0.15)
+                                                    : colorScheme.primary.withValues(alpha: 0.1),
+                                                child: Icon(
+                                                  resolvedIsVoucher
+                                                      ? Icons.confirmation_number_rounded
+                                                      : Icons.card_giftcard_rounded,
+                                                  size: 40,
+                                                  color: resolvedIsVoucher ? const Color(0xFFFF8F00) : colorScheme.primary,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      }
+
+                                      return Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: resolvedIsVoucher
+                                              ? const Color(0xFFFF8F00).withValues(alpha: 0.15)
+                                              : colorScheme.primary.withValues(alpha: 0.1),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Icon(
+                                          resolvedIsVoucher
+                                              ? Icons.confirmation_number_rounded
+                                              : Icons.card_giftcard_rounded,
+                                          size: 40,
+                                          color: resolvedIsVoucher ? const Color(0xFFFF8F00) : colorScheme.primary,
+                                        ),
+                                      );
+                                    },
                                   ),
                                   const SizedBox(height: 10),
 

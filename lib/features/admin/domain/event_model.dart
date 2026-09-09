@@ -7,6 +7,7 @@ class LinkedGiftAllocation {
   final int quantity; // e.g. 2 of 50 EGP card, 1 of 25 EGP card
   final double unitValue; // 50.0
   final String giftType; // 'voucher' | 'product'
+  final String? imageUrl;
 
   LinkedGiftAllocation({
     required this.giftId,
@@ -14,6 +15,7 @@ class LinkedGiftAllocation {
     this.quantity = 1,
     this.unitValue = 0.0,
     this.giftType = 'product',
+    this.imageUrl,
   });
 
   bool get isVoucher {
@@ -38,6 +40,7 @@ class LinkedGiftAllocation {
     int? quantity,
     double? unitValue,
     String? giftType,
+    String? imageUrl,
   }) {
     return LinkedGiftAllocation(
       giftId: giftId ?? this.giftId,
@@ -45,6 +48,7 @@ class LinkedGiftAllocation {
       quantity: quantity ?? this.quantity,
       unitValue: unitValue ?? this.unitValue,
       giftType: giftType ?? this.giftType,
+      imageUrl: imageUrl ?? this.imageUrl,
     );
   }
 
@@ -55,6 +59,7 @@ class LinkedGiftAllocation {
       quantity: (data['quantity'] as num?)?.toInt() ?? 1,
       unitValue: (data['unitValue'] as num?)?.toDouble() ?? 0.0,
       giftType: data['giftType']?.toString() ?? 'product',
+      imageUrl: (data['imageUrl'] as String?)?.isNotEmpty == true ? (data['imageUrl'] as String) : null,
     );
   }
 
@@ -65,6 +70,7 @@ class LinkedGiftAllocation {
       'quantity': quantity,
       'unitValue': unitValue,
       'giftType': giftType,
+      if (imageUrl != null && imageUrl!.isNotEmpty) 'imageUrl': imageUrl,
     };
   }
 }
@@ -334,6 +340,7 @@ class AllocatedPrize {
   final String branchName;
   final String giftType; // 'product' | 'voucher'
   final double unitValue; // Denomination per card for vouchers (e.g. 25.0, 50.0, 100.0)
+  final String? imageUrl;
 
   AllocatedPrize({
     required this.giftId,
@@ -344,6 +351,7 @@ class AllocatedPrize {
     this.branchName = '',
     this.giftType = 'product',
     this.unitValue = 0.0,
+    this.imageUrl,
   });
 
   bool get isVoucher {
@@ -380,6 +388,7 @@ class AllocatedPrize {
     String? branchName,
     String? giftType,
     double? unitValue,
+    String? imageUrl,
   }) {
     return AllocatedPrize(
       giftId: giftId ?? this.giftId,
@@ -390,6 +399,7 @@ class AllocatedPrize {
       branchName: branchName ?? this.branchName,
       giftType: giftType ?? this.giftType,
       unitValue: unitValue ?? this.unitValue,
+      imageUrl: imageUrl ?? this.imageUrl,
     );
   }
 
@@ -438,6 +448,7 @@ class AllocatedPrize {
       branchName: data['branchName'] ?? '',
       giftType: rawType,
       unitValue: rawUnitVal,
+      imageUrl: (data['imageUrl'] as String?)?.isNotEmpty == true ? (data['imageUrl'] as String) : null,
     );
   }
 
@@ -451,6 +462,7 @@ class AllocatedPrize {
       'unitValue': unitValue,
       if (branchId.isNotEmpty) 'branchId': branchId,
       if (branchName.isNotEmpty) 'branchName': branchName,
+      if (imageUrl != null && imageUrl!.isNotEmpty) 'imageUrl': imageUrl,
     };
   }
 }

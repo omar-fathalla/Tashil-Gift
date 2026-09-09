@@ -690,6 +690,7 @@ class CompanyGiftsService {
     required int quantity,
     String giftType = 'product',
     double unitValue = 0.0,
+    String? imageUrl,
     String referenceNumber = '',
     String notes = '',
     String addedBy = 'مسؤول النظام',
@@ -726,6 +727,7 @@ class CompanyGiftsService {
       'availableQuantity': quantity,
       'giftType': giftType,
       'unitValue': unitValue,
+      if (imageUrl != null && imageUrl.trim().isNotEmpty) 'imageUrl': imageUrl.trim(),
       'orderIndex': now.millisecondsSinceEpoch ~/ 1000,
       'batches': batchesList,
       'createdAt': FieldValue.serverTimestamp(),
@@ -751,6 +753,33 @@ class CompanyGiftsService {
     batch.set(movementRef, movement.toFirestore());
 
     await batch.commit();
+  }
+
+  /// Updates gift master details (name, voucher value, image) in the company's master catalog.
+  Future<void> updateGiftDetails({
+    required String giftId,
+    String? giftName,
+    double? unitValue,
+    String? imageUrl,
+    bool removeImage = false,
+  }) async {
+    final docRef = _firestore.collection('company_gifts').doc(giftId);
+    final Map<String, dynamic> updates = {};
+    if (giftName != null && giftName.trim().isNotEmpty) {
+      updates['giftName'] = giftName.trim();
+      updates['name'] = giftName.trim();
+    }
+    if (unitValue != null) {
+      updates['unitValue'] = unitValue;
+    }
+    if (removeImage) {
+      updates['imageUrl'] = FieldValue.delete();
+    } else if (imageUrl != null && imageUrl.trim().isNotEmpty) {
+      updates['imageUrl'] = imageUrl.trim();
+    }
+    if (updates.isNotEmpty) {
+      await docRef.update(updates);
+    }
   }
 
   /// Updates the quantity of an existing gift in the master inventory.

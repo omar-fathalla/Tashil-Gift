@@ -890,25 +890,69 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                        ),
                                                        child: Row(
                                                          children: [
-                                                           Container(
-                                                             width: 44,
-                                                             height: 44,
-                                                             decoration: BoxDecoration(
-                                                               color: isGiftVoucher
-                                                                   ? Colors.amber.shade100
-                                                                   : colorScheme.primary.withValues(alpha: 0.12),
-                                                               shape: BoxShape.circle,
+                                                           if (gift.imageUrl != null && gift.imageUrl!.trim().isNotEmpty)
+                                                             Container(
+                                                               width: 44,
+                                                               height: 44,
+                                                               decoration: BoxDecoration(
+                                                                 borderRadius: BorderRadius.circular(10),
+                                                                 border: Border.all(
+                                                                   color: isGiftVoucher ? Colors.amber.shade300 : colorScheme.outlineVariant.withValues(alpha: 0.5),
+                                                                   width: 1,
+                                                                 ),
+                                                                 boxShadow: [
+                                                                   BoxShadow(
+                                                                     color: Colors.black.withValues(alpha: 0.04),
+                                                                     blurRadius: 4,
+                                                                     offset: const Offset(0, 2),
+                                                                   ),
+                                                                 ],
+                                                               ),
+                                                               child: ClipRRect(
+                                                                 borderRadius: BorderRadius.circular(9),
+                                                                 child: Image.network(
+                                                                   gift.imageUrl!.trim(),
+                                                                   fit: BoxFit.cover,
+                                                                   errorBuilder: (context, error, stackTrace) => Container(
+                                                                     decoration: BoxDecoration(
+                                                                       color: isGiftVoucher
+                                                                           ? Colors.amber.shade100
+                                                                           : colorScheme.primary.withValues(alpha: 0.12),
+                                                                       shape: BoxShape.circle,
+                                                                     ),
+                                                                     child: Icon(
+                                                                       isGiftVoucher
+                                                                           ? Icons.confirmation_number_rounded
+                                                                           : Icons.card_giftcard_rounded,
+                                                                       color: isGiftVoucher
+                                                                           ? Colors.amber.shade900
+                                                                           : colorScheme.primary,
+                                                                       size: 24,
+                                                                     ),
+                                                                   ),
+                                                                 ),
+                                                               ),
+                                                             )
+                                                           else
+                                                             Container(
+                                                               width: 44,
+                                                               height: 44,
+                                                               decoration: BoxDecoration(
+                                                                 color: isGiftVoucher
+                                                                     ? Colors.amber.shade100
+                                                                     : colorScheme.primary.withValues(alpha: 0.12),
+                                                                 shape: BoxShape.circle,
+                                                               ),
+                                                               child: Icon(
+                                                                 isGiftVoucher
+                                                                     ? Icons.confirmation_number_rounded
+                                                                     : Icons.card_giftcard_rounded,
+                                                                 color: isGiftVoucher
+                                                                     ? Colors.amber.shade900
+                                                                     : colorScheme.primary,
+                                                                 size: 24,
+                                                               ),
                                                              ),
-                                                             child: Icon(
-                                                               isGiftVoucher
-                                                                   ? Icons.confirmation_number_rounded
-                                                                   : Icons.card_giftcard_rounded,
-                                                               color: isGiftVoucher
-                                                                   ? Colors.amber.shade900
-                                                                   : colorScheme.primary,
-                                                               size: 24,
-                                                             ),
-                                                           ),
                                                            const SizedBox(width: 14),
                                                            Expanded(
                                                              child: Column(
@@ -1060,14 +1104,34 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                              child: Row(
                                                                mainAxisSize: MainAxisSize.min,
                                                                children: [
-                                                                 Icon(
-                                                                   g.isVoucher
-                                                                       ? Icons.confirmation_number_rounded
-                                                                       : Icons.card_giftcard_rounded,
-                                                                   size: 13,
-                                                                   color: Colors.amber.shade900,
-                                                                 ),
-                                                                 const SizedBox(width: 4),
+                                                                 if (g.imageUrl != null && g.imageUrl!.trim().isNotEmpty) ...[
+                                                                   ClipRRect(
+                                                                     borderRadius: BorderRadius.circular(4),
+                                                                     child: Image.network(
+                                                                       g.imageUrl!.trim(),
+                                                                       width: 16,
+                                                                       height: 16,
+                                                                       fit: BoxFit.cover,
+                                                                       errorBuilder: (context, error, stackTrace) => Icon(
+                                                                         g.isVoucher
+                                                                             ? Icons.confirmation_number_rounded
+                                                                             : Icons.card_giftcard_rounded,
+                                                                         size: 13,
+                                                                         color: Colors.amber.shade900,
+                                                                       ),
+                                                                     ),
+                                                                   ),
+                                                                   const SizedBox(width: 4),
+                                                                 ] else ...[
+                                                                   Icon(
+                                                                     g.isVoucher
+                                                                         ? Icons.confirmation_number_rounded
+                                                                         : Icons.card_giftcard_rounded,
+                                                                     size: 13,
+                                                                     color: Colors.amber.shade900,
+                                                                   ),
+                                                                   const SizedBox(width: 4),
+                                                                 ],
                                                                  Text(
                                                                    '$totalCount × ${g.giftName}',
                                                                    style: GoogleFonts.cairo(

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/services/firebase_service.dart';
 import '../../../core/utils/error_handler.dart';
@@ -33,6 +35,10 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
   final FocusNode _voucherUnitValueFocusNode = FocusNode();
   bool _isLoading = false;
 
+  // Optional Product Image Upload State
+  Uint8List? _pickedImageBytes;
+  String? _pickedImageFileName;
+
   @override
   void dispose() {
     _companySearchController.dispose();
@@ -41,6 +47,220 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
     _giftNameFocusNode.dispose();
     _voucherUnitValueFocusNode.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickGiftImage() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['png', 'jpg', 'jpeg', 'webp'],
+        withData: true,
+      );
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        if (file.bytes != null) {
+          setState(() {
+            _pickedImageBytes = file.bytes;
+            _pickedImageFileName = file.name;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('خطأ أثناء اختيار الصورة: ${AppErrorHandler.getFriendlyMessage(e)}'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
+  void _clearPickedImage() {
+    setState(() {
+      _pickedImageBytes = null;
+      _pickedImageFileName = null;
+    });
+  }
+
+  Future<String?> _uploadGiftImageIfNeeded(String companySlug) async {
+    if (_pickedImageBytes == null) return null;
+    try {
+      final storage = ref.read(firebaseStorageProvider);
+      final ext = _pickedImageFileName != null && _pickedImageFileName!.contains('.')
+          ? _pickedImageFileName!.split('.').last.toLowerCase()
+          : 'jpg';
+      final cleanSlug = companySlug.isNotEmpty ? companySlug : 'general';
+      final storagePath = 'company_gifts/$cleanSlug/${DateTime.now().millisecondsSinceEpoch}_gift.$ext';
+      final storageRef = storage.ref().child(storagePath);
+      final metadata = SettableMetadata(
+        contentType: ext == 'png'
+            ? 'image/png'
+            : (ext == 'webp' ? 'image/webp' : 'image/jpeg'),
+        customMetadata: {
+          'companySlug': cleanSlug,
+          'uploadedAt': DateTime.now().toIso8601String(),
+        },
+      );
+      await storageRef.putData(_pickedImageBytes!, metadata).timeout(const Duration(seconds: 15));
+      return await storageRef.getDownloadURL().timeout(const Duration(seconds: 10));
+    } catch (e) {
+      debugPrint('Error uploading gift image: $e');
+      return null;
+    }
+  }
+
+  void _showImagePreviewDialog(String imageUrl, String title) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(16),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                constraints: const BoxConstraints(maxWidth: 450, maxHeight: 450),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.25),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 16),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    Flexible(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: Image.network(
+                          imageUrl,
+                          fit: BoxFit.contain,
+                          loadingBuilder: (_, child, progress) => progress == null
+                              ? child
+                              : const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(32.0),
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton.filled(
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.black54,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildGiftImagePickerBox(bool isAr, ColorScheme colorScheme) {
+    final hasImage = _pickedImageBytes != null;
+    return Tooltip(
+      message: hasImage
+          ? (isAr ? 'اضغط لتغيير الصورة' : 'Tap to change image')
+          : (isAr ? 'إرفاق صورة المنتج (اختياري)' : 'Upload product image (optional)'),
+      child: InkWell(
+        onTap: _pickGiftImage,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          width: 58,
+          height: 58,
+          decoration: BoxDecoration(
+            color: hasImage
+                ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)
+                : colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: hasImage
+                  ? colorScheme.primary
+                  : colorScheme.outlineVariant.withValues(alpha: 0.6),
+              width: hasImage ? 1.5 : 1,
+            ),
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              if (hasImage)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.memory(
+                    _pickedImageBytes!,
+                    width: 58,
+                    height: 58,
+                    fit: BoxFit.cover,
+                  ),
+                )
+              else
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.add_photo_alternate_outlined,
+                      color: colorScheme.primary,
+                      size: 22,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isAr ? 'صورة' : 'Image',
+                      style: GoogleFonts.cairo(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              if (hasImage)
+                PositionedDirectional(
+                  top: 2,
+                  end: 2,
+                  child: InkWell(
+                    onTap: _clearPickedImage,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: const BoxDecoration(
+                        color: Colors.redAccent,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.close, size: 12, color: Colors.white),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _onVoucherDenominationSelected(double val) {
@@ -114,6 +334,11 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
       final slug = _selectedCompanySlug!.toLowerCase().trim();
       final companyName = _selectedCompanyName ?? _selectedCompanySlug!;
 
+      String? uploadedImageUrl;
+      if (_pickedImageBytes != null) {
+        uploadedImageUrl = await _uploadGiftImageIfNeeded(slug);
+      }
+
       await ref.read(companyGiftsServiceProvider).addGift(
         companySlug: slug,
         companyName: companyName,
@@ -121,11 +346,13 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
         quantity: 0, // Master catalog definition (stock allocated at branch level by Manager)
         giftType: _selectedGiftType,
         unitValue: unitVal,
+        imageUrl: uploadedImageUrl,
         addedBy: 'مسؤول النظام (الأدمن)',
       );
 
       _giftNameController.clear();
       _voucherUnitValueController.clear();
+      _clearPickedImage();
 
       if (mounted) {
         if (_selectedGiftType == 'voucher') {
@@ -191,108 +418,266 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final isAr = ref.isArabic;
 
+    Uint8List? editImageBytes;
+    String? editImageFileName;
+    String? currentImageUrl = gift.imageUrl;
+    bool removeImage = false;
+    bool isSavingEdit = false;
+
     showDialog(
       context: context,
       builder: (dialogCtx) {
-        return AlertDialog(
-          backgroundColor: colorScheme.surfaceContainerHigh,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
-          ),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
-                  color: colorScheme.primary,
-                  size: 20,
-                ),
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            final hasAnyImage = !removeImage && (editImageBytes != null || (currentImageUrl != null && currentImageUrl.isNotEmpty));
+
+            return AlertDialog(
+              backgroundColor: colorScheme.surfaceContainerHigh,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  isAr ? 'تعديل بيانات الصنف في الكتالوج' : 'Edit Catalog Gift',
-                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: colorScheme.onSurface, fontSize: 16),
-                ),
-              ),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: editNameController,
-                  autofocus: true,
-                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
-                  decoration: InputDecoration(
-                    labelText: isAr ? 'اسم الهدية / المنتج المعتمد *' : 'Gift / Product Name *',
-                    labelStyle: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant),
-                    filled: true,
-                    fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none,
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
+                      color: colorScheme.primary,
+                      size: 20,
                     ),
                   ),
-                ),
-                if (isVoucher) ...[
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: editUnitValController,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
-                    style: GoogleFonts.cairo(),
-                    decoration: InputDecoration(
-                      labelText: isAr ? 'قيمة الكارت الواحد (فئة الفواتشر)' : 'Voucher Face Value',
-                      hintText: 'مثال: 50',
-                      prefixText: 'ج.م ',
-                      labelStyle: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant),
-                      filled: true,
-                      fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide.none,
-                      ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      isAr ? 'تعديل بيانات الصنف في الكتالوج' : 'Edit Catalog Gift',
+                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: colorScheme.onSurface, fontSize: 16),
                     ),
                   ),
                 ],
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogCtx).pop(),
-              child: Text(isAr ? 'إلغاء' : 'Cancel', style: GoogleFonts.cairo()),
-            ),
-            FilledButton.icon(
-              icon: const Icon(Icons.check_rounded, size: 18),
-              style: FilledButton.styleFrom(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
-              onPressed: () async {
-                final newName = editNameController.text.trim();
-                final unitVal = editUnitValController.text.trim().toDoubleOrNull() ?? rawUnitVal;
-                if (newName.isNotEmpty) {
-                  try {
-                    await ref.read(firestoreProvider).collection('company_gifts').doc(gift.id).update({
-                      'giftName': newName,
-                      'name': newName,
-                      if (isVoucher) 'unitValue': unitVal,
-                    });
-                  } catch (_) {}
-                  if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
-                }
-              },
-              label: Text(isAr ? 'حفظ التعديلات' : 'Save Changes', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
-            ),
-          ],
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Product Image Picker / Preview in Dialog
+                    Center(
+                      child: Column(
+                        children: [
+                          Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Container(
+                                width: 88,
+                                height: 88,
+                                decoration: BoxDecoration(
+                                  color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                                  borderRadius: BorderRadius.circular(18),
+                                  border: Border.all(
+                                    color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: editImageBytes != null
+                                      ? Image.memory(editImageBytes!, fit: BoxFit.cover)
+                                      : (currentImageUrl != null && currentImageUrl.isNotEmpty && !removeImage
+                                          ? Image.network(
+                                              currentImageUrl,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (context, error, stackTrace) => Icon(
+                                                isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
+                                                size: 36,
+                                                color: colorScheme.onSurfaceVariant,
+                                              ),
+                                            )
+                                          : Column(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                Icon(
+                                                  Icons.add_photo_alternate_outlined,
+                                                  size: 32,
+                                                  color: colorScheme.primary,
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  isAr ? 'صورة المنتج' : 'Product Image',
+                                                  style: GoogleFonts.cairo(
+                                                    fontSize: 10,
+                                                    color: colorScheme.onSurfaceVariant,
+                                                  ),
+                                                ),
+                                              ],
+                                            )),
+                                ),
+                              ),
+                              if (hasAnyImage)
+                                PositionedDirectional(
+                                  top: -2,
+                                  end: -2,
+                                  child: InkWell(
+                                    onTap: () {
+                                      setDialogState(() {
+                                        editImageBytes = null;
+                                        editImageFileName = null;
+                                        removeImage = true;
+                                      });
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: const BoxDecoration(
+                                        color: Colors.redAccent,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(Icons.close, size: 14, color: Colors.white),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            onPressed: () async {
+                              try {
+                                final res = await FilePicker.platform.pickFiles(
+                                  type: FileType.custom,
+                                  allowedExtensions: ['png', 'jpg', 'jpeg', 'webp'],
+                                  withData: true,
+                                );
+                                if (res != null && res.files.isNotEmpty && res.files.first.bytes != null) {
+                                  setDialogState(() {
+                                    editImageBytes = res.files.first.bytes;
+                                    editImageFileName = res.files.first.name;
+                                    removeImage = false;
+                                  });
+                                }
+                              } catch (_) {}
+                            },
+                            icon: const Icon(Icons.photo_camera_rounded, size: 16),
+                            label: Text(
+                              hasAnyImage
+                                  ? (isAr ? 'تغيير صورة الصنف' : 'Change Image')
+                                  : (isAr ? 'رفع صورة الصنف (اختياري)' : 'Upload Image (Optional)'),
+                              style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+
+                    TextField(
+                      controller: editNameController,
+                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                      decoration: InputDecoration(
+                        labelText: isAr ? 'اسم الهدية / المنتج المعتمد *' : 'Gift / Product Name *',
+                        labelStyle: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant),
+                        filled: true,
+                        fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                    if (isVoucher) ...[
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: editUnitValController,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
+                        style: GoogleFonts.cairo(),
+                        decoration: InputDecoration(
+                          labelText: isAr ? 'قيمة الكارت الواحد (فئة الفواتشر)' : 'Voucher Face Value',
+                          hintText: 'مثال: 50',
+                          prefixText: 'ج.م ',
+                          labelStyle: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant),
+                          filled: true,
+                          fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSavingEdit ? null : () => Navigator.of(dialogCtx).pop(),
+                  child: Text(isAr ? 'إلغاء' : 'Cancel', style: GoogleFonts.cairo()),
+                ),
+                FilledButton.icon(
+                  icon: isSavingEdit
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.check_rounded, size: 18),
+                  style: FilledButton.styleFrom(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  onPressed: isSavingEdit
+                      ? null
+                      : () async {
+                          final newName = editNameController.text.trim();
+                          final unitVal = editUnitValController.text.trim().toDoubleOrNull() ?? rawUnitVal;
+                          if (newName.isEmpty) return;
+
+                          setDialogState(() => isSavingEdit = true);
+
+                          try {
+                            String? updatedImageUrl;
+                            if (editImageBytes != null) {
+                              final storage = ref.read(firebaseStorageProvider);
+                              final ext = editImageFileName != null && editImageFileName!.contains('.')
+                                  ? editImageFileName!.split('.').last.toLowerCase()
+                                  : 'jpg';
+                              final storagePath = 'company_gifts/${gift.companySlug}/${DateTime.now().millisecondsSinceEpoch}_gift.$ext';
+                              final storageRef = storage.ref().child(storagePath);
+                              final metadata = SettableMetadata(
+                                contentType: ext == 'png'
+                                    ? 'image/png'
+                                    : (ext == 'webp' ? 'image/webp' : 'image/jpeg'),
+                                customMetadata: {
+                                  'companySlug': gift.companySlug,
+                                  'uploadedAt': DateTime.now().toIso8601String(),
+                                },
+                              );
+                              await storageRef.putData(editImageBytes!, metadata).timeout(const Duration(seconds: 15));
+                              updatedImageUrl = await storageRef.getDownloadURL().timeout(const Duration(seconds: 10));
+                            }
+
+                            await ref.read(companyGiftsServiceProvider).updateGiftDetails(
+                              giftId: gift.id,
+                              giftName: newName,
+                              unitValue: isVoucher ? unitVal : null,
+                              imageUrl: updatedImageUrl,
+                              removeImage: removeImage,
+                            );
+
+                            if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
+                          } catch (e) {
+                            debugPrint('Error updating gift details: $e');
+                            setDialogState(() => isSavingEdit = false);
+                          }
+                        },
+                  label: Text(
+                    isSavingEdit ? (isAr ? 'جاري الحفظ...' : 'Saving...') : (isAr ? 'حفظ التعديلات' : 'Save Changes'),
+                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -766,6 +1151,8 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            _buildGiftImagePickerBox(isAr, colorScheme),
+                            const SizedBox(width: 12),
                             Expanded(
                               flex: 3,
                               child: TextField(
@@ -844,7 +1231,10 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                       ] else ...[
                         // Input fields for standard physical product
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
+                            _buildGiftImagePickerBox(isAr, colorScheme),
+                            const SizedBox(width: 14),
                             Expanded(
                               flex: 6,
                               child: TextField(
@@ -1114,21 +1504,82 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                                         ),
                                         const SizedBox(width: 12),
 
-                                        // 2. Gift Icon
-                                        Container(
-                                          padding: const EdgeInsets.all(10),
-                                          decoration: BoxDecoration(
-                                            color: isVoucher
-                                                ? colorScheme.primaryContainer.withValues(alpha: 0.7)
-                                                : colorScheme.secondaryContainer.withValues(alpha: 0.6),
-                                            borderRadius: BorderRadius.circular(12),
+                                        // 2. Gift Icon or Image Thumbnail
+                                        if (gift.imageUrl != null && gift.imageUrl!.isNotEmpty)
+                                          MouseRegion(
+                                            cursor: SystemMouseCursors.click,
+                                            child: GestureDetector(
+                                              onTap: () => _showImagePreviewDialog(gift.imageUrl!, giftTitle),
+                                              child: Tooltip(
+                                                message: isAr ? 'اضغط لتكبير صورة المنتج' : 'Tap to view full image',
+                                                child: Container(
+                                                  width: 48,
+                                                  height: 48,
+                                                  decoration: BoxDecoration(
+                                                    borderRadius: BorderRadius.circular(12),
+                                                    border: Border.all(
+                                                      color: isVoucher
+                                                          ? colorScheme.primary.withValues(alpha: 0.4)
+                                                          : colorScheme.outlineVariant.withValues(alpha: 0.6),
+                                                      width: 1.2,
+                                                    ),
+                                                    boxShadow: [
+                                                      BoxShadow(
+                                                        color: Colors.black.withValues(alpha: 0.04),
+                                                        blurRadius: 4,
+                                                        offset: const Offset(0, 1),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  child: ClipRRect(
+                                                    borderRadius: BorderRadius.circular(11),
+                                                    child: Image.network(
+                                                      gift.imageUrl!,
+                                                      width: 48,
+                                                      height: 48,
+                                                      fit: BoxFit.cover,
+                                                      loadingBuilder: (context, child, loadingProgress) {
+                                                        if (loadingProgress == null) return child;
+                                                        return Container(
+                                                          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                                                          child: const Center(
+                                                            child: SizedBox(
+                                                              width: 16,
+                                                              height: 16,
+                                                              child: CircularProgressIndicator(strokeWidth: 2),
+                                                            ),
+                                                          ),
+                                                        );
+                                                      },
+                                                      errorBuilder: (context, error, stackTrace) => Container(
+                                                        color: colorScheme.surfaceContainerHighest,
+                                                        child: Icon(
+                                                          isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard,
+                                                          color: colorScheme.onSurfaceVariant,
+                                                          size: 22,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          )
+                                        else
+                                          Container(
+                                            padding: const EdgeInsets.all(10),
+                                            decoration: BoxDecoration(
+                                              color: isVoucher
+                                                  ? colorScheme.primaryContainer.withValues(alpha: 0.7)
+                                                  : colorScheme.secondaryContainer.withValues(alpha: 0.6),
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: Icon(
+                                              isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard,
+                                              color: isVoucher ? colorScheme.primary : colorScheme.onSecondaryContainer,
+                                              size: 22,
+                                            ),
                                           ),
-                                          child: Icon(
-                                            isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard,
-                                            color: isVoucher ? colorScheme.primary : colorScheme.onSecondaryContainer,
-                                            size: 22,
-                                          ),
-                                        ),
                                         const SizedBox(width: 14),
 
                                         // 3. Name & Type Badge
