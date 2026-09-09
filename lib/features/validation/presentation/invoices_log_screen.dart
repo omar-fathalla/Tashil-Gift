@@ -2729,6 +2729,9 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                               } else if (event.gameType == 'directGift' || event.gameType == 'direct_gift') {
                                 gameTypeLabel = isAr ? 'هدية فورية' : 'Direct Gift';
                                 gameIcon = Icons.card_giftcard_rounded;
+                              } else if (event.gameType == 'chooseGift') {
+                                gameTypeLabel = isAr ? 'اختر هديتك' : 'Choose Gift';
+                                gameIcon = Icons.grid_view_rounded;
                               }
 
                               return InkWell(

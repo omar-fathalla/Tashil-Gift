@@ -11,6 +11,7 @@ import 'spin_the_wheel_screen.dart';
 import 'scratch_card_screen.dart';
 import 'mystery_box_screen.dart';
 import 'direct_gift_claim_screen.dart';
+import 'choose_gift_screen.dart';
 
 class GameTypesScreen extends ConsumerWidget {
   const GameTypesScreen({super.key});
@@ -290,6 +291,55 @@ class GameTypesScreen extends ConsumerWidget {
                           'AI analyzes the receipt to verify eligibility and product purchase conditions',
                           'Direct Gift Claim screen opens immediately with automatic quantity calculation',
                           'Gift stock is deducted from branch inventory and handover is logged in real-time',
+                        ],
+                  badgeText: isAr ? 'متاحة للاستخدام' : 'Active & Ready',
+                  badgeColor: colorScheme.secondaryContainer,
+                  badgeTextColor: colorScheme.onSecondaryContainer,
+                ),
+
+                const SizedBox(height: 24),
+
+                // Game 5: Choose Your Gift (اختر هديتك - شبكة الاختيارات)
+                _buildGameCard(
+                  context: context,
+                  isAr: isAr,
+                  iconContainerColor: colorScheme.primaryContainer,
+                  iconColor: colorScheme.primary,
+                  icon: Icons.grid_view_rounded,
+                  title: strings.gameChooseGiftTitle,
+                  subtitle: strings.gameChooseGiftSubtitle,
+                  description: strings.gameChooseGiftDesc,
+                  onPlayDemo: () {
+                    Navigator.of(context).push(
+                      M3PageRoute(
+                        page: const ChooseGiftScreen(
+                          totalChances: 2,
+                          isDemo: true,
+                          prizes: [
+                            'ساعة ذكية فاخرة ⌚',
+                            'قسيمة مشتريات 150 ج.م 🎟️',
+                            'سماعات لاسلكية Pro 🎧',
+                            'ماكينة قهوة اسبريسو ☕',
+                            'خلاط كهربائي سريع ⚡',
+                            'طقم أواني فاخر 🍳',
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                  onPlaySound: () => audioService.playGiftUnlock(),
+                  steps: isAr
+                      ? [
+                          'يتم إعداد وعرض شبكة بطاقات الهدايا المتوفرة في الحملة والفرع',
+                          'يقوم العميل بالاطلاع على خيارات الهدايا المتنوعة',
+                          'يختار العميل هديته المفضلة بلمسة واحدة على المربع المخصص',
+                          'يتم تأكيد الاختيار وخصم الهدية من رصيد الفرع فورياً',
+                        ]
+                      : [
+                          'A curated grid of available campaign gifts is displayed',
+                          'Customer explores the variety of designated rewards',
+                          'Customer picks their favorite reward with a single tap on the card',
+                          'Selection is confirmed and deducted from branch stock in real-time',
                         ],
                   badgeText: isAr ? 'متاحة للاستخدام' : 'Active & Ready',
                   badgeColor: colorScheme.secondaryContainer,

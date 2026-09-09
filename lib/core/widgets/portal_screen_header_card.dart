@@ -114,45 +114,211 @@ class PortalScreenHeaderCard extends ConsumerWidget {
           key: ValueKey('portal_header_event_${effectiveSelectedId}_${cleanEvents.length}'),
           value: effectiveSelectedId,
           isExpanded: true,
+          itemHeight: 62.0,
+          menuMaxHeight: 460,
           dropdownColor: colorScheme.surfaceContainerHigh,
           borderRadius: BorderRadius.circular(16),
           icon: Icon(Icons.keyboard_arrow_down_rounded, color: colorScheme.primary),
           style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
-          items: [
-            DropdownMenuItem<String>(
-              value: 'ALL',
-              child: Row(
+          selectedItemBuilder: (BuildContext context) {
+            return [
+              // Closed view for 'ALL'
+              Row(
                 children: [
-                  Icon(Icons.public_rounded, size: 18, color: colorScheme.primary),
+                  Icon(Icons.public_rounded, size: 17, color: colorScheme.primary),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       (lockedCompanySlug != null && lockedCompanySlug!.isNotEmpty)
                           ? strings.companyAllCampaigns
                           : (isAr ? 'كافة الحملات والفعاليات (All)' : 'All Campaigns & Events'),
+                      style: GoogleFonts.cairo(fontSize: 12.5, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
               ),
-            ),
-            ...cleanEvents.map((evt) => DropdownMenuItem<String>(
-                  value: evt.id,
-                  child: Row(
+              // Closed view for each campaign
+              ...cleanEvents.map((evt) => Row(
                     children: [
-                      Icon(Icons.campaign_rounded, size: 18, color: colorScheme.secondary),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primaryContainer.withValues(alpha: 0.8),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3), width: 0.8),
+                        ),
+                        child: Text(
+                          evt.targetCompany.isNotEmpty ? evt.targetCompany : (isAr ? 'عام' : 'General'),
+                          style: GoogleFonts.cairo(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          evt.retailChainName.isNotEmpty
-                              ? '${evt.eventName} (${evt.targetCompany} - ${evt.retailChainName})'
-                              : '${evt.eventName} (${evt.targetCompany})',
+                          evt.eventName,
+                          style: GoogleFonts.cairo(fontSize: 12.5, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
+                  )),
+            ];
+          },
+          items: [
+            DropdownMenuItem<String>(
+              value: 'ALL',
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.public_rounded, size: 18, color: colorScheme.primary),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            (lockedCompanySlug != null && lockedCompanySlug!.isNotEmpty)
+                                ? strings.companyAllCampaigns
+                                : (isAr ? 'كافة الحملات والفعاليات (All)' : 'All Campaigns & Events'),
+                            style: GoogleFonts.cairo(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.primary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            isAr ? 'عرض شامل لكافة الفواتير والفعاليات المسجلة' : 'Comprehensive view across all events',
+                            style: GoogleFonts.cairo(
+                              fontSize: 10.5,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            ...cleanEvents.map((evt) => DropdownMenuItem<String>(
+                  value: evt.id,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(
+                            color: colorScheme.secondaryContainer.withValues(alpha: 0.7),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(Icons.campaign_rounded, size: 18, color: colorScheme.secondary),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // Line 1: Festival / Event Name (bold & prominent)
+                              Text(
+                                evt.eventName,
+                                style: GoogleFonts.cairo(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: colorScheme.onSurface,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 3),
+                              // Line 2: Company Label Badge + Retail Chain Badge
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                    decoration: BoxDecoration(
+                                      color: colorScheme.primaryContainer,
+                                      borderRadius: BorderRadius.circular(5),
+                                      border: Border.all(
+                                        color: colorScheme.primary.withValues(alpha: 0.3),
+                                        width: 0.7,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.business_rounded, size: 10, color: colorScheme.primary),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          evt.targetCompany.isNotEmpty ? evt.targetCompany : (isAr ? 'عام' : 'General'),
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: colorScheme.onPrimaryContainer,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (evt.retailChainName.isNotEmpty) ...[
+                                    const SizedBox(width: 6),
+                                    Flexible(
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                        decoration: BoxDecoration(
+                                          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                                          borderRadius: BorderRadius.circular(5),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.storefront_rounded, size: 10, color: colorScheme.onSurfaceVariant),
+                                            const SizedBox(width: 3),
+                                            Flexible(
+                                              child: Text(
+                                                evt.retailChainName,
+                                                style: GoogleFonts.cairo(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: colorScheme.onSurfaceVariant,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 )),
           ],
@@ -199,7 +365,7 @@ class PortalScreenHeaderCard extends ConsumerWidget {
                   children: [
                     Expanded(child: titleWidget),
                     const SizedBox(width: 16),
-                    SizedBox(width: 260, child: dropdownWidget),
+                    SizedBox(width: 350, child: dropdownWidget),
                     if (actions.isNotEmpty) ...[
                       const SizedBox(width: 10),
                       ...actions.map((act) => Padding(

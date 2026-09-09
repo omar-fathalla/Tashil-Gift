@@ -320,6 +320,20 @@ class AppStrings {
     en: 'Customer instantly receives a designated promotional gift upon receipt verification without any random draw or chance game.',
     hi: 'रसीद सत्यापन के बाद ग्राहक को बिना किसी यादृच्छिक ड्रॉ के तुरंत एक निर्दिष्ट उपहार मिलता है।',
   );
+  String get gameChooseGiftTitle => _t(ar: 'اختر هديتك (شبكة الاختيارات)', en: 'Choose Your Gift (Choice Grid)', hi: 'अपना उपहार चुनें (Choose Your Gift)');
+  String get gameChooseGiftSubtitle => _t(
+    ar: 'حرية اختيار الهدية المفضلة من بين مجموعة هدايا تفاعلية معتمدة',
+    en: 'Freedom to pick the preferred gift from a curated interactive gift grid',
+    hi: 'सत्यापित उपहारों के ग्रिड से अपना पसंदीदा उपहार चुनने की स्वतंत्रता',
+  );
+  String get gameChooseGiftDesc => _t(
+    ar: 'تظهر للعميل بطاقات ومربعات تفاعلية بكافة الهدايا المتوفرة في الحملة والفرع، ليختار بنفسه الهدية التي تناسبه بلمسة واحدة وتأكيد فوري دون اعتماد على الحظ.',
+    en: 'Customer is presented with a responsive grid of available campaign gifts to freely pick and confirm their favorite reward with a single tap.',
+    hi: 'ग्राहक को उपलब्ध अभियान उपहारों का एक इंटरैक्टिव ग्रिड दिखाया जाता है ताकि वह बिना किसी भाग्य पर निर्भर हुए एक स्पर्श में अपना पसंदीदा उपहार चुन सके।',
+  );
+  String get chooseYourGiftPrompt => _t(ar: 'انقر على هديتك المفضلة للاختيار', en: 'Tap your favorite gift to select', hi: 'चुनने के लिए अपने पसंदीदा उपहार पर टैप करें');
+  String get confirmGiftSelection => _t(ar: 'تأكيد اختيار الهدية', en: 'Confirm Gift Selection', hi: 'उपहार चयन की पुष्टि करें');
+  String get selectGiftForChance => _t(ar: 'اختر الهدية للفرصة رقم', en: 'Select gift for chance #', hi: 'अवसर # के लिए उपहार चुनें');
   String get claimDirectGift => _t(ar: 'تسليم الهدية للعميل', en: 'Handover Gift to Customer', hi: 'ग्राहक को उपहार सौंपें');
   String get directGiftQuantity => _t(ar: 'الكمية المستحقة', en: 'Claim Quantity', hi: 'हकदार मात्रा');
   String get testGameAction => _t(ar: 'تجربة اللعبة (ديمو تفاعلي)', en: 'Play Game (Live Demo)', hi: 'गेम टेस्ट करें (लाइव डेमो)');

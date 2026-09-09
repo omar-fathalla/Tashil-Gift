@@ -4606,6 +4606,16 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             ],
                           ),
                         ),
+                        DropdownMenuItem(
+                          value: 'chooseGift',
+                          child: Row(
+                            children: [
+                              Icon(Icons.grid_view_rounded, color: colorScheme.primary, size: 20),
+                              const SizedBox(width: 10),
+                              Text('اختر هديتك - شبكة الاختيارات (Choose Your Gift)', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
                       ],
                       onChanged: (value) {
                         if (value != null) {
@@ -4613,6 +4623,34 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         }
                       },
                     ),
+                    if (_selectedGameType == 'chooseGift') ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primaryContainer.withValues(alpha: 0.4),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.touch_app_rounded, color: colorScheme.primary, size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'في نمط "اختر هديتك": تظهر للعميل شبكة بطاقات تفاعلية بكافة الهدايا المتوفرة في الحملة والفرع، ليختار بنفسه الهدية التي تفضلها بلمسة واحدة دون اعتماد على القرعة العشوائية أو عجلة الحظ.',
+                                style: GoogleFonts.cairo(
+                                  fontSize: 13,
+                                  color: colorScheme.onPrimaryContainer,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     if (_selectedGameType == 'directGift') ...[
                       const SizedBox(height: 12),
                       Container(

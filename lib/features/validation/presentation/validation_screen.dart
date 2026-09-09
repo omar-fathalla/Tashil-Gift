@@ -17,6 +17,7 @@ import '../../../core/utils/error_handler.dart';
 import '../../games/presentation/spin_the_wheel_screen.dart';
 import '../../games/presentation/scratch_card_screen.dart';
 import '../../games/presentation/direct_gift_claim_screen.dart';
+import '../../games/presentation/choose_gift_screen.dart';
 import '../../admin/domain/event_model.dart';
 import '../../admin/domain/retail_chain_model.dart';
 import '../../client_portal/presentation/widgets/campaign_gift_balance_dialog.dart';
@@ -692,6 +693,33 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       final prizeNames = activeEvent.availablePrizeNames;
       final gameType = activeEvent.gameType;
 
+      // Smart branch ID resolution matching AI-detected branch name with campaign branches
+      String? resolvedBranchId;
+      if (activeEvent.branchIds.isNotEmpty) {
+        final detectedBranchClean = result.branchDetected.trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
+        if (detectedBranchClean.isNotEmpty) {
+          for (int i = 0; i < activeEvent.branchNames.length; i++) {
+            final bName = activeEvent.branchNames[i].trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
+            if (bName.isNotEmpty && (bName.contains(detectedBranchClean) || detectedBranchClean.contains(bName))) {
+              if (i < activeEvent.branchIds.length) {
+                resolvedBranchId = activeEvent.branchIds[i];
+                break;
+              }
+            }
+          }
+          if (resolvedBranchId == null) {
+            for (final p in activeEvent.allocatedPrizes) {
+              final pBranchName = p.branchName.trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
+              if (pBranchName.isNotEmpty && (pBranchName.contains(detectedBranchClean) || detectedBranchClean.contains(pBranchName))) {
+                resolvedBranchId = p.branchId;
+                break;
+              }
+            }
+          }
+        }
+        resolvedBranchId ??= activeEvent.branchIds.first;
+      }
+
       if (gameType == 'directGift' || gameType == 'direct_gift') {
         final designatedPrizeObj = activeEvent.availablePrizes.isNotEmpty
             ? activeEvent.availablePrizes.first
@@ -758,33 +786,6 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           }
         }
 
-        // Smart branch ID resolution matching AI-detected branch name with campaign branches
-        String? resolvedBranchId;
-        if (activeEvent.branchIds.isNotEmpty) {
-          final detectedBranchClean = result.branchDetected.trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
-          if (detectedBranchClean.isNotEmpty) {
-            for (int i = 0; i < activeEvent.branchNames.length; i++) {
-              final bName = activeEvent.branchNames[i].trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
-              if (bName.isNotEmpty && (bName.contains(detectedBranchClean) || detectedBranchClean.contains(bName))) {
-                if (i < activeEvent.branchIds.length) {
-                  resolvedBranchId = activeEvent.branchIds[i];
-                  break;
-                }
-              }
-            }
-            if (resolvedBranchId == null) {
-              for (final p in activeEvent.allocatedPrizes) {
-                final pBranchName = p.branchName.trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
-                if (pBranchName.isNotEmpty && (pBranchName.contains(detectedBranchClean) || detectedBranchClean.contains(pBranchName))) {
-                  resolvedBranchId = p.branchId;
-                  break;
-                }
-              }
-            }
-          }
-          resolvedBranchId ??= activeEvent.branchIds.first;
-        }
-
         final promoQuantity = resolvedLinkedGifts.isNotEmpty
             ? 1
             : (activeEvent.allowMultipleChances ? totalChances : 1);
@@ -800,6 +801,24 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
               isVoucher: resolvedIsVoucher,
               linkedGifts: resolvedLinkedGifts,
               requireVoucherSerials: activeEvent.requireVoucherSerials,
+            ),
+          ),
+        );
+        if (mounted) {
+          setState(() {
+            _receiptImages.clear();
+            _selectedPreviewIndex = 0;
+          });
+        }
+      } else if (gameType == 'chooseGift') {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => ChooseGiftScreen(
+              transactionId: transactionRef.id,
+              eventId: activeEvent.id,
+              prizes: prizeNames,
+              totalChances: totalChances,
+              branchId: resolvedBranchId,
             ),
           ),
         );

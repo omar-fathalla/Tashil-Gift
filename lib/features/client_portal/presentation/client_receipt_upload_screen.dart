@@ -29,6 +29,7 @@ import '../../admin/domain/retail_chain_model.dart';
 import '../../games/presentation/spin_the_wheel_screen.dart';
 import '../../games/presentation/scratch_card_screen.dart';
 import '../../games/presentation/direct_gift_claim_screen.dart';
+import '../../games/presentation/choose_gift_screen.dart';
 import '../../validation/presentation/widgets/receipt_validation_dialog.dart';
 import 'widgets/campaign_gift_balance_dialog.dart';
 import 'widgets/campaign_brief_dialog.dart';
@@ -1180,6 +1181,33 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
 
       final gameType = currentEvent?.gameType ?? (totalValue >= 500 ? 'scratchCard' : 'spinTheWheel');
 
+      // Smart branch ID resolution matching AI-detected branch name with campaign branches
+      String? resolvedBranchId;
+      if (currentEvent != null && currentEvent.branchIds.isNotEmpty) {
+        final detectedBranchClean = result.branchDetected.trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
+        if (detectedBranchClean.isNotEmpty) {
+          for (int i = 0; i < currentEvent.branchNames.length; i++) {
+            final bName = currentEvent.branchNames[i].trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
+            if (bName.isNotEmpty && (bName.contains(detectedBranchClean) || detectedBranchClean.contains(bName))) {
+              if (i < currentEvent.branchIds.length) {
+                resolvedBranchId = currentEvent.branchIds[i];
+                break;
+              }
+            }
+          }
+          if (resolvedBranchId == null) {
+            for (final p in currentEvent.allocatedPrizes) {
+              final pBranchName = p.branchName.trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
+              if (pBranchName.isNotEmpty && (pBranchName.contains(detectedBranchClean) || detectedBranchClean.contains(pBranchName))) {
+                resolvedBranchId = p.branchId;
+                break;
+              }
+            }
+          }
+        }
+        resolvedBranchId ??= currentEvent.branchIds.first;
+      }
+
       if (gameType == 'directGift' || gameType == 'direct_gift') {
         final designatedPrizeObj = (currentEvent?.availablePrizes.isNotEmpty ?? false)
             ? currentEvent!.availablePrizes.first
@@ -1248,33 +1276,6 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           }
         }
 
-        // Smart branch ID resolution matching AI-detected branch name with campaign branches
-        String? resolvedBranchId;
-        if (currentEvent != null && currentEvent.branchIds.isNotEmpty) {
-          final detectedBranchClean = result.branchDetected.trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
-          if (detectedBranchClean.isNotEmpty) {
-            for (int i = 0; i < currentEvent.branchNames.length; i++) {
-              final bName = currentEvent.branchNames[i].trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
-              if (bName.isNotEmpty && (bName.contains(detectedBranchClean) || detectedBranchClean.contains(bName))) {
-                if (i < currentEvent.branchIds.length) {
-                  resolvedBranchId = currentEvent.branchIds[i];
-                  break;
-                }
-              }
-            }
-            if (resolvedBranchId == null) {
-              for (final p in currentEvent.allocatedPrizes) {
-                final pBranchName = p.branchName.trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
-                if (pBranchName.isNotEmpty && (pBranchName.contains(detectedBranchClean) || detectedBranchClean.contains(pBranchName))) {
-                  resolvedBranchId = p.branchId;
-                  break;
-                }
-              }
-            }
-          }
-          resolvedBranchId ??= currentEvent.branchIds.first;
-        }
-
         final promoQuantity = resolvedLinkedGifts.isNotEmpty
             ? 1
             : ((currentEvent?.allowMultipleChances ?? false) ? totalChances : 1);
@@ -1290,6 +1291,19 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
               isVoucher: resolvedIsVoucher,
               linkedGifts: resolvedLinkedGifts,
               requireVoucherSerials: currentEvent?.requireVoucherSerials ?? false,
+            ),
+          ),
+        );
+        _resetFormForNextCustomer();
+      } else if (gameType == 'chooseGift') {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => ChooseGiftScreen(
+              transactionId: transactionRef.id,
+              eventId: currentEventId,
+              prizes: prizeNames,
+              totalChances: totalChances,
+              branchId: resolvedBranchId,
             ),
           ),
         );

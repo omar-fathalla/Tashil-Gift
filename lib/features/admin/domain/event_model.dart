@@ -487,7 +487,7 @@ class EventModel {
   final List<PromotionalRuleItem> promotionalRules;
 
   /// The type of game to show after receipt validation.
-  /// Values: 'wheel' (عجلة الحظ), 'scratch' (امسح واربح)
+  /// Values: 'wheel' (عجلة الحظ), 'scratch' (امسح واربح), 'mysteryBox' (الصندوق الغامض), 'directGift' (هدية فورية مباشرة), 'chooseGift' (اختر هديتك - شبكة الاختيارات)
   final String gameType;
 
   /// Prizes allocated to this specific campaign/branch from the company's master inventory.
