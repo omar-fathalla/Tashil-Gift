@@ -598,7 +598,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
             if (p.trim().isNotEmpty) reqProdSet.add(p.trim());
           }
           for (final r in ev.promotionalRules) {
-            final key = r.id.isNotEmpty ? r.id : '${ev.id}_${r.ruleTitle}';
+            final key = '${ev.id}_${r.id.isNotEmpty ? r.id : r.ruleTitle}';
             if (ruleIdSet.add(key)) {
               combinedPromotionalRules.add(r);
             }
