@@ -221,10 +221,12 @@ class AppTheme {
           fontSize: 14,
           fontWeight: FontWeight.bold,
           color: colorScheme.onSurface,
+          height: 1.25,
         ),
         unselectedLabelTextStyle: GoogleFonts.cairo(
           fontSize: 13,
           color: colorScheme.onSurfaceVariant,
+          height: 1.25,
         ),
       ),
 

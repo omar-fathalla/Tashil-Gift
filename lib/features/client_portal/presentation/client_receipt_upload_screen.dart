@@ -1301,6 +1301,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
             builder: (context) => ChooseGiftScreen(
               transactionId: transactionRef.id,
               eventId: currentEventId,
+              companySlug: currentEvent?.companySlug ?? '',
               prizes: prizeNames,
               totalChances: totalChances,
               branchId: resolvedBranchId,

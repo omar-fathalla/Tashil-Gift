@@ -780,6 +780,215 @@ class CompanyGiftsService {
     if (updates.isNotEmpty) {
       await docRef.update(updates);
     }
+
+    // Cascade update to company campaigns (allocatedPrizes & promotionalRules)
+    try {
+      final giftDoc = await docRef.get();
+      final slug = (giftDoc.data()?['companySlug'] ?? '').toString().trim().toLowerCase();
+      if (slug.isNotEmpty) {
+        final eventsSnap = await _firestore.collection('events').where('companySlug', isEqualTo: slug).get();
+        for (final eDoc in eventsSnap.docs) {
+          final eData = eDoc.data();
+          bool eventNeedsUpdate = false;
+          final rawAllocated = (eData['allocatedPrizes'] as List<dynamic>?) ?? [];
+          final List<Map<String, dynamic>> updatedAllocated = [];
+          for (final p in rawAllocated) {
+            if (p is Map<String, dynamic>) {
+              final copy = Map<String, dynamic>.from(p);
+              if (copy['giftId'] == giftId || (copy['name'] != null && copy['name'] == giftName)) {
+                if (giftName != null && giftName.trim().isNotEmpty) copy['name'] = giftName.trim();
+                if (removeImage) {
+                  copy.remove('imageUrl');
+                } else if (imageUrl != null && imageUrl.trim().isNotEmpty) {
+                  copy['imageUrl'] = imageUrl.trim();
+                }
+                eventNeedsUpdate = true;
+              }
+              updatedAllocated.add(copy);
+            }
+          }
+
+          final rawRules = (eData['promotionalRules'] as List<dynamic>?) ?? [];
+          final List<Map<String, dynamic>> updatedRules = [];
+          for (final r in rawRules) {
+            if (r is Map<String, dynamic>) {
+              final copyRule = Map<String, dynamic>.from(r);
+              final rawLinked = (copyRule['linkedGifts'] as List<dynamic>?) ?? [];
+              final List<Map<String, dynamic>> updatedLinked = [];
+              for (final lg in rawLinked) {
+                if (lg is Map<String, dynamic>) {
+                  final copyLg = Map<String, dynamic>.from(lg);
+                  if (copyLg['giftId'] == giftId || (copyLg['giftName'] != null && copyLg['giftName'] == giftName)) {
+                    if (giftName != null && giftName.trim().isNotEmpty) copyLg['giftName'] = giftName.trim();
+                    if (removeImage) {
+                      copyLg.remove('imageUrl');
+                    } else if (imageUrl != null && imageUrl.trim().isNotEmpty) {
+                      copyLg['imageUrl'] = imageUrl.trim();
+                    }
+                    eventNeedsUpdate = true;
+                  }
+                  updatedLinked.add(copyLg);
+                }
+              }
+              copyRule['linkedGifts'] = updatedLinked;
+              updatedRules.add(copyRule);
+            }
+          }
+
+          if (eventNeedsUpdate) {
+            await eDoc.reference.update({
+              'allocatedPrizes': updatedAllocated,
+              'promotionalRules': updatedRules,
+            });
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  /// Resolves all prize image URLs for an event.
+  /// Combines event.allocatedPrizes, event.promotionalRules.linkedGifts,
+  /// and live master records from `company_gifts`.
+  /// If any master gifts have images that are missing in the event doc,
+  /// this method automatically enriches/backfills the event in Firestore.
+  Future<Map<String, String>> resolvePrizeImagesForEvent({
+    String? eventId,
+    String? companySlug,
+  }) async {
+    final Map<String, String> nameToImageMap = {};
+    final cleanSlug = (companySlug ?? '').trim().toLowerCase();
+    String resolvedSlug = cleanSlug;
+    DocumentSnapshot<Map<String, dynamic>>? eventDoc;
+
+    if (eventId != null && eventId.isNotEmpty) {
+      try {
+        eventDoc = await _firestore.collection('events').doc(eventId).get();
+        if (eventDoc.exists) {
+          final data = eventDoc.data() ?? {};
+          if (resolvedSlug.isEmpty) {
+            resolvedSlug = (data['companySlug'] ?? '').toString().trim().toLowerCase();
+          }
+
+          // 1. Direct from event allocatedPrizes
+          final rawAllocated = data['allocatedPrizes'] as List<dynamic>? ?? [];
+          for (final p in rawAllocated) {
+            if (p is Map<String, dynamic>) {
+              final name = (p['name'] ?? '').toString().trim();
+              final img = (p['imageUrl'] ?? '').toString().trim();
+              final giftId = (p['giftId'] ?? '').toString().trim();
+              if (img.isNotEmpty) {
+                if (name.isNotEmpty) nameToImageMap[name] = img;
+                if (giftId.isNotEmpty) nameToImageMap[giftId] = img;
+              }
+            }
+          }
+
+          // 2. Direct from event promotionalRules linkedGifts
+          final rawRules = data['promotionalRules'] as List<dynamic>? ?? [];
+          for (final r in rawRules) {
+            if (r is Map<String, dynamic>) {
+              final linkedGifts = r['linkedGifts'] as List<dynamic>? ?? [];
+              for (final lg in linkedGifts) {
+                if (lg is Map<String, dynamic>) {
+                  final gName = (lg['giftName'] ?? '').toString().trim();
+                  final gImg = (lg['imageUrl'] ?? '').toString().trim();
+                  final giftId = (lg['giftId'] ?? '').toString().trim();
+                  if (gImg.isNotEmpty) {
+                    if (gName.isNotEmpty) nameToImageMap[gName] = gImg;
+                    if (giftId.isNotEmpty) nameToImageMap[giftId] = gImg;
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 3. Query company_gifts collection (live master catalog)
+    if (resolvedSlug.isNotEmpty) {
+      try {
+        final giftsSnap = await _firestore
+            .collection('company_gifts')
+            .where('companySlug', isEqualTo: resolvedSlug)
+            .get();
+
+        bool needsEventBackfill = false;
+        final Map<String, String> masterImagesById = {};
+
+        for (final doc in giftsSnap.docs) {
+          final data = doc.data();
+          final gName = (data['giftName'] ?? data['name'] ?? '').toString().trim();
+          final gImg = (data['imageUrl'] ?? '').toString().trim();
+          if (gImg.isNotEmpty) {
+            if (gName.isNotEmpty) nameToImageMap[gName] = gImg;
+            nameToImageMap[doc.id] = gImg;
+            masterImagesById[doc.id] = gImg;
+          }
+        }
+
+        // 4. Backfill event document if it was created before images were uploaded
+        if (eventDoc != null && eventDoc.exists && masterImagesById.isNotEmpty) {
+          final data = eventDoc.data() ?? {};
+          final rawAllocated = (data['allocatedPrizes'] as List<dynamic>?) ?? [];
+          final List<Map<String, dynamic>> updatedAllocated = [];
+          for (final p in rawAllocated) {
+            if (p is Map<String, dynamic>) {
+              final copy = Map<String, dynamic>.from(p);
+              final giftId = copy['giftId'] as String? ?? '';
+              final name = (copy['name'] as String? ?? '').trim();
+              final currentImg = (copy['imageUrl'] as String? ?? '').trim();
+              if (currentImg.isEmpty) {
+                final foundImg = masterImagesById[giftId] ?? nameToImageMap[name];
+                if (foundImg != null && foundImg.isNotEmpty) {
+                  copy['imageUrl'] = foundImg;
+                  needsEventBackfill = true;
+                }
+              }
+              updatedAllocated.add(copy);
+            }
+          }
+
+          // Also check promotionalRules linkedGifts
+          final rawRules = (data['promotionalRules'] as List<dynamic>?) ?? [];
+          final List<Map<String, dynamic>> updatedRules = [];
+          for (final r in rawRules) {
+            if (r is Map<String, dynamic>) {
+              final copyRule = Map<String, dynamic>.from(r);
+              final rawLinked = (copyRule['linkedGifts'] as List<dynamic>?) ?? [];
+              final List<Map<String, dynamic>> updatedLinked = [];
+              for (final lg in rawLinked) {
+                if (lg is Map<String, dynamic>) {
+                  final copyLg = Map<String, dynamic>.from(lg);
+                  final giftId = copyLg['giftId'] as String? ?? '';
+                  final name = (copyLg['giftName'] as String? ?? '').trim();
+                  final currentImg = (copyLg['imageUrl'] as String? ?? '').trim();
+                  if (currentImg.isEmpty) {
+                    final foundImg = masterImagesById[giftId] ?? nameToImageMap[name];
+                    if (foundImg != null && foundImg.isNotEmpty) {
+                      copyLg['imageUrl'] = foundImg;
+                      needsEventBackfill = true;
+                    }
+                  }
+                  updatedLinked.add(copyLg);
+                }
+              }
+              copyRule['linkedGifts'] = updatedLinked;
+              updatedRules.add(copyRule);
+            }
+          }
+
+          if (needsEventBackfill && eventId != null) {
+            _firestore.collection('events').doc(eventId).update({
+              'allocatedPrizes': updatedAllocated,
+              'promotionalRules': updatedRules,
+            }).catchError((_) {});
+          }
+        }
+      } catch (_) {}
+    }
+
+    return nameToImageMap;
   }
 
   /// Updates the quantity of an existing gift in the master inventory.

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/services/firebase_service.dart';
@@ -21,6 +20,7 @@ import 'game_demo_banner.dart';
 class ChooseGiftScreen extends ConsumerStatefulWidget {
   final String transactionId;
   final String eventId;
+  final String? companySlug;
   final List<String> prizes;
   final int totalChances;
   final bool isDemo;
@@ -31,6 +31,7 @@ class ChooseGiftScreen extends ConsumerStatefulWidget {
     super.key,
     this.transactionId = '',
     this.eventId = '',
+    this.companySlug,
     this.prizes = const [],
     this.totalChances = 1,
     this.isDemo = false,
@@ -58,11 +59,10 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
   @override
   void initState() {
     super.initState();
-    if (widget.prizeImages != null) {
+    if (widget.prizeImages != null && widget.prizeImages!.isNotEmpty) {
       _prizeImages = Map.from(widget.prizeImages!);
-    } else if (widget.eventId.isNotEmpty) {
-      _loadEventPrizeImages();
     }
+    _loadEventPrizeImages();
     _remainingChances = widget.totalChances > 0 ? widget.totalChances : 1;
     _items = widget.prizes.isNotEmpty
         ? widget.prizes
@@ -93,20 +93,11 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
 
   Future<void> _loadEventPrizeImages() async {
     try {
-      final doc = await FirebaseFirestore.instance.collection('events').doc(widget.eventId).get();
-      if (!doc.exists || !mounted) return;
-      final data = doc.data() ?? {};
-      final rawAllocated = data['allocatedPrizes'] as List<dynamic>? ?? [];
-      final Map<String, String> resolved = {};
-      for (final p in rawAllocated) {
-        if (p is Map<String, dynamic>) {
-          final name = (p['name'] ?? '').toString().trim();
-          final img = (p['imageUrl'] ?? '').toString().trim();
-          if (name.isNotEmpty && img.isNotEmpty) {
-            resolved[name] = img;
-          }
-        }
-      }
+      final giftsService = ref.read(companyGiftsServiceProvider);
+      final resolved = await giftsService.resolvePrizeImagesForEvent(
+        eventId: widget.eventId,
+        companySlug: widget.companySlug,
+      );
       if (resolved.isNotEmpty && mounted) {
         setState(() {
           _prizeImages.addAll(resolved);
@@ -120,15 +111,26 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
       final img = _prizeImages[prizeName];
       if (img != null && img.trim().isNotEmpty) return img.trim();
     }
-    // Clean name comparison (e.g. without trailing emojis or spaces)
-    final cleanName = prizeName.replaceAll(RegExp(r'[\u{1F300}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]', unicode: true), '').trim();
+    // Clean and phonetically normalized comparison
+    final cleanName = _normalizeGiftName(prizeName);
     for (final entry in _prizeImages.entries) {
-      final k = entry.key.replaceAll(RegExp(r'[\u{1F300}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]', unicode: true), '').trim();
+      final k = _normalizeGiftName(entry.key);
       if (k.isNotEmpty && (k == cleanName || cleanName.contains(k) || k.contains(cleanName))) {
         if (entry.value.trim().isNotEmpty) return entry.value.trim();
       }
     }
     return null;
+  }
+
+  String _normalizeGiftName(String name) {
+    return name
+        .replaceAll(RegExp(r'[\u{1F300}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]', unicode: true), '')
+        .replaceAll(RegExp(r'[أإآ]'), 'ا')
+        .replaceAll('ة', 'ه')
+        .replaceAll('ى', 'ي')
+        .replaceAll(RegExp(r'[\s\-_\.]+'), ' ')
+        .trim()
+        .toLowerCase();
   }
 
   IconData _getPrizeIcon(String prizeName) {
@@ -473,7 +475,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                 itemCount: _items.length,
                                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                                   crossAxisCount: crossAxisCount,
-                                  childAspectRatio: isMobile ? 1.16 : 1.1,
+                                  childAspectRatio: isMobile ? 0.78 : 0.85,
                                   crossAxisSpacing: isMobile ? 10 : 16,
                                   mainAxisSpacing: isMobile ? 10 : 16,
                                 ),
@@ -499,43 +501,200 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                           _selectedGiftIndex = index;
                                         });
                                       },
-                                      borderRadius: BorderRadius.circular(isMobile ? 18 : 24),
+                                      borderRadius: BorderRadius.circular(isMobile ? 18 : 22),
                                       child: AnimatedContainer(
                                         duration: const Duration(milliseconds: 250),
                                         curve: Curves.easeOutCubic,
-                                        padding: EdgeInsets.all(isMobile ? 8 : 16),
+                                        clipBehavior: Clip.antiAlias,
                                         decoration: BoxDecoration(
-                                          color: isSelected
-                                              ? colorScheme.primaryContainer.withValues(alpha: 0.45)
-                                              : colorScheme.surfaceContainerLow,
-                                          borderRadius: BorderRadius.circular(isMobile ? 18 : 24),
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(isMobile ? 18 : 22),
                                           border: Border.all(
                                             color: isSelected
                                                 ? colorScheme.primary
-                                                : colorScheme.outlineVariant.withValues(alpha: 0.6),
-                                            width: isSelected ? 2.5 : 1.0,
+                                                : Colors.grey.shade200,
+                                            width: isSelected ? 2.5 : 1.2,
                                           ),
                                           boxShadow: [
                                             if (isSelected)
                                               BoxShadow(
-                                                color: colorScheme.primary.withValues(alpha: 0.25),
-                                                blurRadius: 14,
+                                                color: colorScheme.primary.withValues(alpha: 0.22),
+                                                blurRadius: 16,
                                                 offset: const Offset(0, 4),
                                               )
                                             else
                                               BoxShadow(
-                                                color: Colors.black.withValues(alpha: 0.03),
-                                                blurRadius: 6,
-                                                offset: const Offset(0, 2),
+                                                color: Colors.black.withValues(alpha: 0.04),
+                                                blurRadius: 10,
+                                                offset: const Offset(0, 3),
                                               ),
                                           ],
                                         ),
                                         child: Stack(
                                           children: [
-                                            // Top Selection Corner Checkmark
+                                            // Main Content: Expanded Product Image + Bottom Details Label
+                                            Column(
+                                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                                              children: [
+                                                // 1. Prominent Product Image filling the upper/center of the card
+                                                Expanded(
+                                                  child: Center(
+                                                    child: Padding(
+                                                      padding: EdgeInsets.fromLTRB(
+                                                        isMobile ? 12 : 16,
+                                                        isMobile ? 14 : 18,
+                                                        isMobile ? 12 : 16,
+                                                        isMobile ? 8 : 12,
+                                                      ),
+                                                      child: Builder(
+                                                        builder: (context) {
+                                                          final prizeImg = _resolvePrizeImage(prize);
+                                                          if (prizeImg != null && prizeImg.isNotEmpty) {
+                                                            return Image.network(
+                                                              prizeImg,
+                                                              fit: BoxFit.contain,
+                                                              errorBuilder: (context, error, stackTrace) => Container(
+                                                                width: isMobile ? 64 : 76,
+                                                                height: isMobile ? 64 : 76,
+                                                                decoration: BoxDecoration(
+                                                                  shape: BoxShape.circle,
+                                                                  color: accentColor.withValues(alpha: 0.12),
+                                                                ),
+                                                                child: Icon(
+                                                                  prizeIcon,
+                                                                  color: accentColor,
+                                                                  size: isMobile ? 32 : 38,
+                                                                ),
+                                                              ),
+                                                            );
+                                                          }
+                                                          return Container(
+                                                            width: isMobile ? 64 : 76,
+                                                            height: isMobile ? 64 : 76,
+                                                            decoration: BoxDecoration(
+                                                              shape: BoxShape.circle,
+                                                              color: accentColor.withValues(alpha: 0.12),
+                                                            ),
+                                                            child: Icon(
+                                                              prizeIcon,
+                                                              color: accentColor,
+                                                              size: isMobile ? 32 : 38,
+                                                            ),
+                                                          );
+                                                        },
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+
+                                                // 2. Distinct Bottom Label Panel (Title & Action Button Pill)
+                                                AnimatedContainer(
+                                                  duration: const Duration(milliseconds: 200),
+                                                  width: double.infinity,
+                                                  padding: EdgeInsets.symmetric(
+                                                    horizontal: isMobile ? 8 : 12,
+                                                    vertical: isMobile ? 8 : 10,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: isSelected
+                                                        ? colorScheme.primaryContainer.withValues(alpha: 0.85)
+                                                        : const Color(0xFFF8F9FA),
+                                                    borderRadius: BorderRadius.vertical(
+                                                      bottom: Radius.circular(isMobile ? 16 : 20),
+                                                    ),
+                                                    border: Border(
+                                                      top: BorderSide(
+                                                        color: isSelected
+                                                            ? colorScheme.primary.withValues(alpha: 0.3)
+                                                            : Colors.grey.shade200,
+                                                        width: 1,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  child: Column(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      // Prize Title
+                                                      Padding(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                                                        child: Text(
+                                                          prize,
+                                                          textAlign: TextAlign.center,
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow.ellipsis,
+                                                          style: GoogleFonts.cairo(
+                                                            fontWeight: FontWeight.bold,
+                                                            fontSize: isMobile ? 12 : 13.5,
+                                                            height: 1.25,
+                                                            color: isSelected
+                                                                ? colorScheme.primary
+                                                                : colorScheme.onSurface,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      SizedBox(height: isMobile ? 4 : 6),
+
+                                                      // Interactive Action Pill ("اضغط للاختيار" / "تم الاختيار ✓")
+                                                      AnimatedContainer(
+                                                        duration: const Duration(milliseconds: 200),
+                                                        padding: EdgeInsets.symmetric(
+                                                          horizontal: isMobile ? 10 : 14,
+                                                          vertical: isMobile ? 3 : 4,
+                                                        ),
+                                                        decoration: BoxDecoration(
+                                                          color: isSelected
+                                                              ? colorScheme.primary
+                                                              : colorScheme.primary.withValues(alpha: 0.08),
+                                                          borderRadius: BorderRadius.circular(20),
+                                                          border: Border.all(
+                                                            color: isSelected
+                                                                ? Colors.transparent
+                                                                : colorScheme.primary.withValues(alpha: 0.25),
+                                                            width: 1,
+                                                          ),
+                                                          boxShadow: isSelected
+                                                              ? [
+                                                                  BoxShadow(
+                                                                    color: colorScheme.primary.withValues(alpha: 0.3),
+                                                                    blurRadius: 6,
+                                                                    offset: const Offset(0, 2),
+                                                                  ),
+                                                                ]
+                                                              : null,
+                                                        ),
+                                                        child: Row(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            Icon(
+                                                              isSelected ? Icons.check_circle_rounded : Icons.touch_app_rounded,
+                                                              size: isMobile ? 12 : 14,
+                                                              color: isSelected ? Colors.white : colorScheme.primary,
+                                                            ),
+                                                            const SizedBox(width: 4),
+                                                            Text(
+                                                              isSelected
+                                                                  ? (isAr ? 'تم الاختيار ✓' : 'Selected ✓')
+                                                                  : (isAr ? 'اضغط للاختيار' : 'Tap to Pick'),
+                                                              style: GoogleFonts.cairo(
+                                                                fontSize: isMobile ? 10 : 11,
+                                                                fontWeight: FontWeight.bold,
+                                                                height: 1.2,
+                                                                color: isSelected ? Colors.white : colorScheme.primary,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+
+                                            // 3. Top Selection Corner Indicator
                                             PositionedDirectional(
-                                              top: 0,
-                                              end: 0,
+                                              top: 10,
+                                              end: 10,
                                               child: AnimatedContainer(
                                                 duration: const Duration(milliseconds: 200),
                                                 width: isMobile ? 22 : 26,
@@ -544,13 +703,22 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                                   shape: BoxShape.circle,
                                                   color: isSelected
                                                       ? colorScheme.primary
-                                                      : Colors.transparent,
+                                                      : Colors.white.withValues(alpha: 0.85),
                                                   border: Border.all(
                                                     color: isSelected
                                                         ? colorScheme.primary
-                                                        : colorScheme.outlineVariant.withValues(alpha: 0.8),
+                                                        : Colors.grey.shade300,
                                                     width: 1.5,
                                                   ),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: isSelected
+                                                          ? colorScheme.primary.withValues(alpha: 0.35)
+                                                          : Colors.black.withValues(alpha: 0.06),
+                                                      blurRadius: 4,
+                                                      offset: const Offset(0, 1),
+                                                    ),
+                                                  ],
                                                 ),
                                                 child: isSelected
                                                     ? Icon(
@@ -559,133 +727,6 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                                         size: isMobile ? 14 : 16,
                                                       )
                                                     : null,
-                                              ),
-                                            ),
-
-                                            // Centered Gift Details
-                                            Center(
-                                              child: Column(
-                                                mainAxisSize: MainAxisSize.min,
-                                                mainAxisAlignment: MainAxisAlignment.center,
-                                                children: [
-                                                  // Prize Image Thumbnail or Icon
-                                                  Builder(
-                                                    builder: (context) {
-                                                      final prizeImg = _resolvePrizeImage(prize);
-                                                      if (prizeImg != null && prizeImg.isNotEmpty) {
-                                                        return Container(
-                                                          width: isMobile ? 48 : 58,
-                                                          height: isMobile ? 48 : 58,
-                                                          decoration: BoxDecoration(
-                                                            borderRadius: BorderRadius.circular(10),
-                                                            border: Border.all(
-                                                              color: isSelected ? colorScheme.primary : colorScheme.outlineVariant.withValues(alpha: 0.5),
-                                                              width: isSelected ? 2 : 1,
-                                                            ),
-                                                            boxShadow: [
-                                                              BoxShadow(
-                                                                color: Colors.black.withValues(alpha: 0.04),
-                                                                blurRadius: 4,
-                                                                offset: const Offset(0, 2),
-                                                              ),
-                                                            ],
-                                                          ),
-                                                          child: ClipRRect(
-                                                            borderRadius: BorderRadius.circular(9),
-                                                            child: Image.network(
-                                                              prizeImg,
-                                                              fit: BoxFit.cover,
-                                                              errorBuilder: (context, error, stackTrace) => Container(
-                                                                decoration: BoxDecoration(
-                                                                  shape: BoxShape.circle,
-                                                                  color: accentColor.withValues(alpha: 0.12),
-                                                                ),
-                                                                child: Icon(
-                                                                  prizeIcon,
-                                                                  color: accentColor,
-                                                                  size: isMobile ? 24 : 30,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        );
-                                                      }
-                                                      return Container(
-                                                        width: isMobile ? 44 : 56,
-                                                        height: isMobile ? 44 : 56,
-                                                        decoration: BoxDecoration(
-                                                          shape: BoxShape.circle,
-                                                          color: accentColor.withValues(alpha: 0.12),
-                                                        ),
-                                                        child: Icon(
-                                                          prizeIcon,
-                                                          color: accentColor,
-                                                          size: isMobile ? 24 : 30,
-                                                        ),
-                                                      );
-                                                    },
-                                                  ),
-
-                                                  SizedBox(height: isMobile ? 6 : 10),
-
-                                                  // Prize Title
-                                                  Padding(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                                                    child: Text(
-                                                      prize,
-                                                      textAlign: TextAlign.center,
-                                                      maxLines: 2,
-                                                      overflow: TextOverflow.ellipsis,
-                                                      style: GoogleFonts.cairo(
-                                                        fontWeight: FontWeight.bold,
-                                                        fontSize: isMobile ? 11.5 : 13.5,
-                                                        height: 1.25,
-                                                        color: isSelected
-                                                            ? colorScheme.primary
-                                                            : colorScheme.onSurface,
-                                                      ),
-                                                    ),
-                                                  ),
-
-                                                  if (isSelected) ...[
-                                                    SizedBox(height: isMobile ? 3 : 6),
-                                                    Container(
-                                                      padding: EdgeInsets.symmetric(
-                                                        horizontal: isMobile ? 6 : 8,
-                                                        vertical: isMobile ? 1 : 2,
-                                                      ),
-                                                      decoration: BoxDecoration(
-                                                        color: colorScheme.primary.withValues(alpha: 0.15),
-                                                        borderRadius: BorderRadius.circular(6),
-                                                      ),
-                                                      child: Text(
-                                                        isAr ? 'تم الاختيار ✓' : 'Selected ✓',
-                                                        style: GoogleFonts.cairo(
-                                                          fontSize: isMobile ? 9.5 : 10.5,
-                                                          fontWeight: FontWeight.bold,
-                                                          color: colorScheme.primary,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ] else if (!isMobile) ...[
-                                                    const SizedBox(height: 6),
-                                                    Container(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                                      decoration: BoxDecoration(
-                                                        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                                                        borderRadius: BorderRadius.circular(6),
-                                                      ),
-                                                      child: Text(
-                                                        isAr ? 'اضغط للاختيار' : 'Tap to Pick',
-                                                        style: GoogleFonts.cairo(
-                                                          fontSize: 10,
-                                                          fontWeight: FontWeight.w500,
-                                                          color: colorScheme.onSurfaceVariant,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ],
                                               ),
                                             ),
                                           ],

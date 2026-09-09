@@ -816,6 +816,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
             builder: (context) => ChooseGiftScreen(
               transactionId: transactionRef.id,
               eventId: activeEvent.id,
+              companySlug: activeEvent.companySlug,
               prizes: prizeNames,
               totalChances: totalChances,
               branchId: resolvedBranchId,

@@ -49,6 +49,7 @@ class _MysteryBoxScreenState extends ConsumerState<MysteryBoxScreen>
   late int _remainingChances;
   int _currentRound = 1;
   final List<String> _wonPrizes = [];
+  final Map<String, String> _prizeImages = {};
 
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
@@ -59,6 +60,7 @@ class _MysteryBoxScreenState extends ConsumerState<MysteryBoxScreen>
   @override
   void initState() {
     super.initState();
+    _loadPrizeImages();
     _remainingChances = widget.totalChances > 0 ? widget.totalChances : 1;
     _items = widget.prizes.isNotEmpty
         ? widget.prizes
@@ -166,11 +168,14 @@ class _MysteryBoxScreenState extends ConsumerState<MysteryBoxScreen>
 
     if (!mounted) return;
 
+    final imgUrl = _resolvePrizeImage(_wonPrize);
+
     // Trigger celebration dialog
     await showWinnerCelebrationDialog(
       context: context,
       prizeName: _wonPrize,
       remainingChances: _remainingChances,
+      imageUrl: imgUrl,
       onNextChance: () {
         if (!mounted) return;
         _resetGame();
@@ -179,6 +184,46 @@ class _MysteryBoxScreenState extends ConsumerState<MysteryBoxScreen>
         Navigator.of(context).pop();
       },
     );
+  }
+
+  Future<void> _loadPrizeImages() async {
+    try {
+      final giftsService = ref.read(companyGiftsServiceProvider);
+      final resolved = await giftsService.resolvePrizeImagesForEvent(
+        eventId: widget.eventId,
+      );
+      if (resolved.isNotEmpty && mounted) {
+        setState(() {
+          _prizeImages.addAll(resolved);
+        });
+      }
+    } catch (_) {}
+  }
+
+  String? _resolvePrizeImage(String prizeName) {
+    if (_prizeImages.containsKey(prizeName)) {
+      final img = _prizeImages[prizeName];
+      if (img != null && img.trim().isNotEmpty) return img.trim();
+    }
+    final cleanName = _normalizeGiftName(prizeName);
+    for (final entry in _prizeImages.entries) {
+      final k = _normalizeGiftName(entry.key);
+      if (k.isNotEmpty && (k == cleanName || cleanName.contains(k) || k.contains(cleanName))) {
+        if (entry.value.trim().isNotEmpty) return entry.value.trim();
+      }
+    }
+    return null;
+  }
+
+  String _normalizeGiftName(String name) {
+    return name
+        .replaceAll(RegExp(r'[\u{1F300}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]', unicode: true), '')
+        .replaceAll(RegExp(r'[أإآ]'), 'ا')
+        .replaceAll('ة', 'ه')
+        .replaceAll('ى', 'ي')
+        .replaceAll(RegExp(r'[\s\-_\.]+'), ' ')
+        .trim()
+        .toLowerCase();
   }
 
   void _resetGame() {

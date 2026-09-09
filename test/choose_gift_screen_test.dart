@@ -43,4 +43,34 @@ void main() {
     expect(find.textContaining('تأكيد الهدية'), findsOneWidget);
     expect(find.textContaining('تم الاختيار ✓'), findsOneWidget);
   });
+
+  testWidgets('ChooseGiftScreen renders provided prizeImages and falls back to icon when image missing', (WidgetTester tester) async {
+    final samplePrizes = [
+      'كيس مكرونة ايزى باستا هالبينو',
+      'لانش بوكس',
+    ];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: ChooseGiftScreen(
+            isDemo: true,
+            totalChances: 1,
+            prizes: samplePrizes,
+            prizeImages: {
+              'كيس مكرونة ايزى باستا هالبينو': 'https://example.com/jalapeno.png',
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    // Verify Image widget is rendered for the item with prizeImage
+    expect(find.byType(Image), findsOneWidget);
+
+    // Verify fallback Icon is rendered for the item without prizeImage
+    expect(find.byIcon(Icons.card_giftcard_rounded), findsWidgets);
+  });
 }

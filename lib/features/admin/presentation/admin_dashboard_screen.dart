@@ -480,63 +480,63 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 indicatorColor: colorScheme.secondaryContainer,
                 selectedIconTheme: IconThemeData(color: colorScheme.onSecondaryContainer, size: 24),
                 unselectedIconTheme: IconThemeData(color: colorScheme.onSurfaceVariant, size: 22),
-                selectedLabelTextStyle: GoogleFonts.cairo(color: colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 14),
-                unselectedLabelTextStyle: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant, fontSize: 13),
+                selectedLabelTextStyle: GoogleFonts.cairo(color: colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 14, height: 1.25),
+                unselectedLabelTextStyle: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant, fontSize: 13, height: 1.25),
                 destinations: [
                   NavigationRailDestination(
                     icon: const Icon(Icons.dashboard_outlined),
                     selectedIcon: const Icon(Icons.dashboard_rounded),
-                    label: Text(strings.navEventsManagement),
+                    label: Text(strings.navEventsManagement, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
                   ),
                   NavigationRailDestination(
                     icon: const Icon(Icons.bar_chart_outlined),
                     selectedIcon: const Icon(Icons.bar_chart_rounded),
-                    label: Text(strings.navAnalytics),
+                    label: Text(strings.navAnalytics, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
                   ),
                   NavigationRailDestination(
                     icon: const Icon(Icons.business_center_outlined),
                     selectedIcon: const Icon(Icons.business_center_rounded),
-                    label: Text(strings.navCompanyCatalog),
+                    label: Text(strings.navCompanyCatalog, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
                   ),
                   NavigationRailDestination(
                     icon: const Icon(Icons.storefront_outlined),
                     selectedIcon: const Icon(Icons.storefront_rounded),
-                    label: Text(strings.navRetailChains),
+                    label: Text(strings.navRetailChains, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
                   ),
                   NavigationRailDestination(
                     icon: const Icon(Icons.inventory_2_outlined),
                     selectedIcon: const Icon(Icons.inventory_2_rounded),
-                    label: Text(strings.navProductsIntelligence),
+                    label: Text(strings.navProductsIntelligence, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
                   ),
                   NavigationRailDestination(
                     icon: const Icon(Icons.receipt_long_outlined),
                     selectedIcon: const Icon(Icons.receipt_long_rounded),
-                    label: Text(strings.navInvoicesAudit),
+                    label: Text(strings.navInvoicesAudit, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
                   ),
                   NavigationRailDestination(
                     icon: const Icon(Icons.add_circle_outline_rounded),
                     selectedIcon: const Icon(Icons.add_circle_rounded),
-                    label: Text(strings.navCreateCampaign),
+                    label: Text(strings.navCreateCampaign, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
                   ),
                   NavigationRailDestination(
                     icon: const Icon(Icons.card_giftcard_outlined),
                     selectedIcon: const Icon(Icons.card_giftcard_rounded),
-                    label: Text(strings.navCompanyGifts),
+                    label: Text(strings.navCompanyGifts, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
                   ),
                   NavigationRailDestination(
                     icon: const Icon(Icons.casino_outlined),
                     selectedIcon: const Icon(Icons.casino_rounded),
-                    label: Text(strings.navGameTypes),
+                    label: Text(strings.navGameTypes, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
                   ),
                   NavigationRailDestination(
                     icon: const Icon(Icons.speed_outlined),
                     selectedIcon: const Icon(Icons.speed_rounded),
-                    label: Text(strings.navAiSpeedBenchmark),
+                    label: Text(strings.navAiSpeedBenchmark, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
                   ),
                   NavigationRailDestination(
                     icon: const Icon(Icons.psychology_outlined),
                     selectedIcon: const Icon(Icons.psychology_rounded),
-                    label: Text(strings.navAiBrainRules),
+                    label: Text(strings.navAiBrainRules, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
                   ),
                   NavigationRailDestination(
                     icon: StreamBuilder<int>(
@@ -563,12 +563,12 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                         );
                       },
                     ),
-                    label: Text(strings.navAiProductDiscovery),
+                    label: Text(strings.navAiProductDiscovery, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
                   ),
                   NavigationRailDestination(
                     icon: const Icon(Icons.mark_chat_read_outlined),
                     selectedIcon: const Icon(Icons.mark_chat_read_rounded),
-                    label: Text(strings.customersMarketingNavTitle),
+                    label: Text(strings.customersMarketingNavTitle, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
                   ),
                 ],
               ),
