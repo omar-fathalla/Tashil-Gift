@@ -218,6 +218,8 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
     final audioService = ref.watch(gameAudioServiceProvider);
 
     final totalChances = widget.totalChances > 0 ? widget.totalChances : 1;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
 
     return Directionality(
       textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
@@ -238,7 +240,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
         ),
         bottomNavigationBar: _selectedGiftIndex != null
             ? Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                padding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 24, vertical: isMobile ? 10 : 16),
                 decoration: BoxDecoration(
                   color: colorScheme.surface,
                   boxShadow: [
@@ -263,7 +265,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                             Text(
                               isAr ? 'الهدية المختارة حالياً:' : 'Currently Selected Gift:',
                               style: GoogleFonts.cairo(
-                                fontSize: 12,
+                                fontSize: isMobile ? 11 : 12,
                                 color: colorScheme.onSurfaceVariant,
                               ),
                             ),
@@ -272,7 +274,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.cairo(
-                                fontSize: 16,
+                                fontSize: isMobile ? 14 : 16,
                                 fontWeight: FontWeight.bold,
                                 color: colorScheme.primary,
                               ),
@@ -280,23 +282,23 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                           ],
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      SizedBox(width: isMobile ? 10 : 16),
                       FilledButton.icon(
                         icon: _isConfirming
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            ? SizedBox(
+                                width: isMobile ? 16 : 20,
+                                height: isMobile ? 16 : 20,
+                                child: const CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                               )
-                            : const Icon(Icons.check_circle_rounded, size: 20),
+                            : Icon(Icons.check_circle_rounded, size: isMobile ? 18 : 20),
                         label: Text(
                           _isConfirming
                               ? (isAr ? 'جاري التأكيد...' : 'Confirming...')
                               : (isAr ? 'تأكيد الهدية 🎁' : 'Confirm Gift 🎁'),
-                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 15),
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: isMobile ? 13 : 15),
                         ),
                         style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                          padding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 24, vertical: isMobile ? 10 : 14),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         ),
                         onPressed: _isConfirming ? null : _handleConfirmSelection,
@@ -316,7 +318,12 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
 
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20.0, 12.0, 20.0, 32.0),
+                  padding: EdgeInsets.fromLTRB(
+                    isMobile ? 12.0 : 20.0,
+                    isMobile ? 8.0 : 12.0,
+                    isMobile ? 12.0 : 20.0,
+                    isMobile ? 90.0 : 32.0,
+                  ),
                   child: Center(
                     child: Container(
                       constraints: const BoxConstraints(maxWidth: 860),
@@ -324,7 +331,10 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                         children: [
                           // Status & Chance Indicator
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: isMobile ? 12 : 20,
+                              vertical: isMobile ? 8 : 14,
+                            ),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 colors: [
@@ -332,20 +342,20 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                   colorScheme.secondaryContainer.withValues(alpha: 0.5),
                                 ],
                               ),
-                              borderRadius: BorderRadius.circular(20),
+                              borderRadius: BorderRadius.circular(isMobile ? 14 : 20),
                               border: Border.all(color: colorScheme.primary.withValues(alpha: 0.2)),
                             ),
                             child: Row(
                               children: [
                                 Container(
-                                  padding: const EdgeInsets.all(10),
+                                  padding: EdgeInsets.all(isMobile ? 6 : 10),
                                   decoration: BoxDecoration(
                                     color: colorScheme.primary,
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(Icons.touch_app_rounded, color: Colors.white, size: 22),
+                                  child: Icon(Icons.touch_app_rounded, color: Colors.white, size: isMobile ? 18 : 22),
                                 ),
-                                const SizedBox(width: 14),
+                                SizedBox(width: isMobile ? 10 : 14),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -358,16 +368,16 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                             : strings.chooseYourGiftPrompt,
                                         style: GoogleFonts.cairo(
                                           fontWeight: FontWeight.bold,
-                                          fontSize: 15,
+                                          fontSize: isMobile ? 13 : 15,
                                           color: colorScheme.onSurface,
                                         ),
                                       ),
                                       Text(
                                         isAr
-                                            ? 'اختر الهدية التي تفضلها من المربعات بالأسفل واضغط تأكيد'
-                                            : 'Tap your preferred reward from the cards below and confirm',
+                                            ? 'اختر الهدية التي تفضلها واضغط تأكيد'
+                                            : 'Tap your preferred reward and confirm',
                                         style: GoogleFonts.cairo(
-                                          fontSize: 12,
+                                          fontSize: isMobile ? 10.5 : 12,
                                           color: colorScheme.onSurfaceVariant,
                                         ),
                                       ),
@@ -376,7 +386,10 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                 ),
                                 if (totalChances > 1)
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: isMobile ? 8 : 12,
+                                      vertical: isMobile ? 4 : 6,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: colorScheme.primary,
                                       borderRadius: BorderRadius.circular(20),
@@ -386,7 +399,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                       style: GoogleFonts.cairo(
                                         color: Colors.white,
                                         fontWeight: FontWeight.bold,
-                                        fontSize: 12,
+                                        fontSize: isMobile ? 10.5 : 12,
                                       ),
                                     ),
                                   ),
@@ -394,14 +407,13 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                             ),
                           ),
 
-                          const SizedBox(height: 24),
+                          SizedBox(height: isMobile ? 10 : 20),
 
                           // Responsive Grid of Gift Squares / Cards
                           LayoutBuilder(
                             builder: (context, constraints) {
-                              final crossAxisCount = constraints.maxWidth > 650
-                                  ? 3
-                                  : (constraints.maxWidth > 400 ? 2 : 1);
+                              // ALWAYS 2 columns on mobile/phones (2 under 2 under 2 = 6), 3 columns on tablet/desktop!
+                              final crossAxisCount = constraints.maxWidth > 700 ? 3 : 2;
 
                               return GridView.builder(
                                 shrinkWrap: true,
@@ -409,9 +421,9 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                 itemCount: _items.length,
                                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                                   crossAxisCount: crossAxisCount,
-                                  childAspectRatio: constraints.maxWidth > 650 ? 1.05 : 1.15,
-                                  crossAxisSpacing: 16,
-                                  mainAxisSpacing: 16,
+                                  childAspectRatio: isMobile ? 1.16 : 1.1,
+                                  crossAxisSpacing: isMobile ? 10 : 16,
+                                  mainAxisSpacing: isMobile ? 10 : 16,
                                 ),
                                 itemBuilder: (context, index) {
                                   final prize = _items[index];
@@ -435,16 +447,16 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                           _selectedGiftIndex = index;
                                         });
                                       },
-                                      borderRadius: BorderRadius.circular(24),
+                                      borderRadius: BorderRadius.circular(isMobile ? 18 : 24),
                                       child: AnimatedContainer(
                                         duration: const Duration(milliseconds: 250),
                                         curve: Curves.easeOutCubic,
-                                        padding: const EdgeInsets.all(18),
+                                        padding: EdgeInsets.all(isMobile ? 8 : 16),
                                         decoration: BoxDecoration(
                                           color: isSelected
-                                              ? colorScheme.primaryContainer.withValues(alpha: 0.4)
+                                              ? colorScheme.primaryContainer.withValues(alpha: 0.45)
                                               : colorScheme.surfaceContainerLow,
-                                          borderRadius: BorderRadius.circular(24),
+                                          borderRadius: BorderRadius.circular(isMobile ? 18 : 24),
                                           border: Border.all(
                                             color: isSelected
                                                 ? colorScheme.primary
@@ -455,27 +467,27 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                             if (isSelected)
                                               BoxShadow(
                                                 color: colorScheme.primary.withValues(alpha: 0.25),
-                                                blurRadius: 18,
-                                                offset: const Offset(0, 6),
+                                                blurRadius: 14,
+                                                offset: const Offset(0, 4),
                                               )
                                             else
                                               BoxShadow(
                                                 color: Colors.black.withValues(alpha: 0.03),
-                                                blurRadius: 8,
+                                                blurRadius: 6,
                                                 offset: const Offset(0, 2),
                                               ),
                                           ],
                                         ),
-                                        child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
+                                        child: Stack(
                                           children: [
-                                            // Top Selection Checkmark
-                                            Align(
-                                              alignment: Alignment.topRight,
+                                            // Top Selection Corner Checkmark
+                                            PositionedDirectional(
+                                              top: 0,
+                                              end: 0,
                                               child: AnimatedContainer(
                                                 duration: const Duration(milliseconds: 200),
-                                                width: 28,
-                                                height: 28,
+                                                width: isMobile ? 22 : 26,
+                                                height: isMobile ? 22 : 26,
                                                 decoration: BoxDecoration(
                                                   shape: BoxShape.circle,
                                                   color: isSelected
@@ -484,72 +496,101 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                                   border: Border.all(
                                                     color: isSelected
                                                         ? colorScheme.primary
-                                                        : colorScheme.outlineVariant,
+                                                        : colorScheme.outlineVariant.withValues(alpha: 0.8),
                                                     width: 1.5,
                                                   ),
                                                 ),
                                                 child: isSelected
-                                                    ? const Icon(Icons.check_rounded, color: Colors.white, size: 18)
+                                                    ? Icon(
+                                                        Icons.check_rounded,
+                                                        color: Colors.white,
+                                                        size: isMobile ? 14 : 16,
+                                                      )
                                                     : null,
                                               ),
                                             ),
 
-                                            const Spacer(),
+                                            // Centered Gift Details
+                                            Center(
+                                              child: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children: [
+                                                  // Prize Icon
+                                                  Container(
+                                                    width: isMobile ? 44 : 56,
+                                                    height: isMobile ? 44 : 56,
+                                                    decoration: BoxDecoration(
+                                                      shape: BoxShape.circle,
+                                                      color: accentColor.withValues(alpha: 0.12),
+                                                    ),
+                                                    child: Icon(
+                                                      prizeIcon,
+                                                      color: accentColor,
+                                                      size: isMobile ? 24 : 30,
+                                                    ),
+                                                  ),
 
-                                            // Prize Icon
-                                            Container(
-                                              width: 64,
-                                              height: 64,
-                                              decoration: BoxDecoration(
-                                                shape: BoxShape.circle,
-                                                color: accentColor.withValues(alpha: 0.12),
-                                              ),
-                                              child: Icon(
-                                                prizeIcon,
-                                                color: accentColor,
-                                                size: 32,
-                                              ),
-                                            ),
+                                                  SizedBox(height: isMobile ? 6 : 10),
 
-                                            const SizedBox(height: 14),
+                                                  // Prize Title
+                                                  Padding(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                                    child: Text(
+                                                      prize,
+                                                      textAlign: TextAlign.center,
+                                                      maxLines: 2,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: GoogleFonts.cairo(
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: isMobile ? 11.5 : 13.5,
+                                                        height: 1.25,
+                                                        color: isSelected
+                                                            ? colorScheme.primary
+                                                            : colorScheme.onSurface,
+                                                      ),
+                                                    ),
+                                                  ),
 
-                                            // Prize Title
-                                            Text(
-                                              prize,
-                                              textAlign: TextAlign.center,
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: GoogleFonts.cairo(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 14,
-                                                color: isSelected
-                                                    ? colorScheme.primary
-                                                    : colorScheme.onSurface,
-                                              ),
-                                            ),
-
-                                            const Spacer(),
-
-                                            // Badge / Prompt
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                              decoration: BoxDecoration(
-                                                color: isSelected
-                                                    ? colorScheme.primary.withValues(alpha: 0.12)
-                                                    : colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                                                borderRadius: BorderRadius.circular(12),
-                                              ),
-                                              child: Text(
-                                                isSelected
-                                                    ? (isAr ? 'تم الاختيار ✓' : 'Selected ✓')
-                                                    : (isAr ? 'اضغط للاختيار' : 'Tap to Pick'),
-                                                style: GoogleFonts.cairo(
-                                                  fontSize: 11,
-                                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                                  color: isSelected
-                                                      ? colorScheme.primary
-                                                      : colorScheme.onSurfaceVariant,
-                                                ),
+                                                  if (isSelected) ...[
+                                                    SizedBox(height: isMobile ? 3 : 6),
+                                                    Container(
+                                                      padding: EdgeInsets.symmetric(
+                                                        horizontal: isMobile ? 6 : 8,
+                                                        vertical: isMobile ? 1 : 2,
+                                                      ),
+                                                      decoration: BoxDecoration(
+                                                        color: colorScheme.primary.withValues(alpha: 0.15),
+                                                        borderRadius: BorderRadius.circular(6),
+                                                      ),
+                                                      child: Text(
+                                                        isAr ? 'تم الاختيار ✓' : 'Selected ✓',
+                                                        style: GoogleFonts.cairo(
+                                                          fontSize: isMobile ? 9.5 : 10.5,
+                                                          fontWeight: FontWeight.bold,
+                                                          color: colorScheme.primary,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ] else if (!isMobile) ...[
+                                                    const SizedBox(height: 6),
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                      decoration: BoxDecoration(
+                                                        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                                                        borderRadius: BorderRadius.circular(6),
+                                                      ),
+                                                      child: Text(
+                                                        isAr ? 'اضغط للاختيار' : 'Tap to Pick',
+                                                        style: GoogleFonts.cairo(
+                                                          fontSize: 10,
+                                                          fontWeight: FontWeight.w500,
+                                                          color: colorScheme.onSurfaceVariant,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
                                               ),
                                             ),
                                           ],
@@ -562,7 +603,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                             },
                           ),
 
-                          const SizedBox(height: 36),
+                          SizedBox(height: isMobile ? 14 : 36),
 
                           // SwitchPoint Branding Footer
                           const SwitchPointFooter(),
