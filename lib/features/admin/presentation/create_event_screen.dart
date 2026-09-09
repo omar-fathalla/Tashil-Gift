@@ -105,6 +105,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   final Map<String, bool> _chainIsAllBranchesMap = {};
   final Map<String, Set<String>> _chainSelectedBranchIdsMap = {};
   final Map<String, Set<String>> _chainSelectedBranchNamesMap = {};
+  final Map<String, TextEditingController> _chainBranchSearchControllers = {};
+  final Map<String, String?> _chainSelectedGovernorateFilterMap = {};
   List<BranchModel> _availableBranches = [];
   bool _isLoadingBranches = false;
 
@@ -233,7 +235,12 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     
     _promotionalIdeaController = TextEditingController(text: e?.promotionalIdea ?? '');
     _aiValidationSummary = e?.aiValidationSummary ?? '';
-    _promotionalRules = List<PromotionalRuleItem>.from(e?.promotionalRules ?? []);
+    _promotionalRules = (e?.promotionalRules ?? []).map((rule) {
+      if (rule.conditionType == 'by_quantity' && (rule.minSpend > 0 || rule.maxSpend != null || rule.discountTolerance > 0)) {
+        return rule.copyWith(minSpend: 0.0, maxSpend: null, discountTolerance: 0.0);
+      }
+      return rule;
+    }).toList();
 
     if (e?.companySlug != null && e!.companySlug.isNotEmpty) {
       _loadCompanyProducts(e.companySlug);
@@ -701,7 +708,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     str = str.replaceAll(RegExp(r'\b(axe)\b'), 'اكس');
     str = str.replaceAll(RegExp(r'\b(dove)\b'), 'دوف');
     str = str.replaceAll(RegExp(r'\b(clear)\b'), 'كلير');
-    str = str.replaceAll(RegExp(r'\b(sunsilk|صنسلك)\b'), 'صنسيلك');
+    str = str.replaceAll(RegExp(r'\b(sunsilk|صنسلك|صانسيلك|صانسلك)\b'), 'صنسيلك');
     str = str.replaceAll(RegExp(r'\b(lux)\b'), 'لوكس');
     str = str.replaceAll(RegExp(r'\b(camay|كامي)\b'), 'كاماي');
     str = str.replaceAll(RegExp(r'\b(lifebuoy|لايف بوي)\b'), 'لايفبوي');
@@ -709,6 +716,51 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     str = str.replaceAll(RegExp(r'\b(knorr)\b'), 'كنور');
     str = str.replaceAll(RegExp(r'\b(lipton)\b'), 'ليبتون');
     return str;
+  }
+
+  /// Checks whether a product name matches a specific brand name or alias
+  bool _productMatchesBrandName(String productName, String brand) {
+    final pNorm = _normalizeCatalogSearchText(productName);
+    final rawLower = productName.toLowerCase();
+    final bNorm = _normalizeCatalogSearchText(brand);
+
+    if (bNorm == 'سيجنال' || brand == 'سيجنال') {
+      return pNorm.contains('سيجنال') || productName.contains('سجنال') || rawLower.contains('signal');
+    }
+    if (bNorm.contains('كلوس') || brand == 'كلوس اب') {
+      return pNorm.contains('كلوس اب') || productName.contains('كلوس') || rawLower.contains('closeup') || rawLower.contains('close-up');
+    }
+    if (bNorm.contains('تريزيم') || brand == 'تريزيمي') {
+      return pNorm.contains('تريزيمي') || productName.contains('تريزم') || rawLower.contains('tresemme') || rawLower.contains('treseme');
+    }
+    if (bNorm.contains('ريكسون') || brand == 'ريكسونا') {
+      return pNorm.contains('ريكسونا') || productName.contains('ركسونا') || rawLower.contains('rexona');
+    }
+    if (bNorm == 'دوف' || brand == 'دوف') {
+      return pNorm.contains('دوف') || rawLower.contains('dove');
+    }
+    if (bNorm == 'كلير' || brand == 'كلير') {
+      return pNorm.contains('كلير') || rawLower.contains('clear');
+    }
+    if (bNorm == 'لوكس' || brand == 'لوكس') {
+      return pNorm.contains('لوكس') || rawLower.contains('lux');
+    }
+    if (bNorm == 'اكس' || brand == 'أكس' || brand == 'اكس') {
+      return pNorm.contains('اكس') || pNorm.contains('أكس') || rawLower.contains('axe');
+    }
+    if (bNorm.contains('صنسيلك') || brand == 'صنسيلك') {
+      return pNorm.contains('صنسيلك') || productName.contains('صانسيلك') || productName.contains('صنسلك') || rawLower.contains('sunsilk');
+    }
+    if (bNorm.contains('كاما') || brand == 'كاماي') {
+      return pNorm.contains('كاماي') || productName.contains('كامي') || rawLower.contains('camay');
+    }
+    if (bNorm == 'فازلين' || brand == 'فازلين') {
+      return pNorm.contains('فازلين') || rawLower.contains('vaseline');
+    }
+    if (bNorm.contains('لايفبو') || brand == 'لايفبوي') {
+      return pNorm.contains('لايفبوي') || productName.contains('لايف بوي') || rawLower.contains('lifebuoy');
+    }
+    return pNorm.contains(bNorm) || rawLower.contains(brand.toLowerCase());
   }
 
   /// Extracts major brand clusters with counts from the loaded company products catalog
@@ -1392,6 +1444,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
   @override
   void dispose() {
+    for (final controller in _chainBranchSearchControllers.values) {
+      controller.dispose();
+    }
     _eventNameController.dispose();
     _targetCompanyController.dispose();
     _companySlugController.dispose();
@@ -2490,7 +2545,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     final minSpendController = TextEditingController(
       text: existingRule?.isSpendBased == true && existingRule!.minSpend > 0
           ? existingRule.minSpend.toInt().toString()
-          : (existingRule?.minSpend ?? 100.0).toInt().toString(),
+          : (existingRule != null && existingRule.conditionType == 'by_quantity' ? '' : (existingRule?.minSpend ?? 100.0).toInt().toString()),
     );
     final maxSpendController = TextEditingController(
       text: existingRule?.maxSpend != null && existingRule!.maxSpend! > 0
@@ -2694,7 +2749,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                               requiredBrands = detectedBrands.toList();
                                             }
 
-                                            if (triggerController.text.isEmpty || triggerController.text.contains('مثال') || triggerController.text.length > 80 || triggerController.text.contains('،')) {
+                                            if (items.isNotEmpty) {
                                               if (detectedBrands.isNotEmpty) {
                                                 triggerController.text = 'منتجات ${detectedBrands.join(' و ')} (${items.length} صنف)';
                                               } else if (items.length > 3) {
@@ -2718,18 +2773,96 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                   children: [
                                     ...requiredBrands.map((b) {
                                       return Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                        padding: const EdgeInsetsDirectional.only(start: 8, end: 4, top: 2, bottom: 2),
                                         decoration: BoxDecoration(
-                                          color: Colors.teal.shade100,
+                                          color: Colors.teal.shade50,
                                           borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: Colors.teal.shade300),
                                         ),
-                                        child: Text(
-                                          '🏷️ $b',
-                                          style: GoogleFonts.cairo(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.teal.shade900,
-                                          ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              '🏷️ $b',
+                                              style: GoogleFonts.cairo(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.teal.shade900,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Tooltip(
+                                              message: 'حذف علامة $b وكافة أصنافها وباركوداتها من هذه القاعدة',
+                                              child: InkWell(
+                                                borderRadius: BorderRadius.circular(10),
+                                                onTap: () {
+                                                  setDialogState(() {
+                                                    // 1. Identify all products, barcodes, and names matching brand b
+                                                    final Set<String> idsToRemove = {};
+                                                    final Set<String> barcodesToRemove = {};
+                                                    final Set<String> namesToRemove = {};
+
+                                                    for (final p in _companyProducts) {
+                                                      if (_productMatchesBrandName(p.productName, b)) {
+                                                        idsToRemove.add(p.id);
+                                                        if (p.barcode.isNotEmpty) barcodesToRemove.add(p.barcode);
+                                                        namesToRemove.add(p.productName);
+                                                      }
+                                                    }
+
+                                                    for (final name in selectedProductNames) {
+                                                      if (_productMatchesBrandName(name, b)) {
+                                                        namesToRemove.add(name);
+                                                      }
+                                                    }
+
+                                                    // 2. Remove matching items from selected lists
+                                                    selectedProductIds.removeWhere((id) => idsToRemove.contains(id));
+                                                    selectedBarcodes.removeWhere((bc) => barcodesToRemove.contains(bc));
+                                                    selectedProductNames.removeWhere((name) => namesToRemove.contains(name));
+
+                                                    // 3. Re-detect brands from the remaining products
+                                                    final Set<String> remainingDetectedBrands = {};
+                                                    for (final name in selectedProductNames) {
+                                                      for (final candidate in ['دوف', 'ريكسونا', 'سيجنال', 'كلوس اب', 'تريزيمي', 'كلير', 'لوكس', 'أكس', 'صنسيلك', 'فازلين', 'لايفبوي', 'كاماي']) {
+                                                        if (_productMatchesBrandName(name, candidate) && candidate != b) {
+                                                          remainingDetectedBrands.add(candidate);
+                                                        }
+                                                      }
+                                                    }
+                                                    if (remainingDetectedBrands.isNotEmpty) {
+                                                      requiredBrands = remainingDetectedBrands.toList();
+                                                    } else {
+                                                      requiredBrands.remove(b);
+                                                    }
+
+                                                    // 4. Update triggerController.text accordingly
+                                                    if (selectedProductNames.isNotEmpty) {
+                                                      if (requiredBrands.isNotEmpty) {
+                                                        triggerController.text = 'منتجات ${requiredBrands.join(' و ')} (${selectedProductNames.length} صنف)';
+                                                      } else {
+                                                        triggerController.text = '${selectedProductNames.length} صنف محدد من الكتالوج';
+                                                      }
+                                                    } else {
+                                                      selectedProductIds.clear();
+                                                      selectedBarcodes.clear();
+                                                      selectedProductNames.clear();
+                                                      requiredBrands.clear();
+                                                      triggerController.clear();
+                                                    }
+                                                  });
+                                                },
+                                                child: Padding(
+                                                  padding: const EdgeInsets.all(2.0),
+                                                  child: Icon(
+                                                    Icons.cancel_rounded,
+                                                    size: 15,
+                                                    color: Colors.red.shade700,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       );
                                     }),
@@ -3324,9 +3457,15 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     final title = titleController.text.trim();
                     final trigger = triggerController.text.trim();
                     final minQty = int.tryParse(minQtyController.text.trim()) ?? 1;
-                    final minSpend = double.tryParse(minSpendController.text.trim()) ?? 0.0;
-                    final maxSpend = double.tryParse(maxSpendController.text.trim());
-                    final discountTolerance = double.tryParse(discountToleranceController.text.trim()) ?? 0.0;
+                    final minSpend = conditionType == 'by_quantity'
+                        ? 0.0
+                        : (double.tryParse(minSpendController.text.trim()) ?? 0.0);
+                    final maxSpend = conditionType == 'by_quantity'
+                        ? null
+                        : double.tryParse(maxSpendController.text.trim());
+                    final discountTolerance = conditionType == 'by_quantity'
+                        ? 0.0
+                        : (double.tryParse(discountToleranceController.text.trim()) ?? 0.0);
                     final rewardVal = rewardValController.text.trim();
                     final rewardAmt = double.tryParse(rewardAmtController.text.trim()) ?? 0.0;
 
@@ -3587,7 +3726,12 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         maxChancesPerReceipt: _maxChancesController.text.trim().toIntOrNull() ?? 0,
         promotionalIdea: _promotionalIdeaController.text.trim(),
         aiValidationSummary: _aiValidationSummary.trim(),
-        promotionalRules: _promotionalRules,
+        promotionalRules: _promotionalRules.map((rule) {
+          if (rule.conditionType == 'by_quantity' && (rule.minSpend > 0 || rule.maxSpend != null || rule.discountTolerance > 0)) {
+            return rule.copyWith(minSpend: 0.0, maxSpend: null, discountTolerance: 0.0);
+          }
+          return rule;
+        }).toList(),
         requireVoucherSerials: _requireVoucherSerials,
       );
 
@@ -6168,11 +6312,18 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
     String triggerDisplay;
     if (rule.requiredBrands.isNotEmpty) {
-      triggerDisplay = 'منتجات ${rule.requiredBrands.join(rule.isCombo ? ' و ' : ' أو ')}';
+      final brandsStr = 'منتجات ${rule.requiredBrands.join(rule.isCombo ? ' و ' : ' أو ')}';
+      if (linkedItemsCount > 0) {
+        final barcodePart = rule.selectedBarcodes.isNotEmpty ? ' - ${rule.selectedBarcodes.length} باركود' : '';
+        triggerDisplay = '$brandsStr ($linkedItemsCount صنف$barcodePart)';
+      } else {
+        triggerDisplay = brandsStr;
+      }
+    } else if (linkedItemsCount > 0) {
+      final barcodePart = rule.selectedBarcodes.isNotEmpty ? ' و ${rule.selectedBarcodes.length} باركود' : '';
+      triggerDisplay = '$linkedItemsCount صنف$barcodePart محدد من الكتالوج';
     } else if (rule.triggerProduct.isNotEmpty && rule.triggerProduct.length <= 80 && !rule.triggerProduct.contains('،')) {
       triggerDisplay = rule.triggerProduct;
-    } else if (linkedItemsCount > 0) {
-      triggerDisplay = '$linkedItemsCount صنف محدد من الكتالوج';
     } else {
       triggerDisplay = rule.triggerProduct.length > 80
           ? '${rule.triggerProduct.substring(0, 77)}...'
@@ -6185,7 +6336,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     } else if (rule.isSpendBased) {
       conditionSummary = '• الشرط: شراء بقيمة ${rule.minSpend.toInt()} ج.م من ($triggerDisplay) ➔ المكافأة: [${rule.rewardValue}]';
     } else {
-      conditionSummary = '• الشرط: شراء ${rule.minQuantity} ق من ($triggerDisplay) ➔ المكافأة: [${rule.rewardValue}]';
+      conditionSummary = '• الشرط: شراء كمية ${rule.minQuantity} قطعة من ($triggerDisplay) ➔ المكافأة: [${rule.rewardValue}]';
     }
 
     return Container(
@@ -6276,6 +6427,22 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.blue.shade900,
+                              ),
+                            ),
+                          )
+                        else
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: Colors.indigo.shade100,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'شرط كمية (${rule.minQuantity} قطعة)',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.indigo.shade900,
                               ),
                             ),
                           ),
@@ -7057,6 +7224,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                 _chainIsAllBranchesMap.remove(chainId);
                                 _chainSelectedBranchIdsMap.remove(chainId);
                                 _chainSelectedBranchNamesMap.remove(chainId);
+                                _chainBranchSearchControllers[chainId]?.dispose();
+                                _chainBranchSearchControllers.remove(chainId);
+                                _chainSelectedGovernorateFilterMap.remove(chainId);
                                 _updateAvailableBranches();
                               });
                             },
@@ -7125,46 +7295,83 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
+                              // 1. Header with title, counter, and actions
+                              Wrap(
+                                alignment: WrapAlignment.spaceBetween,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 8,
+                                runSpacing: 8,
                                 children: [
-                                  Text(
-                                    'اختر الفروع المشمولة لـ ($chainName):',
-                                    style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'اختر الفروع المشمولة لـ ($chainName):',
+                                        style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: selectedBranchIds.isNotEmpty
+                                              ? colorScheme.primaryContainer
+                                              : colorScheme.surfaceContainerHighest,
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Text(
+                                          '${selectedBranchIds.length} من ${chainBranches.length} فرع محدد',
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: selectedBranchIds.isNotEmpty
+                                                ? colorScheme.onPrimaryContainer
+                                                : colorScheme.onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const Spacer(),
-                                  if (chainBranches.isNotEmpty) ...[
-                                    TextButton.icon(
-                                      onPressed: () {
-                                        setState(() {
-                                          _chainSelectedBranchIdsMap[chainId] = chainBranches.map((b) => b.id).toSet();
-                                          _chainSelectedBranchNamesMap[chainId] = chainBranches.map((b) => b.branchName).toSet();
-                                        });
-                                      },
-                                      icon: const Icon(Icons.select_all_rounded, size: 16),
-                                      label: const Text('تحديد الكل'),
-                                    ),
-                                    TextButton.icon(
-                                      onPressed: () {
-                                        setState(() {
-                                          _chainSelectedBranchIdsMap[chainId] = {};
-                                          _chainSelectedBranchNamesMap[chainId] = {};
-                                        });
-                                      },
-                                      icon: const Icon(Icons.deselect_rounded, size: 16),
-                                      label: const Text('إلغاء التحديد'),
-                                    ),
-                                  ],
-                                  OutlinedButton.icon(
-                                    onPressed: () => _showQuickAddBranchDialog(chainId, chainName),
-                                    icon: const Icon(Icons.add_location_alt_rounded, size: 16),
-                                    label: Text('+ فرع جديد', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold)),
-                                    style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                    ),
+                                  Wrap(
+                                    spacing: 4,
+                                    runSpacing: 4,
+                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                    children: [
+                                      if (chainBranches.isNotEmpty) ...[
+                                        TextButton.icon(
+                                          onPressed: () {
+                                            setState(() {
+                                              _chainSelectedBranchIdsMap[chainId] = chainBranches.map((b) => b.id).toSet();
+                                              _chainSelectedBranchNamesMap[chainId] = chainBranches.map((b) => b.branchName).toSet();
+                                            });
+                                          },
+                                          icon: const Icon(Icons.select_all_rounded, size: 16),
+                                          label: Text('تحديد الكل (${chainBranches.length})', style: GoogleFonts.cairo(fontSize: 12)),
+                                          style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
+                                        ),
+                                        TextButton.icon(
+                                          onPressed: () {
+                                            setState(() {
+                                              _chainSelectedBranchIdsMap[chainId] = {};
+                                              _chainSelectedBranchNamesMap[chainId] = {};
+                                            });
+                                          },
+                                          icon: const Icon(Icons.deselect_rounded, size: 16),
+                                          label: Text('إلغاء التحديد', style: GoogleFonts.cairo(fontSize: 12)),
+                                          style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
+                                        ),
+                                      ],
+                                      OutlinedButton.icon(
+                                        onPressed: () => _showQuickAddBranchDialog(chainId, chainName),
+                                        icon: const Icon(Icons.add_location_alt_rounded, size: 15),
+                                        label: Text('+ فرع جديد', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold)),
+                                        style: OutlinedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 10),
 
                               if (_isLoadingBranches && chainBranches.isEmpty)
                                 const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()))
@@ -7189,43 +7396,369 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                     ),
                                   ),
                                 )
-                              else
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: chainBranches.map((branch) {
-                                    final isSelected = selectedBranchIds.contains(branch.id) ||
-                                        selectedBranchNames.contains(branch.branchName);
+                              else ...[
+                                const SizedBox(height: 12),
 
-                                    return FilterChip(
-                                      label: Text(
-                                        branch.city.isNotEmpty
-                                            ? '${branch.branchName} (${branch.city})'
-                                            : branch.branchName,
-                                        style: GoogleFonts.cairo(
-                                          fontSize: 12,
-                                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                        ),
-                                      ),
-                                      selected: isSelected,
-                                      selectedColor: colorScheme.primaryContainer,
-                                      checkmarkColor: colorScheme.onPrimaryContainer,
-                                      onSelected: (selected) {
-                                        setState(() {
-                                          final idsSet = _chainSelectedBranchIdsMap.putIfAbsent(chainId, () => {});
-                                          final namesSet = _chainSelectedBranchNamesMap.putIfAbsent(chainId, () => {});
-                                          if (selected) {
-                                            idsSet.add(branch.id);
-                                            namesSet.add(branch.branchName);
-                                          } else {
-                                            idsSet.remove(branch.id);
-                                            namesSet.remove(branch.branchName);
-                                          }
-                                        });
-                                      },
-                                    );
-                                  }).toList(),
+                                // 2. Instant Live Search Bar
+                                TextField(
+                                  controller: _getBranchSearchController(chainId),
+                                  onChanged: (_) => setState(() {}),
+                                  style: GoogleFonts.cairo(fontSize: 13),
+                                  decoration: InputDecoration(
+                                    hintText: 'بحث سريع بالاسم أو المنطقة (مثال: ابو يوسف، سموحة، بدر، دمنهور، المحلة...)...',
+                                    hintStyle: GoogleFonts.cairo(
+                                      fontSize: 12,
+                                      color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                                    ),
+                                    prefixIcon: Icon(Icons.search_rounded, size: 20, color: colorScheme.primary),
+                                    suffixIcon: (_chainBranchSearchControllers[chainId]?.text.isNotEmpty ?? false)
+                                        ? IconButton(
+                                            icon: const Icon(Icons.clear_rounded, size: 18),
+                                            tooltip: 'مسح البحث',
+                                            onPressed: () {
+                                              _chainBranchSearchControllers[chainId]?.clear();
+                                              setState(() {});
+                                            },
+                                          )
+                                        : null,
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                    filled: true,
+                                    fillColor: colorScheme.surface,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
+                                    ),
+                                  ),
                                 ),
+
+                                // 3. Quick Governorate Filter Tabs / Chips & Grouped Cards
+                                Builder(
+                                  builder: (context) {
+                                    final searchQuery = _chainBranchSearchControllers[chainId]?.text.trim() ?? '';
+                                    final filteredByQueryBranches = chainBranches
+                                        .where((b) => _doesBranchMatchQuery(b, searchQuery))
+                                        .toList();
+
+                                    // Calculate all governorate counts in this chain
+                                    final Map<String, int> govBranchCounts = {};
+                                    for (final branch in chainBranches) {
+                                      final gov = _resolveBranchGovernorate(branch);
+                                      govBranchCounts[gov] = (govBranchCounts[gov] ?? 0) + 1;
+                                    }
+
+                                    final availableGovs = govBranchCounts.keys.toList()..sort(_compareGovernorates);
+                                    final activeGovFilter = _chainSelectedGovernorateFilterMap[chainId];
+
+                                    // Only show governorate filter bar if there is more than 1 governorate
+                                    final showGovFilterBar = availableGovs.length > 1;
+
+                                    // Filter by active governorate
+                                    List<BranchModel> finalDisplayedBranches = filteredByQueryBranches;
+                                    if (activeGovFilter != null && activeGovFilter != 'all') {
+                                      finalDisplayedBranches = filteredByQueryBranches
+                                          .where((b) => _resolveBranchGovernorate(b) == activeGovFilter)
+                                          .toList();
+                                    }
+
+                                    // Group displayed branches by governorate
+                                    final Map<String, List<BranchModel>> groupedGovBranches = {};
+                                    for (final b in finalDisplayedBranches) {
+                                      final gov = _resolveBranchGovernorate(b);
+                                      groupedGovBranches.putIfAbsent(gov, () => []).add(b);
+                                    }
+
+                                    // Sort branches inside each governorate alphabetically
+                                    for (final list in groupedGovBranches.values) {
+                                      list.sort((a, b) => a.branchName.compareTo(b.branchName));
+                                    }
+
+                                    final sortedGovKeys = groupedGovBranches.keys.toList()..sort(_compareGovernorates);
+
+                                    return Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        if (showGovFilterBar) ...[
+                                          const SizedBox(height: 10),
+                                          SingleChildScrollView(
+                                            scrollDirection: Axis.horizontal,
+                                            child: Row(
+                                              children: [
+                                                ChoiceChip(
+                                                  label: Text(
+                                                    'جميع المحافظات (${chainBranches.length})',
+                                                    style: GoogleFonts.cairo(
+                                                      fontSize: 11,
+                                                      fontWeight: (activeGovFilter == null || activeGovFilter == 'all')
+                                                          ? FontWeight.bold
+                                                          : FontWeight.w500,
+                                                    ),
+                                                  ),
+                                                  selected: activeGovFilter == null || activeGovFilter == 'all',
+                                                  onSelected: (selected) {
+                                                    if (selected) {
+                                                      setState(() {
+                                                        _chainSelectedGovernorateFilterMap[chainId] = 'all';
+                                                      });
+                                                    }
+                                                  },
+                                                ),
+                                                const SizedBox(width: 6),
+                                                ...availableGovs.map((gov) {
+                                                  final count = govBranchCounts[gov] ?? 0;
+                                                  final isGovSelected = activeGovFilter == gov;
+                                                  final govColor = _getGovernorateColor(gov, colorScheme);
+                                                  final icon = _getGovernorateIcon(gov);
+
+                                                  return Padding(
+                                                    padding: const EdgeInsets.only(left: 6),
+                                                    child: ChoiceChip(
+                                                      avatar: Icon(
+                                                        icon,
+                                                        size: 14,
+                                                        color: isGovSelected ? colorScheme.onPrimary : govColor,
+                                                      ),
+                                                      label: Text(
+                                                        '$gov ($count)',
+                                                        style: GoogleFonts.cairo(
+                                                          fontSize: 11,
+                                                          fontWeight: isGovSelected ? FontWeight.bold : FontWeight.w500,
+                                                        ),
+                                                      ),
+                                                      selected: isGovSelected,
+                                                      onSelected: (selected) {
+                                                        setState(() {
+                                                          _chainSelectedGovernorateFilterMap[chainId] = selected ? gov : 'all';
+                                                        });
+                                                      },
+                                                    ),
+                                                  );
+                                                }),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+
+                                        const SizedBox(height: 12),
+
+                                        // 4. Empty State if search yields no results
+                                        if (finalDisplayedBranches.isEmpty)
+                                          Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                                            decoration: BoxDecoration(
+                                              color: colorScheme.surface,
+                                              borderRadius: BorderRadius.circular(12),
+                                              border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                                            ),
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.search_off_rounded, size: 36, color: colorScheme.outline),
+                                                const SizedBox(height: 8),
+                                                Text(
+                                                  searchQuery.isNotEmpty
+                                                      ? 'لم يتم العثور على أي فرع يطابق "$searchQuery"'
+                                                      : 'لا توجد فروع في هذا القسم',
+                                                  style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                                if (searchQuery.isNotEmpty || (activeGovFilter != null && activeGovFilter != 'all')) ...[
+                                                  const SizedBox(height: 8),
+                                                  OutlinedButton.icon(
+                                                    onPressed: () {
+                                                      _chainBranchSearchControllers[chainId]?.clear();
+                                                      _chainSelectedGovernorateFilterMap[chainId] = 'all';
+                                                      setState(() {});
+                                                    },
+                                                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                                                    label: Text('إعادة ضبط البحث والفلاتر', style: GoogleFonts.cairo(fontSize: 12)),
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                          )
+                                        else
+                                          // 5. Grouped Governorate Cards
+                                          ...sortedGovKeys.map((gov) {
+                                            final govBranches = groupedGovBranches[gov] ?? [];
+                                            final govColor = _getGovernorateColor(gov, colorScheme);
+                                            final govIcon = _getGovernorateIcon(gov);
+
+                                            // Count selected branches in this governorate
+                                            final selectedInGovCount = govBranches.where((b) =>
+                                                selectedBranchIds.contains(b.id) ||
+                                                selectedBranchNames.contains(b.branchName)
+                                            ).length;
+
+                                            final isAllGovSelected = govBranches.isNotEmpty && selectedInGovCount == govBranches.length;
+
+                                            return Container(
+                                              margin: const EdgeInsets.only(bottom: 12),
+                                              decoration: BoxDecoration(
+                                                color: colorScheme.surface,
+                                                borderRadius: BorderRadius.circular(12),
+                                                border: Border.all(
+                                                  color: selectedInGovCount > 0
+                                                      ? govColor.withValues(alpha: 0.4)
+                                                      : colorScheme.outlineVariant.withValues(alpha: 0.4),
+                                                  width: selectedInGovCount > 0 ? 1.2 : 1.0,
+                                                ),
+                                              ),
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  // Governorate Header
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                    decoration: BoxDecoration(
+                                                      color: govColor.withValues(alpha: 0.07),
+                                                      borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+                                                    ),
+                                                    child: Row(
+                                                      children: [
+                                                        Container(
+                                                          padding: const EdgeInsets.all(4),
+                                                          decoration: BoxDecoration(
+                                                            color: govColor.withValues(alpha: 0.15),
+                                                            borderRadius: BorderRadius.circular(6),
+                                                          ),
+                                                          child: Icon(govIcon, size: 16, color: govColor),
+                                                        ),
+                                                        const SizedBox(width: 8),
+                                                        Text(
+                                                          gov,
+                                                          style: GoogleFonts.cairo(
+                                                            fontWeight: FontWeight.bold,
+                                                            fontSize: 13,
+                                                            color: colorScheme.onSurface,
+                                                          ),
+                                                        ),
+                                                        const SizedBox(width: 8),
+                                                        Container(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
+                                                          decoration: BoxDecoration(
+                                                            color: isAllGovSelected
+                                                                ? colorScheme.primary
+                                                                : (selectedInGovCount > 0
+                                                                    ? govColor.withValues(alpha: 0.2)
+                                                                    : colorScheme.surfaceContainerHighest),
+                                                            borderRadius: BorderRadius.circular(10),
+                                                          ),
+                                                          child: Text(
+                                                            '$selectedInGovCount من ${govBranches.length} مشمول',
+                                                            style: GoogleFonts.cairo(
+                                                              fontSize: 10.5,
+                                                              fontWeight: FontWeight.bold,
+                                                              color: isAllGovSelected
+                                                                  ? colorScheme.onPrimary
+                                                                  : (selectedInGovCount > 0
+                                                                      ? govColor
+                                                                      : colorScheme.onSurfaceVariant),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        const Spacer(),
+                                                        TextButton.icon(
+                                                          onPressed: () {
+                                                            setState(() {
+                                                              final idsSet = _chainSelectedBranchIdsMap.putIfAbsent(chainId, () => {});
+                                                              final namesSet = _chainSelectedBranchNamesMap.putIfAbsent(chainId, () => {});
+                                                              if (isAllGovSelected) {
+                                                                // Deselect all in this governorate
+                                                                for (final b in govBranches) {
+                                                                  idsSet.remove(b.id);
+                                                                  namesSet.remove(b.branchName);
+                                                                }
+                                                              } else {
+                                                                // Select all in this governorate
+                                                                for (final b in govBranches) {
+                                                                  idsSet.add(b.id);
+                                                                  namesSet.add(b.branchName);
+                                                                }
+                                                              }
+                                                            });
+                                                          },
+                                                          icon: Icon(
+                                                            isAllGovSelected ? Icons.deselect_rounded : Icons.select_all_rounded,
+                                                            size: 14,
+                                                            color: govColor,
+                                                          ),
+                                                          label: Text(
+                                                            isAllGovSelected ? 'إلغاء فروع المحافظة' : 'تحديد كل فروع المحافظة',
+                                                            style: GoogleFonts.cairo(
+                                                              fontSize: 11,
+                                                              fontWeight: FontWeight.bold,
+                                                              color: govColor,
+                                                            ),
+                                                          ),
+                                                          style: TextButton.styleFrom(
+                                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                            minimumSize: Size.zero,
+                                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+
+                                                  // Branches FilterChips
+                                                  Padding(
+                                                    padding: const EdgeInsets.all(10),
+                                                    child: Wrap(
+                                                      spacing: 8,
+                                                      runSpacing: 8,
+                                                      children: govBranches.map((branch) {
+                                                        final isSelected = selectedBranchIds.contains(branch.id) ||
+                                                            selectedBranchNames.contains(branch.branchName);
+
+                                                        return FilterChip(
+                                                          label: Text(
+                                                            branch.city.isNotEmpty
+                                                                ? '${branch.branchName} (${branch.city})'
+                                                                : branch.branchName,
+                                                            style: GoogleFonts.cairo(
+                                                              fontSize: 12,
+                                                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                                            ),
+                                                          ),
+                                                          selected: isSelected,
+                                                          selectedColor: colorScheme.primaryContainer,
+                                                          checkmarkColor: colorScheme.onPrimaryContainer,
+                                                          onSelected: (selected) {
+                                                            setState(() {
+                                                              final idsSet = _chainSelectedBranchIdsMap.putIfAbsent(chainId, () => {});
+                                                              final namesSet = _chainSelectedBranchNamesMap.putIfAbsent(chainId, () => {});
+                                                              if (selected) {
+                                                                idsSet.add(branch.id);
+                                                                namesSet.add(branch.branchName);
+                                                              } else {
+                                                                idsSet.remove(branch.id);
+                                                                namesSet.remove(branch.branchName);
+                                                              }
+                                                            });
+                                                          },
+                                                        );
+                                                      }).toList(),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          }),
+                                      ],
+                                    );
+                                  },
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -7239,6 +7772,251 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         );
       },
     );
+  }
+
+  // --- RETAIL CHAIN BRANCHES SEARCH & GOVERNORATE GROUPING LOGIC ---
+
+  static const String _govAlexandria = 'الإسكندرية';
+  static const String _govCairoGiza = 'القاهرة والجيزة';
+  static const String _govNorthCoast = 'الساحل الشمالي ومطروح';
+  static const String _govBeheira = 'البحيرة';
+  static const String _govGharbiaDelta = 'الغربية والدلتا';
+  static const String _govCanalDamietta = 'دمياط ومدن القناة';
+  static const String _govUpperEgypt = 'محافظات الصعيد والبحر الأحمر';
+  static const String _govOther = 'فروع ومناطق أخرى';
+
+  static const List<String> _canonicalGovernorateOrder = [
+    _govAlexandria,
+    _govCairoGiza,
+    _govNorthCoast,
+    _govBeheira,
+    _govGharbiaDelta,
+    _govCanalDamietta,
+    _govUpperEgypt,
+    _govOther,
+  ];
+
+  TextEditingController _getBranchSearchController(String chainId) {
+    return _chainBranchSearchControllers.putIfAbsent(chainId, () => TextEditingController());
+  }
+
+  static String _normalizeBranchSearchText(String text) {
+    return text
+        .toLowerCase()
+        .replaceAll(RegExp(r'[ًٌٍَُِّْـ]'), '') // remove tashkeel & tatweel
+        .replaceAll(RegExp(r'[إأآا]'), 'ا')
+        .replaceAll('ة', 'ه')
+        .replaceAll('ى', 'ي')
+        .replaceAll(RegExp(r'[\s_-]+'), ' ')
+        .trim();
+  }
+
+  static String _resolveBranchGovernorate(BranchModel branch) {
+    final rawCity = branch.city.trim();
+    final rawName = branch.branchName.trim();
+    final rawAddress = branch.address.trim();
+
+    // Extract parenthetical governorate if present in branchName, e.g. "فرع بدر (القاهرة)"
+    String parenthetical = '';
+    final parenMatch = RegExp(r'\(([^)]+)\)').firstMatch(rawName);
+    if (parenMatch != null) {
+      parenthetical = parenMatch.group(1)?.trim() ?? '';
+    }
+
+    final normCity = _normalizeBranchSearchText(rawCity);
+    final normParen = _normalizeBranchSearchText(parenthetical);
+    final normName = _normalizeBranchSearchText(rawName);
+    final normAddress = _normalizeBranchSearchText(rawAddress);
+
+    bool hasInLoc(List<String> keywords) {
+      for (final kw in keywords) {
+        final normKw = _normalizeBranchSearchText(kw);
+        if (normCity.contains(normKw) || normParen.contains(normKw)) return true;
+      }
+      return false;
+    }
+
+    bool hasAnywhere(List<String> keywords) {
+      for (final kw in keywords) {
+        final normKw = _normalizeBranchSearchText(kw);
+        if (normCity.contains(normKw) ||
+            normParen.contains(normKw) ||
+            normName.contains(normKw) ||
+            normAddress.contains(normKw)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    // A. Alexandria check
+    if (hasInLoc(['اسكندرية', 'الإسكندرية', 'alexandria', 'alex'])) {
+      return _govAlexandria;
+    }
+
+    // B. Cairo & Giza check
+    if (hasInLoc(['القاهرة', 'الجيزة', 'cairo', 'giza', 'اكتوبر', 'زايد', 'تجمع', 'معادي', 'شروق', 'بدر', 'عبور', 'مدينتي', 'رحاب'])) {
+      return _govCairoGiza;
+    }
+
+    // C. North Coast & Matrouh check
+    if (hasInLoc(['مطروح', 'الساحل الشمالي', 'ساحل', 'علمين', 'مارينا', 'امواج', 'روزانا', 'سيدي عبد الرحمن', 'الضبعة', 'الحمام'])) {
+      return _govNorthCoast;
+    }
+
+    // D. Beheira check
+    if (hasInLoc(['البحيرة', 'دمنهور', 'كفر الدوار', 'ايتاي', 'حوش عيسى', 'ابو حمص', 'رشيد', 'ادكو', 'كوم حمادة'])) {
+      return _govBeheira;
+    }
+
+    // E. Gharbia & Delta check
+    if (hasInLoc(['الغربية', 'طنطا', 'المحلة', 'الدقهلية', 'المنصورة', 'المنوفية', 'شبين', 'القليوبية', 'بنها', 'الشرقية', 'الزقازيق', 'كفر الشيخ', 'دلتا'])) {
+      return _govGharbiaDelta;
+    }
+
+    // F. Damietta & Canal check
+    if (hasInLoc(['دمياط', 'بورسعيد', 'الإسماعيلية', 'السويس', 'القناة', 'راس البر'])) {
+      return _govCanalDamietta;
+    }
+
+    // G. Upper Egypt & Red Sea check
+    if (hasInLoc(['صعيد', 'الفيوم', 'بني سويف', 'المنيا', 'اسيوط', 'سوهاج', 'قنا', 'الأقصر', 'اسوان', 'البحر الاحمر', 'الغردقة', 'شرم الشيخ'])) {
+      return _govUpperEgypt;
+    }
+
+    // If city or parenthetical didn't match, check full text keywords for Alexandria sub-areas:
+    if (hasAnywhere([
+      'سموحة', 'ستانلي', 'سيدي بشر', 'سيدي جابر', 'الابراهيمية', 'الانفوشي',
+      'الدخيلة', 'العجمي', 'الهانوفيل', 'البيطاش', 'ابو يوسف', 'جاردينيا',
+      'سيتي سكوير', 'ميامي', 'فكتوريا', 'العصافرة', 'المنتزه', 'المندرة',
+      'محرم بك', 'الشاطبي', 'كامب شيزار', 'كليوباترا', 'رشدي', 'جليم',
+      'سابا باشا', 'ثروت', 'زيزينيا', 'جناكليس', 'بولكلي', 'شدس', 'العوايد',
+      'السيوف', 'المعمورة', 'بحري', 'المنشية', 'محطة الرمل', 'الورديان', 'المكس', 'برج العرب'
+    ])) {
+      return _govAlexandria;
+    }
+
+    // Check full text keywords for Cairo & Giza sub-areas:
+    if (hasAnywhere([
+      'المعادي', 'مدينة نصر', 'مصر الجديدة', 'التجمع', 'الرحاب', 'مدينتي',
+      'الشروق', 'العبور', 'الشيخ زايد', '6 اكتوبر', 'حدائق الاهرام',
+      'المهندسين', 'الدقي', 'الهرم', 'فيصل', 'العجوزة', 'الزمالك', 'شبرا',
+      'حلوان', 'المقطم', 'عين شمس', 'المرج', 'المطرية', 'الزيتون', 'حدائق القبة'
+    ])) {
+      return _govCairoGiza;
+    }
+
+    // Check full text for North Coast
+    if (hasAnywhere(['أمواج', 'امواج', 'روزانا', 'مارينا', 'مراسي', 'هاسيندا', 'العلمين'])) {
+      return _govNorthCoast;
+    }
+
+    // Check full text for Beheira
+    if (hasAnywhere(['دمنهور', 'كفر الدوار', 'ايتاي البارود'])) {
+      return _govBeheira;
+    }
+
+    // Check full text for Delta
+    if (hasAnywhere(['المحلة', 'طنطا', 'المنصورة', 'بنها', 'الزقازيق', 'شبين الكوم'])) {
+      return _govGharbiaDelta;
+    }
+
+    // Check full text for Damietta
+    if (hasAnywhere(['دمياط', 'بورسعيد', 'الاسماعيلية', 'السويس', 'راس البر'])) {
+      return _govCanalDamietta;
+    }
+
+    // If branch has a specific non-empty city name, return it cleanly
+    if (rawCity.isNotEmpty) {
+      return rawCity;
+    }
+
+    return _govOther;
+  }
+
+  static int _compareGovernorates(String a, String b) {
+    final idxA = _canonicalGovernorateOrder.indexOf(a);
+    final idxB = _canonicalGovernorateOrder.indexOf(b);
+    if (idxA != -1 && idxB != -1) return idxA.compareTo(idxB);
+    if (idxA != -1) return -1;
+    if (idxB != -1) return 1;
+    return a.compareTo(b);
+  }
+
+  static bool _doesBranchMatchQuery(BranchModel branch, String query) {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return true;
+    final cleanQuery = _normalizeBranchSearchText(trimmed);
+    if (cleanQuery.isEmpty) return true;
+
+    final cleanName = _normalizeBranchSearchText(branch.branchName);
+    final cleanCity = _normalizeBranchSearchText(branch.city);
+    final cleanCode = _normalizeBranchSearchText(branch.branchCode);
+    final cleanAddress = _normalizeBranchSearchText(branch.address);
+
+    final fullText = '$cleanName $cleanCity $cleanCode $cleanAddress';
+
+    // 1. Direct match on full text
+    if (fullText.contains(cleanQuery)) return true;
+
+    // 2. Also check without the word "فرع"
+    final strippedQuery = cleanQuery.replaceAll(RegExp(r'\bفرع\b'), '').trim();
+    final strippedName = cleanName.replaceAll(RegExp(r'\bفرع\b'), '').trim();
+    if (strippedQuery.isNotEmpty) {
+      if (strippedName.contains(strippedQuery) || fullText.contains(strippedQuery)) {
+        return true;
+      }
+    }
+
+    // 3. Multi-token match: all tokens in query must appear in fullText
+    final tokens = cleanQuery.split(' ').where((t) => t.isNotEmpty && t != 'فرع').toList();
+    if (tokens.isNotEmpty && tokens.every((token) => fullText.contains(token))) {
+      return true;
+    }
+
+    return false;
+  }
+
+  static IconData _getGovernorateIcon(String gov) {
+    switch (gov) {
+      case _govAlexandria:
+        return Icons.waves_rounded;
+      case _govCairoGiza:
+        return Icons.location_city_rounded;
+      case _govNorthCoast:
+        return Icons.beach_access_rounded;
+      case _govBeheira:
+        return Icons.agriculture_rounded;
+      case _govGharbiaDelta:
+        return Icons.factory_rounded;
+      case _govCanalDamietta:
+        return Icons.directions_boat_rounded;
+      case _govUpperEgypt:
+        return Icons.wb_sunny_rounded;
+      default:
+        return Icons.store_mall_directory_rounded;
+    }
+  }
+
+  static Color _getGovernorateColor(String gov, ColorScheme colorScheme) {
+    switch (gov) {
+      case _govAlexandria:
+        return const Color(0xFF0284C7); // Sky blue
+      case _govCairoGiza:
+        return const Color(0xFF8B5CF6); // Royal purple
+      case _govNorthCoast:
+        return const Color(0xFF0D9488); // Teal
+      case _govBeheira:
+        return const Color(0xFF16A34A); // Emerald green
+      case _govGharbiaDelta:
+        return const Color(0xFFEA580C); // Warm amber-orange
+      case _govCanalDamietta:
+        return const Color(0xFF2563EB); // Deep marine blue
+      case _govUpperEgypt:
+        return const Color(0xFFD97706); // Golden sun
+      default:
+        return colorScheme.primary;
+    }
   }
 
   Widget _buildPrizeAllocationSection(BuildContext context, ColorScheme colorScheme, bool isMobile) {

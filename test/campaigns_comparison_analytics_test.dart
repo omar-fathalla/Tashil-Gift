@@ -268,6 +268,113 @@ void main() {
       expect(effectiveMetrics.isNotEmpty, isTrue);
       expect(effectiveMetrics['camp_hair']!.totalRevenue, equals(499334.0));
     });
+
+    test('Intra-Campaign Weekend & Period Models and Metrics calculate accurately', () {
+      final cluster = CampaignWeekendCluster(
+        id: 'cluster_2026_08_01',
+        waveNumber: 1,
+        startDate: DateTime(2026, 8, 1),
+        endDate: DateTime(2026, 8, 3),
+        label: 'الويك إند 1 (1 - 3 أغسطس)',
+        activeDates: ['2026-08-01', '2026-08-02', '2026-08-03'],
+        invoiceCount: 620,
+        totalSales: 215000.0,
+      );
+
+      expect(cluster.activeDaysCount, equals(3));
+      expect(cluster.waveNumber, equals(1));
+      expect(cluster.totalSales, equals(215000.0));
+
+      final periodMetrics = CampaignPeriodMetrics(
+        periodId: cluster.id,
+        periodLabel: cluster.label,
+        campaignId: 'camp_unilever_hair',
+        campaignTitle: 'يونيليفر ديوز - هيركير',
+        startDate: cluster.startDate,
+        endDate: cluster.endDate,
+        activeDaysCount: cluster.activeDaysCount,
+        totalRevenue: 215000.0,
+        totalInvoices: 620,
+        totalProductsSold: 1860,
+        uniqueShoppersCount: 540,
+        claimedPrizesCount: 400,
+        estimatedPrizesValue: 20000.0,
+      );
+
+      // Verify calculated KPIs
+      expect(periodMetrics.avgBasketSpend, closeTo(346.77, 0.01));
+      expect(periodMetrics.avgUnitsPerBasket, closeTo(3.0, 0.01));
+      expect(periodMetrics.dailySalesVelocity, closeTo(71666.67, 0.01));
+      expect(periodMetrics.dailyInvoicesVelocity, closeTo(206.67, 0.01));
+    });
+
+    test('Trilingual strings for Intra-Campaign Weekend Analytics are declared and non-empty', () {
+      final arStrings = AppStrings('ar');
+      final enStrings = AppStrings('en');
+      final hiStrings = AppStrings('hi');
+
+      expect(arStrings.intraCampaignWeekendTab, contains('ويك إندات'));
+      expect(arStrings.periodComparisonModeAuto, contains('المكتشفة تلقائياً'));
+      expect(arStrings.periodComparisonModeCustom, contains('مخصصة'));
+      expect(arStrings.weekendPeriodA, contains('A'));
+      expect(arStrings.weekendPeriodB, contains('B'));
+      expect(arStrings.allWeekendsProgressionView, contains('جميع الويك إندات'));
+      expect(arStrings.dailySalesVelocityLabel, contains('كثافة المبيعات اليومية'));
+      expect(arStrings.peakWeekendBadge, contains('الذهبي'));
+
+      expect(enStrings.intraCampaignWeekendTab, contains('Weekend'));
+      expect(enStrings.dailySalesVelocityLabel, contains('Daily Sales Velocity'));
+
+      expect(hiStrings.intraCampaignWeekendTab, contains('सप्ताहांत'));
+      expect(hiStrings.dailySalesVelocityLabel, contains('दैनिक बिक्री गति'));
+    });
+
+    test('Weekend clustering algorithm bounds clusters to retail weekend window (max 3-4 days)', () {
+      final sortedDates = [
+        '2024-08-04', // isolated Sunday test invoice
+        '2024-08-12', // Monday
+        '2024-08-13', // Tuesday
+        '2024-08-14', // Wednesday
+        '2024-08-15', // Thursday (starts core weekend)
+        '2024-08-16', // Friday
+        '2024-08-17', // Saturday
+        '2024-08-22', // Thursday (next week weekend)
+        '2024-08-23', // Friday
+        '2024-08-24', // Saturday
+      ];
+
+      final List<List<String>> dateClusters = [];
+      List<String> currentCluster = [sortedDates.first];
+
+      for (int i = 1; i < sortedDates.length; i++) {
+        final prevDate = DateTime.parse(sortedDates[i - 1]);
+        final currDate = DateTime.parse(sortedDates[i]);
+        final clusterStart = DateTime.parse(currentCluster.first);
+        final gap = currDate.difference(prevDate).inDays;
+        final spanFromStart = currDate.difference(clusterStart).inDays;
+
+        if (gap <= 2 && spanFromStart <= 3) {
+          currentCluster.add(sortedDates[i]);
+        } else {
+          dateClusters.add(currentCluster);
+          currentCluster = [sortedDates[i]];
+        }
+      }
+      if (currentCluster.isNotEmpty) {
+        dateClusters.add(currentCluster);
+      }
+
+      // Must be split into multiple distinct waves, NOT one giant 20-day cluster
+      expect(dateClusters.length, greaterThanOrEqualTo(3));
+      // First wave is Aug 4
+      expect(dateClusters[0], equals(['2024-08-04']));
+      // No cluster should span more than 4 calendar days (3-day retail weekend rule)
+      for (final cluster in dateClusters) {
+        final start = DateTime.parse(cluster.first);
+        final end = DateTime.parse(cluster.last);
+        expect(end.difference(start).inDays, lessThanOrEqualTo(3));
+      }
+    });
   });
 }
 

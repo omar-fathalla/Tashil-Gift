@@ -47,6 +47,25 @@ void main() {
       expect(air37.category, AiDirectiveCategory.promotionalRules);
       expect(air37.titleAr, contains('الفصل الصارم بين حصر القطع الفيزيائية'));
       expect(air37.tags, contains('multiplier-isolation'));
+
+      // Verify AIR-40 is present
+      final air40 = directives.firstWhere((d) => d.id == 'AIR-40');
+      expect(air40.code, 'PROMOTIONAL_RULE_CONDITION_TYPE_INTEGRITY_AND_SPEND_SANITATION_STANDARD');
+      expect(air40.orderIndex, 40);
+      expect(air40.category, AiDirectiveCategory.promotionalRules);
+      expect(air40.titleAr, contains('معيار الفصل الصارم لشروط العروض بين الكميات والإنفاق المالي'));
+      expect(air40.tags, contains('quantity-vs-spend'));
+      expect(air40.tags, contains('min-spend-sanitation'));
+
+      // Verify AIR-41 is present
+      final air41 = directives.firstWhere((d) => d.id == 'AIR-41');
+      expect(air41.code, 'RETAIL_CHAIN_CANONICAL_GOVERNORATE_GROUPING_AND_PHONETIC_BRANCH_SEARCH_STANDARD');
+      expect(air41.orderIndex, 41);
+      expect(air41.category, AiDirectiveCategory.branchGovernance);
+      expect(air41.titleAr, contains('معيار التجميع الجغرافي لفروع السلاسل بالمحافظات'));
+      expect(air41.tags, contains('retail-chains'));
+      expect(air41.tags, contains('governorate-grouping'));
+      expect(air41.tags, contains('branch-search'));
     });
 
     test('AIR-22 (Fathalla Price Defense) and AIR-21 (POS Concatenation) are active', () {

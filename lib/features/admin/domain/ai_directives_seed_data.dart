@@ -839,6 +839,131 @@ class AiDirectivesSeedData {
           tags: ['multi-part-receipt', 'long-receipt', 'seam-deduplication', 'fathalla-market', 'gemini-multimodal', 'high-resolution-ocr', 'air-39'],
           lastUpdated: '2026-09-07',
         ),
+
+        const AiDirectiveModel(
+          id: 'AIR-40',
+          code: 'PROMOTIONAL_RULE_CONDITION_TYPE_INTEGRITY_AND_SPEND_SANITATION_STANDARD',
+          orderIndex: 40,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار الفصل الصارم لشروط العروض بين الكميات والإنفاق المالي وتطهير الحقول غير النشطة (Promotional Rule Condition Type Integrity & Spend Sanitation Standard)',
+          titleEn: 'Promotional Rule Condition Type Integrity & Inactive Field Spend Sanitation Standard',
+          descriptionAr:
+              'الفصل الصارم والمانع للخلط بين عروض الكميات الفيزيائية (by_quantity) وعروض الإنفاق المالي (by_spend / combo_spend). يضمن المعيار عدم تسريب أي قيم مالية (minSpend = 0.0) عند اختيار شرط الكمية، وتعطيل خاصية isSpendBased تلقائياً، وإلغاء نطاقات الإنفاق وسماحية الخصم، وتحديث بطاقات الشروط والبرومبت المولد للمطابقة بالقطع حصراً، ومنع اشتراط إنفاق 100 ج.م على عروض شراء القطعة الواحدة.',
+          descriptionEn:
+              'Enforces strict segregation between quantity-based promotional rules (by_quantity) and monetary spend-based rules (by_spend / combo_spend). Guarantees that when conditionType is by_quantity, isSpendBased is strictly false, minSpend is sanitized to 0.0 EGP, spend ranges and discount tolerances are nullified, and prompt generation, receipt matchers, and UI badges evaluate purely on physical piece counts without unintended spend floors.',
+          logicAr:
+              '1. حتمية العزل النوعي (Condition Type Invariant): عند ضبط conditionType على "by_quantity"، تُعتبر خاصية isSpendBased غير مفعلة حتماً (false) بغض النظر عن أي قيم سابقة لحقل minSpend.\n2. تطهير الحقول عند الحفظ والتحميل (Spend Sanitation on Save & Load): تصفير minSpend إلى 0.0 وإلغاء maxSpend و discountTolerance عند الحفظ في كروت الحملة وقواعد البيانات وفي دوال fromMap / toMap.\n3. التحديث الفوري للأصناف المشروطة من الكتالوج (Catalog Selection Sync): عند اختيار وربط أصناف وباركودات من الكتالوج، يتم تحديث حقل الأصناف المشروطة (triggerProduct) فورياً باسم العلامة وعدد الأصناف والباركودات المحددة بدلاً من الإبقاء على نصوص قديمة.\n4. بطاقات وشارات العرض الصريحة (Explicit UI Badges): إظهار شارة مخصصة "شرط كمية (X قطعة)" بوضوح، وصياغة الشرط بعبارة "شراء كمية X قطعة من (أصناف كذا)" بدلاً من عبارات الإنفاق المالي أو الاختصارات غير الواضحة.\n5. اتساق محرك البرومبت (Prompt Consistency): توجيه الذكاء الاصطناعي في البرومبت المولد لفحص الكميات بالقطع حصراً دون اشتراط أي حد مالي في عروض الكميات.',
+          logicEn:
+              '1. Condition Type Invariant: when conditionType is "by_quantity", isSpendBased is strictly false regardless of any lingering minSpend value.\n2. Spend Sanitation on Save & Load: enforces minSpend = 0.0, maxSpend = null, and discountTolerance = 0.0 for quantity rules across UI controllers, fromMap, and toMap.\n3. Catalog Selection Sync: updates triggerProduct text immediately upon selecting items from catalog with detected brands and exact item count.\n4. Explicit UI Badges & Copy: displays dedicated "شرط كمية (X قطعة)" badge and clear Arabic piece copy instead of spend conditions or ambiguous single-letter abbreviations.\n5. Prompt Consistency: ensures system prompt instructs Gemini to audit piece count strictly without requiring financial spending thresholds.',
+          exampleInput: 'إنشاء أو تعديل قاعدة ترويجية لشامبو تريزيمي 600 مل: اختيار نوع الشرط "حسب الكمية (عدد القطع)" مع كمية 1 وربط 14 صنفاً من الكتالوج.',
+          exampleOutput: 'ظهور شارة "شرط كمية (1 قطعة)" وشارة "14 باركود"، ونص الشرط: "شراء كمية 1 قطعة من (منتجات تريزيمي (14 صنف - 14 باركود)) ➔ المكافأة: [Tresemme Cond Botanix Curl 400Ml]" مع minSpend = 0.0 وتصفير تام للإنفاق.',
+          tags: ['promotional-rules', 'condition-type', 'quantity-vs-spend', 'min-spend-sanitation', 'catalog-binding', 'air-40'],
+          lastUpdated: '2026-09-09',
+        ),
+
+        const AiDirectiveModel(
+          id: 'AIR-41',
+          code: 'RETAIL_CHAIN_CANONICAL_GOVERNORATE_GROUPING_AND_PHONETIC_BRANCH_SEARCH_STANDARD',
+          orderIndex: 41,
+          category: AiDirectiveCategory.branchGovernance,
+          titleAr: 'معيار التجميع الجغرافي لفروع السلاسل بالمحافظات والبحث الصوتي اللحظي (Retail Chain Canonical Governorate Grouping & Phonetic Branch Search Standard)',
+          titleEn: 'Retail Chain Canonical Governorate Grouping & Phonetic Branch Search Standard',
+          descriptionAr:
+              'حوكمة وتصنيف فروع السلاسل التجارية الكبرى (مثل أسواق فتح الله، جملة ماركت، كارفور) جغرافياً حسب المحافظات المعتمدة (الإسكندرية، القاهرة والجيزة، الساحل الشمالي ومطروح، البحيرة، الغربية والدلتا، دمياط ومدن القناة، الصعيد) وتوفير محرك بحث لحظي مرن ومطابق لغوياً وصوتياً مع إمكانية التحديد والإلغاء الفوري على مستوى كل محافظة.',
+          descriptionEn:
+              'Architectural governance standard for geographically clustering retail chain outlets into canonical governorates (Alexandria, Cairo/Giza, North Coast/Matrouh, Beheira, Gharbia/Delta, Damietta/Canal, Upper Egypt) with phonetic live search and regional batch select/deselect capabilities across all chains.',
+          logicAr:
+              '1. محرك التجميع الجغرافي للمحافظات: تصنيف فروع السلسلة آلياً بناءً على حقل المدينة (city) أو الأقواس الجغرافية في اسم الفرع (branchName) أو العنوان إلى نطاقات إقليمية معتمدة مرتبة قياسياً.\n2. التحديد والإلغاء المجمّع لكل محافظة (Batch Governorate Actions): تمكين مدير الحملة من تحديد أو إلغاء تحديد كافة فروع محافظة معينة (مثل فروع الإسكندرية الـ 25) بضغطة زر واحدة دون الحاجة لتحديدها فرعاً فرعاً.\n3. محرك البحث الصوتي المرن (Phonetic Live Search): تطبيع الحروف العربية (إلغاء الهمزات والتاء المربوطة والتنوين والتشكيل والمسافات الزائدة) وتجاهل بادئة "فرع" عند البحث لمطابقة فورية عند كتابة "ابو يوسف" أو "سموحة" أو "دمنهور" أو كود الفرع.\n4. شريط الفلاتر السريعة للمحافظات: إتاحة شرائح اختيار أفقية (ChoiceChips) لكل محافظة تتضمن إجمالي عدد الفروع وعدد الفروع المشمولة للانتقال السريع.\n5. العزل والاستقلالية لكل سلسلة: عزل فلاتر البحث والمحافظات لكل سلسلة تجارية على حدة داخل الحملة الواحدة لضمان الدقة ومنع التداخل.',
+          logicEn:
+              '1. Canonical Governorate Clustering: automatically groups chain branches into canonical regions via branch city, parenthetical text, and normalized area keywords in a standard priority sequence.\n2. Batch Governorate Actions: allows instant one-tap selection or deselection of all branches within a specific governorate (e.g. all 25 Alex branches) with dynamic count badges.\n3. Phonetic Live Search Engine: normalizes Arabic orthography (alef variants, teh marbuta, diacritics) and strips "فرع" prefixes for fuzzy matching on name, city, code, or address.\n4. Quick Governorate Filter Bar: provides horizontal filter chips with per-governorate branch counters for rapid filtering.\n5. Per-Chain Isolation: maintains independent search controllers and governorate filter states per retail chain.',
+          exampleInput: 'سلسلة أسواق فتح الله (37 فرعاً مسجلاً): البحث عن "ابو يوسف" أو الضغط على "الإسكندرية" ثم النقر على "تحديد كل فروع المحافظة".',
+          exampleOutput: 'عرض فرع ابو يوسف مباشرة تحت تصنيف الإسكندرية، أو تحديد كافة فروع الإسكندرية الـ 25 بضغطة زر وتحديث العداد إلى 25 من 37 فرعاً مشمولاً.',
+          tags: ['retail-chains', 'governorate-grouping', 'branch-search', 'phonetic-arabic', 'batch-selection', 'fathalla-market', 'air-41'],
+          lastUpdated: '2026-09-09',
+        ),
+
+        const AiDirectiveModel(
+          id: 'AIR-42',
+          code: 'MULTI_CAMPAIGN_CONCURRENT_MATCHING_AND_CONSOLIDATED_DISBURSAL_STANDARD',
+          orderIndex: 42,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار المطابقة المتوازية لعروض الشركات المتعددة والتسليم المجمّع للجوائز (Multi-Campaign Concurrent Matching & Consolidated Disbursal Standard)',
+          titleEn: 'Multi-Campaign Concurrent Matching, Parallel Evaluation & Consolidated Reward Disbursal Standard',
+          descriptionAr:
+              'تمكين الفحص الذكي المتوازي لكافة عروض وحملات الشركة النشطة في نفس الوقت على فاتورة واحدة دون إلزام المروج باختيار حملة مسبقاً. في حال تأهل الفاتورة لأكثر من حملة، يتم جمع الجوائز في سلة تسليم موحدة مع حقول سيريال منفصلة للفواتشرات، وخصم الأرصدة من مخازن فروع كل حملة، وتسجيل معاملات مستقلة مرتبطة برقم مجموعة موحد (bundle_group_id) لضمان دقة التقارير ومنع الازدواجية.',
+          descriptionEn:
+              'Enables parallel smart audit of a single customer receipt across all concurrent active company campaigns without forcing the promoter to preselect a single target offer. If a receipt qualifies for multiple offers (e.g. Oral Care + Hair Care + Deos), gifts are merged into a unified disbursal screen with dedicated voucher serial slots, inventory is deducted atomically per campaign branch, and distinct transactions are recorded in receipts_transactions linked by bundle_group_id for granular auditing without duplication.',
+          logicAr:
+              '1. الفحص التلقائي الشامل (Smart Auto-Match Default): تفعيل وضع الفحص التلقائي لكافة عروض الشركة افتراضياً عند وجود أكثر من حملة نشطة، مع إمكانية التحويل اليدوي لحملة محددة.\n2. التقييم المتوازي الحتمي (Deterministic Parallel Audit): تشغيل استدلال الذكاء الاصطناعي لمرة واحدة واستخراج كافة الأصناف، ثم تقييم الفاتورة مقابل مصفوفة شروط وقواعد كل حملة بالتوازي (تاريخ الحملة، الفرع المعتمد، الحد الأدنى للإنفاق، وقواعد الكميات).\n3. شاشة التسليم الموحدة (Unified Multi-Reward Claim UI): دمج كافة الجوائز المؤهلة في واجهة احتفالية موحدة توضح للعميل والمروج كل عرض مؤهل وجوائزه وسيريالات الفواتشر المطلوبة لكل جائزة.\n4. الحفظ المتوازي المقترن (Chained Transaction Persistence): حفظ سجل معاملة منفصل في receipts_transactions لكل حملة مؤهلة مع وسم bundle_group_id و bundle_campaigns_count و is_multi_campaign_bundle.\n5. خصم المخزون المستقل (Granular Branch Inventory Decrement): خصم كل جائزة من رصيد الفرع الخاص بالحملة المعنية لمنع أي خلل في جرد جوائز الحملات المستقلة.',
+          logicEn:
+              '1. Default Smart Auto-Match: automatically selects "__AUTO_ALL__" when multiple company campaigns are active, letting promoters upload without pre-filtering.\n2. Single-Pass OCR & Parallel Deterministic Audit: calls Gemini 3.7 Flash once to extract all line items, then audits receipt data against each campaign\'s criteria (dates, branches, minimum spend, promotional rules) concurrently.\n3. Unified Multi-Reward Claim UI: aggregates all qualified prizes into a single celebratory screen with dedicated voucher serial inputs per eligible campaign.\n4. Chained Transaction Persistence: writes an independent receipt transaction document per qualified campaign with shared bundle_group_id and metadata.\n5. Atomic Campaign Inventory Decrement: reduces branch prize stock for each specific campaign independently via CompanyGiftsService.',
+          exampleInput: 'فاتورة سوبر ماركت تتضمن: 2 شامبو صانسيلك 600 مل (عرض Hair back to school) + 2 معجون سيجنال مكافح التسوس (عرض Oral Care) + 1 ريكسونا رول أون (عرض ديوز - هيركير).',
+          exampleOutput: 'مطابقة متوازية فورية وتأهيل الفاتورة للثلاث حملات معاً: فواتشر 100 ج (Hair) + فواتشر 50 ج (Oral) + هدية فورية (ديوز)، وعرض سلة الجوائز المجمعة، وتوفير حقول إدخال السيريالات، وتسجيل 3 معاملات مرتبطة بـ BUNDLE_ID، وخصم مخزون كل حملة بنجاح.',
+          tags: ['multi-campaign', 'concurrent-matching', 'auto-disbursal', 'bundle-group', 'voucher-serials', 'air-42'],
+          lastUpdated: '2026-09-09',
+        ),
+
+        const AiDirectiveModel(
+          id: 'AIR-43',
+          code: 'POS_CONCATENATED_PRICE_SEPARATION_AND_ARABIC_ORTHOGRAPHIC_BRAND_NORMALIZATION',
+          orderIndex: 43,
+          category: AiDirectiveCategory.nlpMatching,
+          titleAr: 'تطبيع المتغيرات الإملائية للعلامات التجارية وفصل أسعار وأحجام ماكينات الكاشير الملتصقة (POS Concatenated Price Separation & Orthographic Brand Normalization)',
+          titleEn: 'POS Concatenated Price Separation & Arabic Orthographic Brand Normalization Standard',
+          descriptionAr:
+              'معالجة النصوص الملتصقة الصادرة من طابعات الكاشير بدون مسافات (مثل التصاق الحجم 600 مع السعر 132.00 لإنتاج 600132.00)، وتطبيع كافة التهجئات الإملائية العربية للعلامات التجارية العالمية (مثل: صانسيلك بالألف وصنسيلك بدون ألف)، وتطهير نصوص الشروط من بيانات الكتالوج الوصفية (مثل عدد الأصناف والباركودات المضمنة بين أقواس) لضمان مطابقة الشروط الترويجية بدقة 100%.',
+          descriptionEn:
+              'Resolves concatenated volume and price tokens emitted by unpadded POS receipts (e.g. volume 600 merged with price 132.00 yielding 600132.00), normalizes Arabic orthographic variants of multinational FMCG brands (such as Sunsilk with or without Alef), and purges catalog metadata from promotional trigger conditions.',
+          logicAr:
+              '1. فصل الأسعار والأحجام الملتصقة: تطبيق تعبير نمطي يفصل الأحجام القياسية (1000، 600، 400، 350، 250، 150، 75، إلخ) عن الأرقام العشرية الملتصقة بها.\n2. تطبيع صانسيلك وصنسلك إلى الجذر القياسي صنسيلك داخل محرك _normalize.\n3. تطهير نصوص شروط العروض (Trigger Cleaning): إزالة العبارات الوصفية بين أقواس مثل (23 صنف - 19 باركود) من نصوص الشروط لمنع تلوث كلمات المطابقة.\n4. تصنيف كلمات "منتجات، منتج، صنف، أصناف، باركود" ككلمات غير جوهرية (_noiseWords) لعدم اشتراط ظهورها داخل سطور الفاتورة المطبوعة.',
+          logicEn:
+              '1. POS Volume & Price Separation: regex decoupling known FMCG volumes from glued decimal prices.\n2. Arabic Orthographic Normalization: maps "صانسيلك" and "صنسلك" to canonical "صنسيلك" in _normalize.\n3. Trigger Metadata Purging: strips parenthetical catalog metrics from trigger strings before token matching.\n4. Stopwords Enrichment: treats generic catalog terms ("منتجات", "صنف", "باركود") as noise words.',
+          exampleInput: 'سطر فاتورة كاشير: "صانسيلك شامبو 600132.00" مقابل شرط عرض "شراء كمية 1 قطعة من منتجات صنسيلك (23 صنف - 19 باركود)".',
+          exampleOutput: 'فصل 600 عن 132.00، وتطبيع "صانسيلك" إلى "صنسيلك"، وإزالة بيانات الكتالوج ليصبح الشرط "صنسيلك"، واحتساب العرض فورياً واستحقاق [Sunsilk e Hair Msk 220Ml].',
+          tags: ['pos-concatenation', 'sunsilk', 'orthographic-normalization', 'trigger-cleaning', 'air-43'],
+          lastUpdated: '2026-09-09',
+        ),
+        const AiDirectiveModel(
+          id: 'AIR-44',
+          code: 'PHYSICAL_FORM_STRICT_ISOLATION_AND_CROSS_CATEGORY_CATALOG_LEAKAGE_GUARD',
+          orderIndex: 44,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار العزل القطعي للهيئات الفيزيائية ومنع تسريب العروض المتقاطعة بين فئات المنتجات (Physical Form Isolation & Cross-Category Catalog Leakage Guard)',
+          titleEn: 'Physical Form Strict Isolation & Cross-Category Catalog Leakage Guard Standard',
+          descriptionAr:
+              'منع تسريب منتجات فئات العناية المختلفة (مثل مزيلات العرق اسبراي/رول أون) إلى سلات إنفاق فئات أخرى (مثل العناية بالفم ومعجون الأسنان) الناتجة عن باقات الكتالوج الترويجية المشتركة (Combo Packs)، بالإضافة إلى الفصل الصارم بين العروض الخاصة برذاذ الاسبراي وعروض الرول أون المستقلة حتى لو اشتركت في نفس العلامات التجارية المعتمدة.',
+          descriptionEn:
+              'Prevents cross-category spend leakage (e.g. aerosol bodysprays inadvertently qualifying for oral care spend thresholds due to mixed promotional catalog bundle names), and enforces strict physical form boundaries between roll-on and spray formats in quantity-based multi-brand promotional rules.',
+          logicAr:
+              '1. أسبقية حراس الفئات الفيزيائية (Physical Form Guard Precedence): فحص نوع المنتج وهيئته الفيزيائية (اسبراي مقابل رول أون مقابل معجون أسنان مقابل شامبو) قبل مطابقة أسماء أصناف الكتالوج أو العلامات التجارية.\n2. حظر تسريب الباقات المتقاطعة (Anti Cross-Category Leakage): استبعاد أصناف الاسبراي والرول أون والشامبو قطعياً من التأهيل لعروض العناية بالفم (Toothpaste / Oral Care) حتى لو احتوى الكتالوج على باقات هدايا مشتركة تحمل اسم الصنف.\n3. العزل الدقيق بين الرول أون والاسبراي: استخراج هيئة المنتج المستهدفة من سياق الشرط الكامل (Rule Title + Trigger Product)، ومنع عروض الاسبراي من استهلاك أصناف الرول أون أو العكس.\n4. تطبيع أدوات العطف والتصنيف بالماركة: دعم فصل الأصناف الترويجية عند استخدام حرف العطف "و" بين العلامات التجارية (مثل: منتجات ريكسونا و أكس) في شروط الكميات، مع حوكمة الاحتساب الفردي لكل صنف بناءً على فئته الفيزيائية.',
+          logicEn:
+              '1. Physical Form Guard Precedence: checks physical product formats prior to matching catalog names or spend brands.\n2. Anti Cross-Category Leakage: strictly prevents bodysprays or roll-ons from bleeding into Oral Care toothpaste spend thresholds even if combo promo pack names exist in catalog.\n3. Spray vs Roll-on Isolation: evaluates full rule context (title and trigger) to enforce strict physical form separation so spray rules never consume roll-on quantities and vice-versa.\n4. Multi-Brand Conjunction Parsing: splits multi-brand triggers joined by Arabic \'و\' while honoring requiredBrands and physical form constraints.',
+          exampleInput: 'فاتورة تحتوي على: 1 شامبو صانسيلك 110 ج + 1 كلوس اب 63 ج + 1 سيجنال 52.5 ج (مجموع الفم 115.5 ج) + 2 ريكسونا رول أون + 1 أكس اسبراي.',
+          exampleOutput: 'حساب فواتشر 25 ج فقط لحملة Oral Care (باقة 100 ج) بدلاً من 75 ج لمنع احتساب الأكس مع المعجون، وتخصيص فواتشر 50 ج لرذاذ الأكس وفواتشر 50 ج لقطعتي ريكسونا رول أون تحت حملة ديوز، وهدية صانسيلك ماسك، بإجمالي 4 جوائز دقيقة دون تكرار أو تسريب.',
+          tags: ['physical-form-isolation', 'cross-category-leakage', 'spray-vs-rollon', 'oral-care-isolation', 'air-44'],
+          lastUpdated: '2026-09-09',
+        ),
+        const AiDirectiveModel(
+          id: 'AIR-45',
+          code: 'AUTHORITATIVE_BRAND_LOCK_AND_ITEMIZED_QUALIFICATION_REASONING_STANDARD',
+          orderIndex: 45,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار الإغلاق الصارم للعلامات المعتمدة وتفصيل أسباب استحقاق الجوائز (Authoritative Brand Lock & Itemized Qualification Reasoning Standard)',
+          titleEn: 'Authoritative Brand Lock & Itemized Qualification Reasoning Standard',
+          descriptionAr:
+              'قصر فحص العلامات التجارية المسموحة داخل الشرط الترويجي على العلامات المعرفة صراحة في قاعدة البيانات (requiredBrands)، لمنع نصوص الكتالوج الوصفية العريضة من فتح الباب أمام منتجات خارج نطاق العرض، مع تطبيع الفواصل والمسافات الناتجة عن طابعات الكاشير، وعرض سبب الاستحقاق التفصيلي بخط رفيع وأنيق تحت كل هدية أو قسيمة مشتريات ممنوحة.',
+          descriptionEn:
+              'Locks brand validation strictly to the explicit requiredBrands declared in promotional rules, preventing expansive catalog descriptions from inadvertently permitting unrelated brands, normalizes intra-word POS spacing, and displays granular, itemized qualification reasoning underneath each awarded gift.',
+          logicAr:
+              '1. أولوية العلامات المعتمدة (Authoritative Brand Lock): عند وجود requiredBrands محددة للقاعدة، تكون هي المرجع الحصري ولا يتم استخلاص علامات إضافية من نصوص الكتالوج العامة الشاملة (مثل كاتالوج يونيليفر 497 صنف).\n2. معالجة المسافات العشوائية بين حروف الماركات (Intra-word POS Spacing): دعم مسافات الكاشير مثل "صا نسيلك" و "شا مبو" لتطبيعها إلى المسميات القياسية.\n3. دعم اختصارات الشامبو (Shampoo Shorthands): التعرف على "SH" و "SHMP" في عناوين الشروط لتحديد هيئة الشامبو بدقة.\n4. تفصيل أسباب الفوز (Itemized Qualification Reasoning): تزويد كل نتيجة قاعدة مؤهلة بنص تفسيري رفيع وأنيق يوضح المنتج وعدد القطع أو قيمة المشتريات التي أهلت العميل لنيل الهدية.',
+          logicEn:
+              '1. Authoritative Brand Lock: requiredBrands strictly overrides triggerProduct text when resolving brand anchors.\n2. Intra-word POS Spacing: normalizes spaced POS tokens like "صا نسيلك" and "شا مبو" to canonical forms.\n3. Shampoo Shorthand Support: recognizes "SH" as shampoo form context.\n4. Itemized Qualification Reasoning: displays granular micro-copy explaining the exact product/spend qualification under each prize.',
+          exampleInput: 'فاتورة تحتوي على "صا نسيلك شا مبو 600132.00" و "ريكسونا روول اون" و "اكس اسبراى 150 مل".',
+          exampleOutput: 'عدم احتساب رول أون أو اسبراي لعرض Tresemme 600ml SH (صفر تريزيمي)، واحتساب ماسك صانسيلك، وعرض قسائم المشتريات مفسرة: "قسيمة 50 ج.م" تحتها "استحقاق لشراء 1 قطعة من اكس اسبراى" و"قسيمة 50 ج.م" تحتها "استحقاق لشراء 2 قطعة من ريكسونا".',
+          tags: ['brand-lock', 'pos-intra-spacing', 'shampoo-shorthand', 'qualification-reasoning', 'air-45'],
+          lastUpdated: '2026-09-09',
+        ),
       ];
 }
+
 

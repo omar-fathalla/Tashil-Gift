@@ -118,13 +118,17 @@ class PromotionalRuleItem {
   bool get hasLinkedGifts => linkedGifts.isNotEmpty || (linkedGiftId != null && linkedGiftId!.isNotEmpty);
 
   /// Whether this rule is evaluated based on total monetary spend (e.g. >= 100 EGP) rather than piece count
-  bool get isSpendBased => conditionType == 'by_spend' || conditionType == 'combo_spend' || minSpend > 0;
+  bool get isSpendBased =>
+      conditionType == 'by_spend' ||
+      conditionType == 'combo_spend' ||
+      (conditionType != 'by_quantity' && minSpend > 0);
 
   /// Whether this rule defines a bounded spend range (e.g. 95 to 139 EGP)
   bool get hasSpendRange => isSpendBased && maxSpend != null && maxSpend! > minSpend;
 
   /// Effective minimum spend taking discount tolerance into account
-  double get effectiveMinSpend => (minSpend - discountTolerance).clamp(0.0, double.infinity);
+  double get effectiveMinSpend =>
+      isSpendBased ? (minSpend - discountTolerance).clamp(0.0, double.infinity) : 0.0;
 
   /// Whether this rule requires multiple brands or products together (e.g. Signal + Closeup combo)
   bool get isCombo => conditionType == 'combo_spend' || (matchMode == 'AND' && requiredBrands.length > 1);
@@ -164,7 +168,7 @@ class PromotionalRuleItem {
     } else if (isSpendBased) {
       return 'شراء بقيمة $spendInt ج.م أو أكثر من [$triggerProduct]$toleranceText';
     } else {
-      return 'شراء كمية ($minQuantity) أو أكثر من [$triggerProduct]';
+      return 'شراء كمية ($minQuantity) قطعة أو أكثر من [$triggerProduct]';
     }
   }
 
@@ -215,15 +219,21 @@ class PromotionalRuleItem {
             .toList() ??
         [];
 
+    final condType = data['conditionType']?.toString() ?? 'by_quantity';
+    final rawMinSpend = (data['minSpend'] as num?)?.toDouble() ?? 0.0;
+    final effectiveMinSpend = condType == 'by_quantity' ? 0.0 : rawMinSpend;
+    final effectiveMaxSpend = condType == 'by_quantity' ? null : (data['maxSpend'] as num?)?.toDouble();
+    final effectiveDiscountTolerance = condType == 'by_quantity' ? 0.0 : ((data['discountTolerance'] as num?)?.toDouble() ?? 0.0);
+
     return PromotionalRuleItem(
       id: data['id']?.toString() ?? '',
       ruleTitle: data['ruleTitle']?.toString() ?? '',
       triggerProduct: data['triggerProduct']?.toString() ?? '',
       minQuantity: (data['minQuantity'] as num?)?.toInt() ?? 1,
-      conditionType: data['conditionType']?.toString() ?? 'by_quantity',
-      minSpend: (data['minSpend'] as num?)?.toDouble() ?? 0.0,
-      maxSpend: (data['maxSpend'] as num?)?.toDouble(),
-      discountTolerance: (data['discountTolerance'] as num?)?.toDouble() ?? 0.0,
+      conditionType: condType,
+      minSpend: effectiveMinSpend,
+      maxSpend: effectiveMaxSpend,
+      discountTolerance: effectiveDiscountTolerance,
       matchMode: data['matchMode']?.toString() ?? 'OR',
       requiredBrands: parsedRequiredBrands,
       selectedProductIds: parsedSelectedProductIds,
@@ -249,9 +259,9 @@ class PromotionalRuleItem {
       'triggerProduct': triggerProduct,
       'minQuantity': minQuantity,
       'conditionType': conditionType,
-      'minSpend': minSpend,
-      if (maxSpend != null && maxSpend! > 0) 'maxSpend': maxSpend,
-      if (discountTolerance > 0) 'discountTolerance': discountTolerance,
+      'minSpend': conditionType == 'by_quantity' ? 0.0 : minSpend,
+      if (conditionType != 'by_quantity' && maxSpend != null && maxSpend! > 0) 'maxSpend': maxSpend,
+      if (conditionType != 'by_quantity' && discountTolerance > 0) 'discountTolerance': discountTolerance,
       'matchMode': matchMode,
       if (requiredBrands.isNotEmpty) 'requiredBrands': requiredBrands,
       if (selectedProductIds.isNotEmpty) 'selectedProductIds': selectedProductIds,

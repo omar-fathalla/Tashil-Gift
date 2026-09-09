@@ -3165,6 +3165,91 @@ class AppStrings {
     en: 'Unique Shoppers',
     hi: 'ग्राहक संख्या',
   );
+  String get intraCampaignWeekendTab => _t(
+    ar: 'مقارنة فترات وويك إندات الحملة',
+    en: 'Intra-Campaign Weekend & Period Analytics',
+    hi: 'अभियान सप्ताहांत और अवधि विश्लेषण',
+  );
+  String get selectTargetCampaignToAnalyze => _t(
+    ar: 'اختر الحملة المراد تحليل فتراتها',
+    en: 'Select Campaign to Analyze',
+    hi: 'विश्लेषण के लिए अभियान चुनें',
+  );
+  String get periodComparisonModeAuto => _t(
+    ar: 'دورات الويك إند المكتشفة تلقائياً',
+    en: 'Auto-Detected Weekends',
+    hi: 'स्वतः खोजे गए सप्ताहांत',
+  );
+  String get periodComparisonModeCustom => _t(
+    ar: 'تحديد فترات زمنية مخصصة',
+    en: 'Custom Date Ranges',
+    hi: 'कस्टम तिथि सीमाएँ',
+  );
+  String get weekendPeriodA => _t(
+    ar: 'الويك إند / الفترة الأولى (A)',
+    en: 'Primary Weekend / Period (A)',
+    hi: 'पहला सप्ताहांत / अवधि (A)',
+  );
+  String get weekendPeriodB => _t(
+    ar: 'الويك إند / الفترة المقارنة (B)',
+    en: 'Benchmark Weekend / Period (B)',
+    hi: 'तुलनात्मक सप्ताहांत / अवधि (B)',
+  );
+  String get allWeekendsProgressionView => _t(
+    ar: 'مسار وتطور جميع الويك إندات',
+    en: 'All Weekends Progression Matrix',
+    hi: 'सभी सप्ताहांतों की प्रगति',
+  );
+  String get weekendHeadToHeadView => _t(
+    ar: 'مقارنة مباشرة بين فترتين (A vs B)',
+    en: 'Head-to-Head Period Benchmark',
+    hi: 'अवधि बनाम अवधि तुलना',
+  );
+  String get dailySalesVelocityLabel => _t(
+    ar: 'كثافة المبيعات اليومية',
+    en: 'Daily Sales Velocity',
+    hi: 'दैनिक बिक्री गति',
+  );
+  String get peakWeekendBadge => _t(
+    ar: 'الويك إند الذهبي الأفضل أداءً',
+    en: 'Peak Performance Weekend',
+    hi: 'सर्वश्रेष्ठ سप्ताहांत',
+  );
+  String get noWeekendsFoundNotice => _t(
+    ar: 'لم يتم العثور على دورات تفعيل أو فواتير مسجلة لهذه الحملة حتى الآن',
+    en: 'No recorded invoices or weekend cycles found for this campaign yet',
+    hi: 'इस अभियान के लिए अभी तक कोई सप्ताहांत चक्र नहीं मिला',
+  );
+  String get selectCustomDateRange => _t(
+    ar: 'اختر نطاق التاريخ',
+    en: 'Select Date Range',
+    hi: 'तिथि सीमा चुनें',
+  );
+  String get winningPeriodTag => _t(
+    ar: 'الفترة المتفوقة',
+    en: 'Leading Period',
+    hi: 'अग्रणी अवधि',
+  );
+  String get weekendWavePrefix => _t(
+    ar: 'الويك إند',
+    en: 'Weekend',
+    hi: 'सप्ताहांत',
+  );
+  String get activeDaysLabel => _t(
+    ar: 'أيام التفعيل',
+    en: 'Active Days',
+    hi: 'सक्रिय दिन',
+  );
+  String get comparisonDimensionDailyVelocity => _t(
+    ar: 'كثافة المبيعات اليومية',
+    en: 'Daily Velocity',
+    hi: 'दैनिक गति',
+  );
+  String get weekendProgressionChartTitle => _t(
+    ar: 'تطور ومسار أداء الحملة عبر الويك إندات المتعاقبة',
+    en: 'Campaign Performance Progression across Sequential Weekends',
+    hi: 'क्रमिक सप्ताहांतों में अभियान प्रदर्शन प्रगति',
+  );
 }
 
 

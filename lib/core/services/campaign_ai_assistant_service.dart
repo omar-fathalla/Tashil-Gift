@@ -317,7 +317,7 @@ $rawIdeaText
         } else if (r.isSpendBased) {
           buffer.writeln('   - الشرط: شراء بقيمة إجمالية (${r.minSpend.toInt()} ج.م) أو أكثر من أصناف [${r.triggerProduct}]');
         } else {
-          buffer.writeln('   - الشرط: شراء كمية (${r.minQuantity}) أو أكثر من أصناف [${r.triggerProduct}]');
+          buffer.writeln('   - الشرط: شراء كمية (${r.minQuantity} قطعة) أو أكثر من أصناف [${r.triggerProduct}]');
         }
         buffer.writeln('   - المكافأة المستحقة: [${r.rewardValue}$voucherVal] (نوع: ${r.rewardType})$giftBinding$multText');
       }

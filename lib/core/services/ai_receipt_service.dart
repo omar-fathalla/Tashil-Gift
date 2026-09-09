@@ -2090,6 +2090,10 @@ class PromotionalRuleMatcher {
             }
 
             matchedRuleIds.add(rule.id);
+            final matchingNames = <String>[];
+            for (final idx in matchingProductIndices) {
+              matchingNames.add(effectiveProducts[idx].name);
+            }
             allMatchedResults.add(
               MatchedPromotionalRuleResult(
                 rule: rule,
@@ -2098,6 +2102,8 @@ class PromotionalRuleMatcher {
                 totalRewardAmount: totalAmount,
                 formattedPrizeSummary: prizeSummary,
                 multipliedLinkedGifts: multipliedLinkedGifts,
+                qualifyingProductNames: matchingNames,
+                qualifyingSpend: totalEligibleSpend,
               ),
             );
 
@@ -2168,6 +2174,10 @@ class PromotionalRuleMatcher {
             }
 
             matchedRuleIds.add(rule.id);
+            final matchingNames = <String>[];
+            for (final idx in matchingProductIndices) {
+              matchingNames.add(effectiveProducts[idx].name);
+            }
             allMatchedResults.add(
               MatchedPromotionalRuleResult(
                 rule: rule,
@@ -2176,6 +2186,8 @@ class PromotionalRuleMatcher {
                 totalRewardAmount: totalAmount,
                 formattedPrizeSummary: prizeSummary,
                 multipliedLinkedGifts: multipliedLinkedGifts,
+                qualifyingProductNames: matchingNames,
+                qualifyingSpend: 0.0,
               ),
             );
           }
@@ -2412,6 +2424,13 @@ class PromotionalRuleMatcher {
     'on',
     'مزيل',
     'عرق',
+    'منتجات',
+    'منتج',
+    'صنف',
+    'اصناف',
+    'أصناف',
+    'باركود',
+    'بار',
   };
 
   static const Set<String> _brandRoots = {
@@ -2481,54 +2500,26 @@ class PromotionalRuleMatcher {
 
     final pNorm = _normalize(product.name);
     final triggerNorm = _normalize(triggerProduct);
+    final ruleTitleNorm = rule != null ? _normalize(rule.ruleTitle) : '';
+    final fullRuleContext = '$triggerNorm $ruleTitleNorm';
 
-    // 0.05 Selected Product Names from catalog match:
-    if (rule != null && rule.selectedProductNames.isNotEmpty) {
-      for (final selName in rule.selectedProductNames) {
-        final selNorm = _normalize(selName);
-        if (pNorm == selNorm ||
-            pNorm.contains(selNorm) ||
-            selNorm.contains(pNorm)) {
-          return true;
-        }
-      }
-    }
-
-    // 0.08 Spend & Combo Brand Rule Match:
-    // If the rule has requiredBrands or is spend-based, match if product contains any required brand!
-    if (rule != null &&
-        (rule.isSpendBased || rule.isCombo) &&
-        rule.requiredBrands.isNotEmpty) {
-      final Set<String> productBrands = _getBrandRootsInText(pNorm);
-      final bool hasRuleBrand = rule.requiredBrands.any((rb) {
-        final rbNorm = _normalize(rb);
-        return productBrands.contains(rbNorm) || pNorm.contains(rbNorm);
-      });
-      if (hasRuleBrand) {
-        // Guard against category collision
-        final bool isProductToothpaste =
-            pNorm.contains('معجون') ||
-            pNorm.contains('toothpaste') ||
-            pNorm.contains('تسوس') ||
-            pNorm.contains('سيجنال') ||
-            pNorm.contains('كلوس اب');
-        final bool isRuleToothpaste =
-            rule.requiredBrands.any(
-              (rb) => rb.contains('سيجنال') || rb.contains('كلوس'),
-            ) ||
-            triggerNorm.contains('معجون');
-        if (isRuleToothpaste && isProductToothpaste) return true;
-        if (!isRuleToothpaste) return true;
-      }
-    }
-
-    // 0.1 Strict Brand Root Anchor Guard:
-    // If the trigger rule explicitly targets specific brands (e.g. Tresemme, Rexona, Axe, Clear, Signal, Closeup),
-    // the product MUST contain at least one of those brand roots to prevent cross-brand false positives.
-    final Set<String> triggerBrands = _getBrandRootsInText(triggerProduct);
+    // 0.04 Strict Brand Root Anchor Guard:
+    // If the rule explicitly defines requiredBrands (e.g. ['تريزيمي']), those brands MUST strictly take precedence
+    // and lock the allowed brand scope, preventing broad catalog trigger strings (e.g. Unilever 497 items) from leaking foreign brands!
+    final Set<String> triggerBrands = <String>{};
     if (rule != null && rule.requiredBrands.isNotEmpty) {
       for (final rb in rule.requiredBrands) {
-        triggerBrands.addAll(_getBrandRootsInText(_normalize(rb)));
+        final roots = _getBrandRootsInText(_normalize(rb));
+        if (roots.isNotEmpty) {
+          triggerBrands.addAll(roots);
+        } else {
+          triggerBrands.add(_normalize(rb));
+        }
+      }
+    } else {
+      triggerBrands.addAll(_getBrandRootsInText(triggerProduct));
+      if (rule != null && triggerBrands.isEmpty) {
+        triggerBrands.addAll(_getBrandRootsInText(rule.ruleTitle));
       }
     }
     if (triggerBrands.isNotEmpty) {
@@ -2541,7 +2532,7 @@ class PromotionalRuleMatcher {
       }
     }
 
-    // 0.2 Strict Product Form & Physical Category Collision Guard (حارس التصنيف الفيزيائي للمنتج):
+    // 0.05 Strict Product Form & Physical Category Collision Guard (حارس التصنيف الفيزيائي للمنتج):
     // Disallows matching spray rules against roll-on products, and vice versa.
     final bool isProductRollOn =
         pNorm.contains('رول اون') ||
@@ -2564,25 +2555,36 @@ class PromotionalRuleMatcher {
         pNorm.contains('toothpaste') ||
         pNorm.contains('تسوس') ||
         pNorm.contains('سيجنال') ||
-        pNorm.contains('كلوس اب');
+        pNorm.contains('كلوس اب') ||
+        pNorm.contains('كلوساب');
 
     final bool isTriggerRollOn =
-        triggerNorm.contains('رول') ||
-        triggerNorm.contains('roll') ||
-        triggerNorm.contains('ستيك');
+        fullRuleContext.contains('رول') ||
+        fullRuleContext.contains('roll') ||
+        fullRuleContext.contains('ستيك');
     final bool isTriggerSpray =
-        triggerNorm.contains('اسبراي') ||
-        triggerNorm.contains('بخاخ') ||
-        triggerNorm.contains('spray') ||
-        triggerNorm.contains('150 مل');
+        fullRuleContext.contains('اسبراي') ||
+        fullRuleContext.contains('بخاخ') ||
+        fullRuleContext.contains('spray') ||
+        (fullRuleContext.contains('150 مل') && !isTriggerRollOn);
     final bool isTriggerShampoo =
-        triggerNorm.contains('شامبو') || triggerNorm.contains('shampoo');
+        fullRuleContext.contains('شامبو') ||
+        fullRuleContext.contains('shampoo') ||
+        RegExp(r'\b(sh|shmp|shamp)\b').hasMatch(fullRuleContext);
     final bool isTriggerToothpaste =
-        triggerNorm.contains('معجون') ||
-        triggerNorm.contains('toothpaste') ||
-        triggerNorm.contains('سيجنال') ||
-        triggerNorm.contains('كلوس اب');
+        fullRuleContext.contains('معجون') ||
+        fullRuleContext.contains('toothpaste') ||
+        fullRuleContext.contains('فم') ||
+        fullRuleContext.contains('oral') ||
+        (rule != null &&
+            rule.requiredBrands.any((b) => b.contains('سيجنال') || b.contains('كلوس')));
 
+    // Reject deodorant or spray or roll-on or shampoo matching oral care / toothpaste rules:
+    if ((isProductSpray || isProductRollOn || isProductShampoo) &&
+        !isProductToothpaste &&
+        isTriggerToothpaste) {
+      return false;
+    }
     // Reject roll-on products matching pure spray rules:
     if (isProductRollOn &&
         !isProductSpray &&
@@ -2610,6 +2612,42 @@ class PromotionalRuleMatcher {
       return false;
     }
 
+    // 0.06 Selected Product Names from catalog match:
+    if (rule != null && rule.selectedProductNames.isNotEmpty) {
+      for (final selName in rule.selectedProductNames) {
+        final selNorm = _normalize(selName);
+        if (pNorm == selNorm ||
+            pNorm.contains(selNorm) ||
+            selNorm.contains(pNorm)) {
+          return true;
+        }
+      }
+    }
+
+    // 0.08 Brand Rule Match:
+    // If the rule has requiredBrands, match if product contains any required brand (subject to category and physical form guards):
+    if (rule != null && rule.requiredBrands.isNotEmpty) {
+      final Set<String> productBrands = _getBrandRootsInText(pNorm);
+      final bool hasRuleBrand = rule.requiredBrands.any((rb) {
+        final rbNorm = _normalize(rb);
+        return productBrands.contains(rbNorm) || pNorm.contains(rbNorm);
+      });
+      if (hasRuleBrand) {
+        // Form & category validation
+        if (isTriggerToothpaste && !isProductToothpaste) {
+          // Skip non-toothpaste
+        } else if (isTriggerSpray && !isTriggerRollOn && !isProductSpray) {
+          // Skip non-spray for pure spray rules
+        } else if (isTriggerRollOn && !isTriggerSpray && !isProductRollOn) {
+          // Skip non-roll-on for pure roll-on rules
+        } else if (isTriggerShampoo && !isProductShampoo) {
+          // Skip non-shampoo
+        } else {
+          return true;
+        }
+      }
+    }
+
     // Direct barcode matching if trigger contains barcodes or known promo bundle barcodes:
     if (product.barcode.isNotEmpty) {
       final cleanBarcode = product.barcode.trim();
@@ -2623,8 +2661,14 @@ class PromotionalRuleMatcher {
 
     final int? productSize = _extractSizeMl(pNorm);
 
-    final parts = triggerProduct.split(
-      RegExp(r'[,،/\+\n]|(\s+أو\s+)|(\s+or\s+)', caseSensitive: false),
+    // Strip parenthetical catalog metadata (e.g. "(23 صنف - 19 باركود)", "(457 صنف)")
+    final cleanTrigger = triggerProduct.replaceAll(
+      RegExp(r'\(\s*\d+\s*(?:صنف|أصناف|اصناف|باركود|منتج|منتجات)\s*(?:-\s*\d+\s*(?:صنف|أصناف|اصناف|باركود|منتج|منتجات))?\s*\)'),
+      '',
+    );
+
+    final parts = cleanTrigger.split(
+      RegExp(r'[|؛,،/\+\n]|(\s+أو\s+)|(\s+or\s+)|(\s+و\s+)', caseSensitive: false),
     );
 
     for (final part in parts) {
@@ -2758,6 +2802,12 @@ class PromotionalRuleMatcher {
       (m) => '${m.group(1)} ${m.group(2)}',
     );
 
+    // POS Concatenated Volume and Price Separation (e.g. 600132.00 -> 600 132.00, 150218.00 -> 150 218.00)
+    str = str.replaceAllMapped(
+      RegExp(r'\b(1000|750|700|650|600|450|400|360|350|250|220|200|180|150|120|100|90|75|50)(\d{2,4}\.\d{2})\b'),
+      (m) => '${m.group(1)} ${m.group(2)}',
+    );
+
     // POS Truncated & Clipped Brand Handler (e.g. "كس اسبراى", "كس رول", "ايس شيل" -> "اكس اسبراي")
     str = str.replaceAllMapped(
       RegExp(
@@ -2791,17 +2841,17 @@ class PromotionalRuleMatcher {
       RegExp(r'اسبرى|اسبري|اسبراى|سبراي|سبراى|بخاخ|body\s*spray'),
       'اسبراي',
     );
-    str = str.replaceAll(RegExp(r'شمبو|شامبوا|shampoo'), 'شامبو');
-    str = str.replaceAll(RegExp(r'صنسلك|sunsilk'), 'صنسيلك');
+    str = str.replaceAll(RegExp(r'شا\s*مبو|شا\s*مبوا|شمبو|شامبوا|shampoo'), 'شامبو');
+    str = str.replaceAll(RegExp(r'صا\s*نسيلك|صا\s*نسلك|صن\s*سيلك|صن\s*سلك|صنسلك|صانسيلك|صانسلك|sunsilk'), 'صنسيلك');
     str = str.replaceAll(
-      RegExp(r'تريزيمى|تريزمى|تريزمي|تريزميه|تريسمي|تريسمى|tresemme|treseme'),
+      RegExp(r'تري\s*زيم[يهى]|تري\s*سم[يهى]|ترزيم[يهى]|tresemme|treseme'),
       'تريزيمي',
     );
-    str = str.replaceAll(RegExp(r'ركسونا|rexona'), 'ريكسونا');
+    str = str.replaceAll(RegExp(r'ري\s*كسونا|رك\s*سونا|rexona'), 'ريكسونا');
     str = str.replaceAll(RegExp(r'\baxe\b'), 'اكس');
     str = str.replaceAll(RegExp(r'\bclear\b'), 'كلير');
     str = str.replaceAll(RegExp(r'\bdove\b'), 'دوف');
-    str = str.replaceAll(RegExp(r'سيجنال|سجنال|\bsignal\b'), 'سيجنال');
+    str = str.replaceAll(RegExp(r'سي\s*جنال|سج\s*نال|\bsignal\b'), 'سيجنال');
     str = str.replaceAll(
       RegExp(r'كلوس\s*اب|كلوساب|close\s*up|closeup|close-up'),
       'كلوس اب',
@@ -2924,6 +2974,8 @@ class MatchedPromotionalRuleResult {
   final String
   formattedPrizeSummary; // e.g. "2 × فواتشر بقيمة 125 جنيه (إجمالي 250 جنيه)"
   final List<LinkedGiftAllocation> multipliedLinkedGifts;
+  final List<String> qualifyingProductNames;
+  final double qualifyingSpend;
 
   MatchedPromotionalRuleResult({
     required this.rule,
@@ -2932,7 +2984,51 @@ class MatchedPromotionalRuleResult {
     this.totalRewardAmount = 0.0,
     required this.formattedPrizeSummary,
     this.multipliedLinkedGifts = const [],
+    this.qualifyingProductNames = const [],
+    this.qualifyingSpend = 0.0,
   });
+
+  /// Human-readable qualification reason in Arabic (e.g. "استحقاق لشراء (1) قطعة من (اكس اسبراى 150 مل)")
+  String get qualifyingReasonText {
+    if (qualifyingProductNames.isNotEmpty) {
+      final joinedNames = qualifyingProductNames.toSet().join(' + ');
+      if (rule.isSpendBased) {
+        final spend = qualifyingSpend > 0 ? qualifyingSpend.toInt() : totalTriggerQuantity;
+        return 'استحقاق لمشتريات بقيمة $spend ج.م من ($joinedNames)';
+      } else {
+        final qty = totalTriggerQuantity > 0 ? totalTriggerQuantity : multiplier;
+        return 'استحقاق لشراء ($qty) قطعة من ($joinedNames)';
+      }
+    }
+    if (rule.isSpendBased && rule.minSpend > 0) {
+      return 'استحقاق لتجاوز مشتريات ${rule.minSpend.toInt()} ج.م من منتجات العرض';
+    }
+    if (rule.minQuantity > 0) {
+      return 'استحقاق لشراء ${rule.minQuantity * multiplier} قطعة من منتجات العرض';
+    }
+    return 'استحقاق استيفاء شروط العرض الترويجي';
+  }
+
+  /// Human-readable qualification reason in English
+  String get qualifyingReasonTextEn {
+    if (qualifyingProductNames.isNotEmpty) {
+      final joinedNames = qualifyingProductNames.toSet().join(' + ');
+      if (rule.isSpendBased) {
+        final spend = qualifyingSpend > 0 ? qualifyingSpend.toInt() : totalTriggerQuantity;
+        return 'Qualified for purchases of $spend EGP of ($joinedNames)';
+      } else {
+        final qty = totalTriggerQuantity > 0 ? totalTriggerQuantity : multiplier;
+        return 'Qualified for purchase of ($qty) pcs of ($joinedNames)';
+      }
+    }
+    if (rule.isSpendBased && rule.minSpend > 0) {
+      return 'Qualified for spending ${rule.minSpend.toInt()} EGP on promo items';
+    }
+    if (rule.minQuantity > 0) {
+      return 'Qualified for purchasing ${rule.minQuantity * multiplier} pcs of promo items';
+    }
+    return 'Qualified for fulfilling promo conditions';
+  }
 }
 
 /// Represents a composite multi-offer prize bundle synthesized from all matched rules in a single receipt

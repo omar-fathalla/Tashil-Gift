@@ -33,6 +33,8 @@ import '../../validation/presentation/widgets/receipt_validation_dialog.dart';
 import 'widgets/campaign_gift_balance_dialog.dart';
 import 'widgets/campaign_brief_dialog.dart';
 import 'widgets/promoter_invoices_dialog.dart';
+import 'widgets/unified_multi_campaign_claim_screen.dart';
+import '../../../core/services/multi_campaign_receipt_evaluator.dart';
 import '../../../core/widgets/campaign_suspended_screen.dart';
 
 
@@ -53,6 +55,9 @@ class ClientReceiptUploadScreen extends ConsumerStatefulWidget {
 }
 
 class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadScreen> {
+  static const String kAutoAllCampaignsId = '__AUTO_ALL__';
+  bool _isAutoMultiCampaignMode = true;
+
   EventModel? _activeEvent;
   List<EventModel> _availableCompanyEvents = [];
   bool _isLoadingEvent = true;
@@ -223,6 +228,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
             setState(() {
               _availableCompanyEvents = companyEvents;
               _activeEvent = selected;
+              if (companyEvents.length > 1) {
+                _isAutoMultiCampaignMode = true;
+              }
               _isLoadingEvent = false;
               _errorMessage = null;
             });
@@ -491,7 +499,10 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       return;
     }
 
-    if (_activeEvent == null) {
+    final bool isMultiScan = _isAutoMultiCampaignMode && _availableCompanyEvents.length > 1;
+    final EventModel? primaryTargetEvent = _activeEvent ?? (isMultiScan && _availableCompanyEvents.isNotEmpty ? _availableCompanyEvents.first : widget.event);
+
+    if (primaryTargetEvent == null) {
       _showPopupMessage('خطأ', 'بيانات الحملة غير متوفرة.');
       return;
     }
@@ -502,24 +513,26 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
     });
 
     try {
-      // 1. Check event active dates
-      if (_activeEvent!.isExpired) {
-        final endStr = "${_activeEvent!.endDate!.day}/${_activeEvent!.endDate!.month}/${_activeEvent!.endDate!.year}";
-        _showPopupMessage(
-          'عفواً، الحملة منتهية',
-          'انتهت سريان فترة هذه الحملة بتاريخ $endStr. لا يمكن قبول فواتير جديدة.',
-          isError: true,
-        );
-        return;
-      }
-      if (_activeEvent!.isNotStartedYet) {
-        final startStr = "${_activeEvent!.startDate!.day}/${_activeEvent!.startDate!.month}/${_activeEvent!.startDate!.year}";
-        _showPopupMessage(
-          'عفواً، الحملة لم تبدأ بعد',
-          'تبدأ هذه الحملة في تاريخ $startStr. يرجى العودة عند بدء الحملة.',
-          isError: true,
-        );
-        return;
+      // 1. Check event active dates if single focused campaign mode
+      if (!isMultiScan && _activeEvent != null) {
+        if (_activeEvent!.isExpired) {
+          final endStr = "${_activeEvent!.endDate!.day}/${_activeEvent!.endDate!.month}/${_activeEvent!.endDate!.year}";
+          _showPopupMessage(
+            'عفواً، الحملة منتهية',
+            'انتهت سريان فترة هذه الحملة بتاريخ $endStr. لا يمكن قبول فواتير جديدة.',
+            isError: true,
+          );
+          return;
+        }
+        if (_activeEvent!.isNotStartedYet) {
+          final startStr = "${_activeEvent!.startDate!.day}/${_activeEvent!.startDate!.month}/${_activeEvent!.startDate!.year}";
+          _showPopupMessage(
+            'عفواً، الحملة لم تبدأ بعد',
+            'تبدأ هذه الحملة في تاريخ $startStr. يرجى العودة عند بدء الحملة.',
+            isError: true,
+          );
+          return;
+        }
       }
 
       final firestore = ref.read(firestoreProvider);
@@ -547,11 +560,11 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
 
       try {
         final results = await Future.wait([
-          productsService.getProductsForCompany(_activeEvent!.companySlug).catchError((_) => <CompanyProductItem>[]),
+          productsService.getProductsForCompany(primaryTargetEvent.companySlug).catchError((_) => <CompanyProductItem>[]),
           ref.read(retailChainsServiceProvider).getBranchesForEvent(
-            retailChainId: _activeEvent!.retailChainId,
-            branchIds: _activeEvent!.branchIds,
-            branchNames: _activeEvent!.branchNames,
+            retailChainId: primaryTargetEvent.retailChainId,
+            branchIds: primaryTargetEvent.branchIds,
+            branchNames: primaryTargetEvent.branchNames,
           ).catchError((_) => <BranchModel>[]),
         ]);
 
@@ -566,28 +579,62 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         };
       } catch (_) {}
 
+      List<String> combinedRequiredProducts = [];
+      List<PromotionalRuleItem> combinedPromotionalRules = [];
+      List<String> combinedAllowedBranches = [];
+      bool combinedIsAllBranches = false;
+
+      if (isMultiScan) {
+        final Set<String> reqProdSet = {};
+        final Set<String> ruleIdSet = {};
+        final Set<String> branchSet = {};
+
+        for (final ev in _availableCompanyEvents) {
+          if (ev.isAllBranches) combinedIsAllBranches = true;
+          for (final b in ev.branchNames) {
+            if (b.trim().isNotEmpty) branchSet.add(b.trim());
+          }
+          for (final p in ev.requiredProducts) {
+            if (p.trim().isNotEmpty) reqProdSet.add(p.trim());
+          }
+          for (final r in ev.promotionalRules) {
+            final key = r.id.isNotEmpty ? r.id : '${ev.id}_${r.ruleTitle}';
+            if (ruleIdSet.add(key)) {
+              combinedPromotionalRules.add(r);
+            }
+          }
+        }
+        combinedRequiredProducts = reqProdSet.toList();
+        combinedAllowedBranches = branchSet.toList();
+      } else {
+        combinedRequiredProducts = _activeEvent!.requiredProducts;
+        combinedPromotionalRules = _activeEvent!.promotionalRules;
+        combinedAllowedBranches = _activeEvent!.branchNames;
+        combinedIsAllBranches = _activeEvent!.isAllBranches;
+      }
+
       // Run Gemini AI analysis
       final result = await aiService.analyzeReceiptImage(
         bytes,
         mimeType,
         additionalImagesBytes: additionalBytesList,
         additionalMimeTypes: additionalMimesList,
-        targetCompany: _activeEvent!.targetCompany,
-        minimumSpend: _activeEvent!.minimumSpend,
-        requiredProducts: _activeEvent!.requiredProducts,
+        targetCompany: primaryTargetEvent.targetCompany,
+        minimumSpend: isMultiScan ? 0.0 : _activeEvent!.minimumSpend,
+        requiredProducts: combinedRequiredProducts,
         registeredBarcodes: registeredBarcodes,
         catalogBarcodeMap: catalogBarcodeMap,
-        retailChainName: _activeEvent!.retailChainName,
-        allowedBranches: _activeEvent!.branchNames,
-        isAllBranches: _activeEvent!.isAllBranches,
+        retailChainName: primaryTargetEvent.retailChainName,
+        allowedBranches: combinedAllowedBranches,
+        isAllBranches: combinedIsAllBranches,
         registeredBranches: chainBranches,
-        startDate: _activeEvent!.startDate,
-        endDate: _activeEvent!.endDate,
-        customPrompt: _activeEvent!.customPrompt,
-        allowMultipleChances: _activeEvent!.allowMultipleChances,
-        multiplierBasis: _activeEvent!.multiplierBasis,
-        maxChancesPerReceipt: _activeEvent!.maxChancesPerReceipt,
-        promotionalRules: _activeEvent!.promotionalRules,
+        startDate: isMultiScan ? null : _activeEvent!.startDate,
+        endDate: isMultiScan ? null : _activeEvent!.endDate,
+        customPrompt: isMultiScan ? '' : _activeEvent!.customPrompt,
+        allowMultipleChances: true,
+        multiplierBasis: isMultiScan ? 'both' : _activeEvent!.multiplierBasis,
+        maxChancesPerReceipt: isMultiScan ? 0 : _activeEvent!.maxChancesPerReceipt,
+        promotionalRules: combinedPromotionalRules,
       );
 
       final previewImgUrl = 'data:$mimeType;base64,${base64Encode(bytes)}';
@@ -653,12 +700,176 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           branch: result.branchDetected,
           receiptDate: result.receiptDate,
           totalValue: result.targetCompanyTotal,
-          requiredMinimum: _activeEvent!.minimumSpend,
+          requiredMinimum: isMultiScan ? 0.0 : _activeEvent!.minimumSpend,
           currencySymbol: activeCountry.currencySymbol,
           imageUrl: previewImgUrl,
           imageUrls: previewUrls,
         );
         return;
+      }
+
+      if (isMultiScan) {
+        final summary = MultiCampaignReceiptEvaluator.evaluateAll(
+          result: result,
+          campaigns: _availableCompanyEvents,
+        );
+
+        if (summary.isMultiMatch) {
+          // Upload to Firebase Storage
+          setState(() {
+            _aiPhaseText = '2/3 جاري حفظ صورة الفاتورة في التخزين السحابي...';
+          });
+
+          final receiptNumber = result.receiptNumber.trim();
+          final cleanReceiptNumber = (receiptNumber.isNotEmpty ? receiptNumber : "INV_${DateTime.now().millisecondsSinceEpoch}")
+              .replaceAll(RegExp(r'[/\\?%*:|"<>]'), '_');
+
+          final List<String> uploadedImageUrls = [];
+          final List<String> uploadedStoragePaths = [];
+
+          await Future.wait(
+            List.generate(allBytesList.length, (index) async {
+              final partNum = index + 1;
+              final sPath = allBytesList.length == 1
+                  ? 'receipts/${primaryTargetEvent.companySlug}/multi_bundles/$cleanReceiptNumber.jpg'
+                  : 'receipts/${primaryTargetEvent.companySlug}/multi_bundles/${cleanReceiptNumber}_part$partNum.jpg';
+              try {
+                final storage = ref.read(firebaseStorageProvider);
+                final storageRef = storage.ref().child(sPath);
+                final metadata = SettableMetadata(
+                  contentType: 'image/jpeg',
+                  customMetadata: {
+                    'receiptNumber': receiptNumber,
+                    'companySlug': primaryTargetEvent.companySlug,
+                    'targetCompany': primaryTargetEvent.targetCompany,
+                    'totalValue': result.targetCompanyTotal.toString(),
+                    'partIndex': '$partNum',
+                    'totalParts': '${allBytesList.length}',
+                    'uploadedAt': DateTime.now().toIso8601String(),
+                  },
+                );
+
+                if (kIsWeb) {
+                  await storageRef.putData(allBytesList[index], metadata).timeout(const Duration(seconds: 15));
+                } else {
+                  await storageRef.putFile(File(allImagesList[index].path), metadata).timeout(const Duration(seconds: 15));
+                }
+                final url = await storageRef.getDownloadURL().timeout(const Duration(seconds: 10));
+                uploadedImageUrls.add(url);
+                uploadedStoragePaths.add(sPath);
+              } catch (e) {
+                debugPrint('Firebase Storage upload notice for part $partNum: $e');
+                if (allBytesList[index].lengthInBytes <= 400 * 1024) {
+                  uploadedImageUrls.add('data:image/jpeg;base64,${base64Encode(allBytesList[index])}');
+                } else {
+                  uploadedImageUrls.add('');
+                }
+                uploadedStoragePaths.add(sPath);
+              }
+            }),
+          );
+
+          // Harvest discovered products asynchronously
+          unawaited(ref.read(aiProductDiscoveryServiceProvider).autoHarvestFromReceiptAnalysis(
+            companySlug: primaryTargetEvent.companySlug,
+            companyName: primaryTargetEvent.targetCompany,
+            retailChain: result.storeChainDetected,
+            branch: result.branchDetected,
+            receiptNumber: receiptNumber,
+            extractedProducts: result.extractedProducts,
+          ));
+
+          // Reset image preview and analysis state immediately
+          setState(() {
+            _receiptImages.clear();
+            _selectedPreviewIndex = 0;
+            _isAiLoading = false;
+            _aiPhaseText = '';
+          });
+
+          final bundleGroupId = 'BUNDLE_${DateTime.now().millisecondsSinceEpoch}_${math.Random().nextInt(9999)}';
+          if (!mounted) return;
+          await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => UnifiedMultiCampaignClaimScreen(
+                bundleGroupId: bundleGroupId,
+                receiptNumber: receiptNumber,
+                customerPhone: _customerPhoneController.text.toEnglishDigits().trim(),
+                customerName: _customerNameController.text.trim(),
+                qualifiedCampaigns: summary.qualifiedCampaigns,
+                imageUrls: uploadedImageUrls.isNotEmpty ? uploadedImageUrls : previewUrls,
+                initialAiMetadata: {
+                  'store_chain_detected': result.storeChainDetected,
+                  'branch_detected': result.branchDetected,
+                  'receipt_date': result.receiptDate,
+                  'analysis_duration_seconds': result.durationSeconds,
+                  'analysis_duration_ms': result.durationMs,
+                  'ai_kpi_rating': result.kpiRating,
+                },
+                onDisbursalCompleted: () {
+                  _resetFormForNextCustomer();
+                },
+              ),
+            ),
+          );
+          _resetFormForNextCustomer();
+          return;
+        } else if (summary.isSingleMatch) {
+          // Exactly 1 campaign matched! Switch _activeEvent to that campaign
+          _activeEvent = summary.qualifiedCampaigns.first.campaign;
+        } else {
+          // 0 campaigns matched in multi-scan! Show aggregated report
+          if (!mounted) return;
+          final activeCountry = ref.read(activeCountryProvider);
+
+          final List<ValidationConditionItem> conditions = [];
+          final List<String> allUnfulfilled = [];
+
+          for (final unfulfilled in summary.unfulfilledCampaigns) {
+            final campaignName = unfulfilled.campaign.eventName;
+            final reasons = unfulfilled.unfulfilledConditions.isNotEmpty
+                ? unfulfilled.unfulfilledConditions.join('\n• ')
+                : (unfulfilled.rejectionReason ?? 'الشروط غير مستوفاة');
+            allUnfulfilled.add('$campaignName: $reasons');
+
+            conditions.add(
+              ValidationConditionItem(
+                title: campaignName,
+                description: reasons,
+                icon: Icons.layers_clear_rounded,
+                isMet: false,
+              ),
+            );
+          }
+
+          _recordRejectedReceipt(
+            result: result,
+            allBytesList: allBytesList,
+            allImagesList: allImagesList,
+            activeEvent: primaryTargetEvent,
+            rejectionReason: allUnfulfilled.join(' | '),
+            unfulfilledConditions: allUnfulfilled,
+            totalValue: result.targetCompanyTotal,
+          );
+
+          showReceiptValidationReportDialog(
+            context: context,
+            title: 'الفاتورة غير مطابقة لأي من عروض الشركة',
+            subtitle: 'تم فحص الفاتورة بالذكاء الاصطناعي مقابل (${summary.allEvaluations.length}) عروض ولم تستوفِ شروط أي منها:',
+            conditions: conditions,
+            receiptNumber: result.receiptNumber,
+            storeChain: result.storeChainDetected,
+            branch: result.branchDetected,
+            receiptDate: result.receiptDate,
+            totalValue: result.targetCompanyTotal,
+            requiredMinimum: 0,
+            currencySymbol: activeCountry.currencySymbol,
+            imageUrl: previewImgUrl,
+            imageUrls: previewUrls,
+          );
+          _resetFormForNextCustomer();
+          return;
+        }
       }
 
       final double totalValue = result.targetCompanyTotal;
@@ -1472,7 +1683,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                   ),
                                   const SizedBox(height: 8),
                                   DropdownButtonFormField<String>(
-                                    initialValue: _activeEvent?.id,
+                                    initialValue: (_isAutoMultiCampaignMode && _availableCompanyEvents.length > 1)
+                                        ? kAutoAllCampaignsId
+                                        : _activeEvent?.id,
                                     isExpanded: true,
                                     decoration: InputDecoration(
                                       isDense: true,
@@ -1492,39 +1705,81 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                         borderSide: BorderSide(color: colorScheme.primary, width: 2),
                                       ),
                                     ),
-                                    items: _availableCompanyEvents.map((ev) {
-                                      final minSpendStr = ev.minimumSpend > 0
-                                          ? ' (${isAr ? 'حد أدنى' : 'Min'}: ${ev.minimumSpend.toInt()} ${activeCountry.currencySymbolFor(strings.languageCode)})'
-                                          : '';
-                                      return DropdownMenuItem<String>(
-                                        value: ev.id,
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              ev.gameType == 'wheel' ? Icons.donut_large_rounded : Icons.card_giftcard_rounded,
-                                              size: 16,
-                                              color: colorScheme.primary,
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: Text(
-                                                '${ev.eventName}$minSpendStr',
-                                                style: GoogleFonts.cairo(
-                                                  fontSize: isMobile ? 12 : 13,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: colorScheme.onSurface,
+                                    items: [
+                                      if (_availableCompanyEvents.length > 1)
+                                        DropdownMenuItem<String>(
+                                          value: kAutoAllCampaignsId,
+                                          child: Row(
+                                            children: [
+                                              Container(
+                                                padding: const EdgeInsets.all(3),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.amber.shade100,
+                                                  borderRadius: BorderRadius.circular(6),
                                                 ),
-                                                overflow: TextOverflow.ellipsis,
+                                                child: Icon(
+                                                  Icons.auto_awesome_rounded,
+                                                  size: 15,
+                                                  color: Colors.amber.shade900,
+                                                ),
                                               ),
-                                            ),
-                                          ],
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  isAr
+                                                      ? '✨ فحص ذكي لكافة عروض الشركة (تحديد تلقائي)'
+                                                      : '✨ Smart Auto-Match (All Company Offers)',
+                                                  style: GoogleFonts.cairo(
+                                                    fontSize: isMobile ? 12 : 13,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: colorScheme.primary,
+                                                  ),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                      );
-                                    }).toList(),
+                                      ..._availableCompanyEvents.map((ev) {
+                                        final minSpendStr = ev.minimumSpend > 0
+                                            ? ' (${isAr ? 'حد أدنى' : 'Min'}: ${ev.minimumSpend.toInt()} ${activeCountry.currencySymbolFor(strings.languageCode)})'
+                                            : '';
+                                        return DropdownMenuItem<String>(
+                                          value: ev.id,
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                ev.gameType == 'wheel' ? Icons.donut_large_rounded : Icons.card_giftcard_rounded,
+                                                size: 16,
+                                                color: colorScheme.primary,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  '${ev.eventName}$minSpendStr',
+                                                  style: GoogleFonts.cairo(
+                                                    fontSize: isMobile ? 12 : 13,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: colorScheme.onSurface,
+                                                  ),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }),
+                                    ],
                                     onChanged: (selectedId) {
-                                      if (selectedId != null && selectedId != _activeEvent?.id) {
+                                      if (selectedId == kAutoAllCampaignsId) {
+                                        setState(() {
+                                          _isAutoMultiCampaignMode = true;
+                                          _resetFormForNextCustomer();
+                                        });
+                                      } else if (selectedId != null && (selectedId != _activeEvent?.id || _isAutoMultiCampaignMode)) {
                                         final newActive = _availableCompanyEvents.firstWhere((e) => e.id == selectedId);
                                         setState(() {
+                                          _isAutoMultiCampaignMode = false;
                                           _activeEvent = newActive;
                                           _resetFormForNextCustomer();
                                         });
@@ -1538,7 +1793,6 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
 
                           SizedBox(height: isMobile ? 18 : 24),
 
-                          // 2. Customer Info Inputs (M3 Filled TextFields)
                           TextField(
                             controller: _customerNameController,
                             textInputAction: TextInputAction.next,
