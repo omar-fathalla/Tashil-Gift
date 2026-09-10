@@ -960,6 +960,18 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           totalValue: totalValue,
         );
 
+        // Harvest unlisted company products so they immediately appear in "تحديث الأصناف" for review & one-click catalog addition
+        if (result.extractedProducts.any((p) => p.isTargetCompany)) {
+          unawaited(ref.read(aiProductDiscoveryServiceProvider).autoHarvestFromReceiptAnalysis(
+            companySlug: _activeEvent!.companySlug,
+            companyName: _activeEvent!.targetCompany,
+            retailChain: result.storeChainDetected,
+            branch: result.branchDetected,
+            receiptNumber: receiptNumber,
+            extractedProducts: result.extractedProducts,
+          ));
+        }
+
         showReceiptValidationReportDialog(
           context: context,
           title: 'عفواً، شروط العرض غير مستوفاة',

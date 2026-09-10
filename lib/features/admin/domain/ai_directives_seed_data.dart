@@ -1015,12 +1015,32 @@ class AiDirectivesSeedData {
           descriptionEn:
               'Enforces strict extraction of genuine receipt numbers / transaction IDs from receipt headers (e.g. TP0001000420897) while explicitly preventing AI models from erroneously picking tax registration numbers (ب.ض e.g. 291/064/167) or commercial register codes (س.ت e.g. 98401) found in receipt footers.',
           logicAr:
-              '1. تحديد موضع رقم الفاتورة: إعطاء الأولوية للرموز والأرقام التسلسلية الموجودة في ترويسة البون المطبوعة بجوار (عملية رقم / Slip / Receipt / Ticket / TP).\\n2. حظر استخراج الأرقام الضريبية: منع استخراج أي رقم يسبقه أو يليه اختصار (ب.ض / بطاقة ضريبية / tax id / س.ت / سجل تجاري) كرقم للفاتورة.\\n3. دقة سجل منع التكرار (Anti-Duplication Integrity): ضمان تسجيل الرقم الحقيقي للمعاملة في قاعدة البيانات لمنع رفض فواتير أخرى مختلفة تصدر من نفس السوبرماركت وتحمل نفس الرقم الضريبي.',
+              '1. تحديد موضع رقم الفاتورة: إعطاء الأولوية للرموز والأرقام التسلسلية الموجودة في ترويسة البون المطبوعة بجوار (عملية رقم / Slip / Receipt / Ticket / TP).\n2. حظر استخراج الأرقام الضريبية: منع استخراج أي رقم يسبقه أو يليه اختصار (ب.ض / بطاقة ضريبية / tax id / س.ت / سجل تجاري) كرقم للفاتورة.\n3. دقة سجل منع التكرار (Anti-Duplication Integrity): ضمان تسجيل الرقم الحقيقي للمعاملة في قاعدة البيانات لمنع رفض فواتير أخرى مختلفة تصدر من نفس السوبرماركت وتحمل نفس الرقم الضريبي.',
           logicEn:
-              '1. Header-Priority Transaction Number: prioritizes transaction identifiers in the receipt header adjacent to keywords like (TP, Slip, Ticket, Receipt, Transactio).\\n2. Tax ID & CR Number Blacklist: strictly forbids assigning any number preceded or succeeded by tax card (ب.ض) or commercial registry (س.ت) to receiptNumber.\\n3. Anti-Duplication Integrity: guarantees distinct receipt numbers across multiple customer transactions from the same retail chain branch sharing the same legal tax ID.',
+              '1. Header-Priority Transaction Number: prioritizes transaction identifiers in the receipt header adjacent to keywords like (TP, Slip, Ticket, Receipt, Transactio).\n2. Tax ID & CR Number Blacklist: strictly forbids assigning any number preceded or succeeded by tax card (ب.ض) or commercial registry (س.ت) to receiptNumber.\n3. Anti-Duplication Integrity: guarantees distinct receipt numbers across multiple customer transactions from the same retail chain branch sharing the same legal tax ID.',
           exampleInput: 'بون كاشير نجمة هليوبوليس (جمال سلامه) فرع شيراتون يتضمن في الترويسة "TP0001000420897" وفي التذييل "ب.ض: 291/064/167" و"س.ت: 98401".',
           exampleOutput: 'استخراج receiptNumber = "TP0001000420897" بدقة، وعزل رقم البطاقة الضريبية لمنع تصنيفه كرقم للفاتورة وتفادي تكرار المعاملات.',
           tags: ['receipt-number-isolation', 'tax-card-filtering', 'commercial-reg-filtering', 'gamal-salama', 'anti-duplication', 'air-48'],
+          lastUpdated: '2026-09-10',
+        ),
+        const AiDirectiveModel(
+          id: 'AIR-49',
+          code: 'COMPANY_BRAND_SPEND_INVARIANT_AND_POS_EDGE_TRUNCATION_STANDARD',
+          orderIndex: 49,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار شمولية منتجات الشركة في عروض الإنفاق ومعالجة بتر نصوص الأرز والباركود المختصر (Company Brand Spend Invariant & POS Edge-Truncation Standard)',
+          titleEn: 'Company Brand Spend Invariant, POS Edge-Truncation Healing & 12-to-13 Barcode Prefix Standard',
+          descriptionAr:
+              'حوكمة شمولية قبول كافة منتجات العلامة التجارية المؤكدة للشركة (مثل شركة الضحى) ضمن عروض الإنفاق المالي (Spend-based Promotional Rules مثل: "أشتري بقيمة 200 ج.م من منتجات الضحى") حتى وإن لم تكن مدرجة مسبقاً في قوائم الأصناف المنتقاة يدوياً، مع الحصاد التلقائي للأصناف الجديدة إلى صندوق الوارد لشاشة «تحديث الأصناف» للاعتماد بضغطة زر واحدة، ومعالجة بتر الحرف الأول لكلمة أرز عند حواف بونات ماكينات الكاشير ("ز مصرى" -> "رز مصري") وتوحيد مرادفات ("ارز" ⟷ "رز") وتطابق الباركودات ذات الـ 12 رقماً مع الـ 13 رقماً (Prefix Match).',
+          descriptionEn:
+              'Enforces automatic brand-level spend qualification for confirmed company products (e.g. Al-Doha) in spend-based promotional rules even if the specific SKU was not pre-selected in legacy catalog lists, while auto-harvesting unlisted items to the Product Discovery Inbox for one-click catalog sync; heals margin-clipped text on POS paper ("ز مصرى" -> "رز مصري"); unifies "ارز" and "رز" synonyms; and matches 12-digit barcodes with 13-digit catalog entries.',
+          logicAr:
+              '1. حوكمة الإنفاق على العلامة التجارية (Company Brand Spend Invariant): في القواعد المالية (by_spend) لعلامة تجارية، يُعتمد أي منتج تابع للشركة ويُحتسب ضمن إجمالي الإنفاق المؤهل للهدايا والمضاعفات فوراً دون التقيد بالحصر اليدوي للأصناف.\n2. الحصاد التلقائي للأصناف الجديدة (Auto-Harvesting to Discovery Inbox): إرسال الأصناف التابعة للشركة والجديدة على الكتالوج إلى صندوق الوارد لشاشة «تحديث الأصناف» لتنزيلها واعتمادها في الكتالوج والحملة بضغطة زر واحدة.\n3. معالجة البتر الطرفي للكلمات (Edge-Truncation): تحويل "ز مصري/مصرى/بسمتي" إلى "رز مصري" عند سقوط حرف الراء من حافة بون الكاشير في الطابعات الحرارية (مثل هايبر وان).\n4. مرونة الباركود (12 vs 13 Barcode Prefix): مطابقة الباركود المطبوع ذو الـ 12 رقماً مع باركود الكتالوج ذو الـ 13 رقماً عند تطابق البادئة لتفادي إسقاط رقم التحقق في نقاط البيع.',
+          logicEn:
+              '1. Company Brand Spend Invariant: in spend-based rules for a company, any verified company product automatically qualifies towards the eligible spend total and multipliers without being blocked by manual item selections.\n2. Auto-Harvesting to Discovery Inbox: sends unlisted company products to the Product Discovery Inbox for one-click catalog and campaign synchronization.\n3. Margin-Clipped Rice Text Healing: normalizes "ز مصري" / "ز مصرى" to "رز مصري" when the leading "ر" is clipped on thermal printer margins (e.g. Hyper One).\n4. 12-to-13 Barcode Prefix Matching: matches 12-digit printed POS barcodes with 13-digit EAN catalog codes when the prefix matches, overcoming check-digit stripping.',
+          exampleInput: 'بون كاشير هايبر وان فرع الشيخ زايد يتضمن سطر: "0% 819.00 40.95 20 622300066001 ز مصرى الضحى 1كجم" مع خصم "-120.00" بصافي 699 ج.م في عرض "أشتري بقيمة 200 جنية من منتجات الضحى واكسب هدية".',
+          exampleOutput: 'مطابقة الصنف بنجاح كأرز مصري الضحى 1 كجم، ومطابقة الباركود 622300066001 مع 6223000660010، واحتساب إجمالي الإنفاق 699 ج.م ومنح العميل مضاعف 3 هدايا فوراً، مع إرسال الصنف والباركود لصندوق «تحديث الأصناف» لحفظه بالكتالوج.',
+          tags: ['company-spend-invariant', 'pos-edge-truncation', 'hyper-one', 'al-doha-rice', 'barcode-prefix-matching', 'auto-harvesting', 'air-49'],
           lastUpdated: '2026-09-10',
         ),
       ];

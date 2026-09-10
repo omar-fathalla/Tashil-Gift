@@ -2635,10 +2635,18 @@ class PromotionalRuleMatcher {
     // If the rule has selected barcodes from catalog, or trigger contains barcode, match immediately!
     final cleanBarcode = product.barcode.trim();
     if (cleanBarcode.isNotEmpty) {
-      if (rule != null &&
-          rule.selectedBarcodes.isNotEmpty &&
-          rule.selectedBarcodes.contains(cleanBarcode)) {
-        return true;
+      if (rule != null && rule.selectedBarcodes.isNotEmpty) {
+        if (rule.selectedBarcodes.contains(cleanBarcode)) {
+          return true;
+        }
+        // Handle 12-digit vs 13-digit retail POS variations (e.g. 622300066001 vs 6223000660010 in Hyper One)
+        if (cleanBarcode.length >= 10) {
+          final matchesCatalogPrefix = rule.selectedBarcodes.any((b) =>
+              b.startsWith(cleanBarcode) || cleanBarcode.startsWith(b));
+          if (matchesCatalogPrefix) {
+            return true;
+          }
+        }
       }
       if (cleanBarcode.length >= 6 && triggerProduct.contains(cleanBarcode)) {
         return true;
@@ -2679,7 +2687,11 @@ class PromotionalRuleMatcher {
       final bool hasMatchingBrand = triggerBrands.any(
         (tb) => productBrands.contains(tb),
       );
-      if (!hasMatchingBrand) {
+      // In spend rules for a company, if AI confirmed product belongs to target company, do not reject solely on brand name root
+      final bool isCompanySpendAnchor = (rule?.conditionType == 'by_spend') &&
+          product.isTargetCompany &&
+          (triggerBrands.contains('الضحي') || triggerBrands.contains('الضحى'));
+      if (!hasMatchingBrand && !isCompanySpendAnchor) {
         return false;
       }
     }
@@ -2824,15 +2836,36 @@ class PromotionalRuleMatcher {
       }
     }
 
-    // 0.08 Brand Rule Match:
-    // If the rule has requiredBrands, match if product contains any required brand (subject to category and physical form guards):
+    // 0.08 Brand Rule Match (including Company-Level Spend Rules):
+    // If the rule has requiredBrands OR is a spend-based rule mentioning a brand in its title/trigger:
+    final Set<String> effectiveRuleBrands = <String>{};
     if (rule != null && rule.requiredBrands.isNotEmpty) {
+      for (final rb in rule.requiredBrands) {
+        final roots = _getBrandRootsInText(_normalize(rb));
+        if (roots.isNotEmpty) {
+          effectiveRuleBrands.addAll(roots);
+        } else {
+          effectiveRuleBrands.add(_normalize(rb));
+        }
+      }
+    } else if (rule != null) {
+      effectiveRuleBrands.addAll(_getBrandRootsInText(rule.ruleTitle));
+      effectiveRuleBrands.addAll(_getBrandRootsInText(triggerProduct));
+    }
+
+    if (effectiveRuleBrands.isNotEmpty) {
       final Set<String> productBrands = _getBrandRootsInText(pNorm);
-      final bool hasRuleBrand = rule.requiredBrands.any((rb) {
+      final bool hasRuleBrand = effectiveRuleBrands.any((rb) {
         final rbNorm = _normalize(rb);
         return productBrands.contains(rbNorm) || pNorm.contains(rbNorm);
       });
-      if (hasRuleBrand) {
+
+      // Also allow if product is flagged as target company and belongs to the same company scope in spend rules
+      final bool isCompanyProductSpendRule = (rule?.conditionType == 'by_spend') &&
+          product.isTargetCompany &&
+          (hasRuleBrand || effectiveRuleBrands.contains('الضحي') || effectiveRuleBrands.contains('الضحى'));
+
+      if (hasRuleBrand || isCompanyProductSpendRule) {
         // Form & category validation
         if (isTriggerToothpaste && !isProductToothpaste) {
           // Skip non-toothpaste
@@ -3026,6 +3059,18 @@ class PromotionalRuleMatcher {
         r'(^|\s)(ايس\s*شيل|ايس\s*تشيل|ice\s*chill|بلاك\s*تيمبتيشن|black\s*temptation|دارك\s*تيمبتيشن|dark\s*temptation|افريكان\s*كول)',
       ),
       (m) => '${m.group(1)}اكس ${m.group(2)}',
+    );
+
+    // Rice Synonym & POS Edge-Truncation Normalization (e.g. "ز مصرى", "ز بسمتي" -> "رز مصري", "ارز" -> "رز")
+    // When printed near paper margins in thermal POS printers (e.g. Hyper One), "رز" is frequently clipped to "ز"
+    str = str.replaceAllMapped(
+      RegExp(r'(^|\s)ز\s+(مصري|مصرى|بسمتي|بسمتى|ابيض|أبيض|حبة|حبه|فاخر|اصفر|أصفر|طبيعي|طبيعى|الضحى|الضحي|1|2|5)'),
+      (m) => '${m.group(1)}رز ${m.group(2)}',
+    );
+    // Unify "ارز" -> "رز"
+    str = str.replaceAllMapped(
+      RegExp(r'\bارز\b'),
+      (_) => 'رز',
     );
 
     // POS & transliteration dictionary normalization
