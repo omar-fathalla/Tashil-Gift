@@ -983,6 +983,26 @@ class AiDirectivesSeedData {
           tags: ['spend-multipliers', 'win-verb-collision', 'al-doha', 'fmcg-phonetics', 'popcorn-normalization', 'air-46'],
           lastUpdated: '2026-09-10',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-47',
+          code: 'POS_DATE_DISAMBIGUATION_AND_RETAIL_FMCG_UNIT_NORMALIZATION_STANDARD',
+          orderIndex: 47,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار حل التباس تواريخ الفواتير (MM/DD مقابل DD/MM) وتطبيع الأوزان وأخطاء الكاشير لسلاسل السوبرماركت (POS Date Disambiguation & Retail FMCG Unit Normalization Standard)',
+          titleEn: 'POS Date Disambiguation (MM/DD vs DD/MM), Supermarket Keyboard Typo Healing & FMCG Unit Normalization Standard',
+          descriptionAr:
+              'حل إشكالية التباس تنسيق التاريخ المطبوع في بونات ماكينات الكاشير لبعض سلاسل السوبرماركت (مثل زهران ماركت الذي يطبع 09/10/26 لليوم 10 سبتمبر 2026 بتنسيق MM/DD/YY بدلاً من DD/MM/YY)، عبر مقارنة التاريخ تلقائياً بالنافذة الزمنية للحملة [startDate, endDate] وتاريخ اليوم الحالي لمنع قراءة التاريخ في المستقبل أو بعد نهاية الحملة، مع معالجة الأخطاء الشائعة في كيبورد الكاشير (مثل كتابة "الصحي" بالصاد بدلاً من الضاد "الضحي") وتطبيع اختصارات الأوزان والأحجام (1ك ⟷ 1 كجم ⟷ 1 كيلو ⟷ 1kg) ومطابقة أصناف الكتالوج دون تأثر بإغفال الكاشير لكلمات الوصف العامة مثل (مصري، فاخر، ممتاز).',
+          descriptionEn:
+              'Disambiguates POS receipt date formats between MM/DD/YY and DD/MM/YY (such as Zahran Market printing 09/10/26 for September 10, 2026) by cross-referencing against the campaign window [startDate, endDate] and current time to prevent future date rejection; heals adjacent keyboard typos in retail databases (e.g. "الصحي" with "ص" instead of "ض"); unifies grocery weight units (1ك ⟷ 1 كجم ⟷ 1 كيلو ⟷ 1kg); and matches catalog products even when POS receipts omit generic descriptors (مصري, فاخر, ممتاز).',
+          logicAr:
+              '1. فض التباس تاريخ الفاتورة الذكي (Date Disambiguation): عند استخراج تاريخ بصيغة (AA/BB/YY) حيث كلاهما <= 12 (مثل 09/10/26)، يُفحص كلا الاحتمالين (10 سبتمبر مقابل 9 أكتوبر)؛ فإذا كان أحدهما في المستقبل بعد تاريخ اليوم أو خارج الفترة الزمنية للحملة والآخر يقع تماماً داخل فترة العرض، يتم اعتماد التاريخ الصحيح تلقائياً.\n2. تصحيح خطأ الكيبورد الشائع "الصحي ⟷ الضحي": تحويل "الصحي" و"الصحى" إلى "الضحي" في كافة أسطر الفاتورة لتجاوز أخطاء مدخلي البيانات في سلاسل السوبرماركت (مثل زهران ماركت).\n3. توحيد وحدات الوزن القياسية (Unit Normalization): توحيد أشكال كتابة الأوزان (1ك، 1 ك، 1كيلو، 1كجم، 1kg) إلى صيغة قياسية واحدة (1 كجم)، وكذلك الغرامات والمليلترات.\n4. مطابقة الكلمات الجوهرية للأصناف (Core-Word Catalog Matching): السماح بمطابقة أصناف الكتالوج حتى لو أغفل بون الكاشير الصفات العامة مثل "مصرى" في "الضحى ارز مصرى 1ك" مقابل "الضحي أرز 1كجم".',
+          logicEn:
+              '1. Smart POS Date Disambiguation: evaluates ambiguous dates where both day and month <= 12 (e.g. 09/10/26) against campaign window [startDate, endDate] and current timestamp, rejecting impossible future dates and prioritizing the valid in-campaign date.\n2. Adjacent Keyboard Typo Healing: normalizes "الصحي" / "الصحى" to "الضحي" to heal cashier typos on QWERTY Arabic keyboards.\n3. Uniform FMCG Unit Canonicalization: normalizes weight shorthands (1ك, 1 ك, 1كيلو, 1كجم, 1kg) into unified canonical units (1 كجم).\n4. Core-Word Catalog Token Matching: matches catalog items even when POS receipts omit optional descriptor terms (e.g. "مصرى" in "الضحى ارز مصرى 1ك" vs "الضحي أرز 1كجم").',
+          exampleInput: 'بون كاشير زهران ماركت فرع سموحة بتاريخ "09/10/26" يتضمن: "الصحي مكرونة مرمرية 400 جم" (58 ج) + "الصحي أرز 1كجم" (154 ج net) بإجمالي 212 ج في حملة تبدأ 7 سبتمبر وتنتهي 6 أكتوبر وعرضها "أشتري بقيمة 200 جنية من منتجات الضحى واكسب هدية".',
+          exampleOutput: 'تفسير التاريخ تلقائياً كـ 10 سبتمبر 2026 (داخل فترة العرض)، وتصحيح "الصحي" إلى "الضحي"، ومطابقة الأرز والمكرونة مع الكتالوج، واحتساب إجمالي 212 ج.م >= 190 ج.م، وقبول الفاتورة بنجاح 100% ومنح العميل هدية العرض بدلاً من رسائل الخطأ.',
+          tags: ['pos-date-disambiguation', 'mm-dd-vs-dd-mm', 'zahran-market', 'keyboard-typo-healing', 'fmcg-unit-normalization', 'eldoha-al-sehi', 'air-47'],
+          lastUpdated: '2026-09-10',
+        ),
       ];
 }
 

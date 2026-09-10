@@ -217,10 +217,14 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
 
       final imgUrl = _resolvePrizeImage(selectedPrize);
 
+      final isAr = ref.read(localeProvider).languageCode == 'ar';
       await showWinnerCelebrationDialog(
         context: context,
         prizeName: selectedPrize,
         remainingChances: _remainingChances,
+        nextChanceLabel: isAr
+            ? 'اختيار الهدية التالية (متبقي $_remainingChances) 🎁'
+            : 'Choose Next Gift ($_remainingChances left) 🎁',
         imageUrl: imgUrl,
         onNextChance: () {
           if (!mounted) return;
@@ -281,8 +285,10 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
         backgroundColor: colorScheme.surface,
         appBar: AppBar(
           title: Text(
-            strings.gameChooseGiftTitle,
-            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 18),
+            isAr
+                ? 'اختر هديتك ($totalChances ${totalChances == 1 ? 'هدية مستحقة' : 'هدايا مستحقة'})'
+                : 'Choose Your Gift ($totalChances ${totalChances == 1 ? 'Gift' : 'Gifts'})',
+            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: isMobile ? 16 : 18),
           ),
           centerTitle: true,
           elevation: 0,
@@ -317,9 +323,14 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              isAr ? 'الهدية المختارة حالياً:' : 'Currently Selected Gift:',
+                              totalChances > 1
+                                  ? (isAr
+                                      ? 'الهدية المختارة للفرصة ($_currentRound من إجمالي $totalChances):'
+                                      : 'Selected for Chance ($_currentRound of $totalChances):')
+                                  : (isAr ? 'الهدية المختارة حالياً:' : 'Currently Selected Gift:'),
                               style: GoogleFonts.cairo(
                                 fontSize: isMobile ? 11 : 12,
+                                fontWeight: FontWeight.bold,
                                 color: colorScheme.onSurfaceVariant,
                               ),
                             ),
@@ -348,8 +359,16 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                         label: Text(
                           _isConfirming
                               ? (isAr ? 'جاري التأكيد...' : 'Confirming...')
-                              : (isAr ? 'تأكيد الهدية 🎁' : 'Confirm Gift 🎁'),
-                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: isMobile ? 13 : 15),
+                              : (totalChances > 1
+                                  ? (_remainingChances > 1
+                                      ? (isAr
+                                          ? 'تأكيد الهدية ($_currentRound من $totalChances) ➔'
+                                          : 'Confirm Gift ($_currentRound of $totalChances) ➔')
+                                      : (isAr
+                                          ? 'تأكيد الهدية الأخيرة ($_currentRound من $totalChances) 🎁'
+                                          : 'Confirm Final Gift ($_currentRound of $totalChances) 🎁'))
+                                  : (isAr ? 'تأكيد الهدية 🎁' : 'Confirm Gift 🎁')),
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: isMobile ? 12.5 : 14.5),
                         ),
                         style: FilledButton.styleFrom(
                           padding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 24, vertical: isMobile ? 10 : 14),
@@ -383,80 +402,269 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                       constraints: const BoxConstraints(maxWidth: 860),
                       child: Column(
                         children: [
-                          // Status & Chance Indicator
+                          // Status & Qualified Wins Indicator Banner
                           Container(
+                            width: double.infinity,
                             padding: EdgeInsets.symmetric(
-                              horizontal: isMobile ? 12 : 20,
-                              vertical: isMobile ? 8 : 14,
+                              horizontal: isMobile ? 14 : 20,
+                              vertical: isMobile ? 12 : 16,
                             ),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 colors: [
-                                  colorScheme.primaryContainer.withValues(alpha: 0.8),
-                                  colorScheme.secondaryContainer.withValues(alpha: 0.5),
+                                  colorScheme.primaryContainer.withValues(alpha: 0.85),
+                                  colorScheme.secondaryContainer.withValues(alpha: 0.6),
                                 ],
+                                begin: AlignmentDirectional.topStart,
+                                end: AlignmentDirectional.bottomEnd,
                               ),
-                              borderRadius: BorderRadius.circular(isMobile ? 14 : 20),
-                              border: Border.all(color: colorScheme.primary.withValues(alpha: 0.2)),
+                              borderRadius: BorderRadius.circular(isMobile ? 16 : 22),
+                              border: Border.all(
+                                color: totalChances > 1 ? const Color(0xFFFFB300) : colorScheme.primary.withValues(alpha: 0.3),
+                                width: totalChances > 1 ? 2.0 : 1.2,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: (totalChances > 1 ? const Color(0xFFFFB300) : colorScheme.primary).withValues(alpha: 0.12),
+                                  blurRadius: 14,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
                             ),
-                            child: Row(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Container(
-                                  padding: EdgeInsets.all(isMobile ? 6 : 10),
-                                  decoration: BoxDecoration(
-                                    color: colorScheme.primary,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(Icons.touch_app_rounded, color: Colors.white, size: isMobile ? 18 : 22),
-                                ),
-                                SizedBox(width: isMobile ? 10 : 14),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        totalChances > 1
-                                            ? (isAr
-                                                ? 'الفرصة $_currentRound من إجمالي $totalChances فرص'
-                                                : 'Chance #$_currentRound of $totalChances chances')
-                                            : strings.chooseYourGiftPrompt,
-                                        style: GoogleFonts.cairo(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: isMobile ? 13 : 15,
-                                          color: colorScheme.onSurface,
+                                // 1. Top Badges Row: Total Qualified Wins & Remaining Counter
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: isMobile ? 10 : 14,
+                                        vertical: isMobile ? 5 : 7,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: totalChances > 1
+                                              ? [const Color(0xFFFF8F00), const Color(0xFFFFA000)]
+                                              : [colorScheme.primary, colorScheme.primary.withValues(alpha: 0.85)],
+                                        ),
+                                        borderRadius: BorderRadius.circular(30),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: (totalChances > 1 ? const Color(0xFFFF8F00) : colorScheme.primary).withValues(alpha: 0.35),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            totalChances > 1 ? Icons.emoji_events_rounded : Icons.card_giftcard_rounded,
+                                            color: Colors.white,
+                                            size: isMobile ? 16 : 18,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            isAr
+                                                ? 'عدد مرات الفوز: $totalChances ${totalChances == 1 ? 'مرة واحدة (هدية واحدة)' : totalChances == 2 ? 'مرتان (2 هدايا)' : '$totalChances مرات ($totalChances هدايا)'}'
+                                                : 'Total Wins: $totalChances ${totalChances == 1 ? 'Gift' : 'Gifts'}',
+                                            style: GoogleFonts.cairo(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: isMobile ? 11.5 : 13,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    if (totalChances > 1)
+                                      Container(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: isMobile ? 8 : 12,
+                                          vertical: isMobile ? 4 : 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withValues(alpha: 0.92),
+                                          borderRadius: BorderRadius.circular(20),
+                                          border: Border.all(
+                                            color: colorScheme.primary.withValues(alpha: 0.3),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.hourglass_top_rounded,
+                                              size: isMobile ? 13 : 15,
+                                              color: colorScheme.primary,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              isAr ? '$_remainingChances متبقية' : '$_remainingChances left',
+                                              style: GoogleFonts.cairo(
+                                                color: colorScheme.primary,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: isMobile ? 10.5 : 12,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                      Text(
-                                        isAr
-                                            ? 'اختر الهدية التي تفضلها واضغط تأكيد'
-                                            : 'Tap your preferred reward and confirm',
-                                        style: GoogleFonts.cairo(
-                                          fontSize: isMobile ? 10.5 : 12,
-                                          color: colorScheme.onSurfaceVariant,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                  ],
                                 ),
-                                if (totalChances > 1)
+
+                                SizedBox(height: isMobile ? 10 : 12),
+
+                                // 2. Instructions & Current Round Explanation
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      padding: EdgeInsets.all(isMobile ? 8 : 10),
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.primary,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(Icons.touch_app_rounded, color: Colors.white, size: isMobile ? 18 : 22),
+                                    ),
+                                    SizedBox(width: isMobile ? 10 : 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            totalChances > 1
+                                                ? (isAr
+                                                    ? 'الفرصة الحالية: اختيار الهدية رقم ($_currentRound) من إجمالي ($totalChances) هدايا'
+                                                    : 'Current Round: Choosing gift #$_currentRound of $totalChances')
+                                                : (isAr
+                                                    ? 'انقر على هديتك المفضلة للاختيار'
+                                                    : strings.chooseYourGiftPrompt),
+                                            style: GoogleFonts.cairo(
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: isMobile ? 13.5 : 15.5,
+                                              color: colorScheme.onSurface,
+                                            ),
+                                          ),
+                                          Text(
+                                            totalChances > 1
+                                                ? (isAr
+                                                    ? 'اختر هديتك للفرصة ($_currentRound) واضغط تأكيد الهدية للانتقال للفرصة التالية'
+                                                    : 'Pick your reward for chance #$_currentRound and confirm')
+                                                : (isAr
+                                                    ? 'اختر الهدية التي تفضلها واضغط تأكيد الهدية'
+                                                    : 'Tap your preferred reward and confirm'),
+                                            style: GoogleFonts.cairo(
+                                              fontSize: isMobile ? 11 : 12.5,
+                                              fontWeight: FontWeight.w600,
+                                              color: colorScheme.onSurfaceVariant,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+
+                                // 3. Multi-chance Step Indicators
+                                if (totalChances > 1) ...[
+                                  SizedBox(height: isMobile ? 12 : 14),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 6,
+                                    children: List.generate(totalChances, (i) {
+                                      final roundNum = i + 1;
+                                      final isCompleted = roundNum < _currentRound;
+                                      final isCurrent = roundNum == _currentRound;
+                                      final wonGift = isCompleted && i < _wonPrizes.length ? _wonPrizes[i] : null;
+
+                                      return Container(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: isMobile ? 8 : 12,
+                                          vertical: isMobile ? 4 : 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: isCurrent
+                                              ? colorScheme.primary
+                                              : isCompleted
+                                                  ? Colors.green.shade600
+                                                  : Colors.grey.shade200,
+                                          borderRadius: BorderRadius.circular(16),
+                                          border: Border.all(
+                                            color: isCurrent
+                                                ? colorScheme.primary
+                                                : isCompleted
+                                                    ? Colors.green.shade700
+                                                    : Colors.grey.shade300,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              isCompleted
+                                                  ? Icons.check_circle_rounded
+                                                  : isCurrent
+                                                      ? Icons.radio_button_checked_rounded
+                                                      : Icons.radio_button_unchecked_rounded,
+                                              size: isMobile ? 13 : 15,
+                                              color: isCompleted || isCurrent ? Colors.white : Colors.grey.shade600,
+                                            ),
+                                            const SizedBox(width: 5),
+                                            Text(
+                                              isCompleted
+                                                  ? (wonGift != null
+                                                      ? (isAr ? 'الهدية $roundNum: $wonGift ✓' : 'Gift $roundNum: $wonGift ✓')
+                                                      : (isAr ? 'الهدية $roundNum: تم الاختيار ✓' : 'Gift $roundNum: Picked ✓'))
+                                                  : isCurrent
+                                                      ? (isAr ? 'الهدية $roundNum: اختر الآن 👈' : 'Gift $roundNum: Pick now 👈')
+                                                      : (isAr ? 'الهدية $roundNum: في الانتظار ⏳' : 'Gift $roundNum: Waiting ⏳'),
+                                              style: GoogleFonts.cairo(
+                                                fontSize: isMobile ? 10 : 11.5,
+                                                fontWeight: FontWeight.bold,
+                                                color: isCompleted || isCurrent ? Colors.white : Colors.grey.shade700,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }),
+                                  ),
+                                ],
+
+                                // 4. Claimed gifts history summary
+                                if (_wonPrizes.isNotEmpty) ...[
+                                  SizedBox(height: isMobile ? 10 : 12),
                                   Container(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: isMobile ? 8 : 12,
-                                      vertical: isMobile ? 4 : 6,
-                                    ),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                     decoration: BoxDecoration(
-                                      color: colorScheme.primary,
-                                      borderRadius: BorderRadius.circular(20),
+                                      color: Colors.green.shade50,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: Colors.green.shade300),
                                     ),
-                                    child: Text(
-                                      isAr ? '$_remainingChances متبقية' : '$_remainingChances left',
-                                      style: GoogleFonts.cairo(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: isMobile ? 10.5 : 12,
-                                      ),
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.inventory_2_rounded, size: 16, color: Colors.green.shade800),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            isAr
+                                                ? 'الهدايا المختارة حتى الآن: ${_wonPrizes.join(' + ')}'
+                                                : 'Claimed gifts so far: ${_wonPrizes.join(' + ')}',
+                                            style: GoogleFonts.cairo(
+                                              fontSize: isMobile ? 10.5 : 12,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.green.shade900,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
+                                ],
                               ],
                             ),
                           ),
@@ -671,15 +879,23 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                                               color: isSelected ? Colors.white : colorScheme.primary,
                                                             ),
                                                             const SizedBox(width: 4),
-                                                            Text(
-                                                              isSelected
-                                                                  ? (isAr ? 'تم الاختيار ✓' : 'Selected ✓')
-                                                                  : (isAr ? 'اضغط للاختيار' : 'Tap to Pick'),
-                                                              style: GoogleFonts.cairo(
-                                                                fontSize: isMobile ? 10 : 11,
-                                                                fontWeight: FontWeight.bold,
-                                                                height: 1.2,
-                                                                color: isSelected ? Colors.white : colorScheme.primary,
+                                                            Flexible(
+                                                              child: Text(
+                                                                isSelected
+                                                                    ? (totalChances > 1
+                                                                        ? (isAr ? 'تم الاختيار (فرصة $_currentRound) ✓' : 'Picked (#$_currentRound) ✓')
+                                                                        : (isAr ? 'تم الاختيار ✓' : 'Selected ✓'))
+                                                                    : (totalChances > 1
+                                                                        ? (isAr ? 'اختيار للفرصة $_currentRound' : 'Pick for #$_currentRound')
+                                                                        : (isAr ? 'اضغط للاختيار' : 'Tap to Pick')),
+                                                                overflow: TextOverflow.ellipsis,
+                                                                maxLines: 1,
+                                                                style: GoogleFonts.cairo(
+                                                                  fontSize: isMobile ? 9.5 : 11,
+                                                                  fontWeight: FontWeight.bold,
+                                                                  height: 1.2,
+                                                                  color: isSelected ? Colors.white : colorScheme.primary,
+                                                                ),
                                                               ),
                                                             ),
                                                           ],
@@ -697,8 +913,8 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                               end: 10,
                                               child: AnimatedContainer(
                                                 duration: const Duration(milliseconds: 200),
-                                                width: isMobile ? 22 : 26,
-                                                height: isMobile ? 22 : 26,
+                                                width: isMobile ? 24 : 28,
+                                                height: isMobile ? 24 : 28,
                                                 decoration: BoxDecoration(
                                                   shape: BoxShape.circle,
                                                   color: isSelected
@@ -724,7 +940,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                                     ? Icon(
                                                         Icons.check_rounded,
                                                         color: Colors.white,
-                                                        size: isMobile ? 14 : 16,
+                                                        size: isMobile ? 15 : 18,
                                                       )
                                                     : null,
                                               ),

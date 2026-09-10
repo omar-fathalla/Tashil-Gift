@@ -13,6 +13,7 @@ Future<void> showWinnerCelebrationDialog({
   required VoidCallback onNextCustomer,
   int remainingChances = 0,
   VoidCallback? onNextChance,
+  String? nextChanceLabel,
   double? unitValue,
   bool? isVoucher,
   List<LinkedGiftAllocation> linkedGifts = const [],
@@ -37,6 +38,7 @@ Future<void> showWinnerCelebrationDialog({
         onNextCustomer: onNextCustomer,
         remainingChances: remainingChances,
         onNextChance: onNextChance,
+        nextChanceLabel: nextChanceLabel,
         unitValue: unitValue,
         isVoucher: isVoucher,
         linkedGifts: linkedGifts,
@@ -51,6 +53,7 @@ class WinnerCelebrationDialog extends ConsumerStatefulWidget {
   final VoidCallback onNextCustomer;
   final int remainingChances;
   final VoidCallback? onNextChance;
+  final String? nextChanceLabel;
   final double? unitValue;
   final bool? isVoucher;
   final List<LinkedGiftAllocation> linkedGifts;
@@ -62,6 +65,7 @@ class WinnerCelebrationDialog extends ConsumerStatefulWidget {
     required this.onNextCustomer,
     this.remainingChances = 0,
     this.onNextChance,
+    this.nextChanceLabel,
     this.unitValue,
     this.isVoucher,
     this.linkedGifts = const [],
@@ -617,8 +621,8 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                         // Action Buttons
                         if (widget.remainingChances > 0) ...[
                           M3ActionButton(
-                            label: 'سحب الفرصة التالية (متبقي ${widget.remainingChances})',
-                            icon: Icons.casino_rounded,
+                            label: widget.nextChanceLabel ?? 'سحب الفرصة التالية (متبقي ${widget.remainingChances})',
+                            icon: widget.nextChanceLabel != null ? Icons.card_giftcard_rounded : Icons.casino_rounded,
                             variant: M3ButtonVariant.filled,
                             onPressed: () async {
                               Navigator.of(context).pop();

@@ -1468,7 +1468,11 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         if (startDate != null || endDate != null) {
           final rawDateStr = result.receiptDate.trim();
           if (rawDateStr.isNotEmpty) {
-            DateTime? parsedDate = _parseReceiptDate(rawDateStr);
+            DateTime? parsedDate = _parseReceiptDate(
+              rawDateStr,
+              startDate: startDate,
+              endDate: endDate,
+            );
             if (parsedDate != null) {
               if (startDate != null && parsedDate.isBefore(startDate)) {
                 final startStr =
@@ -1654,25 +1658,143 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
     };
   }
 
-  DateTime? _parseReceiptDate(String dateStr) {
+  DateTime? _parseReceiptDate(
+    String dateStr, {
+    DateTime? startDate,
+    DateTime? endDate,
+  }) {
+    return parseReceiptDate(dateStr, startDate: startDate, endDate: endDate);
+  }
+
+  /// Disambiguates and parses receipt dates supporting both DD/MM/YYYY and MM/DD/YYYY formats.
+  /// When ambiguous (e.g. 09/10/26), cross-references against current time and campaign window.
+  static DateTime? parseReceiptDate(
+    String dateStr, {
+    DateTime? startDate,
+    DateTime? endDate,
+  }) {
     try {
       final clean = dateStr.replaceAll(RegExp(r'[^\d/\-]'), '');
       if (clean.contains('/')) {
         final parts = clean.split('/');
         if (parts.length >= 3) {
-          int day = int.parse(parts[0]);
-          int month = int.parse(parts[1]);
+          int a = int.parse(parts[0]);
+          int b = int.parse(parts[1]);
           int year = int.parse(parts[2]);
           if (year < 100) year += 2000;
-          return DateTime(year, month, day);
+
+          // Case 1: YYYY/MM/DD format
+          if (a > 1000) {
+            return DateTime(a, b, year);
+          }
+
+          // Case 2: Unambiguous day/month
+          if (a > 12 && b <= 12) {
+            // Must be DD/MM/YYYY
+            return DateTime(year, b, a);
+          }
+          if (b > 12 && a <= 12) {
+            // Must be MM/DD/YYYY
+            return DateTime(year, a, b);
+          }
+
+          // Case 3: Ambiguous (both a <= 12 and b <= 12, e.g. 09/10/26)
+          // Candidate 1: DD/MM/YYYY (day=a, month=b)
+          // Candidate 2: MM/DD/YYYY (month=a, day=b)
+          final candidateDDMM = DateTime(year, b, a);
+          final candidateMMDD = DateTime(year, a, b);
+
+          final now = DateTime.now();
+          final tomorrow = now.add(const Duration(days: 1));
+
+          // A receipt cannot be issued in the future
+          final bool ddmmInFuture = candidateDDMM.isAfter(tomorrow);
+          final bool mmddInFuture = candidateMMDD.isAfter(tomorrow);
+
+          if (ddmmInFuture && !mmddInFuture) {
+            return candidateMMDD;
+          }
+          if (mmddInFuture && !ddmmInFuture) {
+            return candidateDDMM;
+          }
+
+          // Check against campaign window [startDate, endDate]
+          if (startDate != null || endDate != null) {
+            final startBound = startDate != null
+                ? DateTime(startDate.year, startDate.month, startDate.day)
+                : DateTime(2000);
+            final endBound = endDate != null
+                ? DateTime(endDate.year, endDate.month, endDate.day)
+                    .add(const Duration(days: 1))
+                : DateTime(2100);
+
+            final bool ddmmInWindow = !candidateDDMM.isBefore(startBound) &&
+                !candidateDDMM.isAfter(endBound);
+            final bool mmddInWindow = !candidateMMDD.isBefore(startBound) &&
+                !candidateMMDD.isAfter(endBound);
+
+            if (mmddInWindow && !ddmmInWindow) {
+              return candidateMMDD;
+            }
+            if (ddmmInWindow && !mmddInWindow) {
+              return candidateDDMM;
+            }
+          }
+
+          // Prefer candidate closest to current date
+          final diffDDMM = (now.difference(candidateDDMM).inDays).abs();
+          final diffMMDD = (now.difference(candidateMMDD).inDays).abs();
+          if (diffMMDD < diffDDMM && diffMMDD <= 60) {
+            return candidateMMDD;
+          }
+
+          return candidateDDMM;
         }
       } else if (clean.contains('-')) {
         final parts = clean.split('-');
         if (parts.length >= 3) {
-          int year = int.parse(parts[0]);
-          int month = int.parse(parts[1]);
-          int day = int.parse(parts[2]);
-          return DateTime(year, month, day);
+          int a = int.parse(parts[0]);
+          int b = int.parse(parts[1]);
+          int c = int.parse(parts[2]);
+          if (a > 1000) {
+            return DateTime(a, b, c);
+          } else {
+            int year = c < 100 ? c + 2000 : c;
+            if (a > 12 && b <= 12) return DateTime(year, b, a);
+            if (b > 12 && a <= 12) return DateTime(year, a, b);
+
+            final candidateDDMM = DateTime(year, b, a);
+            final candidateMMDD = DateTime(year, a, b);
+            final now = DateTime.now();
+            final tomorrow = now.add(const Duration(days: 1));
+
+            if (candidateDDMM.isAfter(tomorrow) && !candidateMMDD.isAfter(tomorrow)) {
+              return candidateMMDD;
+            }
+            if (candidateMMDD.isAfter(tomorrow) && !candidateDDMM.isAfter(tomorrow)) {
+              return candidateDDMM;
+            }
+
+            if (startDate != null || endDate != null) {
+              final startBound = startDate != null
+                  ? DateTime(startDate.year, startDate.month, startDate.day)
+                  : DateTime(2000);
+              final endBound = endDate != null
+                  ? DateTime(endDate.year, endDate.month, endDate.day)
+                      .add(const Duration(days: 1))
+                  : DateTime(2100);
+
+              final bool ddmmInWindow = !candidateDDMM.isBefore(startBound) &&
+                  !candidateDDMM.isAfter(endBound);
+              final bool mmddInWindow = !candidateMMDD.isBefore(startBound) &&
+                  !candidateMMDD.isAfter(endBound);
+
+              if (mmddInWindow && !ddmmInWindow) return candidateMMDD;
+              if (ddmmInWindow && !mmddInWindow) return candidateDDMM;
+            }
+
+            return candidateDDMM;
+          }
         }
       }
     } catch (_) {}
@@ -2467,6 +2589,8 @@ class PromotionalRuleMatcher {
     'كلوساب',
     'الضحى',
     'الضحي',
+    'الصحي',
+    'الصحى',
   };
 
   static int? _extractSizeMl(String text) {
@@ -2648,6 +2772,54 @@ class PromotionalRuleMatcher {
             pNorm.contains(selNorm) ||
             selNorm.contains(pNorm)) {
           return true;
+        }
+
+        // Token-based matching: handles supermarket POS descriptor omissions / additions
+        // (e.g. POS prints "الضحى أرز 1كجم" while catalog has "الضحى ارز مصرى 1ك")
+        final pWords = pNorm
+            .split(' ')
+            .where((w) => w.isNotEmpty && !_noiseWords.contains(w))
+            .toList();
+        final selWords = selNorm
+            .split(' ')
+            .where((w) => w.isNotEmpty && !_noiseWords.contains(w))
+            .toSet();
+
+        if (pWords.length >= 2) {
+          const optionalDescriptors = {
+            'مصري',
+            'مصرى',
+            'فاخر',
+            'ممتاز',
+            'سادة',
+            'ساده',
+            'طبيعي',
+            'طبيعى',
+            'اصلي',
+            'اصلى',
+            'نقي',
+            'نقى',
+            'عادي',
+            'عادى',
+            'ابيض',
+            'بلدي',
+            'بلدى',
+          };
+          final pCoreWords = pWords
+              .where((w) => !optionalDescriptors.contains(w))
+              .toList();
+          final selCoreWords = selWords
+              .where((w) => !optionalDescriptors.contains(w))
+              .toSet();
+
+          if (pCoreWords.length >= 2 &&
+              pCoreWords.every((w) => selCoreWords.contains(w))) {
+            return true;
+          }
+          if (selCoreWords.length >= 2 &&
+              selCoreWords.every((w) => pCoreWords.contains(w))) {
+            return true;
+          }
         }
       }
     }
@@ -2893,6 +3065,33 @@ class PromotionalRuleMatcher {
       RegExp(r'مينى\s*شيف|ميني\s*شيف|mini\s*chef'),
       'ميني شيف',
     );
+
+    // FMCG Unit Normalization across retail POS:
+    // Unify kilogram units: 1ك, 1 ك, 1كيلو, 1 كيلو, 1كجم, 1 كجم, 1kg -> 1 كجم
+    str = str.replaceAllMapped(
+      RegExp(r'(\d+)\s*(?:كجم|كيلو|كيلوجرام|ك|kg)(?!\S)', caseSensitive: false),
+      (m) => '${m.group(1)} كجم',
+    );
+    // Unify gram units: 400جم, 400 جرام, 400g -> 400 جم
+    str = str.replaceAllMapped(
+      RegExp(r'(\d+)\s*(?:جرام|جم|g)(?!\S)', caseSensitive: false),
+      (m) => '${m.group(1)} جم',
+    );
+    // Unify ml units: 400مل, 400 ملى, 400ml -> 400 مل
+    str = str.replaceAllMapped(
+      RegExp(r'(\d+)\s*(?:ملى|مل|ml)(?!\S)', caseSensitive: false),
+      (m) => '${m.group(1)} مل',
+    );
+    // Unify liter units: 1لتر, 1 لتر, 1liter, 1l -> 1 لتر
+    str = str.replaceAllMapped(
+      RegExp(r'(\d+)\s*(?:لتر|liter|l)(?!\S)', caseSensitive: false),
+      (m) => '${m.group(1)} لتر',
+    );
+
+    // Zahran Market & retail POS keyboard typo for El-Doha brand:
+    // Cashiers frequently type 'ص' instead of 'ض' ('الصحي' / 'الصحى' -> 'الضحي')
+    str = str.replaceAll('الصحي', 'الضحي');
+    str = str.replaceAll('الصحى', 'الضحي');
 
     // 150ml Aerosol Bodyspray Resolution: In retail FMCG, 150ml for Rexona/Axe is ALWAYS an aerosol spray
     // E.g. "ريكسونا 150 مل حريمي" -> "ريكسونا اسبراي 150 مل حريمي", "اكس 150 مل" -> "اكس اسبراي 150 مل"
