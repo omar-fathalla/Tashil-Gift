@@ -33,14 +33,14 @@ void main() {
     }
 
     // Verify confirm bar is NOT visible before selecting
-    expect(find.textContaining('تأكيد الهدية'), findsNothing);
+    expect(find.text('تأكيد الهدية 🎁'), findsNothing);
 
     // Tap on the first gift
     await tester.tap(find.text(samplePrizes[0]));
     await tester.pump(const Duration(milliseconds: 300));
 
     // Verify confirm bar is now visible
-    expect(find.textContaining('تأكيد الهدية'), findsOneWidget);
+    expect(find.text('تأكيد الهدية 🎁'), findsOneWidget);
     expect(find.textContaining('تم الاختيار ✓'), findsOneWidget);
   });
 

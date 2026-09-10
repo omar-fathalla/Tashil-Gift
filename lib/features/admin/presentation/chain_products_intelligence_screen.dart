@@ -39,6 +39,17 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
   String _healingStatus = '';
   bool _isExporting = false;
 
+  // Memoized computation caches for 60fps instant UI rebuilding (Rule 9)
+  String? _lastFilterCacheKey;
+  List<ChainProductItem> _cachedFilteredProducts = [];
+  List<String> _cachedDistinctChains = [];
+  List<String> _cachedDistinctBrands = [];
+  int _cachedTotalPromos = 0;
+  int _cachedTotalFluctuations = 0;
+  int _cachedThreats = 0;
+  int _cachedFathallaWinning = 0;
+  int _cachedSharedSkus = 0;
+
   Future<void> _startHealingProcess({required bool incrementalOnly}) async {
     setState(() {
       _isHealingData = true;
@@ -134,89 +145,113 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
           ),
         ),
         data: (allProducts) {
-          // Extract all distinct chains and dynamic metrics
-          final Set<String> chainsSet = {};
-          final Set<String> brandsSet = {};
-          int totalPromotionsCount = 0;
-          int totalFluctuationsCount = 0;
-          int threatsCount = 0;
-          int fathallaWinningCount = 0;
-          int sharedSkusCount = 0;
+          final currentCacheKey = '${allProducts.length}_${_viewFilterMode}_${_searchQuery}_${_selectedChain}_${_selectedBrand}_${_promotionsOnly}_${_fluctuationsOnly}_$_sortBy';
 
-          for (final item in allProducts) {
-            chainsSet.addAll(item.latestPricesByChain.keys);
-            if (item.brand.isNotEmpty) brandsSet.add(item.brand);
-            if (item.isCurrentlyOnPromotion) totalPromotionsCount++;
-            if (item.hasPriceFluctuation) totalFluctuationsCount++;
-            if (item.isUnderpricedByCompetitors) threatsCount++;
-            if (item.isFathallaCheapest && item.isMultiChain) fathallaWinningCount++;
-            if (item.isMultiChain) sharedSkusCount++;
+          if (_lastFilterCacheKey != currentCacheKey) {
+            _lastFilterCacheKey = currentCacheKey;
+
+            // Extract all distinct chains and dynamic metrics
+            final Set<String> chainsSet = {};
+            final Set<String> brandsSet = {};
+            int totalPromotionsCount = 0;
+            int totalFluctuationsCount = 0;
+            int threatsCount = 0;
+            int fathallaWinningCount = 0;
+            int sharedSkusCount = 0;
+
+            for (final item in allProducts) {
+              chainsSet.addAll(item.latestPricesByChain.keys);
+              if (item.brand.isNotEmpty) brandsSet.add(item.brand);
+              if (item.isCurrentlyOnPromotion) totalPromotionsCount++;
+              if (item.hasPriceFluctuation) totalFluctuationsCount++;
+              if (item.isUnderpricedByCompetitors) threatsCount++;
+              if (item.isFathallaCheapest && item.isMultiChain) fathallaWinningCount++;
+              if (item.isMultiChain) sharedSkusCount++;
+            }
+
+            final distinctChains = chainsSet.toList()..sort();
+            if (distinctChains.contains('أسواق فتح الله')) {
+              distinctChains.remove('أسواق فتح الله');
+              distinctChains.insert(0, 'أسواق فتح الله');
+            }
+            final distinctBrands = brandsSet.toList()..sort();
+
+            // Filter products based on Fathalla Defense & View Mode
+            final filteredProducts = allProducts.where((p) {
+              // 1. View Filter Mode (Default: SHARED_ONLY to hide single-chain clutter)
+              if (_viewFilterMode == 'THREATS_ONLY') {
+                if (!p.isUnderpricedByCompetitors) return false;
+              } else if (_viewFilterMode == 'FATHALLA_WINNING') {
+                if (!p.isFathallaCheapest || !p.isMultiChain) return false;
+              } else if (_viewFilterMode == 'SHARED_ONLY') {
+                if (!p.isMultiChain) return false;
+              } else if (_viewFilterMode == 'ALL_ARCHIVED') {
+                // Show complete database archive
+              }
+
+              // 2. Search Query
+              if (_searchQuery.isNotEmpty) {
+                final q = _searchQuery.toLowerCase().trim();
+                final matchesName = p.name.toLowerCase().contains(q);
+                final matchesBarcode = p.barcode.contains(q);
+                final matchesBrand = p.brand.toLowerCase().contains(q);
+                if (!matchesName && !matchesBarcode && !matchesBrand) return false;
+              }
+
+              // 3. Chain Filter
+              if (_selectedChain != 'ALL') {
+                if (!p.latestPricesByChain.containsKey(_selectedChain)) return false;
+              }
+
+              // 4. Brand Filter
+              if (_selectedBrand != 'ALL') {
+                if (p.brand != _selectedBrand) return false;
+              }
+
+              // 5. Promotions Only
+              if (_promotionsOnly && !p.isCurrentlyOnPromotion) {
+                return false;
+              }
+
+              // 6. Fluctuations Only
+              if (_fluctuationsOnly && !p.hasPriceFluctuation) {
+                return false;
+              }
+
+              return true;
+            }).toList();
+
+            // Sort products
+            if (_sortBy == 'THREAT_DIFF') {
+              filteredProducts.sort((a, b) => b.competitorUnderpricedDiff.compareTo(a.competitorUnderpricedDiff));
+            } else if (_sortBy == 'PRICE_ASC') {
+              filteredProducts.sort((a, b) => a.minPrice.compareTo(b.minPrice));
+            } else if (_sortBy == 'PRICE_DESC') {
+              filteredProducts.sort((a, b) => b.maxPrice.compareTo(a.maxPrice));
+            } else if (_sortBy == 'VARIANCE') {
+              filteredProducts.sort((a, b) => b.priceVariancePercent.compareTo(a.priceVariancePercent));
+            } else {
+              // LATEST: Default sorted by totalScansCount / recent
+            }
+
+            _cachedFilteredProducts = filteredProducts;
+            _cachedDistinctChains = distinctChains;
+            _cachedDistinctBrands = distinctBrands;
+            _cachedTotalPromos = totalPromotionsCount;
+            _cachedTotalFluctuations = totalFluctuationsCount;
+            _cachedThreats = threatsCount;
+            _cachedFathallaWinning = fathallaWinningCount;
+            _cachedSharedSkus = sharedSkusCount;
           }
 
-          final distinctChains = chainsSet.toList()..sort();
-          if (distinctChains.contains('أسواق فتح الله')) {
-            distinctChains.remove('أسواق فتح الله');
-            distinctChains.insert(0, 'أسواق فتح الله');
-          }
-          final distinctBrands = brandsSet.toList()..sort();
-
-          // Filter products based on Fathalla Defense & View Mode
-          final filteredProducts = allProducts.where((p) {
-            // 1. View Filter Mode (Default: SHARED_ONLY to hide single-chain clutter)
-            if (_viewFilterMode == 'THREATS_ONLY') {
-              if (!p.isUnderpricedByCompetitors) return false;
-            } else if (_viewFilterMode == 'FATHALLA_WINNING') {
-              if (!p.isFathallaCheapest || !p.isMultiChain) return false;
-            } else if (_viewFilterMode == 'SHARED_ONLY') {
-              if (!p.isMultiChain) return false;
-            } else if (_viewFilterMode == 'ALL_ARCHIVED') {
-              // Show complete database archive
-            }
-
-            // 2. Search Query
-            if (_searchQuery.isNotEmpty) {
-              final q = _searchQuery.toLowerCase().trim();
-              final matchesName = p.name.toLowerCase().contains(q);
-              final matchesBarcode = p.barcode.contains(q);
-              final matchesBrand = p.brand.toLowerCase().contains(q);
-              if (!matchesName && !matchesBarcode && !matchesBrand) return false;
-            }
-
-            // 3. Chain Filter
-            if (_selectedChain != 'ALL') {
-              if (!p.latestPricesByChain.containsKey(_selectedChain)) return false;
-            }
-
-            // 4. Brand Filter
-            if (_selectedBrand != 'ALL') {
-              if (p.brand != _selectedBrand) return false;
-            }
-
-            // 5. Promotions Only
-            if (_promotionsOnly && !p.isCurrentlyOnPromotion) {
-              return false;
-            }
-
-            // 6. Fluctuations Only
-            if (_fluctuationsOnly && !p.hasPriceFluctuation) {
-              return false;
-            }
-
-            return true;
-          }).toList();
-
-          // Sort products
-          if (_sortBy == 'THREAT_DIFF') {
-            filteredProducts.sort((a, b) => b.competitorUnderpricedDiff.compareTo(a.competitorUnderpricedDiff));
-          } else if (_sortBy == 'PRICE_ASC') {
-            filteredProducts.sort((a, b) => a.minPrice.compareTo(b.minPrice));
-          } else if (_sortBy == 'PRICE_DESC') {
-            filteredProducts.sort((a, b) => b.maxPrice.compareTo(a.maxPrice));
-          } else if (_sortBy == 'VARIANCE') {
-            filteredProducts.sort((a, b) => b.priceVariancePercent.compareTo(a.priceVariancePercent));
-          } else {
-            // LATEST: Default sorted by totalScansCount / recent
-          }
+          final distinctChains = _cachedDistinctChains;
+          final distinctBrands = _cachedDistinctBrands;
+          final filteredProducts = _cachedFilteredProducts;
+          final totalPromotionsCount = _cachedTotalPromos;
+          final totalFluctuationsCount = _cachedTotalFluctuations;
+          final threatsCount = _cachedThreats;
+          final fathallaWinningCount = _cachedFathallaWinning;
+          final sharedSkusCount = _cachedSharedSkus;
 
           return CustomScrollView(
             slivers: [
@@ -369,17 +404,19 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                       ),
                       if (_isHealingData) ...[
                         const SizedBox(height: 14),
-                        M3ProgressCard(
-                          title: _healingStatus.isNotEmpty
-                              ? _healingStatus
-                              : (isAr ? 'جاري فحص وتدقيق الفواتير بالذكاء الاصطناعي...' : 'Auditing receipts with AI...'),
-                          subtitle: isAr
-                              ? 'يتم فحص وتصحيح اقتصاديات القطعة الواحدة وكشف تكرار الفواتير وحوكمة الأسعار...'
-                              : 'Verifying unit economics and price governance across all chains...',
-                          progress: _healingProgress > 0 ? _healingProgress : null,
-                          currentCount: _healingCurrent,
-                          totalCount: _healingTotal,
-                          icon: Icons.auto_fix_high_rounded,
+                        RepaintBoundary(
+                          child: M3ProgressCard(
+                            title: _healingStatus.isNotEmpty
+                                ? _healingStatus
+                                : (isAr ? 'جاري فحص وتدقيق الفواتير بالذكاء الاصطناعي...' : 'Auditing receipts with AI...'),
+                            subtitle: isAr
+                                ? 'يتم فحص وتصحيح اقتصاديات القطعة الواحدة وكشف تكرار الفواتير وحوكمة الأسعار...'
+                                : 'Verifying unit economics and price governance across all chains...',
+                            progress: _healingProgress > 0 ? _healingProgress : null,
+                            currentCount: _healingCurrent,
+                            totalCount: _healingTotal,
+                            icon: Icons.auto_fix_high_rounded,
+                          ),
                         ),
                       ],
                       const SizedBox(height: 16),
