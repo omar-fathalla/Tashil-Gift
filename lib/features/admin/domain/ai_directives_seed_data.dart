@@ -1043,6 +1043,28 @@ class AiDirectivesSeedData {
           tags: ['company-spend-invariant', 'pos-edge-truncation', 'hyper-one', 'al-doha-rice', 'barcode-prefix-matching', 'auto-harvesting', 'air-49'],
           lastUpdated: '2026-09-10',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-50',
+          code: 'ORAL_CARE_STANDALONE_BRAND_QUALIFICATION_AND_ZERO_FALSE_COMBO_REJECTION_STANDARD',
+          orderIndex: 50,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار التأهيل المستقل لعلامات العناية بالفم (سيجنال أو كلوس اب) ومنع الرفض الخاطئ للجمع الإجباري (Oral Care Standalone Brand Qualification & Zero False-Combo Rejection Standard)',
+          titleEn: 'Oral Care Standalone Brand Qualification (Signal OR Closeup) & Zero False-Combo Rejection Standard',
+          descriptionAr:
+              'حوكمة وتأهيل عروض حزم العناية بالفم (Oral Care Bundles) لشركة يونيليفر لتعتمد مبدأ الاختيار المرن (matchMode: OR / by_spend) بدلاً من الجمع الإجباري المانع (AND / combo_spend). يحق للعميل التأهل لجوائز وفواتشرات كافة مستويات الإنفاق (100 ج ➔ فواتشر 25 ج، 150 ج ➔ فواتشر 50 ج، 200 ج ➔ فواتشر 75 ج) بشراء منتجات سيجنال وحدها أو منتجات كلوس اب وحدها أو كليهما معاً، مع منع رفض الفواتير التي تحقق قيمة الإنفاق المطلوبة لمجرد خلوها من إحدى العلامتين.',
+          descriptionEn:
+              'Enforces flexible standalone brand qualification (matchMode: OR / by_spend) across Unilever Oral Care promotional tiers instead of restrictive mandatory combo requirements (AND / combo_spend). Customers qualify for all voucher reward tiers (100 EGP ➔ 25 EGP Voucher, 150 EGP ➔ 50 EGP Voucher, 200 EGP ➔ 75 EGP Voucher) by purchasing either Signal alone, Closeup alone, or both together, strictly preventing false rejections of valid receipts that meet spend thresholds.',
+          logicAr:
+              '1. التحول إلى شرط الإنفاق المستقل (by_spend / OR): ضبط نوع الشرط إلى by_spend ونمط المطابقة إلى OR لكافة مستويات حزم العناية بالفم.\n2. التأهيل الفردي للعلامات: احتساب إجمالي الإنفاق المؤهل من مشتريات (معجون أسنان سيجنال أو كلوس اب) بصورة مستقلة أو مجمعة.\n3. منح أعلى مستوى مؤهل: ترتيب القواعد تنازلياً حسب الحد الأدنى للإنفاق (200 ج ➔ 150 ج ➔ 100 ج) لمنح العميل أعلى جائزة مستحقة فقط دون مضاعفة مكررة.\n4. منع رسائل الرفض الزائفة (Zero False-Combo Invariant): إزالة شرط الجمع الإجباري من محرك القواعد ونصوص توجيهات الذكاء الاصطناعي (customPrompt) حتى لا ترفض الفاتورة بسبب عدم وجود العلامة الأخرى.',
+          logicEn:
+              '1. Migration to Standalone Spend (by_spend / OR): sets conditionType to by_spend and matchMode to OR across all Oral Care promotional tiers.\n2. Independent Brand Qualification: aggregates qualifying spend from Signal or Closeup individually or combined.\n3. Highest Achieved Tier Selection: sorts spend rules descending (200 EGP ➔ 150 EGP ➔ 100 EGP) to award the highest matching prize tier.\n4. Zero False-Combo Rejection: removes mandatory dual-brand requirements from promotional rules and customPrompt instructions.',
+          exampleInput:
+              'بون كاشير جملة ماركت (فرع المنتزه - الإسكندرية) بتاريخ 10/09/2026 يتضمن: 3 معجون سيجنال مكافح التسوس 120مل + سيجنال فحم 20مل بسعر 53 ج.م للقطعة بإجمالي 159 ج.م (دون وجود كلوس اب) في عرض Back to School Oral Care Event.',
+          exampleOutput:
+              'مطابقة الفاتورة فورياً مع حزمة العناية بالفم 2 (150 ج.م) واستحقاق فواتشر 50 ج.م بنجاح 100% ودون أي اشتراط لوجود كلوس اب، مع تسجيل المعاملة والتسليم السلس.',
+          tags: ['oral-care', 'signal', 'closeup', 'standalone-brand-qualification', 'or-matching', 'gomla-market', 'zero-false-combo', 'air-50'],
+          lastUpdated: '2026-09-10',
+        ),
       ];
 }
 

@@ -1768,11 +1768,11 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       }).toList();
       final newRule = PromotionalRuleItem(
         id: 'rule_${_promotionalRules.length + 1}',
-        ruleTitle: 'حزمة العناية بالفم 1 (Signal + Closeup معاً بقيمة 100 ج.م) -> فواتشر 25 ج.م',
+        ruleTitle: 'حزمة العناية بالفم 1 (Signal أو Closeup بقيمة 100 ج.م) -> فواتشر 25 ج.م',
         triggerProduct: 'معجون أسنان سيجنال، معجون أسنان كلوس اب، Signal Toothpaste, Closeup Toothpaste',
-        conditionType: 'combo_spend',
+        conditionType: 'by_spend',
         minSpend: 100.0,
-        matchMode: 'AND',
+        matchMode: 'OR',
         requiredBrands: ['سيجنال', 'كلوس اب'],
         selectedProductIds: oralProducts.map((p) => p.id).toList(),
         selectedBarcodes: oralProducts.map((p) => p.barcode).where((b) => b.isNotEmpty).toList(),
@@ -1795,11 +1795,11 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       }).toList();
       final newRule = PromotionalRuleItem(
         id: 'rule_${_promotionalRules.length + 1}',
-        ruleTitle: 'حزمة العناية بالفم 2 (Signal + Closeup معاً بقيمة 150 ج.م) -> فواتشر 50 ج.م',
+        ruleTitle: 'حزمة العناية بالفم 2 (Signal أو Closeup بقيمة 150 ج.م) -> فواتشر 50 ج.م',
         triggerProduct: 'معجون أسنان سيجنال، معجون أسنان كلوس اب، Signal Toothpaste, Closeup Toothpaste',
-        conditionType: 'combo_spend',
+        conditionType: 'by_spend',
         minSpend: 150.0,
-        matchMode: 'AND',
+        matchMode: 'OR',
         requiredBrands: ['سيجنال', 'كلوس اب'],
         selectedProductIds: oralProducts.map((p) => p.id).toList(),
         selectedBarcodes: oralProducts.map((p) => p.barcode).where((b) => b.isNotEmpty).toList(),
@@ -1853,13 +1853,13 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
       final rule1 = PromotionalRuleItem(
         id: 'rule_${_promotionalRules.length + 1}',
-        ruleTitle: 'حزمة العناية بالفم 1 (Signal + Closeup معاً: نطاق 95 إلى 139 ج.م) -> فواتشر 25 ج.م',
+        ruleTitle: 'حزمة العناية بالفم 1 (Signal أو Closeup: نطاق 95 إلى 139 ج.م) -> فواتشر 25 ج.م',
         triggerProduct: 'معجون أسنان سيجنال، معجون أسنان كلوس اب، Signal Toothpaste, Closeup Toothpaste',
-        conditionType: 'combo_spend',
+        conditionType: 'by_spend',
         minSpend: 95.0,
         maxSpend: 139.99,
         discountTolerance: 5.0,
-        matchMode: 'AND',
+        matchMode: 'OR',
         requiredBrands: ['سيجنال', 'كلوس اب'],
         selectedProductIds: oralProducts.map((p) => p.id).toList(),
         selectedBarcodes: oralProducts.map((p) => p.barcode).where((b) => b.isNotEmpty).toList(),
@@ -1875,13 +1875,13 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
       final rule2 = PromotionalRuleItem(
         id: 'rule_${_promotionalRules.length + 2}',
-        ruleTitle: 'حزمة العناية بالفم 2 (Signal + Closeup معاً: نطاق 140 إلى 189 ج.م) -> فواتشر 50 ج.م',
+        ruleTitle: 'حزمة العناية بالفم 2 (Signal أو Closeup: نطاق 140 إلى 189 ج.م) -> فواتشر 50 ج.م',
         triggerProduct: 'معجون أسنان سيجنال، معجون أسنان كلوس اب، Signal Toothpaste, Closeup Toothpaste',
-        conditionType: 'combo_spend',
+        conditionType: 'by_spend',
         minSpend: 140.0,
         maxSpend: 189.99,
         discountTolerance: 5.0,
-        matchMode: 'AND',
+        matchMode: 'OR',
         requiredBrands: ['سيجنال', 'كلوس اب'],
         selectedProductIds: oralProducts.map((p) => p.id).toList(),
         selectedBarcodes: oralProducts.map((p) => p.barcode).where((b) => b.isNotEmpty).toList(),
@@ -5984,11 +5984,11 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         ),
                         DropdownMenuItem(
                           value: 'oral_bundle_100',
-                          child: Text('🦷 حزمة العناية بالفم 1: سيجنال + كلوس اب معاً ≥ 100 ج.م -> فواتشر 25 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                          child: Text('🦷 حزمة العناية بالفم 1: سيجنال أو كلوس اب ≥ 100 ج.م -> فواتشر 25 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
                         ),
                         DropdownMenuItem(
                           value: 'oral_bundle_150',
-                          child: Text('🦷 حزمة العناية بالفم 2: سيجنال + كلوس اب معاً ≥ 150 ج.م -> فواتشر 50 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                          child: Text('🦷 حزمة العناية بالفم 2: سيجنال أو كلوس اب ≥ 150 ج.م -> فواتشر 50 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
                         ),
                         DropdownMenuItem(
                           value: 'oral_bundle_200',
