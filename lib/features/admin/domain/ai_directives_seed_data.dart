@@ -1003,6 +1003,26 @@ class AiDirectivesSeedData {
           tags: ['pos-date-disambiguation', 'mm-dd-vs-dd-mm', 'zahran-market', 'keyboard-typo-healing', 'fmcg-unit-normalization', 'eldoha-al-sehi', 'air-47'],
           lastUpdated: '2026-09-10',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-48',
+          code: 'POS_RECEIPT_NUMBER_VS_TAX_CARD_ISOLATION_STANDARD',
+          orderIndex: 48,
+          category: AiDirectiveCategory.fraudSecurity,
+          titleAr: 'معيار استخراج رقم الفاتورة الحقيقي وعزل أرقام البطاقة الضريبية والسجل التجاري (POS Receipt Number vs Tax ID Isolation Standard)',
+          titleEn: 'POS Receipt Number vs Tax ID & Commercial Registration Isolation Standard',
+          descriptionAr:
+              'حوكمة استخراج رقم المعاملة الحقيقي (Transaction ID / Slip No / Receipt Number) الموجود في ترويسة البون (مثل TP0001000420897)، ومنع الالتباس الشائع لدى نماذج الذكاء الاصطناعي بين رقم الفاتورة وأرقام التسجيل الضريبي (ب.ض مثل 291/064/167) أو أرقام السجل التجاري (س.ت مثل 98401) المطبوعة في تذييل البون.',
+          descriptionEn:
+              'Enforces strict extraction of genuine receipt numbers / transaction IDs from receipt headers (e.g. TP0001000420897) while explicitly preventing AI models from erroneously picking tax registration numbers (ب.ض e.g. 291/064/167) or commercial register codes (س.ت e.g. 98401) found in receipt footers.',
+          logicAr:
+              '1. تحديد موضع رقم الفاتورة: إعطاء الأولوية للرموز والأرقام التسلسلية الموجودة في ترويسة البون المطبوعة بجوار (عملية رقم / Slip / Receipt / Ticket / TP).\\n2. حظر استخراج الأرقام الضريبية: منع استخراج أي رقم يسبقه أو يليه اختصار (ب.ض / بطاقة ضريبية / tax id / س.ت / سجل تجاري) كرقم للفاتورة.\\n3. دقة سجل منع التكرار (Anti-Duplication Integrity): ضمان تسجيل الرقم الحقيقي للمعاملة في قاعدة البيانات لمنع رفض فواتير أخرى مختلفة تصدر من نفس السوبرماركت وتحمل نفس الرقم الضريبي.',
+          logicEn:
+              '1. Header-Priority Transaction Number: prioritizes transaction identifiers in the receipt header adjacent to keywords like (TP, Slip, Ticket, Receipt, Transactio).\\n2. Tax ID & CR Number Blacklist: strictly forbids assigning any number preceded or succeeded by tax card (ب.ض) or commercial registry (س.ت) to receiptNumber.\\n3. Anti-Duplication Integrity: guarantees distinct receipt numbers across multiple customer transactions from the same retail chain branch sharing the same legal tax ID.',
+          exampleInput: 'بون كاشير نجمة هليوبوليس (جمال سلامه) فرع شيراتون يتضمن في الترويسة "TP0001000420897" وفي التذييل "ب.ض: 291/064/167" و"س.ت: 98401".',
+          exampleOutput: 'استخراج receiptNumber = "TP0001000420897" بدقة، وعزل رقم البطاقة الضريبية لمنع تصنيفه كرقم للفاتورة وتفادي تكرار المعاملات.',
+          tags: ['receipt-number-isolation', 'tax-card-filtering', 'commercial-reg-filtering', 'gamal-salama', 'anti-duplication', 'air-48'],
+          lastUpdated: '2026-09-10',
+        ),
       ];
 }
 
