@@ -56,14 +56,10 @@ void main() {
       final match1 = PromotionalRuleMatcher.matchesProduct(item1, elDohaRule.triggerProduct, elDohaRule);
       final match2 = PromotionalRuleMatcher.matchesProduct(item2, elDohaRule.triggerProduct, elDohaRule);
 
-      print('Match 1 (عدس اصفر 500 جم): $match1');
-      print('Match 2 (دقيق 1ك): $match2');
-
       final reasons = PromotionalRuleMatcher.getUnfulfilledPromotionReasons(
         extractedProducts: [item1, item2],
         promotionalRules: [elDohaRule],
       );
-      print('Reasons: $reasons');
 
       expect(match1, isTrue);
       expect(match2, isTrue);
