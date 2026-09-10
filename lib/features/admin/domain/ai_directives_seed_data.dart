@@ -963,6 +963,26 @@ class AiDirectivesSeedData {
           tags: ['brand-lock', 'pos-intra-spacing', 'shampoo-shorthand', 'qualification-reasoning', 'air-45'],
           lastUpdated: '2026-09-09',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-46',
+          code: 'SPEND_BASED_MULTIPLIER_GOVERNANCE_AND_ARABIC_WIN_VERB_COLLISION_STANDARD',
+          orderIndex: 46,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار حوكمة مضاعفات الإنفاق ومنع تعارض أفعال الفوز مع العلامات التجارية والتطبيع الصوتي (Spend-Based Multiplier Governance & Win Verb Anti-Collision)',
+          titleEn: 'Spend-Based Multiplier Governance, Arabic Win Verb Collision Prevention & FMCG Normalization Standard',
+          descriptionAr:
+              'حوكمة مضاعفة الجوائز والفرص في العروض القائمة على الإنفاق النقدي (Spend-Based Rules) بحيث يحصل العميل على مضاعف دقيق بعدد شرائح الإنفاق المحققة (مثال: إنفاق 405 ج.م في عرض حده الأدنى 190 ج.م يؤهل لـ 2 هدايا/فرص فورية)، مع منع التعارض الشائع في اللغة العربية بين أفعال الفوز والكسب (واكسب، اكسب، مكسب) وماركة أكس (Axe)، وإضافة علامة الضحى كجذر علامة تجارية معتمدة، وتطبيع المتغيرات الصوتية الشائعة مثل (فيشار ⟷ فشار، ايزى باستا ⟷ ايزي باستا).',
+          descriptionEn:
+              'Enforces accurate multi-tier multiplier calculation for spend-based promotional rules (e.g. 405 EGP spend against a 190 EGP min spend threshold awards exactly 2 gifts/chances), prevents Arabic win verbs (واكسب, اكسب, مكسب) from falsely colliding with the brand "Axe", registers Al-Doha as an authoritative brand root, and normalizes retail variants (فيشار ⟷ فشار, ايزى باستا ⟷ ايزي باستا).',
+          logicAr:
+              '1. منع تعارض أفعال الفوز مع ماركة أكس: استبعاد الكلمات المشتقة من جذر (ك-س-ب) مثل "واكسب" أو "اكسب" أو "مكسب" عند البحث عن علامة "اكس" في نصوص الشروط وعناوين العروض، واشتراط كلمة مستقلة لمنع تصنيف عروض الشركات الأخرى كعروض لماركة أكس.\n2. تسجيل الضحى كعلامة تجارية معتمدة: إضافة "الضحى" و"الضحي" إلى قائمة _brandRoots لحماية منتجات الشركة وسهولة التعرف عليها وتأهيلها في سلات الإنفاق.\n3. التطبيع الصوتي لمتغيرات بونات الكاشير: تطبيع "فيشار" إلى "فشار"، و"ايزى باستا" إلى "ايزي باستا"، و"مينى شيف" إلى "ميني شيف" لضمان تطابق أسماء الأصناف بين بون الكاشير وكتالوج الحملة بدقة 100%.\n4. حوكمة احتساب الفرص في عروض الإنفاق: إذا كانت القاعدة الترويجية معتمدة على الإنفاق (isSpendBased) أو كان أساس الحملة هو الإنفاق (multiplierBasis == spend)، يتم حساب الفرص والجوائز بمضاعف الإنفاق الحقيقي (targetCompanyTotal / minSpend) دون تقييده بمضاعف الكميات بالقطع.',
+          logicEn:
+              '1. Win Verb Anti-Collision: isolates "اكس" / "axe" to standalone tokens and ignores Arabic win verbs (واكسب, اكسب, مكسب) to prevent non-Axe campaigns from falsely inheriting Axe brand locks.\n2. Al-Doha Authoritative Brand Root: registers "الضحى" in _brandRoots for deterministic product matching across supermarket chains.\n3. FMCG Phonetic & Orthographic Normalization: normalizes "فيشار" to "فشار", "ايزى باستا" to "ايزي باستا", and "مينى شيف" to "ميني شيف".\n4. Spend-Based Multiplier Governance: calculates chances and prizes via spend divisor (targetCompanyTotal / minSpend) when multiplierBasis == "spend" or rule.isSpendBased, ensuring multi-spend receipts receive exact multiplied gifts.',
+          exampleInput: 'فاتورة فتح الله بقيمة 405 ج.م لمنتجات الضحى تتضمن: 4 أرز مصري (168 ج) + 1 لوبيا (107 ج) + 1 ذرة فشار (91 ج) + 1 سكر (39 ج)، في عرض عنوانه "أشتري بقيمة 200 جنية من منتجات الضحى واكسب هدية".',
+          exampleOutput: 'التعرف على جميع الأصناف الـ 4 بما فيها "ذرة فشار" ومطابقتها مع الكتالوج، واحتساب إجمالي 405 ج.م >= 2 × 190 ج.م، ومنح العميل مضاعف 2 (هديتين وفرصتين لاختيار الجوائز) بدقة 100%.',
+          tags: ['spend-multipliers', 'win-verb-collision', 'al-doha', 'fmcg-phonetics', 'popcorn-normalization', 'air-46'],
+          lastUpdated: '2026-09-10',
+        ),
       ];
 }
 

@@ -1186,7 +1186,26 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           }
 
           if (promotionalRules.isNotEmpty && result.matchedRuleId.isNotEmpty) {
-            calculatedChances = quantityMultiplier;
+            final matchedRule = promotionalRules
+                .where((r) => r.id == result.matchedRuleId)
+                .firstOrNull;
+            if (matchedRule != null && matchedRule.isSpendBased) {
+              final minSp = matchedRule.effectiveMinSpend > 0
+                  ? matchedRule.effectiveMinSpend
+                  : minimumSpend;
+              final ruleSpendChances = minSp > 0
+                  ? (result.targetCompanyTotal / minSp).floor()
+                  : spendChances;
+              calculatedChances = (matchedRule.allowMultipliers || allowMultipleChances)
+                  ? (ruleSpendChances > 0 ? ruleSpendChances : 1)
+                  : 1;
+            } else if (multiplierBasis == 'spend') {
+              calculatedChances = spendChances;
+            } else if (multiplierBasis == 'both') {
+              calculatedChances = math.max(quantityMultiplier, spendChances);
+            } else {
+              calculatedChances = quantityMultiplier;
+            }
           } else if (multiplierBasis == 'quantity') {
             calculatedChances = quantityMultiplier;
           } else if (multiplierBasis == 'spend') {
@@ -2446,6 +2465,8 @@ class PromotionalRuleMatcher {
     'فازلين',
     'كلوس اب',
     'كلوساب',
+    'الضحى',
+    'الضحي',
   };
 
   static int? _extractSizeMl(String text) {
@@ -2461,7 +2482,14 @@ class PromotionalRuleMatcher {
     final norm = _normalize(text);
     final brands = <String>{};
     for (final brand in _brandRoots) {
-      if (norm.contains(brand)) brands.add(brand);
+      if (brand == 'اكس') {
+        // Must match standalone word 'اكس' / 'axe', NOT Arabic words derived from root (ك-س-ب) like 'واكسب', 'اكسب', 'مكسب'
+        final words = norm.split(' ');
+        final hasAxe = words.any((w) => (w == 'اكس' || w == 'axe') && !w.contains('كسب'));
+        if (hasAxe) brands.add(brand);
+      } else if (norm.contains(brand)) {
+        brands.add(brand);
+      }
     }
     return brands;
   }
@@ -2855,6 +2883,15 @@ class PromotionalRuleMatcher {
     str = str.replaceAll(
       RegExp(r'كلوس\s*اب|كلوساب|close\s*up|closeup|close-up'),
       'كلوس اب',
+    );
+    str = str.replaceAll('فيشار', 'فشار');
+    str = str.replaceAll(
+      RegExp(r'ايزى\s*باستا|ايزي\s*باستا|easy\s*pasta'),
+      'ايزي باستا',
+    );
+    str = str.replaceAll(
+      RegExp(r'مينى\s*شيف|ميني\s*شيف|mini\s*chef'),
+      'ميني شيف',
     );
 
     // 150ml Aerosol Bodyspray Resolution: In retail FMCG, 150ml for Rexona/Axe is ALWAYS an aerosol spray
