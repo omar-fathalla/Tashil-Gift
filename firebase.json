@@ -21,11 +21,41 @@
     ],
     "headers": [
       {
-        "source": "**/*.@(js|wasm|css)",
+        "source": "@(index.html|flutter_bootstrap.js|flutter_service_worker.js|version.json|manifest.json)",
         "headers": [
           {
             "key": "Cache-Control",
-            "value": "public, max-age=604800, stale-while-revalidate=86400"
+            "value": "no-cache, no-store, must-revalidate, max-age=0"
+          },
+          {
+            "key": "Pragma",
+            "value": "no-cache"
+          },
+          {
+            "key": "Expires",
+            "value": "0"
+          }
+        ]
+      },
+      {
+        "source": "main.dart.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate, max-age=0"
+          },
+          {
+            "key": "Pragma",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "canvaskit/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=2592000, immutable"
           }
         ]
       },
@@ -53,15 +83,6 @@
           {
             "key": "Cache-Control",
             "value": "public, max-age=2592000, immutable"
-          }
-        ]
-      },
-      {
-        "source": "@(index.html|flutter_service_worker.js|version.json)",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "no-cache, no-store, must-revalidate"
           }
         ]
       }

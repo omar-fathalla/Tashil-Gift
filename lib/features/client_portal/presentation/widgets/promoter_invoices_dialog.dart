@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,16 +6,23 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 
 import '../../../../core/services/firebase_service.dart';
+import '../../../../core/services/ai_receipt_service.dart';
+import '../../../../core/services/company_products_service.dart';
+import '../../../../core/services/retail_chains_service.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/constants/country_currency_config.dart';
 import '../../../../core/utils/arabic_numbers_utils.dart';
 import '../../../../core/utils/error_handler.dart';
 import '../../../../core/widgets/interactive_receipt_viewer_dialog.dart';
+import '../../../../core/services/multi_campaign_receipt_evaluator.dart';
 import '../../../admin/domain/event_model.dart';
+import '../../../admin/domain/retail_chain_model.dart';
 
-enum PromoterDateFilter { all, today, last7Days, thisMonth }
+enum PromoterDateFilter { today, custom, all }
+enum PromoterStatusFilter { all, accepted, rejected }
 
 /// Interactive Material Design 3 Dialog displaying the Invoices Log for Promoters
 /// with branch filtering, persistent branch pinning, real-time sync, and detailed search.
@@ -62,17 +70,47 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
 
   String? _selectedBranch; // null or empty string means 'All Branches'
   String? _pinnedBranch;
-  PromoterDateFilter _dateFilter = PromoterDateFilter.all;
+  PromoterDateFilter _dateFilter = PromoterDateFilter.today; // Defaults to Today per user request
+  PromoterStatusFilter _statusFilter = PromoterStatusFilter.all;
+  DateTime? _customSelectedDate;
+  DateTimeRange? _customSelectedRange;
+  final Set<String> _recheckingDocIds = <String>{};
   final Set<String> _expandedDocIds = <String>{};
 
   static const int _pageSize = 25;
   int _displayedCount = _pageSize;
+
+  // Stale-While-Revalidate Persistent In-Memory Cache (0ms Instant Render)
+  static final Map<String, List<Map<String, dynamic>>> _cachedCampaignInvoices = {};
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _invoicesStream;
 
   @override
   void initState() {
     super.initState();
     _loadPinnedBranch();
     _scrollController.addListener(_onScroll);
+    _initStream();
+  }
+
+  @override
+  void didUpdateWidget(covariant PromoterInvoicesDialog oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.event.id != oldWidget.event.id ||
+        widget.event.companySlug != oldWidget.event.companySlug) {
+      _initStream(force: true);
+    }
+  }
+
+  void _initStream({bool force = false}) {
+    if (_invoicesStream != null && !force) return;
+    final firestore = ref.read(firestoreProvider);
+    Query<Map<String, dynamic>> query = firestore.collection('receipts_transactions');
+    if (widget.event.id.isNotEmpty) {
+      query = query.where('campaignId', isEqualTo: widget.event.id);
+    } else if (widget.event.companySlug.isNotEmpty) {
+      query = query.where('companySlug', isEqualTo: widget.event.companySlug.trim());
+    }
+    _invoicesStream = query.snapshots();
   }
 
   @override
@@ -288,11 +326,12 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
           setState(() {
             _pinnedBranch = branchName;
           });
+          final colorScheme = Theme.of(context).colorScheme;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('${strings.branchPinnedSuccess}: $branchName'),
               duration: const Duration(seconds: 2),
-              backgroundColor: Colors.teal.shade700,
+              backgroundColor: colorScheme.primary,
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -329,13 +368,43 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     switch (_dateFilter) {
       case PromoterDateFilter.today:
         return dt.year == now.year && dt.month == now.month && dt.day == now.day;
-      case PromoterDateFilter.last7Days:
-        final sevenDaysAgo = now.subtract(const Duration(days: 7));
-        return dt.isAfter(sevenDaysAgo) && dt.isBefore(now.add(const Duration(days: 1)));
-      case PromoterDateFilter.thisMonth:
-        return dt.year == now.year && dt.month == now.month;
+      case PromoterDateFilter.custom:
+        if (_customSelectedDate != null) {
+          return dt.year == _customSelectedDate!.year &&
+              dt.month == _customSelectedDate!.month &&
+              dt.day == _customSelectedDate!.day;
+        }
+        if (_customSelectedRange != null) {
+          final start = DateTime(
+            _customSelectedRange!.start.year,
+            _customSelectedRange!.start.month,
+            _customSelectedRange!.start.day,
+          );
+          final end = DateTime(
+            _customSelectedRange!.end.year,
+            _customSelectedRange!.end.month,
+            _customSelectedRange!.end.day,
+            23,
+            59,
+            59,
+          );
+          return dt.isAfter(start.subtract(const Duration(seconds: 1))) &&
+              dt.isBefore(end.add(const Duration(seconds: 1)));
+        }
+        return true;
       case PromoterDateFilter.all:
         return true;
+    }
+  }
+
+  bool _matchesStatusFilter(bool isValid) {
+    switch (_statusFilter) {
+      case PromoterStatusFilter.all:
+        return true;
+      case PromoterStatusFilter.accepted:
+        return isValid;
+      case PromoterStatusFilter.rejected:
+        return !isValid;
     }
   }
 
@@ -381,7 +450,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     final screenHeight = mediaQuery.size.height;
     final isMobile = screenWidth < 650;
 
-    final firestore = ref.watch(firestoreProvider);
+    _initStream();
 
     return Directionality(
       textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
@@ -404,13 +473,14 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
           height: isMobile ? screenHeight * 0.94 : screenHeight * 0.88,
           constraints: const BoxConstraints(maxWidth: 1060, maxHeight: 920),
           child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: firestore.collection('receipts_transactions').snapshots(),
+            stream: _invoicesStream,
             builder: (context, snapshot) {
-              if (snapshot.hasError) {
+              final cacheKey = widget.event.id.isNotEmpty ? widget.event.id : widget.event.companySlug;
+              final cachedInvoices = _cachedCampaignInvoices[cacheKey];
+
+              if (snapshot.hasError && (cachedInvoices == null || cachedInvoices.isEmpty)) {
                 return _buildErrorState(colorScheme, strings, snapshot.error);
               }
-
-              final allDocs = snapshot.data?.docs ?? [];
 
               // 1. Strictly Canonical Branches from Event definition
               final List<String> canonicalBranches = widget.event.branchNames
@@ -418,82 +488,102 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   .where((b) => b.isNotEmpty)
                   .toList();
 
-              // 2. Filter transactions related to this campaign / company & only ACCEPTED / VALID invoices
-              final List<Map<String, dynamic>> validCampaignInvoices = [];
-              for (final doc in allDocs) {
-                final data = doc.data();
-                final cId = (data['campaignId'] ?? data['event_id'] ?? data['eventId'] ?? '').toString().trim();
-                final cSlug = (data['companySlug'] ?? data['company_slug'] ?? '').toString().trim().toLowerCase();
-                final targetComp = (data['targetCompany'] ?? data['target_company'] ?? '').toString().trim().toLowerCase();
+              // 2. Filter transactions related to this campaign / company (both valid & rejected)
+              final List<Map<String, dynamic>> campaignInvoices;
 
-                final eventSlug = widget.event.companySlug.trim().toLowerCase();
-                final eventTarget = widget.event.targetCompany.trim().toLowerCase();
+              if (snapshot.hasData && snapshot.data != null) {
+                final allDocs = snapshot.data!.docs;
+                final List<Map<String, dynamic>> parsedInvoices = [];
+                for (final doc in allDocs) {
+                  final data = doc.data();
+                  final cId = (data['campaignId'] ?? data['event_id'] ?? data['eventId'] ?? '').toString().trim();
+                  final cSlug = (data['companySlug'] ?? data['company_slug'] ?? '').toString().trim().toLowerCase();
+                  final targetComp = (data['targetCompany'] ?? data['target_company'] ?? '').toString().trim().toLowerCase();
 
-                final bool matchesCampaign = (widget.event.id.isNotEmpty && cId == widget.event.id) ||
-                    (eventSlug.isNotEmpty && cSlug == eventSlug) ||
-                    (eventTarget.isNotEmpty && targetComp.contains(eventTarget));
+                  final eventSlug = widget.event.companySlug.trim().toLowerCase();
+                  final eventTarget = widget.event.targetCompany.trim().toLowerCase();
 
-                if (!matchesCampaign) continue;
+                  final bool matchesCampaign = (widget.event.id.isNotEmpty && cId == widget.event.id) ||
+                      (widget.event.id.isEmpty && eventSlug.isNotEmpty && cSlug == eventSlug) ||
+                      (widget.event.id.isEmpty && eventTarget.isNotEmpty && targetComp.contains(eventTarget));
 
-                // Explicit check for valid invoices (exclude rejected as requested)
-                final bool isExplicitlyValid = data['is_valid'] == true || data['status'] == 'accepted' || data['isValid'] == true;
-                final bool isExplicitlyRejected = data['is_valid'] == false || data['status'] == 'rejected' || data['isValid'] == false || ((data['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
-                final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((data['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
+                  if (!matchesCampaign) continue;
 
-                if (!isValid) continue;
+                  final bool isExplicitlyValid = data['is_valid'] == true || data['status'] == 'accepted' || data['isValid'] == true;
+                  final bool isExplicitlyRejected = data['is_valid'] == false || data['status'] == 'rejected' || data['isValid'] == false || ((data['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
+                  final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((data['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
 
-                final rawBranch = (data['branch_detected'] ?? data['branch_name'] ?? data['branch'] ?? '').toString().trim();
-                final canonicalBranch = _normalizeBranchName(rawBranch, canonicalBranches, isAr);
+                  final rawBranch = (data['branch_detected'] ?? data['branch_name'] ?? data['branch'] ?? '').toString().trim();
+                  final canonicalBranch = _normalizeBranchName(rawBranch, canonicalBranches, isAr);
 
-                validCampaignInvoices.add({
-                  'docId': doc.id,
-                  ...data,
-                  'canonical_branch': canonicalBranch,
-                  'raw_branch': rawBranch,
-                });
+                  parsedInvoices.add({
+                    'docId': doc.id,
+                    'id': doc.id,
+                    ...data,
+                    'is_computed_valid': isValid,
+                    'canonical_branch': canonicalBranch,
+                    'raw_branch': rawBranch,
+                  });
+                }
+                campaignInvoices = parsedInvoices;
+                _cachedCampaignInvoices[cacheKey] = parsedInvoices;
+              } else if (cachedInvoices != null && cachedInvoices.isNotEmpty) {
+                // Stale-While-Revalidate: render immediately in 0ms!
+                campaignInvoices = cachedInvoices;
+              } else {
+                campaignInvoices = [];
               }
+
+              final int totalCampaignInvoices = campaignInvoices.length;
+              final int totalAcceptedInvoices = campaignInvoices.where((inv) => inv['is_computed_valid'] == true).length;
+              final int totalRejectedInvoices = campaignInvoices.where((inv) => inv['is_computed_valid'] == false).length;
 
               // 3. Compute Invoice Counts per Canonical Branch
               final Map<String, int> branchInvoiceCounts = {};
               for (final b in canonicalBranches) {
                 branchInvoiceCounts[b] = 0;
               }
-              for (final inv in validCampaignInvoices) {
-                final b = inv['canonical_branch'] as String;
-                if (branchInvoiceCounts.containsKey(b)) {
-                  branchInvoiceCounts[b] = (branchInvoiceCounts[b] ?? 0) + 1;
+              for (final inv in campaignInvoices) {
+                if (_matchesStatusFilter(inv['is_computed_valid'] == true)) {
+                  final b = inv['canonical_branch'] as String;
+                  if (branchInvoiceCounts.containsKey(b)) {
+                    branchInvoiceCounts[b] = (branchInvoiceCounts[b] ?? 0) + 1;
+                  }
                 }
               }
-
-              final int totalAcceptedInvoices = validCampaignInvoices.length;
 
               // 4. Apply Search & Filters
               final searchQuery = _searchController.text.trim().toLowerCase().toEnglishDigits();
 
-              final filteredInvoices = validCampaignInvoices.where((inv) {
-                final canonicalBranch = (inv['canonical_branch'] ?? '').toString();
-                final rawBranch = (inv['raw_branch'] ?? '').toString();
-                final storeChain = (inv['store_chain_detected'] ?? inv['retail_chain_name'] ?? '').toString().trim();
-                final receiptNumber = (inv['receipt_number'] ?? '').toString().trim().toLowerCase();
-                final customerPhone = (inv['customerPhone'] ?? inv['customer_phone'] ?? '').toString().trim();
-                final customerName = (inv['customerName'] ?? inv['customer_name'] ?? '').toString().trim().toLowerCase();
-                final receiptDate = (inv['receipt_date'] ?? '').toString().trim().toLowerCase();
-                final dt = _parseDateTime(inv['timestamp'], inv['receipt_date']);
+              final filteredInvoices = campaignInvoices.where((inv) {
+                final bool isValid = inv['is_computed_valid'] == true;
 
-                // 1. Strict Branch Filter (Exact Canonical Match)
+                // 1. Status Filter
+                if (!_matchesStatusFilter(isValid)) return false;
+
+                // 2. Strict Branch Filter (Exact Canonical Match)
+                final canonicalBranch = (inv['canonical_branch'] ?? '').toString();
                 if (_selectedBranch != null && _selectedBranch!.isNotEmpty) {
                   if (canonicalBranch != _selectedBranch) {
                     return false;
                   }
                 }
 
-                // 2. Date Filter
+                // 3. Date Filter
+                final dt = _parseDateTime(inv['timestamp'], inv['receipt_date']);
                 if (!_matchesDateFilter(dt)) {
                   return false;
                 }
 
-                // 3. Search Query Filter
+                // 4. Search Query Filter
                 if (searchQuery.isNotEmpty) {
+                  final rawBranch = (inv['raw_branch'] ?? '').toString();
+                  final storeChain = (inv['store_chain_detected'] ?? inv['retail_chain_name'] ?? '').toString().trim();
+                  final receiptNumber = (inv['receipt_number'] ?? '').toString().trim().toLowerCase();
+                  final customerPhone = (inv['customerPhone'] ?? inv['customer_phone'] ?? '').toString().trim();
+                  final customerName = (inv['customerName'] ?? inv['customer_name'] ?? '').toString().trim().toLowerCase();
+                  final receiptDate = (inv['receipt_date'] ?? '').toString().trim().toLowerCase();
+
                   final matchesReceipt = receiptNumber.contains(searchQuery);
                   final matchesPhone = customerPhone.toEnglishDigits().contains(searchQuery);
                   final matchesName = customerName.contains(searchQuery);
@@ -540,13 +630,16 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                     strings: strings,
                     isMobile: isMobile,
                     filteredCount: filteredInvoices.length,
+                    totalAccepted: totalAcceptedInvoices,
+                    totalRejected: totalRejectedInvoices,
                     totalSales: totalSales,
                     currencySymbol: currencySymbol,
+                    isAr: isAr,
                   ),
 
                   const Divider(height: 1, thickness: 1),
 
-                  // 2. Filter & Search Controls (Branches Bar + Date Chips + Search Box)
+                  // 2. Filter & Search Controls (Branches Bar + Date Chips + Status Chips + Search Box)
                   _buildFilterControls(
                     context: context,
                     colorScheme: colorScheme,
@@ -554,14 +647,17 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                     isMobile: isMobile,
                     availableBranches: canonicalBranches,
                     branchCounts: branchInvoiceCounts,
-                    totalCount: totalAcceptedInvoices,
+                    totalCount: totalCampaignInvoices,
+                    acceptedCount: totalAcceptedInvoices,
+                    rejectedCount: totalRejectedInvoices,
+                    isAr: isAr,
                   ),
 
                   const Divider(height: 1, thickness: 1),
 
                   // 3. Invoices List View
                   Expanded(
-                    child: snapshot.connectionState == ConnectionState.waiting && allDocs.isEmpty
+                    child: snapshot.connectionState == ConnectionState.waiting && campaignInvoices.isEmpty
                         ? const Center(child: CircularProgressIndicator())
                         : filteredInvoices.isEmpty
                             ? _buildEmptyState(colorScheme, strings, isMobile)
@@ -572,6 +668,8 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                                 isMobile: isMobile,
                                 invoices: filteredInvoices,
                                 currencySymbol: currencySymbol,
+                                activeCountry: activeCountry,
+                                isAr: isAr,
                               ),
                   ),
                 ],
@@ -589,8 +687,11 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     required AppStrings strings,
     required bool isMobile,
     required int filteredCount,
+    required int totalAccepted,
+    required int totalRejected,
     required double totalSales,
     required String currencySymbol,
+    required bool isAr,
   }) {
     return Container(
       padding: EdgeInsets.symmetric(
@@ -652,21 +753,21 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
-                          color: Colors.teal.shade50,
+                          color: colorScheme.primaryContainer.withValues(alpha: 0.5),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.teal.shade300),
+                          border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3)),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.push_pin_rounded, size: 12, color: Colors.teal.shade800),
+                            Icon(Icons.push_pin_rounded, size: 12, color: colorScheme.primary),
                             const SizedBox(width: 4),
                             Text(
                               _pinnedBranch!,
                               style: GoogleFonts.cairo(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.teal.shade900,
+                                color: colorScheme.primary,
                               ),
                             ),
                           ],
@@ -711,6 +812,31 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                       color: colorScheme.onPrimaryContainer,
                     ),
                   ),
+                  if (totalRejected > 0) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.cancel_rounded, size: 12, color: Colors.red.shade900),
+                          const SizedBox(width: 4),
+                          Text(
+                            isAr ? '$totalRejected مرفوضة' : '$totalRejected Rejected',
+                            style: GoogleFonts.cairo(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red.shade900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(width: 12),
                   Container(width: 1, height: 16, color: colorScheme.outlineVariant),
                   const SizedBox(width: 12),
@@ -728,6 +854,33 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
               ),
             ),
             const SizedBox(width: 12),
+          ] else ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '#$filteredCount',
+                    style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: colorScheme.primary),
+                  ),
+                  if (totalRejected > 0) ...[
+                    const SizedBox(width: 4),
+                    Icon(Icons.cancel_rounded, size: 10, color: Colors.red.shade900),
+                    const SizedBox(width: 2),
+                    Text(
+                      '$totalRejected',
+                      style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red.shade900),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 6),
           ],
 
           // Close Dialog Button
@@ -761,6 +914,9 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     required List<String> availableBranches,
     required Map<String, int> branchCounts,
     required int totalCount,
+    required int acceptedCount,
+    required int rejectedCount,
+    required bool isAr,
   }) {
     return Container(
       padding: EdgeInsets.symmetric(
@@ -799,12 +955,12 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: _pinnedBranch == _selectedBranch
-                            ? Colors.teal.shade600
+                            ? colorScheme.primary
                             : colorScheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: _pinnedBranch == _selectedBranch
-                              ? Colors.teal.shade800
+                              ? colorScheme.primary
                               : colorScheme.outlineVariant,
                         ),
                       ),
@@ -817,7 +973,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                                 : Icons.push_pin_outlined,
                             size: 13,
                             color: _pinnedBranch == _selectedBranch
-                                ? Colors.white
+                                ? colorScheme.onPrimary
                                 : colorScheme.onSurfaceVariant,
                           ),
                           const SizedBox(width: 4),
@@ -829,7 +985,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
                               color: _pinnedBranch == _selectedBranch
-                                  ? Colors.white
+                                  ? colorScheme.onPrimary
                                   : colorScheme.onSurfaceVariant,
                             ),
                           ),
@@ -882,7 +1038,11 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (isPinned) ...[
-                            const Icon(Icons.push_pin_rounded, size: 12, color: Colors.teal),
+                            Icon(
+                              Icons.push_pin_rounded,
+                              size: 12,
+                              color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                            ),
                             const SizedBox(width: 4),
                           ],
                           Text('$branchName ($count)'),
@@ -908,17 +1068,23 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
           ),
           const SizedBox(height: 12),
 
-          // 2. Search Box + Date Filters Row
+          // 2. Search Box
+          _buildSearchField(colorScheme, strings),
+          const SizedBox(height: 10),
+
+          // 3. Filter Row: Date Chips + Status Chips
           if (isMobile) ...[
-            _buildSearchField(colorScheme, strings),
+            _buildDateFilterChips(context, colorScheme, strings, isAr),
             const SizedBox(height: 8),
-            _buildDateFilterChips(colorScheme, strings),
+            _buildStatusFilterChips(colorScheme, strings, acceptedCount, rejectedCount, isAr),
           ] else ...[
             Row(
               children: [
-                Expanded(child: _buildSearchField(colorScheme, strings)),
+                Expanded(
+                  child: _buildDateFilterChips(context, colorScheme, strings, isAr),
+                ),
                 const SizedBox(width: 14),
-                _buildDateFilterChips(colorScheme, strings),
+                _buildStatusFilterChips(colorScheme, strings, acceptedCount, rejectedCount, isAr),
               ],
             ),
           ],
@@ -970,27 +1136,61 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     );
   }
 
-  Widget _buildDateFilterChips(ColorScheme colorScheme, AppStrings strings) {
+  Widget _buildDateFilterChips(
+    BuildContext context,
+    ColorScheme colorScheme,
+    AppStrings strings,
+    bool isAr,
+  ) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildDateChip('الكل', PromoterDateFilter.all, colorScheme),
+          // 1. Default "Today" Chip
+          _buildDateChip(
+            label: isAr ? 'اليوم' : 'Today',
+            filter: PromoterDateFilter.today,
+            colorScheme: colorScheme,
+            icon: Icons.today_rounded,
+          ),
           const SizedBox(width: 6),
-          _buildDateChip('اليوم', PromoterDateFilter.today, colorScheme),
+
+          // 2. Interactive Animated Date Picker Chip (Single Day or Range)
+          _buildCustomDateChip(
+            context: context,
+            colorScheme: colorScheme,
+            strings: strings,
+            isAr: isAr,
+          ),
           const SizedBox(width: 6),
-          _buildDateChip('آخر 7 أيام', PromoterDateFilter.last7Days, colorScheme),
-          const SizedBox(width: 6),
-          _buildDateChip('هذا الشهر', PromoterDateFilter.thisMonth, colorScheme),
+
+          // 3. "All" Dates Chip
+          _buildDateChip(
+            label: isAr ? 'الكل' : 'All',
+            filter: PromoterDateFilter.all,
+            colorScheme: colorScheme,
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildDateChip(String label, PromoterDateFilter filter, ColorScheme colorScheme) {
+  Widget _buildDateChip({
+    required String label,
+    required PromoterDateFilter filter,
+    required ColorScheme colorScheme,
+    IconData? icon,
+  }) {
     final isSelected = _dateFilter == filter;
     return FilterChip(
+      avatar: icon != null
+          ? Icon(
+              icon,
+              size: 14,
+              color: isSelected ? colorScheme.onPrimary : colorScheme.primary,
+            )
+          : null,
       label: Text(label),
       labelStyle: GoogleFonts.cairo(
         fontSize: 11.5,
@@ -1005,6 +1205,422 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
       onSelected: (selected) {
         setState(() {
           _dateFilter = filter;
+          _customSelectedDate = null;
+          _customSelectedRange = null;
+          _displayedCount = _pageSize;
+        });
+      },
+    );
+  }
+
+  Widget _buildCustomDateChip({
+    required BuildContext context,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+  }) {
+    final isCustomActive = _dateFilter == PromoterDateFilter.custom;
+    String customLabel;
+    if (_customSelectedDate != null) {
+      customLabel = DateFormat('dd/MM/yyyy').format(_customSelectedDate!);
+    } else if (_customSelectedRange != null) {
+      final s = DateFormat('dd/MM').format(_customSelectedRange!.start);
+      final e = DateFormat('dd/MM').format(_customSelectedRange!.end);
+      customLabel = '$s - $e';
+    } else {
+      customLabel = isAr ? 'يوم / فترة...' : 'Date / Range...';
+    }
+
+    return FilterChip(
+      avatar: Icon(
+        Icons.calendar_month_rounded,
+        size: 15,
+        color: isCustomActive ? colorScheme.onPrimary : colorScheme.primary,
+      ),
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(customLabel),
+          if (isCustomActive && (_customSelectedDate != null || _customSelectedRange != null)) ...[
+            const SizedBox(width: 4),
+            InkWell(
+              onTap: () {
+                setState(() {
+                  _dateFilter = PromoterDateFilter.today;
+                  _customSelectedDate = null;
+                  _customSelectedRange = null;
+                  _displayedCount = _pageSize;
+                });
+              },
+              child: Icon(
+                Icons.close_rounded,
+                size: 14,
+                color: isCustomActive ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ],
+      ),
+      labelStyle: GoogleFonts.cairo(
+        fontSize: 11.5,
+        fontWeight: isCustomActive ? FontWeight.bold : FontWeight.w500,
+        color: isCustomActive ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+      ),
+      selected: isCustomActive,
+      selectedColor: colorScheme.primary,
+      showCheckmark: false,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      visualDensity: VisualDensity.compact,
+      onSelected: (_) {
+        _showAnimatedDateSelectionSheet(
+          context: context,
+          colorScheme: colorScheme,
+          strings: strings,
+          isAr: isAr,
+        );
+      },
+    );
+  }
+
+  void _showAnimatedDateSelectionSheet({
+    required BuildContext context,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetCtx) {
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerHighest,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.15),
+                blurRadius: 16,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: colorScheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primaryContainer,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.date_range_rounded, color: colorScheme.primary, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            strings.pickDateOrRangeTitle,
+                            style: GoogleFonts.cairo(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          Text(
+                            isAr
+                                ? 'حدد يوم محدد أو اختر فترة زمنية لعرض فواتيرها'
+                                : 'Select a single day or date range to filter invoices',
+                            style: GoogleFonts.cairo(
+                              fontSize: 12,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+
+                // Option 1: Single Day Card
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () async {
+                      Navigator.pop(sheetCtx);
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _customSelectedDate ?? DateTime.now(),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2035),
+                        builder: (ctx, child) {
+                          return Theme(
+                            data: Theme.of(ctx).copyWith(
+                              colorScheme: colorScheme,
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          _dateFilter = PromoterDateFilter.custom;
+                          _customSelectedDate = picked;
+                          _customSelectedRange = null;
+                          _displayedCount = _pageSize;
+                        });
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: (_dateFilter == PromoterDateFilter.custom && _customSelectedDate != null)
+                              ? colorScheme.primary
+                              : colorScheme.outlineVariant.withValues(alpha: 0.6),
+                          width: (_dateFilter == PromoterDateFilter.custom && _customSelectedDate != null) ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primaryContainer.withValues(alpha: 0.6),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(Icons.calendar_today_rounded, color: colorScheme.primary, size: 22),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  strings.singleDayOption,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: colorScheme.onSurface,
+                                  ),
+                                ),
+                                Text(
+                                  strings.singleDaySubtitle,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 12,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.chevron_right_rounded, color: colorScheme.onSurfaceVariant),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // Option 2: Date Range Card (Animated Material Range Picker)
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () async {
+                      Navigator.pop(sheetCtx);
+                      final pickedRange = await showDateRangePicker(
+                        context: context,
+                        initialDateRange: _customSelectedRange ??
+                            DateTimeRange(
+                              start: DateTime.now().subtract(const Duration(days: 7)),
+                              end: DateTime.now(),
+                            ),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2035),
+                        builder: (ctx, child) {
+                          return Theme(
+                            data: Theme.of(ctx).copyWith(
+                              colorScheme: colorScheme,
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
+                      if (pickedRange != null) {
+                        setState(() {
+                          _dateFilter = PromoterDateFilter.custom;
+                          _customSelectedRange = pickedRange;
+                          _customSelectedDate = null;
+                          _displayedCount = _pageSize;
+                        });
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: (_dateFilter == PromoterDateFilter.custom && _customSelectedRange != null)
+                              ? colorScheme.primary
+                              : colorScheme.outlineVariant.withValues(alpha: 0.6),
+                          width: (_dateFilter == PromoterDateFilter.custom && _customSelectedRange != null) ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: colorScheme.tertiaryContainer.withValues(alpha: 0.6),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(Icons.date_range_rounded, color: colorScheme.tertiary, size: 22),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  strings.dateRangeOption,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: colorScheme.onSurface,
+                                  ),
+                                ),
+                                Text(
+                                  strings.dateRangeSubtitle,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 12,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.chevron_right_rounded, color: colorScheme.onSurfaceVariant),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatusFilterChips(
+    ColorScheme colorScheme,
+    AppStrings strings,
+    int acceptedCount,
+    int rejectedCount,
+    bool isAr,
+  ) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildStatusChip(
+            label: strings.all,
+            filter: PromoterStatusFilter.all,
+            count: null,
+            colorScheme: colorScheme,
+          ),
+          const SizedBox(width: 6),
+          _buildStatusChip(
+            label: isAr ? 'المعتمدة' : 'Accepted',
+            filter: PromoterStatusFilter.accepted,
+            count: acceptedCount,
+            colorScheme: colorScheme,
+            activeColor: Colors.teal.shade700,
+            icon: Icons.check_circle_rounded,
+          ),
+          const SizedBox(width: 6),
+          _buildStatusChip(
+            label: isAr ? 'المرفوضة' : 'Rejected',
+            filter: PromoterStatusFilter.rejected,
+            count: rejectedCount,
+            colorScheme: colorScheme,
+            activeColor: Colors.red.shade700,
+            icon: Icons.cancel_rounded,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusChip({
+    required String label,
+    required PromoterStatusFilter filter,
+    required int? count,
+    required ColorScheme colorScheme,
+    Color? activeColor,
+    IconData? icon,
+  }) {
+    final isSelected = _statusFilter == filter;
+    final primaryColor = activeColor ?? colorScheme.primary;
+
+    return FilterChip(
+      avatar: icon != null
+          ? Icon(
+              icon,
+              size: 14,
+              color: isSelected ? Colors.white : primaryColor,
+            )
+          : null,
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label),
+          if (count != null) ...[
+            const SizedBox(width: 4),
+            Text('($count)'),
+          ],
+        ],
+      ),
+      labelStyle: GoogleFonts.cairo(
+        fontSize: 11.5,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+        color: isSelected ? Colors.white : colorScheme.onSurfaceVariant,
+      ),
+      selected: isSelected,
+      selectedColor: primaryColor,
+      showCheckmark: false,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      visualDensity: VisualDensity.compact,
+      onSelected: (selected) {
+        setState(() {
+          _statusFilter = filter;
           _displayedCount = _pageSize;
         });
       },
@@ -1018,6 +1634,8 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     required bool isMobile,
     required List<Map<String, dynamic>> invoices,
     required String currencySymbol,
+    required CountryCurrency activeCountry,
+    required bool isAr,
   }) {
     final visibleInvoices = invoices.take(_displayedCount).toList();
 
@@ -1055,6 +1673,8 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
           data: data,
           isExpanded: isExpanded,
           currencySymbol: currencySymbol,
+          activeCountry: activeCountry,
+          isAr: isAr,
         );
       },
     );
@@ -1069,6 +1689,8 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     required Map<String, dynamic> data,
     required bool isExpanded,
     required String currencySymbol,
+    required CountryCurrency activeCountry,
+    required bool isAr,
   }) {
     final receiptNumber = (data['receipt_number'] ?? 'INV-N/A').toString().trim();
     final totalVal = (data['target_company_total'] ?? data['total_value'] as num?)?.toDouble() ?? 0.0;
@@ -1087,6 +1709,21 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     final bool isExplicitlyRejected = data['is_valid'] == false || data['status'] == 'rejected' || data['isValid'] == false || ((data['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
     final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((data['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
     final rejectionReason = (data['rejection_reason'] ?? '').toString().trim();
+
+    final List<String> unfulfilledConditions = [];
+    if (data['unfulfilled_conditions'] is List) {
+      for (final item in (data['unfulfilled_conditions'] as List)) {
+        if (item != null && item.toString().trim().isNotEmpty) {
+          unfulfilledConditions.add(item.toString().trim());
+        }
+      }
+    }
+    if (unfulfilledConditions.isEmpty && rejectionReason.isNotEmpty) {
+      unfulfilledConditions.addAll(rejectionReason.split(' • ').map((s) => s.trim()).where((s) => s.isNotEmpty));
+    }
+    if (unfulfilledConditions.isEmpty && !isValid) {
+      unfulfilledConditions.add(isAr ? 'الفاتورة غير مطابقة لشروط الحملة أو تفتقر للمنتجات المؤهلة.' : 'Receipt does not meet promotion conditions.');
+    }
 
     final extractedProducts = (data['extracted_products'] as List<dynamic>?) ?? [];
     final aiMessage = (data['aiMessage'] ?? '').toString().trim();
@@ -1265,37 +1902,6 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                     ),
                   ),
 
-                  // Rejection Reason Chip if rejected
-                  if (!isValid && rejectionReason.isNotEmpty) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.red.shade200),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.info_outline_rounded, size: 13, color: Colors.red.shade700),
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              rejectionReason,
-                              style: GoogleFonts.cairo(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.red.shade900,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-
                   // Customer Phone & Name
                   if (customerPhone.isNotEmpty) ...[
                     Container(
@@ -1387,7 +1993,9 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                           Icon(Icons.confirmation_number_rounded, size: 12, color: Colors.amber.shade900),
                           const SizedBox(width: 4),
                           Text(
-                            '💳 كروت الفواتشر: ${(data['voucher_serials'] as List).join(" | ")}',
+                            isAr
+                                ? 'كروت الفواتشر: ${(data['voucher_serials'] as List).join(" | ")}'
+                                : 'Voucher Cards: ${(data['voucher_serials'] as List).join(" | ")}',
                             style: GoogleFonts.cairo(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
@@ -1400,6 +2008,76 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   ],
                 ],
               ),
+
+              // If Rejected: Prominent Rejection Alert Box with Reasons and Recheck Button
+              if (!isValid) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50.withValues(alpha: 0.85),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.report_problem_rounded, size: 18, color: Colors.red.shade800),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              isAr ? 'سبب الرفض وعدم الاستحقاق:' : 'Rejection Reason:',
+                              style: GoogleFonts.cairo(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red.shade900,
+                              ),
+                            ),
+                          ),
+                          _buildRecheckButton(
+                            docId: docId,
+                            data: data,
+                            colorScheme: colorScheme,
+                            strings: strings,
+                            activeCountry: activeCountry,
+                            isAr: isAr,
+                            isDense: true,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ...unfulfilledConditions.map(
+                        (reason) => Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Icon(Icons.circle, size: 5, color: Colors.red.shade700),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  reason,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.red.shade900,
+                                    height: 1.35,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
 
               // Expandable Itemized Products & Image Details
               if (isExpanded) ...[
@@ -1475,17 +2153,17 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   }),
                 ],
 
-                // Receipt Image Preview Action Button
+                // Action Buttons Row (Image Zoom)
                 if (imageUrl.isNotEmpty) ...[
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   Align(
-                    alignment: Alignment.centerLeft,
+                    alignment: AlignmentDirectional.centerStart,
                     child: OutlinedButton.icon(
                       onPressed: () => _showReceiptImageZoomDialog(context, imageUrl, receiptNumber),
                       icon: const Icon(Icons.zoom_in_rounded, size: 16),
                       label: Text(strings.receiptZoomImage, style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold)),
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                         visualDensity: VisualDensity.compact,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
@@ -1496,6 +2174,1060 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildRecheckButton({
+    required String docId,
+    required Map<String, dynamic> data,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required CountryCurrency activeCountry,
+    required bool isAr,
+    required bool isDense,
+  }) {
+    final isRechecking = _recheckingDocIds.contains(docId);
+
+    if (isRechecking) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.amber.shade100,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.amber.shade300),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.amber),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              isAr ? 'جاري الفحص...' : 'Rechecking...',
+              style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (isDense) {
+      return FilledButton.tonalIcon(
+        onPressed: () => _promptRecheckOptions(
+          context: context,
+          inv: data,
+          event: widget.event,
+          strings: strings,
+          colorScheme: colorScheme,
+          activeCountry: activeCountry,
+          isAr: isAr,
+        ),
+        icon: const Icon(Icons.refresh_rounded, size: 13),
+        label: Text(
+          strings.recheckInvoiceAction,
+          style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
+        ),
+        style: FilledButton.styleFrom(
+          backgroundColor: Colors.red.shade100,
+          foregroundColor: Colors.red.shade900,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+          visualDensity: VisualDensity.compact,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+    }
+
+    return FilledButton.icon(
+      onPressed: () => _promptRecheckOptions(
+        context: context,
+        inv: data,
+        event: widget.event,
+        strings: strings,
+        colorScheme: colorScheme,
+        activeCountry: activeCountry,
+        isAr: isAr,
+      ),
+      icon: const Icon(Icons.sync_rounded, size: 16),
+      label: Text(
+        strings.recheckInvoiceAction,
+        style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+      ),
+      style: FilledButton.styleFrom(
+        backgroundColor: colorScheme.primary,
+        foregroundColor: colorScheme.onPrimary,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        visualDensity: VisualDensity.compact,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  void _promptRecheckOptions({
+    required BuildContext context,
+    required Map<String, dynamic> inv,
+    required EventModel? event,
+    required AppStrings strings,
+    required ColorScheme colorScheme,
+    required CountryCurrency activeCountry,
+    required bool isAr,
+  }) {
+    final receiptNumber = inv['receipt_number']?.toString() ?? 'N/A';
+    final hasImage = (inv['image_url']?.toString().isNotEmpty ?? false) ||
+        (inv['storage_path']?.toString().isNotEmpty ?? false);
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer.withValues(alpha: 0.5),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.sync_rounded, color: colorScheme.primary, size: 22),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${strings.recheckInvoiceAction} (#$receiptNumber)',
+                    style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    isAr ? 'اختر أسلوب إعادة التحقق بعد تحديث الشروط أو الكتالوج:' : 'Select re-verification mode:',
+                    style: TextStyle(fontSize: 11.5, color: colorScheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Option 1: Quick Rule Re-match
+            InkWell(
+              onTap: () {
+                Navigator.pop(dialogCtx);
+                _executeRecheck(
+                  inv: inv,
+                  event: event,
+                  isFullAiScan: false,
+                  strings: strings,
+                  colorScheme: colorScheme,
+                  activeCountry: activeCountry,
+                  isAr: isAr,
+                );
+              },
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50.withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.amber.shade300),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade100,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.bolt_rounded, color: Colors.amber.shade900, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  strings.quickRecheckTitle,
+                                  style: const TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF452700),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.shade200,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  isAr ? '⚡ فوري' : '⚡ Instant',
+                                  style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF452700)),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            strings.quickRecheckSubtitle,
+                            style: TextStyle(fontSize: 11, color: Colors.amber.shade900, height: 1.3),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            // Option 2: Full AI Re-Scan (Gemini 3.7 Flash)
+            InkWell(
+              onTap: hasImage
+                  ? () {
+                      Navigator.pop(dialogCtx);
+                      _executeRecheck(
+                        inv: inv,
+                        event: event,
+                        isFullAiScan: true,
+                        strings: strings,
+                        colorScheme: colorScheme,
+                        activeCountry: activeCountry,
+                        isAr: isAr,
+                      );
+                    }
+                  : null,
+              borderRadius: BorderRadius.circular(14),
+              child: Opacity(
+                opacity: hasImage ? 1.0 : 0.45,
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primary.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.psychology_rounded, color: colorScheme.primary, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    strings.fullAiRecheckTitle,
+                                    style: TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: colorScheme.onSurface,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.primary.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    'Gemini 3.7',
+                                    style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: colorScheme.primary),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              hasImage
+                                  ? strings.fullAiRecheckSubtitle
+                                  : (isAr ? 'غير متاح: لا توجد صورة مرفقة لهذه الفاتورة' : 'Not available: No image attached'),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: hasImage ? colorScheme.onSurfaceVariant : colorScheme.error,
+                                height: 1.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: Text(isAr ? 'إلغاء' : 'Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _executeRecheck({
+    required Map<String, dynamic> inv,
+    required EventModel? event,
+    required bool isFullAiScan,
+    required AppStrings strings,
+    required ColorScheme colorScheme,
+    required CountryCurrency activeCountry,
+    required bool isAr,
+  }) async {
+    final docId = (inv['docId'] ?? inv['id']) as String;
+    setState(() => _recheckingDocIds.add(docId));
+
+    try {
+      EventModel? activeEvent = event ?? widget.event;
+      final firestore = ref.read(firestoreProvider);
+
+      final campaignId = (inv['campaignId'] ?? inv['event_id'] ?? activeEvent.id).toString();
+      if (campaignId.isNotEmpty) {
+        try {
+          final evtDoc = await firestore.collection('events').doc(campaignId).get();
+          if (evtDoc.exists) {
+            activeEvent = EventModel.fromFirestore(evtDoc);
+          }
+        } catch (_) {}
+      }
+
+      // 1. Resolve Company Identity
+      final String companySlug = (inv['companySlug'] ??
+              inv['company_slug'] ??
+              activeEvent?.companySlug ??
+              widget.event.companySlug)
+          .toString()
+          .trim();
+      final String targetCompany = (inv['targetCompany'] ??
+              activeEvent?.targetCompany ??
+              widget.event.targetCompany)
+          .toString()
+          .trim();
+
+      // 2. Discover all active candidate campaigns for this company
+      List<EventModel> companyEvents = [];
+      if (companySlug.isNotEmpty) {
+        try {
+          final snap = await firestore
+              .collection('events')
+              .where('companySlug', isEqualTo: companySlug)
+              .where('isActive', isEqualTo: true)
+              .get();
+          companyEvents = snap.docs
+              .map((d) => EventModel.fromFirestore(d))
+              .where((e) => !e.isExpired)
+              .toList();
+        } catch (_) {}
+      }
+
+      if (companyEvents.isEmpty && targetCompany.isNotEmpty) {
+        try {
+          final snap = await firestore
+              .collection('events')
+              .where('targetCompany', isEqualTo: targetCompany)
+              .where('isActive', isEqualTo: true)
+              .get();
+          companyEvents = snap.docs
+              .map((d) => EventModel.fromFirestore(d))
+              .where((e) => !e.isExpired)
+              .toList();
+        } catch (_) {}
+      }
+
+      if (activeEvent != null) {
+        final currentEvent = activeEvent;
+        if (!companyEvents.any((e) => e.id == currentEvent.id)) {
+          companyEvents.insert(0, currentEvent);
+        }
+      }
+      if (companyEvents.isEmpty) {
+        companyEvents = [activeEvent ?? widget.event];
+      }
+      activeEvent ??= companyEvents.first;
+
+      if (!isFullAiScan) {
+        await _runQuickRuleRecheck(
+          docId: docId,
+          inv: inv,
+          activeEvent: activeEvent,
+          companyEvents: companyEvents,
+          activeCountry: activeCountry,
+          strings: strings,
+          colorScheme: colorScheme,
+          isAr: isAr,
+        );
+      } else {
+        await _runFullAiRecheck(
+          docId: docId,
+          inv: inv,
+          activeEvent: activeEvent,
+          companyEvents: companyEvents,
+          activeCountry: activeCountry,
+          strings: strings,
+          colorScheme: colorScheme,
+          isAr: isAr,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isAr ? 'حدث خطأ أثناء إعادة الفحص: $e' : 'Error re-checking invoice: $e'),
+            backgroundColor: colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _recheckingDocIds.remove(docId));
+      }
+    }
+  }
+
+  Future<void> _runQuickRuleRecheck({
+    required String docId,
+    required Map<String, dynamic> inv,
+    required EventModel activeEvent,
+    required List<EventModel> companyEvents,
+    required CountryCurrency activeCountry,
+    required AppStrings strings,
+    required ColorScheme colorScheme,
+    required bool isAr,
+  }) async {
+    final firestore = ref.read(firestoreProvider);
+    final currentUser = ref.read(firebaseAuthProvider).currentUser;
+
+    // Check if products exist
+    final rawProducts = (inv['extracted_products'] as List?) ?? [];
+    final bool hasImage = (inv['image_url']?.toString().isNotEmpty ?? false) ||
+        (inv['storage_path']?.toString().isNotEmpty ?? false);
+
+    // If zero products are saved in the rejected record and an image exists,
+    // quick rule matching on an empty list is impossible. Auto-fallback to Full AI Recheck!
+    if (rawProducts.isEmpty && hasImage) {
+      await _runFullAiRecheck(
+        docId: docId,
+        inv: inv,
+        activeEvent: activeEvent,
+        companyEvents: companyEvents,
+        activeCountry: activeCountry,
+        strings: strings,
+        colorScheme: colorScheme,
+        isAr: isAr,
+      );
+      return;
+    }
+
+    final List<ExtractedProductItem> products = rawProducts.map((p) {
+      if (p is Map<String, dynamic>) return ExtractedProductItem.fromJson(p);
+      if (p is Map) return ExtractedProductItem.fromJson(Map<String, dynamic>.from(p));
+      return ExtractedProductItem(
+        name: p.toString(),
+        price: 0,
+        quantity: 1,
+        isTargetCompany: false,
+      );
+    }).toList();
+
+    final rawBranch = (inv['raw_branch'] ?? inv['branch_detected'] ?? '').toString();
+    final storeChain = (inv['store_chain_detected'] ?? inv['retail_chain_name'] ?? '').toString();
+    final receiptNumber = (inv['receipt_number'] ?? '').toString();
+    final dt = _parseDateTime(inv['timestamp'], inv['receipt_date']);
+    final receiptDate = dt != null ? dt.toIso8601String() : (inv['receipt_date'] ?? '').toString();
+
+    final double computedTotal = products.fold<double>(0.0, (acc, p) => acc + p.actualLineSpend);
+    final double targetTotal = (inv['target_company_total'] is num && (inv['target_company_total'] as num) > 0)
+        ? (inv['target_company_total'] as num).toDouble()
+        : (computedTotal > 0 ? computedTotal : (inv['total_value'] is num ? (inv['total_value'] as num).toDouble() : 0.0));
+
+    final synthesizedResult = AiReceiptAnalysisResult(
+      isValid: true,
+      receiptNumber: receiptNumber,
+      targetCompanyTotal: targetTotal,
+      receiptDate: receiptDate,
+      extractedProducts: products,
+      storeChainDetected: storeChain,
+      branchDetected: rawBranch,
+      isBranchMatched: true,
+      message: 'Quick rule recheck evaluation',
+      unfulfilledConditions: const [],
+      durationMs: 0,
+      durationSeconds: 0.0,
+      kpiRating: 'A+',
+      kpiColorHex: '#4CAF50',
+      chancesEarned: 1,
+      matchedRuleId: '',
+      matchedRuleIds: const [],
+      matchedRuleTitle: '',
+      matchedRewardValue: '',
+      matchedRewardAmount: 0.0,
+      matchedRewardType: '',
+      isHandwritten: false,
+    );
+
+    // Test activeEvent first, then sister company events
+    final orderedCampaigns = <EventModel>[
+      activeEvent,
+      ...companyEvents.where((e) => e.id != activeEvent.id),
+    ];
+
+    final summary = MultiCampaignReceiptEvaluator.evaluateAll(
+      result: synthesizedResult,
+      campaigns: orderedCampaigns,
+    );
+
+    if (summary.qualifiedCampaigns.isNotEmpty) {
+      final winningEval = summary.qualifiedCampaigns.firstWhere(
+        (e) => e.campaign.id == activeEvent.id,
+        orElse: () => summary.qualifiedCampaigns.first,
+      );
+      final winningCampaign = winningEval.campaign;
+
+      final int chances = winningEval.totalChances > 0 ? winningEval.totalChances : 1;
+
+      final claimedGifts = <Map<String, dynamic>>[];
+      for (final g in winningEval.resolvedLinkedGifts) {
+        claimedGifts.add({
+          'giftId': g.giftId,
+          'giftName': g.giftName,
+          'quantity': g.quantity,
+          'unitValue': g.unitValue,
+          'isVoucher': g.isVoucher,
+        });
+      }
+
+      final canonical = winningEval.resolvedBranchName ?? _normalizeBranchName(rawBranch, winningCampaign.branchNames, isAr);
+      final double promoSpend = winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : targetTotal;
+
+      await firestore.collection('receipts_transactions').doc(docId).update({
+        'is_valid': true,
+        'status': 'accepted',
+        'campaignId': winningCampaign.id,
+        'campaign_name': winningCampaign.eventName,
+        'eventName': winningCampaign.eventName,
+        'unfulfilled_conditions': <String>[],
+        'rejection_reason': FieldValue.delete(),
+        'is_updated_via_ai': true,
+        'rechecked_at': FieldValue.serverTimestamp(),
+        'rechecked_by': currentUser?.email ?? 'promoter',
+        'recheck_type': winningCampaign.id == activeEvent.id ? 'quick_rule_match' : 'quick_multi_campaign_match',
+        'target_company_total': promoSpend,
+        'chances_earned': chances,
+        'canonical_branch': canonical,
+        'branch_detected': canonical,
+        if (claimedGifts.isNotEmpty) 'claimed_gifts': claimedGifts,
+      });
+
+      if (mounted) {
+        _showRecheckSuccessDialog(
+          context: context,
+          isAr: isAr,
+          strings: strings,
+          winningCampaign: winningCampaign,
+          isReassignedToSisterCampaign: winningCampaign.id != activeEvent.id,
+          prizeTitle: winningEval.designatedPrize,
+          onViewAccepted: () {
+            setState(() {
+              _statusFilter = PromoterStatusFilter.accepted;
+            });
+          },
+        );
+      }
+    } else {
+      final unfulfilled = <String>[];
+      for (final u in summary.unfulfilledCampaigns) {
+        if (u.unfulfilledConditions.isNotEmpty) {
+          unfulfilled.addAll(u.unfulfilledConditions);
+        } else if (u.rejectionReason != null && u.rejectionReason!.isNotEmpty) {
+          unfulfilled.add(u.rejectionReason!);
+        }
+      }
+      if (unfulfilled.isEmpty) {
+        unfulfilled.add(isAr ? 'الفاتورة غير مستوفية لشروط عروض الشركة' : 'Receipt conditions not met for company offers');
+      }
+
+      await firestore.collection('receipts_transactions').doc(docId).update({
+        'unfulfilled_conditions': unfulfilled,
+        'rejection_reason': unfulfilled.join(' • '),
+        'rechecked_at': FieldValue.serverTimestamp(),
+        'rechecked_by': currentUser?.email ?? 'promoter',
+        'recheck_type': 'quick_rule_match_failed',
+      });
+
+      if (mounted) {
+        _showRecheckStillRejectedDialog(
+          context,
+          unfulfilled,
+          isAr,
+          strings,
+          canRunFullAi: hasImage,
+          onRunFullAi: () {
+            Navigator.pop(context);
+            _executeRecheck(
+              inv: inv,
+              event: activeEvent,
+              isFullAiScan: true,
+              strings: strings,
+              colorScheme: colorScheme,
+              activeCountry: activeCountry,
+              isAr: isAr,
+            );
+          },
+        );
+      }
+    }
+  }
+
+  Future<void> _runFullAiRecheck({
+    required String docId,
+    required Map<String, dynamic> inv,
+    required EventModel activeEvent,
+    required List<EventModel> companyEvents,
+    required CountryCurrency activeCountry,
+    required AppStrings strings,
+    required ColorScheme colorScheme,
+    required bool isAr,
+  }) async {
+    final firestore = ref.read(firestoreProvider);
+    final currentUser = ref.read(firebaseAuthProvider).currentUser;
+    final aiService = ref.read(aiReceiptServiceProvider);
+    final productsService = ref.read(companyProductsServiceProvider);
+    final retailChainsService = ref.read(retailChainsServiceProvider);
+
+    final imageUrl = (inv['image_url'] ?? '').toString();
+    final storagePath = inv['storage_path']?.toString();
+
+    if (imageUrl.isEmpty && (storagePath == null || storagePath.isEmpty)) {
+      throw Exception(isAr ? 'لا توجد صورة مسجلة لهذه الفاتورة لإعادة الفحص بالذكاء الاصطناعي.' : 'No receipt image found for full AI scan.');
+    }
+
+    final Uint8List? imageBytes = await _downloadReceiptImageBytes(imageUrl, storagePath);
+    if (imageBytes == null || imageBytes.isEmpty) {
+      throw Exception(isAr ? 'تعذر تنزيل صورة الفاتورة من السيرفر.' : 'Failed to download receipt image.');
+    }
+
+    // Load knowledge context for retail chains & products
+    List<String> registeredBarcodes = [];
+    Map<String, String> catalogBarcodeMap = {};
+    List<BranchModel> chainBranches = [];
+
+    final companySlug = activeEvent.companySlug.isNotEmpty
+        ? activeEvent.companySlug
+        : (inv['companySlug'] ?? '').toString();
+
+    try {
+      final results = await Future.wait([
+        productsService.getProductsForCompany(companySlug).catchError((_) => <CompanyProductItem>[]),
+        retailChainsService.getBranchesForEvent(
+          retailChainId: activeEvent.retailChainId,
+          branchIds: activeEvent.branchIds,
+          branchNames: activeEvent.branchNames,
+        ).catchError((_) => <BranchModel>[]),
+      ]);
+
+      final catalogItems = results[0] as List<CompanyProductItem>;
+      chainBranches = results[1] as List<BranchModel>;
+
+      registeredBarcodes = catalogItems.map((e) => "${e.productName} (${e.barcode})").toList();
+      catalogBarcodeMap = {
+        for (final item in catalogItems)
+          if (item.productName.isNotEmpty && item.barcode.isNotEmpty)
+            item.productName: item.barcode,
+      };
+    } catch (_) {}
+
+    // Combine required products, promotional rules, and branches across all active company events
+    final Set<String> combinedReqProds = {};
+    final Set<String> ruleIdSet = {};
+    final Set<String> combinedBranches = {};
+    bool combinedIsAllBranches = false;
+    final List<PromotionalRuleItem> combinedPromotionalRules = [];
+
+    for (final ev in companyEvents) {
+      if (ev.isAllBranches) combinedIsAllBranches = true;
+      for (final b in ev.branchNames) {
+        if (b.trim().isNotEmpty) combinedBranches.add(b.trim());
+      }
+      for (final p in ev.requiredProducts) {
+        if (p.trim().isNotEmpty) combinedReqProds.add(p.trim());
+      }
+      for (final r in ev.promotionalRules) {
+        final key = '${ev.id}_${r.id.isNotEmpty ? r.id : r.ruleTitle}';
+        if (ruleIdSet.add(key)) {
+          combinedPromotionalRules.add(r);
+        }
+        for (final sp in r.selectedProductNames) {
+          if (sp.trim().isNotEmpty) combinedReqProds.add(sp.trim());
+        }
+        for (final rb in r.requiredBrands) {
+          if (rb.trim().isNotEmpty) combinedReqProds.add(rb.trim());
+        }
+      }
+    }
+
+    final result = await aiService.analyzeReceiptImage(
+      imageBytes,
+      'image/jpeg',
+      targetCompany: activeEvent.targetCompany,
+      minimumSpend: 0.0,
+      requiredProducts: combinedReqProds.toList(),
+      registeredBarcodes: registeredBarcodes,
+      catalogBarcodeMap: catalogBarcodeMap,
+      retailChainName: activeEvent.retailChainName,
+      allowedBranches: combinedBranches.toList(),
+      isAllBranches: combinedIsAllBranches || activeEvent.isAllBranches,
+      registeredBranches: chainBranches,
+      startDate: null,
+      endDate: null,
+      customPrompt: '',
+      allowMultipleChances: true,
+      multiplierBasis: 'both',
+      maxChancesPerReceipt: 0,
+      promotionalRules: combinedPromotionalRules,
+    );
+
+    // Multi-campaign evaluation
+    final orderedCampaigns = <EventModel>[
+      activeEvent,
+      ...companyEvents.where((e) => e.id != activeEvent.id),
+    ];
+
+    final summary = MultiCampaignReceiptEvaluator.evaluateAll(
+      result: result,
+      campaigns: orderedCampaigns,
+    );
+
+    if (summary.qualifiedCampaigns.isNotEmpty) {
+      final winningEval = summary.qualifiedCampaigns.firstWhere(
+        (e) => e.campaign.id == activeEvent.id,
+        orElse: () => summary.qualifiedCampaigns.first,
+      );
+      final winningCampaign = winningEval.campaign;
+
+      final int chances = winningEval.totalChances > 0 ? winningEval.totalChances : 1;
+
+      final claimedGifts = <Map<String, dynamic>>[];
+      for (final g in winningEval.resolvedLinkedGifts) {
+        claimedGifts.add({
+          'giftId': g.giftId,
+          'giftName': g.giftName,
+          'quantity': g.quantity,
+          'unitValue': g.unitValue,
+          'isVoucher': g.isVoucher,
+        });
+      }
+
+      final double computedTotal = result.extractedProducts.fold<double>(0.0, (acc, p) => acc + p.actualLineSpend);
+      final double totalSpend = computedTotal > 0 ? computedTotal : result.targetCompanyTotal;
+      final canonical = winningEval.resolvedBranchName ?? _normalizeBranchName(result.branchDetected, winningCampaign.branchNames, isAr);
+
+      await firestore.collection('receipts_transactions').doc(docId).update({
+        'is_valid': true,
+        'status': 'accepted',
+        'campaignId': winningCampaign.id,
+        'campaign_name': winningCampaign.eventName,
+        'eventName': winningCampaign.eventName,
+        'unfulfilled_conditions': <String>[],
+        'rejection_reason': FieldValue.delete(),
+        'is_updated_via_ai': true,
+        'rechecked_at': FieldValue.serverTimestamp(),
+        'rechecked_by': currentUser?.email ?? 'promoter',
+        'recheck_type': winningCampaign.id == activeEvent.id ? 'full_ai_scan' : 'full_ai_multi_campaign_match',
+        'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
+        'target_company_total': winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : result.targetCompanyTotal,
+        'total_value': totalSpend,
+        if (result.receiptNumber.isNotEmpty) 'receipt_number': result.receiptNumber,
+        if (result.storeChainDetected.isNotEmpty) 'store_chain_detected': result.storeChainDetected,
+        if (result.branchDetected.isNotEmpty) 'branch_detected': result.branchDetected,
+        'canonical_branch': canonical,
+        'analysis_duration_seconds': result.durationSeconds,
+        'ai_kpi_rating': result.kpiRating,
+        'chances_earned': chances,
+        if (claimedGifts.isNotEmpty) 'claimed_gifts': claimedGifts,
+      });
+
+      if (mounted) {
+        _showRecheckSuccessDialog(
+          context: context,
+          isAr: isAr,
+          strings: strings,
+          winningCampaign: winningCampaign,
+          isReassignedToSisterCampaign: winningCampaign.id != activeEvent.id,
+          prizeTitle: winningEval.designatedPrize,
+          onViewAccepted: () {
+            setState(() {
+              _statusFilter = PromoterStatusFilter.accepted;
+            });
+          },
+        );
+      }
+    } else {
+      final unfulfilledList = result.unfulfilledConditions.isNotEmpty
+          ? result.unfulfilledConditions
+          : (summary.unfulfilledCampaigns.isNotEmpty
+              ? summary.unfulfilledCampaigns.expand((u) => u.unfulfilledConditions).toList()
+              : [result.message.trim().isNotEmpty ? result.message.trim() : (isAr ? 'الفاتورة غير مطابقة لشروط عروض الشركة' : 'Receipt does not qualify for company offers')]);
+
+      final double computedTotal = result.extractedProducts.fold<double>(0.0, (acc, p) => acc + p.actualLineSpend);
+      final double totalSpend = computedTotal > 0 ? computedTotal : result.targetCompanyTotal;
+
+      await firestore.collection('receipts_transactions').doc(docId).update({
+        'is_valid': false,
+        'status': 'rejected',
+        'unfulfilled_conditions': unfulfilledList,
+        'rejection_reason': unfulfilledList.join(' • '),
+        'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
+        'target_company_total': result.targetCompanyTotal,
+        'total_value': totalSpend,
+        'rechecked_at': FieldValue.serverTimestamp(),
+        'rechecked_by': currentUser?.email ?? 'promoter',
+        'recheck_type': 'full_ai_scan_rejected',
+        'analysis_duration_seconds': result.durationSeconds,
+        'ai_kpi_rating': result.kpiRating,
+      });
+
+      if (mounted) {
+        _showRecheckStillRejectedDialog(context, unfulfilledList, isAr, strings);
+      }
+    }
+  }
+
+  Future<Uint8List?> _downloadReceiptImageBytes(String imageUrl, String? storagePath) async {
+    if (imageUrl.startsWith('data:image') || imageUrl.contains(';base64,')) {
+      final base64String = imageUrl.contains(',') ? imageUrl.split(',').last : imageUrl;
+      return base64Decode(base64String.trim());
+    }
+
+    if (storagePath != null && storagePath.isNotEmpty) {
+      try {
+        final storage = ref.read(firebaseStorageProvider);
+        final bytes = await storage.ref(storagePath).getData(10 * 1024 * 1024);
+        if (bytes != null && bytes.isNotEmpty) return bytes;
+      } catch (e) {
+        debugPrint('Error fetching image from storagePath: $e');
+      }
+    }
+
+    if (imageUrl.startsWith('http')) {
+      try {
+        final response = await http.get(Uri.parse(imageUrl));
+        if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+          return response.bodyBytes;
+        }
+      } catch (e) {
+        debugPrint('Error downloading image from URL: $e');
+      }
+    }
+
+    return null;
+  }
+
+  void _showRecheckSuccessDialog({
+    required BuildContext context,
+    required bool isAr,
+    required AppStrings strings,
+    EventModel? winningCampaign,
+    bool isReassignedToSisterCampaign = false,
+    String? prizeTitle,
+    VoidCallback? onViewAccepted,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        icon: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.green.shade50,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(Icons.check_circle_rounded, size: 48, color: Colors.green.shade700),
+        ),
+        title: Text(
+          isReassignedToSisterCampaign
+              ? (isAr ? 'تم استيفاء الشروط وتأهيل الفاتورة!' : 'Receipt Qualified for Campaign!')
+              : strings.recheckSuccessTitle,
+          textAlign: TextAlign.center,
+          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              isReassignedToSisterCampaign
+                  ? (isAr
+                      ? 'تبيّن بعد التدقيق أن الفاتورة مطابقة ومستوفاة لشروط حملة (${winningCampaign?.eventName ?? ""}) وتم اعتمادها وحصولها على الهدية بنجاح!'
+                      : 'Receipt matches campaign (${winningCampaign?.eventName ?? ""}) and has been successfully approved!')
+                  : strings.recheckSuccessMessage,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.cairo(color: Colors.grey.shade700, fontSize: 13.5),
+            ),
+            if (prizeTitle != null && prizeTitle.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.purple.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.purple.shade200),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.card_giftcard_rounded, color: Colors.purple.shade700, size: 20),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        prizeTitle,
+                        style: GoogleFonts.cairo(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: Colors.purple.shade900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 10),
+            Text(
+              isAr
+                  ? 'تم تحديث حالة الفاتورة ونقلها تلقائياً إلى قسم "الفواتير المقبولة" وحذف سبب الرفض.'
+                  : 'Status updated: Moved automatically to "Accepted Invoices" and rejection reason cleared.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          if (onViewAccepted != null)
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                onViewAccepted();
+              },
+              icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+              label: Text(
+                isAr ? 'عرض الفاتورة في المقبولة' : 'View in Accepted',
+                style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.green.shade700,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              ),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(isAr ? 'إغلاق' : 'Close', style: GoogleFonts.cairo()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRecheckStillRejectedDialog(
+    BuildContext context,
+    List<String> reasons,
+    bool isAr,
+    AppStrings strings, {
+    bool canRunFullAi = false,
+    VoidCallback? onRunFullAi,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        icon: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.orange.shade50,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(Icons.warning_amber_rounded, size: 48, color: Colors.orange.shade800),
+        ),
+        title: Text(
+          strings.recheckStillRejectedMessage,
+          textAlign: TextAlign.center,
+          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ...reasons.map(
+                (r) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 5),
+                        child: Icon(Icons.circle, size: 6, color: Colors.orange.shade800),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          r,
+                          style: TextStyle(fontSize: 12.5, color: Colors.grey.shade900, height: 1.3),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          if (canRunFullAi && onRunFullAi != null)
+            FilledButton.icon(
+              onPressed: onRunFullAi,
+              icon: const Icon(Icons.psychology_rounded, size: 18),
+              label: Text(isAr ? 'مسح شامل بالذكاء الاصطناعي' : 'Full AI Re-Scan', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          OutlinedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: OutlinedButton.styleFrom(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text(isAr ? 'إغلاق' : 'Close', style: GoogleFonts.cairo()),
+          ),
+        ],
       ),
     );
   }

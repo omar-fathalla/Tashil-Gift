@@ -603,12 +603,27 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
             if (ruleIdSet.add(key)) {
               combinedPromotionalRules.add(r);
             }
+            for (final sp in r.selectedProductNames) {
+              if (sp.trim().isNotEmpty) reqProdSet.add(sp.trim());
+            }
+            for (final rb in r.requiredBrands) {
+              if (rb.trim().isNotEmpty) reqProdSet.add(rb.trim());
+            }
           }
         }
         combinedRequiredProducts = reqProdSet.toList();
         combinedAllowedBranches = branchSet.toList();
       } else {
-        combinedRequiredProducts = _activeEvent!.requiredProducts;
+        final Set<String> singleReqProds = Set<String>.from(_activeEvent!.requiredProducts);
+        for (final r in _activeEvent!.promotionalRules) {
+          for (final sp in r.selectedProductNames) {
+            if (sp.trim().isNotEmpty) singleReqProds.add(sp.trim());
+          }
+          for (final rb in r.requiredBrands) {
+            if (rb.trim().isNotEmpty) singleReqProds.add(rb.trim());
+          }
+        }
+        combinedRequiredProducts = singleReqProds.toList();
         combinedPromotionalRules = _activeEvent!.promotionalRules;
         combinedAllowedBranches = _activeEvent!.branchNames;
         combinedIsAllBranches = _activeEvent!.isAllBranches;
@@ -642,6 +657,25 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       final List<String> previewUrls = allBytesList
           .map((b) => 'data:image/jpeg;base64,${base64Encode(b)}')
           .toList();
+
+      // Asynchronously stage any newly harvested branch metadata for admin review & merge
+      unawaited(
+        ref.read(retailChainsServiceProvider).stageBranchEnrichment(
+          chainName: result.storeChainDetected.isNotEmpty
+              ? result.storeChainDetected
+              : primaryTargetEvent.retailChainName,
+          branchName: result.branchDetected,
+          storeId: result.storeId,
+          posNumber: result.posNumber,
+          taxNumber: result.taxNumber,
+          commercialReg: result.commercialReg,
+          hotline: result.hotline,
+          branchAddress: result.branchAddress,
+          receiptNumber: result.receiptNumber,
+          receiptDate: result.receiptDate,
+          sourceReceiptUrl: previewImgUrl,
+        ).catchError((_) => false),
+      );
 
       if (!result.isValid) {
         if (!mounted) return;

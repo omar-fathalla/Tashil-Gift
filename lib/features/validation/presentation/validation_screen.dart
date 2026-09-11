@@ -41,6 +41,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
   int _selectedPreviewIndex = 0;
   bool _isAiLoading = false;
   EventModel? _activeEvent;
+  List<EventModel> _activeEvents = [];
 
   final ImagePicker _picker = ImagePicker();
 
@@ -56,11 +57,18 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       final eventsSnapshot = await firestore
           .collection('events')
           .where('isActive', isEqualTo: true)
-          .limit(1)
           .get();
       if (eventsSnapshot.docs.isNotEmpty && mounted) {
+        final events = eventsSnapshot.docs
+            .map((d) => EventModel.fromFirestore(d))
+            .toList();
         setState(() {
-          _activeEvent = EventModel.fromFirestore(eventsSnapshot.docs.first);
+          _activeEvents = events;
+          if (_activeEvent == null || !events.any((e) => e.id == _activeEvent!.id)) {
+            _activeEvent = events.first;
+          } else {
+            _activeEvent = events.firstWhere((e) => e.id == _activeEvent!.id);
+          }
         });
       }
     } catch (_) {}
@@ -226,21 +234,32 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
     try {
       final firestore = ref.read(firestoreProvider);
       
-      // Fetch active event
-      final eventsSnapshot = await firestore
-          .collection('events')
-          .where('isActive', isEqualTo: true)
-          .limit(1)
-          .get();
-          
-      if (eventsSnapshot.docs.isEmpty) {
-        if (!mounted) return;
-        _showPopupMessage('خطأ', 'لا يوجد أي حملة (Event) مفعلة حالياً.', isError: true);
-        setState(() => _isAiLoading = false);
-        return;
+      // Resolve active event
+      final EventModel activeEvent;
+      if (_activeEvent != null) {
+        EventModel refreshed = _activeEvent!;
+        try {
+          final doc = await firestore.collection('events').doc(_activeEvent!.id).get();
+          if (doc.exists) {
+            refreshed = EventModel.fromFirestore(doc);
+            if (mounted) setState(() => _activeEvent = refreshed);
+          }
+        } catch (_) {}
+        activeEvent = refreshed;
+      } else {
+        final eventsSnapshot = await firestore
+            .collection('events')
+            .where('isActive', isEqualTo: true)
+            .get();
+            
+        if (eventsSnapshot.docs.isEmpty) {
+          if (!mounted) return;
+          _showPopupMessage('خطأ', 'لا يوجد أي حملة (Event) مفعلة حالياً.', isError: true);
+          setState(() => _isAiLoading = false);
+          return;
+        }
+        activeEvent = EventModel.fromFirestore(eventsSnapshot.docs.first);
       }
-      
-      final activeEvent = EventModel.fromFirestore(eventsSnapshot.docs.first);
 
       final aiService = ref.read(aiReceiptServiceProvider);
       final productsService = ref.read(companyProductsServiceProvider);
@@ -286,6 +305,15 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         };
       } catch (_) {}
       
+      final List<String> effectiveRequiredProducts = [
+        ...activeEvent.requiredProducts,
+        for (final rule in activeEvent.promotionalRules) ...[
+          ...rule.selectedProductNames,
+          ...rule.requiredBrands,
+          if (rule.triggerProduct.trim().isNotEmpty) rule.triggerProduct.trim(),
+        ],
+      ].where((s) => s.trim().isNotEmpty).toSet().toList();
+
       final result = await aiService.analyzeReceiptImage(
         bytes, 
         mimeType,
@@ -293,7 +321,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         additionalMimeTypes: additionalMimesList,
         targetCompany: activeEvent.targetCompany,
         minimumSpend: activeEvent.minimumSpend,
-        requiredProducts: activeEvent.requiredProducts,
+        requiredProducts: effectiveRequiredProducts,
         registeredBarcodes: registeredBarcodes,
         catalogBarcodeMap: catalogBarcodeMap,
         retailChainName: activeEvent.retailChainName,
@@ -313,6 +341,25 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       final List<String> previewUrls = allBytesList
           .map((b) => 'data:image/jpeg;base64,${base64Encode(b)}')
           .toList();
+
+      // Asynchronously stage any newly harvested branch metadata for admin review & merge
+      unawaited(
+        ref.read(retailChainsServiceProvider).stageBranchEnrichment(
+          chainName: result.storeChainDetected.isNotEmpty
+              ? result.storeChainDetected
+              : activeEvent.retailChainName,
+          branchName: result.branchDetected,
+          storeId: result.storeId,
+          posNumber: result.posNumber,
+          taxNumber: result.taxNumber,
+          commercialReg: result.commercialReg,
+          hotline: result.hotline,
+          branchAddress: result.branchAddress,
+          receiptNumber: result.receiptNumber,
+          receiptDate: result.receiptDate,
+          sourceReceiptUrl: previewImgUrl,
+        ).catchError((_) => false),
+      );
 
       if (!result.isValid) {
         if (!mounted) return;
@@ -1063,6 +1110,81 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
                                   ],
                                 ),
                               ),
+                              if (_activeEvents.length > 1) ...[
+                                const SizedBox(width: 8),
+                                PopupMenuButton<EventModel>(
+                                  tooltip: 'تبديل الحملة النشطة',
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: colorScheme.primaryContainer.withValues(alpha: 0.6),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3)),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.swap_horiz_rounded, size: 18, color: colorScheme.primary),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'تبديل الحملة (${_activeEvents.length})',
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: colorScheme.primary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  onSelected: (event) {
+                                    setState(() => _activeEvent = event);
+                                  },
+                                  itemBuilder: (ctx) => _activeEvents.map((e) {
+                                    final isSelected = e.id == _activeEvent?.id;
+                                    return PopupMenuItem<EventModel>(
+                                      value: e,
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                                            color: isSelected ? colorScheme.primary : colorScheme.outline,
+                                            size: 18,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(
+                                                  e.eventName,
+                                                  style: GoogleFonts.cairo(
+                                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                                    fontSize: 13,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                                Text(
+                                                  '${e.targetCompany} • ${e.retailChainName}',
+                                                  style: GoogleFonts.cairo(
+                                                    fontSize: 11,
+                                                    color: colorScheme.outline,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ],
                             ],
                           ),
                           const SizedBox(height: 24),

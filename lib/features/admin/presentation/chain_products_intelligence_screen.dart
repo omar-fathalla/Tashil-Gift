@@ -767,9 +767,24 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                 SliverPadding(
                   padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24, vertical: 8),
                   sliver: SliverToBoxAdapter(
-                    child: ChainProductsMatrixTable(
-                      products: filteredProducts,
-                      distinctChains: _selectedChain == 'ALL' ? distinctChains : [_selectedChain],
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_viewFilterMode == 'THREATS_ONLY' && filteredProducts.isNotEmpty)
+                          _buildThreatsRadarBanner(
+                            context: context,
+                            cs: cs,
+                            isAr: isAr,
+                            currency: currency,
+                            threatItems: filteredProducts,
+                            isMobile: isMobile,
+                          ),
+                        ChainProductsMatrixTable(
+                          products: filteredProducts,
+                          distinctChains: _selectedChain == 'ALL' ? distinctChains : [_selectedChain],
+                        ),
+                      ],
                     ),
                   ),
                 )
@@ -822,6 +837,121 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildThreatsRadarBanner({
+    required BuildContext context,
+    required ColorScheme cs,
+    required bool isAr,
+    required String currency,
+    required List<ChainProductItem> threatItems,
+    required bool isMobile,
+  }) {
+    if (threatItems.isEmpty) return const SizedBox.shrink();
+
+    // Aggregate threat counts by competitor chain
+    final Map<String, int> competitorThreatCounts = {};
+    for (final item in threatItems) {
+      final cheapestComp = item.cheapestCompetitorName;
+      if (cheapestComp.isNotEmpty) {
+        competitorThreatCounts[cheapestComp] = (competitorThreatCounts[cheapestComp] ?? 0) + 1;
+      }
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.red.shade900.withValues(alpha: 0.9),
+            Colors.red.shade800,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.red.shade900.withValues(alpha: 0.25),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.radar_rounded, color: Colors.white, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isAr ? '🚨 رادار كسر الأسعار التنافسي (الأصناف الأرخص عند المنافسين)' : '🚨 Competitor Price Undercut Radar',
+                      style: GoogleFonts.cairo(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                    Text(
+                      isAr
+                          ? 'تم رصد ${threatItems.length} صنف يباع لدى المنافسين بسعر أقل من أسواق فتح الله (المرجع)'
+                          : 'Detected ${threatItems.length} SKUs priced below Fathalla baseline by competitors',
+                      style: GoogleFonts.cairo(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (competitorThreatCounts.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: competitorThreatCounts.entries.map((entry) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 0.8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.storefront_rounded, size: 13, color: Colors.amberAccent),
+                      const SizedBox(width: 5),
+                      Text(
+                        '${entry.key}: ${entry.value} ${isAr ? "صنف أرخص" : "cheaper"}',
+                        style: GoogleFonts.cairo(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ],
       ),
     );
   }

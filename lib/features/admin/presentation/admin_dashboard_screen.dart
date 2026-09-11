@@ -64,9 +64,14 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     final url = AppUrlBuilder.buildPromoterUrl(slug, eventId: eventId);
     Clipboard.setData(ClipboardData(text: url));
     final strings = AppStrings.of(ref);
+    final isAr = ref.isArabic;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${strings.promoterLinkCopied}: $url'),
+        content: Text(
+          isAr
+              ? 'تم نسخ رابط العميل والبروموتر الموحد للشركة ($slug): $url'
+              : '${strings.promoterLinkCopied}: $url',
+        ),
         backgroundColor: Colors.teal.shade700,
         behavior: SnackBarBehavior.floating,
       ),
@@ -77,9 +82,14 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     final url = AppUrlBuilder.buildAgencyOpsUrl(slug, eventId: eventId);
     Clipboard.setData(ClipboardData(text: url));
     final strings = AppStrings.of(ref);
+    final isAr = ref.isArabic;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${strings.agencyOpsLinkCopied}: $url'),
+        content: Text(
+          isAr
+              ? 'تم نسخ رابط بوابة شركة الدعاية والعمليات الموحد ($slug): $url'
+              : '${strings.agencyOpsLinkCopied}: $url',
+        ),
         backgroundColor: Colors.purple.shade700,
         behavior: SnackBarBehavior.floating,
       ),
@@ -90,9 +100,14 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     final url = AppUrlBuilder.buildBrandExecutiveUrl(slug, eventId: eventId);
     Clipboard.setData(ClipboardData(text: url));
     final strings = AppStrings.of(ref);
+    final isAr = ref.isArabic;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${strings.brandExecutiveLinkCopied}: $url'),
+        content: Text(
+          isAr
+              ? 'تم نسخ رابط مدير الشركة العام الموحد ($slug): $url'
+              : '${strings.brandExecutiveLinkCopied}: $url',
+        ),
         backgroundColor: Colors.indigo.shade700,
         behavior: SnackBarBehavior.floating,
       ),
@@ -1594,12 +1609,14 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               runSpacing: 10,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                // 1. Copy Promoter / Client Link
+                // 1. Copy Promoter / Client Link (Unified Company Master Link)
                 Tooltip(
-                  message: strings.promoterPortalTooltip,
+                  message: isAr
+                      ? 'نسخ رابط العميل والبروموتر الموحد الدائم لكافة عروض الشركة (كود: $companySlug)'
+                      : strings.promoterPortalTooltip,
                   waitDuration: const Duration(milliseconds: 400),
                   child: FilledButton.tonalIcon(
-                    onPressed: () => _copyPromoterLink(context, companySlug, eventId: event.id),
+                    onPressed: () => _copyPromoterLink(context, companySlug),
                     icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
                     label: Text(strings.copyPromoterLink, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13)),
                     style: FilledButton.styleFrom(
@@ -1614,12 +1631,14 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   ),
                 ),
 
-                // 2. Copy Agency Operations Link
+                // 2. Copy Agency Operations Link (Unified Company Master Link)
                 Tooltip(
-                  message: strings.agencyOpsPortalTooltip,
+                  message: isAr
+                      ? 'نسخ رابط بوابة شركة الدعاية والعمليات الموحد لكافة عروض الشركة (كود: $companySlug)'
+                      : strings.agencyOpsPortalTooltip,
                   waitDuration: const Duration(milliseconds: 400),
                   child: FilledButton.tonalIcon(
-                    onPressed: () => _copyAgencyOpsLink(context, companySlug, eventId: event.id),
+                    onPressed: () => _copyAgencyOpsLink(context, companySlug),
                     icon: const Icon(Icons.store_mall_directory_rounded, size: 18),
                     label: Text(strings.copyAgencyOpsLink, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13)),
                     style: FilledButton.styleFrom(
@@ -1631,12 +1650,14 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   ),
                 ),
 
-                // 3. Copy Brand Executive Master Link
+                // 3. Copy Brand Executive Master Link (Unified Company Master Link)
                 Tooltip(
-                  message: strings.brandExecutivePortalTooltip,
+                  message: isAr
+                      ? 'نسخ رابط البوابة التنفيذية الدائمة لمدير عام الشركة (كود: $companySlug)'
+                      : strings.brandExecutivePortalTooltip,
                   waitDuration: const Duration(milliseconds: 400),
                   child: FilledButton.tonalIcon(
-                    onPressed: () => _copyBrandExecutiveLink(context, companySlug, eventId: event.id),
+                    onPressed: () => _copyBrandExecutiveLink(context, companySlug),
                     icon: const Icon(Icons.business_center_rounded, size: 18),
                     label: Text(strings.copyBrandExecutiveLink, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13)),
                     style: FilledButton.styleFrom(

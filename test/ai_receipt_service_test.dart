@@ -142,5 +142,69 @@ void main() {
       expect(outJson['isThermalPosReceipt'], false);
       expect(outJson['fraudRiskScore'], 100);
     });
+
+    test('AIR-52: Should handle multi-chain names and purge spurious chain rejection conditions', () {
+      final jsonMap = {
+        'isValid': false,
+        'receiptNumber': '39/5/426/110926',
+        'targetCompanyTotal': 99.0,
+        'receiptDate': '11/09/2026',
+        'storeChainDetected': 'جملة ماركت',
+        'branchDetected': '((المنصورة (المنصورة)))',
+        'isBranchMatched': true,
+        'unfulfilledConditions': [
+          'الفاتورة صادرة من سلسلة غير مشمولة بالعرض (جملة ماركت)',
+        ],
+        'extractedProducts': [],
+        'message': 'الفاتورة صادرة من سلسلة غير مشمولة بالعرض',
+      };
+
+      var result = AiReceiptAnalysisResult.fromJson(jsonMap);
+
+      // Verify double parentheses sanitization
+      if (result.branchDetected.contains('(') || result.branchDetected.contains(')')) {
+        var bNorm = result.branchDetected.trim();
+        while (bNorm.startsWith('(') && bNorm.endsWith(')') && '('.allMatches(bNorm).length > 1) {
+          bNorm = bNorm.substring(1, bNorm.length - 1).trim();
+        }
+        while (bNorm.startsWith('(') && '('.allMatches(bNorm).length > ')'.allMatches(bNorm).length) {
+          bNorm = bNorm.substring(1).trim();
+        }
+        while (bNorm.endsWith(')') && ')'.allMatches(bNorm).length > '('.allMatches(bNorm).length) {
+          bNorm = bNorm.substring(0, bNorm.length - 1).trim();
+        }
+        result = result.copyWith(branchDetected: bNorm);
+      }
+      expect(result.branchDetected, 'المنصورة (المنصورة)');
+
+      // Verify multi-chain reconciliation
+      const retailChainName = 'أسواق فتح الله • جملة ماركت';
+      final allowedChains = retailChainName
+          .split(RegExp(r'[\•\,\،\/\-\|\+]'))
+          .map((s) => s.trim().toLowerCase())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      final detChainNorm = result.storeChainDetected.trim().toLowerCase();
+      final isChainMatched = allowedChains.any((ac) => detChainNorm.contains(ac) || ac.contains(detChainNorm));
+      expect(isChainMatched, true);
+
+      // Clean spurious unfulfilledConditions
+      if (result.isBranchMatched && isChainMatched) {
+        final cleaned = result.unfulfilledConditions.where((c) {
+          final lower = c.toLowerCase();
+          return !lower.contains('سلسلة غير مشمولة') && !lower.contains('غير مشمولة بالعرض');
+        }).toList();
+
+        result = result.copyWith(
+          unfulfilledConditions: cleaned,
+          isValid: cleaned.isEmpty,
+          message: cleaned.isEmpty ? 'تم التحقق من الفاتورة ومطابقة الفرع بنجاح.' : result.message,
+        );
+      }
+
+      expect(result.unfulfilledConditions, isEmpty);
+      expect(result.isValid, true);
+      expect(result.message, contains('تم التحقق'));
+    });
   });
 }

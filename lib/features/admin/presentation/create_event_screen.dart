@@ -142,7 +142,10 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   String _getBranchDisplayName(String branchId) {
     final b = _availableBranches.where((b) => b.id == branchId).firstOrNull;
     if (b != null) {
-      return b.city.isNotEmpty ? '${b.branchName} (${b.city})' : b.branchName;
+      if (b.city.isNotEmpty && !b.branchName.contains(b.city) && !b.branchName.contains('(')) {
+        return '${b.branchName} (${b.city})';
+      }
+      return b.branchName;
     }
     if (widget.eventToEdit != null) {
       final idx = widget.eventToEdit!.branchIds.indexOf(branchId);
@@ -8077,7 +8080,11 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         activeBranchName = _selectedBranchNames[branchIndex];
       } else {
         final b = _availableBranches.where((b) => b.id == activeBranchId).firstOrNull;
-        activeBranchName = b != null ? '${b.branchName} (${b.city})' : activeBranchId;
+        activeBranchName = b != null
+            ? (b.city.isNotEmpty && !b.branchName.contains(b.city) && !b.branchName.contains('(')
+                ? '${b.branchName} (${b.city})'
+                : b.branchName)
+            : activeBranchId;
       }
     }
 

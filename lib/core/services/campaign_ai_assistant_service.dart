@@ -266,8 +266,17 @@ $rawIdeaText
     buffer.writeln();
 
     if (retailChainName.trim().isNotEmpty) {
+      final chainList = retailChainName
+          .split(RegExp(r'[\•\,\،\/\-\|\+]'))
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      final chainClarification = chainList.length > 1
+          ? 'تشمل أياً من السلاسل الآتية: [${chainList.join(" أو ")}] (أي فاتورة صادرة من أيٍّ منها معتمدة ومشمولة بالكامل)'
+          : '"$retailChainName"';
+
       buffer.writeln('🏢 شروط السلسلة والفروع:');
-      buffer.writeln('- السلسلة المعتمدة: "$retailChainName".');
+      buffer.writeln('- السلسلة/السلاسل المعتمدة: $chainClarification.');
       if (allowedBranches.isNotEmpty) {
         buffer.writeln('- الفروع المعتمدة حصراً: [${allowedBranches.join("، ")}].');
       }

@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_service.dart';
+import 'chain_products_intelligence_service.dart';
 import '../utils/arabic_numbers_utils.dart';
 import '../../features/admin/domain/retail_chain_model.dart';
 
@@ -654,5 +655,199 @@ class RetailChainsService {
     );
 
     return addedCount;
+  }
+
+  // --- AUTOMATED BRANCH ENRICHMENT & MERGE GOVERNANCE ---
+
+  static String _normalizeBranchSearchToken(String s) {
+    var str = s.trim().toLowerCase();
+    // Strip parentheticals like (القاهرة), (الإسكندرية), (الجيزة), etc.
+    str = str.replaceAll(RegExp(r'\(.*?\)'), ' ');
+    // Strip common store prefixes
+    str = str.replaceAll(RegExp(r'^(?:فرع|هايبر|سوبر|ماركت|اسواق|أسواق|مجمع)\s+'), '');
+    // Normalize Arabic characters
+    str = str
+        .replaceAll(RegExp(r'[أإآ]'), 'ا')
+        .replaceAll('ة', 'ه')
+        .replaceAll('ى', 'ي')
+        .replaceAll(RegExp(r'[^\w\s\u0600-\u06FF]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return str;
+  }
+
+  /// Finds an existing branch that matches the detected chain and branch name (or direct branchId),
+  /// checks if the branch is missing any metadata (storeId, posNumber, taxNumber, address, hotline),
+  /// and if so, writes a pendingEnrichment proposal to the branch document in Firestore.
+  Future<bool> stageBranchEnrichment({
+    String branchId = '',
+    required String chainName,
+    required String branchName,
+    required String storeId,
+    required String posNumber,
+    required String taxNumber,
+    required String commercialReg,
+    required String hotline,
+    required String branchAddress,
+    required String receiptNumber,
+    required String receiptDate,
+    String sourceReceiptUrl = '',
+  }) async {
+    final cleanChain = chainName.trim();
+    final cleanBranch = branchName.trim();
+    if (branchId.isEmpty && cleanChain.isEmpty && cleanBranch.isEmpty) return false;
+
+    // Check if at least one actionable field was extracted
+    final hasHarvestedData = storeId.trim().isNotEmpty ||
+        posNumber.trim().isNotEmpty ||
+        taxNumber.trim().isNotEmpty ||
+        commercialReg.trim().isNotEmpty ||
+        hotline.trim().isNotEmpty ||
+        branchAddress.trim().isNotEmpty;
+    if (!hasHarvestedData) return false;
+
+    BranchModel? matchedBranch;
+
+    // 1. Direct branchId lookup if provided
+    if (branchId.trim().isNotEmpty) {
+      final doc = await _branchesCollection.doc(branchId.trim()).get();
+      if (doc.exists) {
+        matchedBranch = BranchModel.fromFirestore(doc);
+      }
+    }
+
+    // 2. Fuzzy match across all branches if not matched by ID
+    if (matchedBranch == null) {
+      final branches = await getAllBranches();
+      final canonicalChain = ChainProductsIntelligenceService.normalizeRetailChain(cleanChain);
+      final detBranchNorm = _normalizeBranchSearchToken(cleanBranch);
+
+      for (final b in branches) {
+        final bCanonicalChain = ChainProductsIntelligenceService.normalizeRetailChain(b.retailChainName);
+        final bBranchNorm = _normalizeBranchSearchToken(b.branchName);
+
+        final bool chainMatches = canonicalChain.isEmpty ||
+            bCanonicalChain.isEmpty ||
+            canonicalChain.toLowerCase() == bCanonicalChain.toLowerCase() ||
+            cleanChain.toLowerCase().contains(b.retailChainName.toLowerCase()) ||
+            b.retailChainName.toLowerCase().contains(cleanChain.toLowerCase());
+
+        final bool branchMatches = detBranchNorm.isNotEmpty &&
+            bBranchNorm.isNotEmpty &&
+            (detBranchNorm == bBranchNorm ||
+                detBranchNorm.contains(bBranchNorm) ||
+                bBranchNorm.contains(detBranchNorm));
+
+        if (chainMatches && branchMatches) {
+          matchedBranch = b;
+          break;
+        }
+      }
+    }
+
+    if (matchedBranch == null) return false;
+
+    // Check if the branch actually misses any of these data points
+    final existingSig = matchedBranch.receiptSignature;
+    final bool missingStoreId = (matchedBranch.branchCode.isEmpty || matchedBranch.branchCode == 'DEF') &&
+        (existingSig == null || existingSig.storeId.isEmpty) &&
+        storeId.trim().isNotEmpty;
+    final bool missingPos = (existingSig == null || existingSig.posNumberPattern.isEmpty) && posNumber.trim().isNotEmpty;
+    final bool missingTax = (existingSig == null || existingSig.taxNumber.isEmpty) && taxNumber.trim().isNotEmpty;
+    final bool missingComm = (existingSig == null || existingSig.commercialReg.isEmpty) && commercialReg.trim().isNotEmpty;
+    final bool missingHotline = (existingSig == null || existingSig.hotline.isEmpty) && hotline.trim().isNotEmpty;
+    final bool missingAddress = matchedBranch.address.isEmpty && branchAddress.trim().isNotEmpty;
+
+    final bool hasNewData = missingStoreId || missingPos || missingTax || missingComm || missingHotline || missingAddress;
+    if (!hasNewData) return false;
+
+    final enrichment = BranchPendingEnrichment(
+      storeId: storeId.trim(),
+      posNumber: posNumber.trim(),
+      taxNumber: taxNumber.trim(),
+      commercialReg: commercialReg.trim(),
+      hotline: hotline.trim(),
+      branchAddress: branchAddress.trim(),
+      receiptNumber: receiptNumber.trim(),
+      receiptDate: receiptDate.trim(),
+      sourceReceiptUrl: sourceReceiptUrl.trim(),
+      detectedAt: DateTime.now(),
+    );
+
+    await _branchesCollection.doc(matchedBranch.id).set({
+      'pendingEnrichment': enrichment.toMap(),
+    }, SetOptions(merge: true));
+
+    return true;
+  }
+
+  /// Merges pending enrichment into official branch fields and clears the pending state
+  Future<void> applyBranchEnrichment(String branchId) async {
+    final doc = await _branchesCollection.doc(branchId).get();
+    if (!doc.exists) return;
+    final branch = BranchModel.fromFirestore(doc);
+    final pe = branch.pendingEnrichment;
+    if (pe == null) return;
+
+    final existingSig = branch.receiptSignature ?? BranchReceiptSignature(
+      storeId: '',
+      posNumberPattern: '',
+      receiptPattern: '',
+      headerKeywords: [],
+      footerKeywords: [],
+      taxNumber: '',
+      commercialReg: '',
+      hotline: '',
+      sampleReceiptUrl: '',
+      extractedSummary: '',
+    );
+
+    final updatedSig = existingSig.copyWith(
+      storeId: pe.storeId.isNotEmpty ? pe.storeId : existingSig.storeId,
+      posNumberPattern: pe.posNumber.isNotEmpty ? pe.posNumber : existingSig.posNumberPattern,
+      taxNumber: pe.taxNumber.isNotEmpty ? pe.taxNumber : existingSig.taxNumber,
+      commercialReg: pe.commercialReg.isNotEmpty ? pe.commercialReg : existingSig.commercialReg,
+      hotline: pe.hotline.isNotEmpty ? pe.hotline : existingSig.hotline,
+      sampleReceiptUrl: pe.sourceReceiptUrl.isNotEmpty ? pe.sourceReceiptUrl : existingSig.sampleReceiptUrl,
+      scannedAt: DateTime.now(),
+    );
+
+    final updatedBranch = branch.copyWith(
+      branchCode: (branch.branchCode.isEmpty || branch.branchCode == 'DEF') && pe.storeId.isNotEmpty
+          ? pe.storeId
+          : branch.branchCode,
+      address: branch.address.isEmpty && pe.branchAddress.isNotEmpty
+          ? pe.branchAddress
+          : branch.address,
+      receiptSignature: updatedSig,
+      clearPendingEnrichment: true,
+    );
+
+    await _branchesCollection.doc(branchId).update({
+      'branchCode': updatedBranch.branchCode,
+      'address': updatedBranch.address,
+      'receiptSignature': updatedSig.toMap(),
+      'pendingEnrichment': FieldValue.delete(),
+    });
+  }
+
+  /// Dismisses / deletes a pending enrichment from a branch
+  Future<void> dismissBranchEnrichment(String branchId) async {
+    await _branchesCollection.doc(branchId).update({
+      'pendingEnrichment': FieldValue.delete(),
+    });
+  }
+
+  /// Bulk merges all pending enrichments across all branches
+  Future<int> applyAllPendingEnrichments() async {
+    final branches = await getAllBranches();
+    int count = 0;
+    for (final b in branches) {
+      if (b.pendingEnrichment != null && b.pendingEnrichment!.hasActionableData) {
+        await applyBranchEnrichment(b.id);
+        count++;
+      }
+    }
+    return count;
   }
 }

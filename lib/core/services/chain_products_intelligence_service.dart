@@ -44,6 +44,28 @@ class ChainProductsIntelligenceService {
     });
   }
 
+  /// Checks if a receipt contains valid extracted products suitable for price intelligence.
+  /// Receipts that were rejected solely for campaign promotional eligibility (e.g. competitor chain not enrolled)
+  /// still contain 100% verified retail product prices and are included in market price intelligence.
+  static bool isReceiptEligibleForPriceIntelligence(Map<String, dynamic> data) {
+    final rawProducts = data['extracted_products'] as List<dynamic>? ?? [];
+    if (rawProducts.isEmpty) return false;
+
+    // Discard only if flagged explicitly for unreadable/blurred image with zero valid items
+    final unfulfilled = data['unfulfilled_conditions'] as List<dynamic>? ?? [];
+    final bool isUnreadable = unfulfilled.any((u) {
+      final str = u.toString();
+      return str.contains('غير واضحة') || str.contains('غير مقروء') || str.contains('إعادة تصوير');
+    });
+    if (isUnreadable && rawProducts.isEmpty) return false;
+
+    // Must have at least one product with name and positive price
+    return rawProducts.any((p) =>
+        p is Map &&
+        (p['name']?.toString().trim().isNotEmpty ?? false) &&
+        ((p['price'] as num?)?.toDouble() ?? 0.0) > 0);
+  }
+
   /// Pure function to aggregate raw receipt documents into rich ChainProductItem models
   static List<ChainProductItem> aggregateProductsFromReceipts(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
@@ -56,7 +78,7 @@ class ChainProductsIntelligenceService {
     final Map<String, String> nameToBarcodeMap = {};
     for (final doc in docs) {
       final data = doc.data();
-      if (data['is_valid'] == false || data['isValid'] == false || data['status'] == 'rejected') {
+      if (!isReceiptEligibleForPriceIntelligence(data)) {
         continue;
       }
       final rawProducts = data['extracted_products'] as List<dynamic>? ?? [];
@@ -79,7 +101,7 @@ class ChainProductsIntelligenceService {
     // -------------------------------------------------------------------------
     for (final doc in docs) {
       final data = doc.data();
-      if (data['is_valid'] == false || data['isValid'] == false || data['status'] == 'rejected') {
+      if (!isReceiptEligibleForPriceIntelligence(data)) {
         continue;
       }
       final String receiptNumber = data['receipt_number']?.toString() ?? doc.id;
@@ -373,24 +395,49 @@ class ChainProductsIntelligenceService {
     return aggregated;
   }
 
+  /// Master list of canonical Enterprise Retail Chains for comprehensive market radar
+  static const List<String> canonicalRetailChains = [
+    'أسواق فتح الله', // Reference baseline anchor
+    'جملة ماركت',
+    'بيت الجملة',
+    'كارفور',
+    'هايبر وان',
+    'لولو هايبرماركت',
+    'سبينس',
+    'هايبر بنده',
+    'نجمة هليوبوليس',
+    'زهران ماركت',
+    'أسواق علام',
+    'خير زمان',
+    'سعودي ماركت',
+    'مترو ماركت',
+    'كازيون',
+    'بيم',
+  ];
+
   /// Normalizes store chain variants into standard Enterprise Retail Chains
   static String normalizeRetailChain(String rawChain) {
     final s = rawChain.toLowerCase().trim();
     if (s.isEmpty) return 'سلسلة تجارية عامة';
     if (s.contains('فتح الله') || s.contains('fathalla')) return 'أسواق فتح الله';
-    if (s.contains('جملة ماركت') || s.contains('gomla')) return 'جملة ماركت';
+    // Priority: Beit El Gomla MUST be checked BEFORE Gomla Market to avoid false substring matching!
     if (s.contains('بيت الجملة') || s.contains('beit el gomla') || s.contains('beit elgomla')) return 'بيت الجملة';
+    if (s.contains('جملة ماركت') || s.contains('gomla') || s.contains('km gomla') || s.contains('جملة')) return 'جملة ماركت';
     if (s.contains('كارفور') || s.contains('carrefour')) return 'كارفور';
-    if (s.contains('خير زمان') || s.contains('kheir zaman')) return 'خير زمان';
+    if (s.contains('هايبر وان') || s.contains('hyper one') || s.contains('hyperone') || s.contains('هايبر1') || s.contains('hyper 1')) return 'هايبر وان';
+    if (s.contains('لولو') || s.contains('lulu')) return 'لولو هايبرماركت';
     if (s.contains('سبينس') || s.contains('spinneys')) return 'سبينس';
+    if (s.contains('بنده') || s.contains('باندا') || s.contains('panda')) return 'هايبر بنده';
+    if (s.contains('نجمة هليوبوليس') || s.contains('جمال سلامه') || s.contains('هليوبوليس') || s.contains('heliopolis')) return 'نجمة هليوبوليس';
+    if (s.contains('زهران') || s.contains('zahran')) return 'زهران ماركت';
+    if (s.contains('علام') || s.contains('allam')) return 'أسواق علام';
+    if (s.contains('خير زمان') || s.contains('kheir zaman')) return 'خير زمان';
     if (s.contains('مترو') || s.contains('metro')) return 'مترو ماركت';
+    if (s.contains('سعودي') || s.contains('seoudi')) return 'سعودي ماركت';
     if (s.contains('كازيون') || s.contains('kazyon')) return 'كازيون';
     if (s.contains('بيم') || s.contains('bim')) return 'بيم';
-    if (s.contains('سعودي') || s.contains('seoudi')) return 'سعودي ماركت';
-    if (s.contains('لولو') || s.contains('lulu')) return 'لولو هايبرماركت';
     if (s.contains('رجب') || s.contains('ragab')) return 'أولاد رجب';
     if (s.contains('محلاوي') || s.contains('mahallawy')) return 'المحلاوي';
-    if (s.contains('باندا') || s.contains('panda')) return 'هايبر بنده';
     if (s.contains('الراية') || s.contains('raya')) return 'أسواق الراية';
     return rawChain.trim();
   }
@@ -458,7 +505,7 @@ class ChainProductsIntelligenceService {
     for (int i = 0; i < totalDocs; i++) {
       final doc = docs[i];
       final data = doc.data();
-      if (data['is_valid'] == false || data['isValid'] == false || data['status'] == 'rejected') {
+      if (!isReceiptEligibleForPriceIntelligence(data)) {
         continue;
       }
       final rawProducts = data['extracted_products'] as List<dynamic>? ?? [];
@@ -487,7 +534,7 @@ class ChainProductsIntelligenceService {
     for (int i = 0; i < totalDocs; i++) {
       final doc = docs[i];
       final data = doc.data();
-      if (data['is_valid'] == false || data['isValid'] == false || data['status'] == 'rejected') {
+      if (!isReceiptEligibleForPriceIntelligence(data)) {
         continue;
       }
       final String receiptNumber = data['receipt_number']?.toString() ?? doc.id;

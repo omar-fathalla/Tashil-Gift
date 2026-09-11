@@ -11,6 +11,10 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/services/firebase_service.dart';
 import '../../../core/services/company_gifts_service.dart';
+import '../../../core/services/ai_receipt_service.dart';
+import '../../../core/services/company_products_service.dart';
+import '../../../core/services/retail_chains_service.dart';
+import '../../admin/domain/retail_chain_model.dart';
 import '../../../core/constants/country_currency_config.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
@@ -18,6 +22,8 @@ import '../../admin/domain/event_model.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
 import '../../../core/widgets/portal_screen_header_card.dart';
 import '../../../core/widgets/interactive_receipt_viewer_dialog.dart';
+import '../../../core/services/multi_campaign_receipt_evaluator.dart';
+import 'package:http/http.dart' as http;
 
 enum DateFilterType { all, today, last7Days, thisMonth, custom }
 
@@ -54,6 +60,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
   DateFilterType _dateFilter = DateFilterType.all;
   DateTimeRange? _customDateRange;
   final Set<String> _expandedDocIds = <String>{};
+  final Set<String> _recheckingDocIds = <String>{};
 
   // Golden Standard: Static Persistent In-Memory Caches for 0ms instant render across tab switches
   static final Map<String, List<QueryDocumentSnapshot>> _persistentInvoicesCache = {};
@@ -860,6 +867,998 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     }
   }
 
+  // ===========================================================================
+  // Smart Receipt Re-verification Engine (إعادة الفحص الذكي للفواتير المرفوضة)
+  // ===========================================================================
+
+  void _promptRecheckOptions({
+    required BuildContext context,
+    required Map<String, dynamic> inv,
+    required EventModel? event,
+    required Map<String, EventModel> eventsMap,
+    required AppStrings strings,
+    required ColorScheme colorScheme,
+    required CountryCurrency activeCountry,
+    required bool isAr,
+  }) {
+    final receiptNumber = inv['receipt_number']?.toString() ?? 'N/A';
+    final hasImage = (inv['image_url']?.toString().isNotEmpty ?? false) ||
+        (inv['storage_path']?.toString().isNotEmpty ?? false);
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer.withValues(alpha: 0.5),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.sync_rounded, color: colorScheme.primary, size: 22),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${strings.recheckInvoiceAction} (#$receiptNumber)',
+                    style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    isAr ? 'اختر أسلوب إعادة التحقق بعد تحديث الشروط أو الكتالوج:' : 'Select re-verification mode:',
+                    style: TextStyle(fontSize: 11.5, color: colorScheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Option 1: Quick Rule Re-match
+            InkWell(
+              onTap: () {
+                Navigator.pop(dialogCtx);
+                _executeRecheck(
+                  inv: inv,
+                  event: event,
+                  eventsMap: eventsMap,
+                  isFullAiScan: false,
+                  strings: strings,
+                  colorScheme: colorScheme,
+                  activeCountry: activeCountry,
+                  isAr: isAr,
+                );
+              },
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50.withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.amber.shade300),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade100,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.bolt_rounded, color: Colors.amber.shade900, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  strings.quickRecheckTitle,
+                                  style: const TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF452700),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.shade200,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  isAr ? '⚡ فوري' : '⚡ Instant',
+                                  style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF452700)),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            isAr
+                                ? 'إعادة التحقق الذكي الفوري من شروط الحملة وعروض الشركة المرتبطة وفق القواعد'
+                                : strings.quickRecheckSubtitle,
+                            style: TextStyle(fontSize: 11, color: Colors.amber.shade900, height: 1.3),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            // Option 2: Full AI Re-Scan
+            InkWell(
+              onTap: hasImage
+                  ? () {
+                      Navigator.pop(dialogCtx);
+                      _executeRecheck(
+                        inv: inv,
+                        event: event,
+                        eventsMap: eventsMap,
+                        isFullAiScan: true,
+                        strings: strings,
+                        colorScheme: colorScheme,
+                        activeCountry: activeCountry,
+                        isAr: isAr,
+                      );
+                    }
+                  : null,
+              borderRadius: BorderRadius.circular(14),
+              child: Opacity(
+                opacity: hasImage ? 1.0 : 0.45,
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primary.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.psychology_rounded, color: colorScheme.primary, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    strings.fullAiRecheckTitle,
+                                    style: TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: colorScheme.onSurface,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.primary.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    'Gemini 3.7',
+                                    style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: colorScheme.primary),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              hasImage
+                                  ? (isAr
+                                      ? 'إعادة قراءة صورة الفاتورة بالكامل بذكاء Gemini 3.7 والتحقق الشامل من كافة عروض الشركة'
+                                      : strings.fullAiRecheckSubtitle)
+                                  : (isAr ? 'غير متاح: لا توجد صورة مرفقة لهذه الفاتورة' : 'Not available: No image attached'),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: hasImage ? colorScheme.onSurfaceVariant : colorScheme.error,
+                                height: 1.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: Text(isAr ? 'إلغاء' : 'Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _executeRecheck({
+    required Map<String, dynamic> inv,
+    required EventModel? event,
+    required Map<String, EventModel> eventsMap,
+    required bool isFullAiScan,
+    required AppStrings strings,
+    required ColorScheme colorScheme,
+    required CountryCurrency activeCountry,
+    required bool isAr,
+  }) async {
+    final docId = inv['id'] as String;
+    setState(() => _recheckingDocIds.add(docId));
+
+    try {
+      EventModel? activeEvent = event;
+      final firestore = ref.read(firestoreProvider);
+
+      final campaignId = (inv['campaignId'] ?? '').toString();
+      if (campaignId.isNotEmpty && activeEvent == null) {
+        if (eventsMap.containsKey(campaignId)) {
+          activeEvent = eventsMap[campaignId];
+        } else {
+          try {
+            final evtDoc = await firestore.collection('events').doc(campaignId).get();
+            if (evtDoc.exists) {
+              activeEvent = EventModel.fromFirestore(evtDoc);
+            }
+          } catch (_) {}
+        }
+      }
+
+      // 1. Resolve Company Identity
+      final String companySlug = (inv['companySlug'] ??
+              inv['company_slug'] ??
+              activeEvent?.companySlug ??
+              '')
+          .toString()
+          .trim();
+      final String targetCompany = (inv['targetCompany'] ??
+              activeEvent?.targetCompany ??
+              '')
+          .toString()
+          .trim();
+
+      // 2. Discover all active candidate campaigns for this company
+      List<EventModel> companyEvents = [];
+      if (companySlug.isNotEmpty || targetCompany.isNotEmpty) {
+        companyEvents = eventsMap.values.where((e) {
+          final matchSlug = companySlug.isNotEmpty &&
+              e.companySlug.trim().toLowerCase() == companySlug.toLowerCase();
+          final matchTarget = targetCompany.isNotEmpty &&
+              e.targetCompany.trim().toLowerCase() == targetCompany.toLowerCase();
+          return (matchSlug || matchTarget) && e.isActive && !e.isExpired;
+        }).toList();
+      }
+
+      // If empty in memory cache, query Firestore
+      if (companyEvents.isEmpty && companySlug.isNotEmpty) {
+        try {
+          final snap = await firestore
+              .collection('events')
+              .where('companySlug', isEqualTo: companySlug)
+              .where('isActive', isEqualTo: true)
+              .get();
+          companyEvents = snap.docs
+              .map((d) => EventModel.fromFirestore(d))
+              .where((e) => !e.isExpired)
+              .toList();
+        } catch (_) {}
+      }
+
+      // Ensure activeEvent is in companyEvents (preferably at front)
+      if (activeEvent != null) {
+        final currentEvent = activeEvent;
+        if (!companyEvents.any((e) => e.id == currentEvent.id)) {
+          companyEvents.insert(0, currentEvent);
+        }
+      }
+
+      if (companyEvents.isEmpty && activeEvent == null) {
+        throw Exception(isAr
+            ? 'تعذر العثور على بيانات الحملة الترويجية المرتبطة.'
+            : 'Associated campaign data not found.');
+      }
+      activeEvent ??= companyEvents.first;
+
+      if (!isFullAiScan) {
+        await _runQuickRuleRecheck(
+          docId: docId,
+          inv: inv,
+          activeEvent: activeEvent,
+          companyEvents: companyEvents,
+          eventsMap: eventsMap,
+          activeCountry: activeCountry,
+          strings: strings,
+          colorScheme: colorScheme,
+          isAr: isAr,
+        );
+      } else {
+        await _runFullAiRecheck(
+          docId: docId,
+          inv: inv,
+          activeEvent: activeEvent,
+          companyEvents: companyEvents,
+          eventsMap: eventsMap,
+          activeCountry: activeCountry,
+          strings: strings,
+          colorScheme: colorScheme,
+          isAr: isAr,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isAr ? 'حدث خطأ أثناء إعادة الفحص: $e' : 'Error re-checking invoice: $e'),
+            backgroundColor: colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _recheckingDocIds.remove(docId));
+      }
+    }
+  }
+
+  Future<void> _runQuickRuleRecheck({
+    required String docId,
+    required Map<String, dynamic> inv,
+    required EventModel activeEvent,
+    required List<EventModel> companyEvents,
+    required Map<String, EventModel> eventsMap,
+    required CountryCurrency activeCountry,
+    required AppStrings strings,
+    required ColorScheme colorScheme,
+    required bool isAr,
+  }) async {
+    final firestore = ref.read(firestoreProvider);
+    final currentUser = ref.read(firebaseAuthProvider).currentUser;
+
+    // Check if products exist
+    final rawProducts = (inv['extracted_products'] as List?) ?? [];
+    final bool hasImage = (inv['image_url']?.toString().isNotEmpty ?? false) ||
+        (inv['storage_path']?.toString().isNotEmpty ?? false);
+
+    // If zero products are saved in the rejected record and an image exists,
+    // quick rule matching on an empty list is impossible. Auto-fallback to Full AI Recheck!
+    if (rawProducts.isEmpty && hasImage) {
+      await _runFullAiRecheck(
+        docId: docId,
+        inv: inv,
+        activeEvent: activeEvent,
+        companyEvents: companyEvents,
+        eventsMap: eventsMap,
+        activeCountry: activeCountry,
+        strings: strings,
+        colorScheme: colorScheme,
+        isAr: isAr,
+      );
+      return;
+    }
+
+    final List<ExtractedProductItem> products = rawProducts.map((p) {
+      if (p is Map<String, dynamic>) return ExtractedProductItem.fromJson(p);
+      if (p is Map) return ExtractedProductItem.fromJson(Map<String, dynamic>.from(p));
+      return ExtractedProductItem(
+        name: p.toString(),
+        price: 0,
+        quantity: 1,
+        isTargetCompany: false,
+      );
+    }).toList();
+
+    final rawBranch = (inv['raw_branch'] ?? inv['branch_detected'] ?? '').toString();
+    final storeChain = (inv['store_chain_detected'] ?? inv['retail_chain_name'] ?? '').toString();
+    final receiptNumber = (inv['receipt_number'] ?? '').toString();
+    final receiptDate = (inv['date'] is DateTime)
+        ? (inv['date'] as DateTime).toIso8601String()
+        : (inv['receipt_date'] ?? inv['formattedDate'] ?? '').toString();
+
+    final double computedTotal = products.fold<double>(0.0, (acc, p) => acc + p.actualLineSpend);
+    final double targetTotal = (inv['target_company_total'] is num && (inv['target_company_total'] as num) > 0)
+        ? (inv['target_company_total'] as num).toDouble()
+        : (computedTotal > 0 ? computedTotal : (inv['total_value'] is num ? (inv['total_value'] as num).toDouble() : 0.0));
+
+    final synthesizedResult = AiReceiptAnalysisResult(
+      isValid: true,
+      receiptNumber: receiptNumber,
+      targetCompanyTotal: targetTotal,
+      receiptDate: receiptDate,
+      extractedProducts: products,
+      storeChainDetected: storeChain,
+      branchDetected: rawBranch,
+      isBranchMatched: true,
+      message: 'Quick rule recheck evaluation',
+      unfulfilledConditions: const [],
+      durationMs: 0,
+      durationSeconds: 0.0,
+      kpiRating: 'A+',
+      kpiColorHex: '#4CAF50',
+      chancesEarned: 1,
+      matchedRuleId: '',
+      matchedRuleIds: const [],
+      matchedRuleTitle: '',
+      matchedRewardValue: '',
+      matchedRewardAmount: 0.0,
+      matchedRewardType: '',
+      isHandwritten: false,
+    );
+
+    // Test activeEvent first, then sister company events
+    final orderedCampaigns = <EventModel>[
+      activeEvent,
+      ...companyEvents.where((e) => e.id != activeEvent.id),
+    ];
+
+    final summary = MultiCampaignReceiptEvaluator.evaluateAll(
+      result: synthesizedResult,
+      campaigns: orderedCampaigns,
+    );
+
+    if (summary.qualifiedCampaigns.isNotEmpty) {
+      final winningEval = summary.qualifiedCampaigns.firstWhere(
+        (e) => e.campaign.id == activeEvent.id,
+        orElse: () => summary.qualifiedCampaigns.first,
+      );
+      final winningCampaign = winningEval.campaign;
+
+      final int chances = winningEval.totalChances > 0 ? winningEval.totalChances : 1;
+
+      final claimedGifts = <Map<String, dynamic>>[];
+      for (final g in winningEval.resolvedLinkedGifts) {
+        claimedGifts.add({
+          'giftId': g.giftId,
+          'giftName': g.giftName,
+          'quantity': g.quantity,
+          'unitValue': g.unitValue,
+          'isVoucher': g.isVoucher,
+        });
+      }
+
+      final canonical = winningEval.resolvedBranchName ?? _normalizeBranchName(rawBranch, winningCampaign.branchNames, isAr);
+      final double promoSpend = winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : targetTotal;
+
+      await firestore.collection('receipts_transactions').doc(docId).update({
+        'is_valid': true,
+        'status': 'accepted',
+        'campaignId': winningCampaign.id,
+        'campaign_name': winningCampaign.eventName,
+        'eventName': winningCampaign.eventName,
+        'unfulfilled_conditions': <String>[],
+        'rejection_reason': FieldValue.delete(),
+        'is_updated_via_ai': true,
+        'rechecked_at': FieldValue.serverTimestamp(),
+        'rechecked_by': currentUser?.email ?? 'admin',
+        'recheck_type': winningCampaign.id == activeEvent.id ? 'quick_rule_match' : 'quick_multi_campaign_match',
+        'target_company_total': promoSpend,
+        'chances_earned': chances,
+        'canonical_branch': canonical,
+        'branch_detected': canonical,
+        if (claimedGifts.isNotEmpty) 'claimed_gifts': claimedGifts,
+      });
+
+      if (mounted) {
+        _showRecheckSuccessDialog(
+          context: context,
+          isAr: isAr,
+          strings: strings,
+          winningCampaign: winningCampaign,
+          isReassignedToSisterCampaign: winningCampaign.id != activeEvent.id,
+          prizeTitle: winningEval.designatedPrize,
+          onViewAccepted: () {
+            setState(() {
+              _statusFilter = 'accepted';
+              _selectedCampaignId = winningCampaign.id;
+            });
+          },
+        );
+      }
+    } else {
+      final unfulfilled = <String>[];
+      for (final u in summary.unfulfilledCampaigns) {
+        if (u.unfulfilledConditions.isNotEmpty) {
+          unfulfilled.addAll(u.unfulfilledConditions);
+        } else if (u.rejectionReason != null && u.rejectionReason!.isNotEmpty) {
+          unfulfilled.add(u.rejectionReason!);
+        }
+      }
+      if (unfulfilled.isEmpty) {
+        unfulfilled.add(isAr ? 'الفاتورة غير مستوفية لشروط عروض الشركة' : 'Receipt conditions not met for company offers');
+      }
+
+      await firestore.collection('receipts_transactions').doc(docId).update({
+        'unfulfilled_conditions': unfulfilled,
+        'rejection_reason': unfulfilled.join(' • '),
+        'rechecked_at': FieldValue.serverTimestamp(),
+        'rechecked_by': currentUser?.email ?? 'admin',
+        'recheck_type': 'quick_rule_match_failed',
+      });
+
+      if (mounted) {
+        _showRecheckStillRejectedDialog(
+          context,
+          unfulfilled,
+          isAr,
+          strings,
+          canRunFullAi: hasImage,
+          onRunFullAi: () {
+            Navigator.pop(context);
+            _executeRecheck(
+              inv: inv,
+              event: activeEvent,
+              eventsMap: eventsMap,
+              isFullAiScan: true,
+              strings: strings,
+              colorScheme: colorScheme,
+              activeCountry: activeCountry,
+              isAr: isAr,
+            );
+          },
+        );
+      }
+    }
+  }
+
+  Future<void> _runFullAiRecheck({
+    required String docId,
+    required Map<String, dynamic> inv,
+    required EventModel activeEvent,
+    required List<EventModel> companyEvents,
+    required Map<String, EventModel> eventsMap,
+    required CountryCurrency activeCountry,
+    required AppStrings strings,
+    required ColorScheme colorScheme,
+    required bool isAr,
+  }) async {
+    final firestore = ref.read(firestoreProvider);
+    final currentUser = ref.read(firebaseAuthProvider).currentUser;
+    final aiService = ref.read(aiReceiptServiceProvider);
+    final productsService = ref.read(companyProductsServiceProvider);
+    final retailChainsService = ref.read(retailChainsServiceProvider);
+
+    final imageUrl = (inv['image_url'] ?? '').toString();
+    final storagePath = inv['storage_path']?.toString();
+
+    if (imageUrl.isEmpty && (storagePath == null || storagePath.isEmpty)) {
+      throw Exception(isAr ? 'لا توجد صورة مسجلة لهذه الفاتورة لإعادة الفحص بالذكاء الاصطناعي.' : 'No receipt image found for full AI scan.');
+    }
+
+    final Uint8List? imageBytes = await _downloadReceiptImageBytes(imageUrl, storagePath);
+    if (imageBytes == null || imageBytes.isEmpty) {
+      throw Exception(isAr ? 'تعذر تنزيل صورة الفاتورة من السيرفر.' : 'Failed to download receipt image.');
+    }
+
+    // Load knowledge context for retail chains & products
+    List<String> registeredBarcodes = [];
+    Map<String, String> catalogBarcodeMap = {};
+    List<BranchModel> chainBranches = [];
+
+    final companySlug = activeEvent.companySlug.isNotEmpty
+        ? activeEvent.companySlug
+        : (inv['companySlug'] ?? '').toString();
+
+    try {
+      final results = await Future.wait([
+        productsService.getProductsForCompany(companySlug).catchError((_) => <CompanyProductItem>[]),
+        retailChainsService.getBranchesForEvent(
+          retailChainId: activeEvent.retailChainId,
+          branchIds: activeEvent.branchIds,
+          branchNames: activeEvent.branchNames,
+        ).catchError((_) => <BranchModel>[]),
+      ]);
+
+      final catalogItems = results[0] as List<CompanyProductItem>;
+      chainBranches = results[1] as List<BranchModel>;
+
+      registeredBarcodes = catalogItems.map((e) => "${e.productName} (${e.barcode})").toList();
+      catalogBarcodeMap = {
+        for (final item in catalogItems)
+          if (item.productName.isNotEmpty && item.barcode.isNotEmpty)
+            item.productName: item.barcode,
+      };
+    } catch (_) {}
+
+    // Combine required products, promotional rules, and branches across all active company events
+    final Set<String> combinedReqProds = {};
+    final Set<String> ruleIdSet = {};
+    final Set<String> combinedBranches = {};
+    bool combinedIsAllBranches = false;
+    final List<PromotionalRuleItem> combinedPromotionalRules = [];
+
+    for (final ev in companyEvents) {
+      if (ev.isAllBranches) combinedIsAllBranches = true;
+      for (final b in ev.branchNames) {
+        if (b.trim().isNotEmpty) combinedBranches.add(b.trim());
+      }
+      for (final p in ev.requiredProducts) {
+        if (p.trim().isNotEmpty) combinedReqProds.add(p.trim());
+      }
+      for (final r in ev.promotionalRules) {
+        final key = '${ev.id}_${r.id.isNotEmpty ? r.id : r.ruleTitle}';
+        if (ruleIdSet.add(key)) {
+          combinedPromotionalRules.add(r);
+        }
+        for (final sp in r.selectedProductNames) {
+          if (sp.trim().isNotEmpty) combinedReqProds.add(sp.trim());
+        }
+        for (final rb in r.requiredBrands) {
+          if (rb.trim().isNotEmpty) combinedReqProds.add(rb.trim());
+        }
+      }
+    }
+
+    final result = await aiService.analyzeReceiptImage(
+      imageBytes,
+      'image/jpeg',
+      targetCompany: activeEvent.targetCompany,
+      minimumSpend: 0.0,
+      requiredProducts: combinedReqProds.toList(),
+      registeredBarcodes: registeredBarcodes,
+      catalogBarcodeMap: catalogBarcodeMap,
+      retailChainName: activeEvent.retailChainName,
+      allowedBranches: combinedBranches.toList(),
+      isAllBranches: combinedIsAllBranches || activeEvent.isAllBranches,
+      registeredBranches: chainBranches,
+      startDate: null,
+      endDate: null,
+      customPrompt: '',
+      allowMultipleChances: true,
+      multiplierBasis: 'both',
+      maxChancesPerReceipt: 0,
+      promotionalRules: combinedPromotionalRules,
+    );
+
+    // Multi-campaign evaluation
+    final orderedCampaigns = <EventModel>[
+      activeEvent,
+      ...companyEvents.where((e) => e.id != activeEvent.id),
+    ];
+
+    final summary = MultiCampaignReceiptEvaluator.evaluateAll(
+      result: result,
+      campaigns: orderedCampaigns,
+    );
+
+    if (summary.qualifiedCampaigns.isNotEmpty) {
+      final winningEval = summary.qualifiedCampaigns.firstWhere(
+        (e) => e.campaign.id == activeEvent.id,
+        orElse: () => summary.qualifiedCampaigns.first,
+      );
+      final winningCampaign = winningEval.campaign;
+
+      final int chances = winningEval.totalChances > 0 ? winningEval.totalChances : 1;
+
+      final claimedGifts = <Map<String, dynamic>>[];
+      for (final g in winningEval.resolvedLinkedGifts) {
+        claimedGifts.add({
+          'giftId': g.giftId,
+          'giftName': g.giftName,
+          'quantity': g.quantity,
+          'unitValue': g.unitValue,
+          'isVoucher': g.isVoucher,
+        });
+      }
+
+      final double computedTotal = result.extractedProducts.fold<double>(0.0, (acc, p) => acc + p.actualLineSpend);
+      final double totalSpend = computedTotal > 0 ? computedTotal : result.targetCompanyTotal;
+      final canonical = winningEval.resolvedBranchName ?? _normalizeBranchName(result.branchDetected, winningCampaign.branchNames, isAr);
+
+      await firestore.collection('receipts_transactions').doc(docId).update({
+        'is_valid': true,
+        'status': 'accepted',
+        'campaignId': winningCampaign.id,
+        'campaign_name': winningCampaign.eventName,
+        'eventName': winningCampaign.eventName,
+        'unfulfilled_conditions': <String>[],
+        'rejection_reason': FieldValue.delete(),
+        'is_updated_via_ai': true,
+        'rechecked_at': FieldValue.serverTimestamp(),
+        'rechecked_by': currentUser?.email ?? 'admin',
+        'recheck_type': winningCampaign.id == activeEvent.id ? 'full_ai_scan' : 'full_ai_multi_campaign_match',
+        'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
+        'target_company_total': winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : result.targetCompanyTotal,
+        'total_value': totalSpend,
+        if (result.receiptNumber.isNotEmpty) 'receipt_number': result.receiptNumber,
+        if (result.storeChainDetected.isNotEmpty) 'store_chain_detected': result.storeChainDetected,
+        if (result.branchDetected.isNotEmpty) 'branch_detected': result.branchDetected,
+        'canonical_branch': canonical,
+        'analysis_duration_seconds': result.durationSeconds,
+        'ai_kpi_rating': result.kpiRating,
+        'chances_earned': chances,
+        if (claimedGifts.isNotEmpty) 'claimed_gifts': claimedGifts,
+      });
+
+      if (mounted) {
+        _showRecheckSuccessDialog(
+          context: context,
+          isAr: isAr,
+          strings: strings,
+          winningCampaign: winningCampaign,
+          isReassignedToSisterCampaign: winningCampaign.id != activeEvent.id,
+          prizeTitle: winningEval.designatedPrize,
+          onViewAccepted: () {
+            setState(() {
+              _statusFilter = 'accepted';
+              _selectedCampaignId = winningCampaign.id;
+            });
+          },
+        );
+      }
+    } else {
+      final unfulfilledList = result.unfulfilledConditions.isNotEmpty
+          ? result.unfulfilledConditions
+          : (summary.unfulfilledCampaigns.isNotEmpty
+              ? summary.unfulfilledCampaigns.expand((u) => u.unfulfilledConditions).toList()
+              : [result.message.trim().isNotEmpty ? result.message.trim() : (isAr ? 'الفاتورة غير مطابقة لشروط عروض الشركة' : 'Receipt does not qualify for company offers')]);
+
+      final double computedTotal = result.extractedProducts.fold<double>(0.0, (acc, p) => acc + p.actualLineSpend);
+      final double totalSpend = computedTotal > 0 ? computedTotal : result.targetCompanyTotal;
+
+      await firestore.collection('receipts_transactions').doc(docId).update({
+        'is_valid': false,
+        'status': 'rejected',
+        'unfulfilled_conditions': unfulfilledList,
+        'rejection_reason': unfulfilledList.join(' • '),
+        'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
+        'target_company_total': result.targetCompanyTotal,
+        'total_value': totalSpend,
+        'rechecked_at': FieldValue.serverTimestamp(),
+        'rechecked_by': currentUser?.email ?? 'admin',
+        'recheck_type': 'full_ai_scan_rejected',
+        'analysis_duration_seconds': result.durationSeconds,
+        'ai_kpi_rating': result.kpiRating,
+      });
+
+      if (mounted) {
+        _showRecheckStillRejectedDialog(context, unfulfilledList, isAr, strings);
+      }
+    }
+  }
+
+  Future<Uint8List?> _downloadReceiptImageBytes(String imageUrl, String? storagePath) async {
+    if (imageUrl.startsWith('data:image') || imageUrl.contains(';base64,')) {
+      final base64String = imageUrl.contains(',') ? imageUrl.split(',').last : imageUrl;
+      return base64Decode(base64String.trim());
+    }
+
+    if (storagePath != null && storagePath.isNotEmpty) {
+      try {
+        final storage = ref.read(firebaseStorageProvider);
+        final bytes = await storage.ref(storagePath).getData(10 * 1024 * 1024);
+        if (bytes != null && bytes.isNotEmpty) return bytes;
+      } catch (e) {
+        debugPrint('Error fetching image from storagePath: $e');
+      }
+    }
+
+    if (imageUrl.startsWith('http')) {
+      try {
+        final response = await http.get(Uri.parse(imageUrl));
+        if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+          return response.bodyBytes;
+        }
+      } catch (e) {
+        debugPrint('Error downloading image from URL: $e');
+      }
+    }
+
+    return null;
+  }
+
+  void _showRecheckSuccessDialog({
+    required BuildContext context,
+    required bool isAr,
+    required AppStrings strings,
+    EventModel? winningCampaign,
+    bool isReassignedToSisterCampaign = false,
+    String? prizeTitle,
+    VoidCallback? onViewAccepted,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        icon: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.green.shade50,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(Icons.check_circle_rounded, size: 48, color: Colors.green.shade700),
+        ),
+        title: Text(
+          isReassignedToSisterCampaign
+              ? (isAr ? 'تم استيفاء الشروط وتأهيل الفاتورة!' : 'Receipt Qualified for Campaign!')
+              : strings.recheckSuccessTitle,
+          textAlign: TextAlign.center,
+          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              isReassignedToSisterCampaign
+                  ? (isAr
+                      ? 'تبيّن بعد التدقيق أن الفاتورة مطابقة ومستوفاة لشروط حملة (${winningCampaign?.eventName ?? ""}) وتم اعتمادها وحصولها على الهدية بنجاح!'
+                      : 'Receipt matches campaign (${winningCampaign?.eventName ?? ""}) and has been successfully approved!')
+                  : strings.recheckSuccessMessage,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.cairo(color: Colors.grey.shade700, fontSize: 13.5),
+            ),
+            if (prizeTitle != null && prizeTitle.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.purple.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.purple.shade200),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.card_giftcard_rounded, color: Colors.purple.shade700, size: 20),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        prizeTitle,
+                        style: GoogleFonts.cairo(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: Colors.purple.shade900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 10),
+            Text(
+              isAr
+                  ? 'تم تحديث حالة الفاتورة ونقلها تلقائياً إلى قسم "الفواتير المقبولة" وحذف سبب الرفض.'
+                  : 'Status updated: Moved automatically to "Accepted Invoices" and rejection reason cleared.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          if (onViewAccepted != null)
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                onViewAccepted();
+              },
+              icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+              label: Text(
+                isAr ? 'عرض الفاتورة في المقبولة' : 'View in Accepted',
+                style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.green.shade700,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              ),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(isAr ? 'إغلاق' : 'Close', style: GoogleFonts.cairo()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRecheckStillRejectedDialog(
+    BuildContext context,
+    List<String> reasons,
+    bool isAr,
+    AppStrings strings, {
+    bool canRunFullAi = false,
+    VoidCallback? onRunFullAi,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        icon: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.orange.shade50,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(Icons.warning_amber_rounded, size: 48, color: Colors.orange.shade800),
+        ),
+        title: Text(
+          strings.recheckStillRejectedMessage,
+          textAlign: TextAlign.center,
+          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ...reasons.map(
+                (r) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 5),
+                        child: Icon(Icons.circle, size: 6, color: Colors.orange.shade800),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          r,
+                          style: TextStyle(fontSize: 12.5, color: Colors.grey.shade900, height: 1.3),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          if (canRunFullAi && onRunFullAi != null)
+            FilledButton.icon(
+              onPressed: onRunFullAi,
+              icon: const Icon(Icons.psychology_rounded, size: 18),
+              label: Text(isAr ? 'مسح شامل بالذكاء الاصطناعي' : 'Full AI Re-Scan', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          OutlinedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: OutlinedButton.styleFrom(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text(isAr ? 'إغلاق' : 'Close', style: GoogleFonts.cairo()),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showImagePreviewDialog({
     required BuildContext context,
     required String imageUrl,
@@ -1345,6 +2344,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                 strings: strings,
                 isAr: isAr,
                 isMobile: isMobile,
+                eventsMap: eventsMap,
               ),
             ),
         ],
@@ -2994,6 +3994,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     required AppStrings strings,
     required bool isAr,
     required bool isMobile,
+    required Map<String, EventModel> eventsMap,
   }) {
     final isAdmin = ref.watch(isAdminProvider) && !widget.isEmbedded;
     final totalItems = filteredInvoices.length;
@@ -3053,9 +4054,13 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
         }
 
         final inv = visibleInvoices[index];
+        final campaignId = (inv['campaignId'] ?? '').toString();
+        final event = eventsMap[campaignId];
         return _buildInvoiceCard(
           context: context,
           inv: inv,
+          event: event,
+          eventsMap: eventsMap,
           colorScheme: colorScheme,
           activeCountry: activeCountry,
           strings: strings,
@@ -3070,6 +4075,8 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
   Widget _buildInvoiceCard({
     required BuildContext context,
     required Map<String, dynamic> inv,
+    required EventModel? event,
+    required Map<String, EventModel> eventsMap,
     required ColorScheme colorScheme,
     required CountryCurrency activeCountry,
     required AppStrings strings,
@@ -3079,6 +4086,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
   }) {
     final docId = inv['id'] as String;
     final isExpanded = _expandedDocIds.contains(docId);
+    final isRechecking = _recheckingDocIds.contains(docId);
 
     final receiptNumber = inv['receipt_number']?.toString() ?? 'N/A';
     final totalValue = inv['target_company_total'] ?? inv['total_value'] ?? 0;
@@ -3093,6 +4101,88 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     final customerName = inv['customerName']?.toString();
     final customerPhone = inv['customerPhone']?.toString();
     final products = (inv['extracted_products'] as List?) ?? [];
+
+    final bool isExplicitlyValid = inv['is_valid'] == true || inv['status'] == 'accepted' || inv['isValid'] == true;
+    final bool isExplicitlyRejected = inv['is_valid'] == false || inv['status'] == 'rejected' || inv['isValid'] == false || ((inv['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
+    final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((inv['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
+
+    final List<String> displayReasons = [];
+    if (!isValid) {
+      final rawConditions = (inv['unfulfilled_conditions'] as List?)?.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList() ?? <String>[];
+      final rawRejectionReason = (inv['rejection_reason'] ?? '').toString().trim();
+      final rawFraudReasons = (inv['fraud_reasons'] as List?)?.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList() ?? <String>[];
+      final rawAiMessage = (inv['aiMessage'] ?? '').toString().trim();
+
+      for (final c in rawConditions) {
+        if (!displayReasons.contains(c)) displayReasons.add(c);
+      }
+      if (rawRejectionReason.isNotEmpty && !displayReasons.contains(rawRejectionReason)) {
+        if (rawRejectionReason.contains(' • ')) {
+          for (final part in rawRejectionReason.split(' • ')) {
+            final p = part.trim();
+            if (p.isNotEmpty && !displayReasons.contains(p)) displayReasons.add(p);
+          }
+        } else {
+          displayReasons.add(rawRejectionReason);
+        }
+      }
+      for (final f in rawFraudReasons) {
+        if (!displayReasons.contains(f)) displayReasons.add(f);
+      }
+
+      // Dynamic rule deduction if no explicit reason was logged
+      if (displayReasons.isEmpty) {
+        if (event != null) {
+          final promoRules = event.promotionalRules;
+          final minSpend = event.minimumSpend;
+          final targetTotal = (inv['target_company_total'] ?? inv['total_value'] ?? 0) is num
+              ? (inv['target_company_total'] ?? inv['total_value'] as num).toDouble()
+              : 0.0;
+
+          if (event.isExpired) {
+            displayReasons.add(isAr ? 'انتهت فترة سريان الحملة الترويجية.' : 'Campaign has expired.');
+          }
+          if (event.isNotStartedYet) {
+            displayReasons.add(isAr ? 'لم تبدأ فترة هذه الحملة الترويجية بعد.' : 'Campaign has not started yet.');
+          }
+
+          final rawBranch = (inv['raw_branch'] ?? inv['branch_detected'] ?? '').toString();
+          final canonical = _normalizeBranchName(rawBranch, event.branchNames, isAr);
+          final bool isBranchMatched = event.isAllBranches || event.branchNames.isEmpty ||
+              event.branchNames.any((b) => _cleanBranchForComparison(b) == _cleanBranchForComparison(canonical));
+          if (!isBranchMatched) {
+            displayReasons.add(isAr
+                ? 'الفرع ($canonical) غير مسجل ضمن الفروع المعتمدة للحملة.'
+                : 'Branch ($canonical) is not among approved campaign branches.');
+          }
+
+          if (promoRules.isNotEmpty) {
+            final rawProducts = (inv['extracted_products'] as List?) ?? [];
+            final items = rawProducts
+                .map((p) => p is Map ? ExtractedProductItem.fromJson(Map<String, dynamic>.from(p)) : null)
+                .whereType<ExtractedProductItem>()
+                .toList();
+            final unfulfilled = PromotionalRuleMatcher.getUnfulfilledPromotionReasons(
+              extractedProducts: items,
+              promotionalRules: promoRules,
+            );
+            displayReasons.addAll(unfulfilled);
+          } else if (minSpend > 0 && targetTotal < minSpend) {
+            displayReasons.add(isAr
+                ? 'إجمالي مشتريات منتجات الحملة ($targetTotal ${activeCountry.currencySymbol}) أقل من الحد الأدنى المطلوب (${minSpend.toInt()} ${activeCountry.currencySymbol}).'
+                : 'Target purchases ($targetTotal) is below minimum spend ($minSpend).');
+          }
+        }
+
+        if (displayReasons.isEmpty) {
+          if (rawAiMessage.isNotEmpty && (rawAiMessage.contains('غير') || rawAiMessage.contains('رفض') || rawAiMessage.contains('نقص') || rawAiMessage.contains('لا '))) {
+            displayReasons.add(rawAiMessage);
+          } else {
+            displayReasons.add(isAr ? 'الفاتورة غير مستوفية للشروط والأحكام الخاصة بالعرض.' : 'Receipt does not satisfy campaign promotional conditions.');
+          }
+        }
+      }
+    }
 
     return Card(
       elevation: 1,
@@ -3287,39 +4377,33 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                         runSpacing: 4,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          () {
-                            final bool isExplicitlyValid = inv['is_valid'] == true || inv['status'] == 'accepted' || inv['isValid'] == true;
-                            final bool isExplicitlyRejected = inv['is_valid'] == false || inv['status'] == 'rejected' || inv['isValid'] == false || ((inv['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
-                            final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((inv['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
-
-                            return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: isValid ? Colors.green.shade50 : Colors.red.shade50,
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: isValid ? Colors.green.shade300 : Colors.red.shade300),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    isValid ? Icons.check_circle_rounded : Icons.cancel_rounded,
-                                    size: 12,
-                                    color: isValid ? Colors.green.shade800 : Colors.red.shade800,
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isValid ? Colors.green.shade50 : Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: isValid ? Colors.green.shade300 : Colors.red.shade300),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  isValid ? Icons.check_circle_rounded : Icons.cancel_rounded,
+                                  size: 12,
+                                  color: isValid ? Colors.green.shade800 : Colors.red.shade800,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  isValid ? (isAr ? 'مقبولة' : 'Valid') : (isAr ? 'مرفوضة' : 'Rejected'),
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: isValid ? Colors.green.shade900 : Colors.red.shade900,
                                   ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    isValid ? (isAr ? 'مقبولة' : 'Valid') : (isAr ? 'مرفوضة' : 'Rejected'),
-                                    style: TextStyle(
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.bold,
-                                      color: isValid ? Colors.green.shade900 : Colors.red.shade900,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }(),
+                                ),
+                              ],
+                            ),
+                          ),
 
                           if (eventName.isNotEmpty)
                             Container(
@@ -3387,6 +4471,107 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                           ),
                         ],
                       ),
+
+                      // Row 5: Rejection Reason Alert Box (When !isValid)
+                      if (!isValid) ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50.withValues(alpha: 0.85),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.red.shade200),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.report_problem_rounded, size: 16, color: Colors.red.shade800),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    strings.rejectionReasonLabel,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.red.shade900,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  // Quick Re-verify Pill Button
+                                  TextButton.icon(
+                                    onPressed: isRechecking
+                                        ? null
+                                        : () => _promptRecheckOptions(
+                                              context: context,
+                                              inv: inv,
+                                              event: event,
+                                              eventsMap: eventsMap,
+                                              strings: strings,
+                                              colorScheme: colorScheme,
+                                              activeCountry: activeCountry,
+                                              isAr: isAr,
+                                            ),
+                                    icon: isRechecking
+                                        ? SizedBox(
+                                            width: 12,
+                                            height: 12,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Colors.red.shade900,
+                                            ),
+                                          )
+                                        : Icon(Icons.sync_rounded, size: 14, color: Colors.red.shade900),
+                                    label: Text(
+                                      isRechecking ? strings.recheckingReceiptLoading : strings.recheckInvoiceAction,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.red.shade900,
+                                      ),
+                                    ),
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      visualDensity: VisualDensity.compact,
+                                      backgroundColor: Colors.red.shade100,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              ...displayReasons.map(
+                                (reason) => Padding(
+                                  padding: const EdgeInsets.only(top: 2, bottom: 2),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 5),
+                                        child: Icon(Icons.circle, size: 5, color: Colors.red.shade700),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          reason,
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            color: const Color(0xFF5C0000),
+                                            fontWeight: FontWeight.w500,
+                                            height: 1.35,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -3438,6 +4623,51 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                         ],
                       ),
                     ),
+
+                    // Recheck Action Button for Rejected Invoices
+                    if (!isValid) ...[
+                      const SizedBox(width: 8),
+                      FilledButton.tonalIcon(
+                        onPressed: isRechecking
+                            ? null
+                            : () => _promptRecheckOptions(
+                                  context: context,
+                                  inv: inv,
+                                  event: event,
+                                  eventsMap: eventsMap,
+                                  strings: strings,
+                                  colorScheme: colorScheme,
+                                  activeCountry: activeCountry,
+                                  isAr: isAr,
+                                ),
+                        icon: isRechecking
+                            ? SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.amber.shade900,
+                                ),
+                              )
+                            : Icon(Icons.sync_rounded, size: isCardMobile ? 16 : 18),
+                        label: Text(
+                          isCardMobile ? strings.recheckInvoiceAction : '${strings.recheckInvoiceAction} 🔄',
+                          style: TextStyle(
+                            fontSize: isCardMobile ? 11 : 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.amber.shade100,
+                          foregroundColor: const Color(0xFF452700),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isCardMobile ? 8 : 12,
+                            vertical: isCardMobile ? 6 : 8,
+                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ],
 
                     const SizedBox(width: 8),
 

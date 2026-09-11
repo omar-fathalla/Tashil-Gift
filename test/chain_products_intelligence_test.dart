@@ -263,5 +263,84 @@ void main() {
       expect(exported['price'], 69.0);
       expect(exported['totalPrice'], 414.0);
     });
+
+    test('normalizeRetailChain handles precedence for Beit El Gomla vs Gomla Market and all competitors', () {
+      // Critical check: "بيت الجملة (جملة ماركت)" must resolve to "بيت الجملة"
+      expect(ChainProductsIntelligenceService.normalizeRetailChain('بيت الجملة (جملة ماركت)'), 'بيت الجملة');
+      expect(ChainProductsIntelligenceService.normalizeRetailChain('سلسلة بيت الجملة'), 'بيت الجملة');
+      expect(ChainProductsIntelligenceService.normalizeRetailChain('KM GOMLA MARKET'), 'جملة ماركت');
+      expect(ChainProductsIntelligenceService.normalizeRetailChain('هايبر وان الشيخ زايد'), 'هايبر وان');
+      expect(ChainProductsIntelligenceService.normalizeRetailChain('لولو هايبرماركت التجمع'), 'لولو هايبرماركت');
+      expect(ChainProductsIntelligenceService.normalizeRetailChain('سبينس مول العرب'), 'سبينس');
+      expect(ChainProductsIntelligenceService.normalizeRetailChain('بنده ماركت'), 'هايبر بنده');
+      expect(ChainProductsIntelligenceService.normalizeRetailChain('جمال سلامه (نجمة هليوبوليس)'), 'نجمة هليوبوليس');
+      expect(ChainProductsIntelligenceService.normalizeRetailChain('زهران ماركت سموحة'), 'زهران ماركت');
+      expect(ChainProductsIntelligenceService.normalizeRetailChain('أسواق علام'), 'أسواق علام');
+      expect(ChainProductsIntelligenceService.normalizeRetailChain('كارفور مصر سيتي سنتر'), 'كارفور');
+    });
+
+    test('isReceiptEligibleForPriceIntelligence includes competitor receipts even if rejected for promo eligibility', () {
+      // Case 1: Receipt from Lulu or Spinneys rejected for promotional conditions, but with valid products
+      final competitorReceiptData = {
+        'store_chain_detected': 'لولو هايبرماركت',
+        'status': 'rejected',
+        'is_valid': false,
+        'unfulfilled_conditions': [
+          'السلسلة غير معتمدة (صادرة من لولو هايبر ماركت والمطلوب أسواق فتح الله / بيت الجملة / جملة ماركت)'
+        ],
+        'extracted_products': [
+          {'name': 'شامبو كلير 360 مل', 'price': 160.0, 'quantity': 1, 'barcode': '6221155123456'}
+        ],
+      };
+
+      expect(ChainProductsIntelligenceService.isReceiptEligibleForPriceIntelligence(competitorReceiptData), isTrue);
+
+      // Case 2: Corrupted or blurry receipt with zero valid extracted products
+      final blurryReceiptData = {
+        'status': 'rejected',
+        'is_valid': false,
+        'unfulfilled_conditions': [
+          'صورة الفاتورة غير واضحة أو اسم المنتج غير مقروء بدقة، برجاء إعادة تصوير الفاتورة بوضوح'
+        ],
+        'extracted_products': [],
+      };
+
+      expect(ChainProductsIntelligenceService.isReceiptEligibleForPriceIntelligence(blurryReceiptData), isFalse);
+    });
+
+    test('Omni-Chain multi-competitor comparison correctly identifies price threats across 4+ chains', () {
+      final multiCompetitorProduct = ChainProductItem(
+        id: '6221155122926',
+        name: 'اكس اسبراي بلاك نايت 150 مل',
+        barcode: '6221155122926',
+        companySlug: 'unilever',
+        latestPricesByChain: {
+          'أسواق فتح الله': 170.0, // Fathalla Baseline
+          'جملة ماركت': 140.0, // Threat (-30 EGP, -17.6%)
+          'هايبر وان': 155.0, // Threat (-15 EGP)
+          'لولو هايبرماركت': 165.0, // Threat (-5 EGP)
+          'كارفور': 175.0, // Higher than Fathalla
+        },
+      );
+
+      expect(multiCompetitorProduct.distinctChainsCount, 5);
+      expect(multiCompetitorProduct.isMultiChain, isTrue);
+      expect(multiCompetitorProduct.hasFathallaPrice, isTrue);
+      expect(multiCompetitorProduct.fathallaPrice, 170.0);
+      expect(multiCompetitorProduct.minPrice, 140.0);
+      expect(multiCompetitorProduct.cheapestChain, 'جملة ماركت');
+      expect(multiCompetitorProduct.maxPrice, 175.0);
+      expect(multiCompetitorProduct.mostExpensiveChain, 'كارفور');
+
+      // Threat intelligence
+      expect(multiCompetitorProduct.isUnderpricedByCompetitors, isTrue);
+      expect(multiCompetitorProduct.cheaperCompetitors.length, 3); // Gomla, Hyper One, Lulu
+      expect(multiCompetitorProduct.cheapestCompetitorName, 'جملة ماركت');
+      expect(multiCompetitorProduct.lowestCompetitorPriceBelowFathalla, 140.0);
+      expect(multiCompetitorProduct.competitorUnderpricedDiff, 30.0);
+      expect(multiCompetitorProduct.competitorUnderpricedPercent, closeTo(17.64, 0.05));
+      expect(multiCompetitorProduct.isFathallaCheapest, isFalse);
+    });
   });
 }
+

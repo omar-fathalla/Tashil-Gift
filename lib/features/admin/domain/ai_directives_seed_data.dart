@@ -1065,6 +1065,70 @@ class AiDirectivesSeedData {
           tags: ['oral-care', 'signal', 'closeup', 'standalone-brand-qualification', 'or-matching', 'gomla-market', 'zero-false-combo', 'air-50'],
           lastUpdated: '2026-09-10',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-51',
+          code: 'BRANCH_SIGNATURE_AUTO_HARVESTING_AND_MERGE_GOVERNANCE_STANDARD',
+          orderIndex: 51,
+          category: AiDirectiveCategory.branchGovernance,
+          titleAr: 'معيار استحواذ وإثراء بيانات الفروع تلقائياً من الفواتير الميدانية وحوكمة المراجعة والدمج (Live Receipt Branch Data Harvesting & Merge Governance Standard)',
+          titleEn: 'Live Receipt Branch Data Harvesting & Merge Governance Standard',
+          descriptionAr:
+              'حوكمة الرصد والاستخراج التلقائي للبيانات التكميلية للفروع والسلاسل التجارية (كود المتجر Store ID، رقم نقطة البيع POS، العنوان المطبوع، الرقم الضريبي، الخط الساخن) من واقع فواتير الكاشير الحية التي يرفعها المناديب والعملاء. فحص الفرع المطابق وتخزين النواقص في حقل معلق (pendingEnrichment) لحمايتها من الكتابة التلقائية غير المراجعة، وعرضها في رادار ذكي بشاشة السلاسل والمنافذ لمراجعتها ودمجها بضغطة زر واحدة.',
+          descriptionEn:
+              'Automated harvesting of auxiliary branch and POS metadata (Store ID, POS number, printed address, tax number, commercial registration, hotline) directly from live cashier receipts scanned by promoters and customers. Missing branch fields are non-destructively staged under "pendingEnrichment" in Firestore to prevent unverified overwrites, and displayed via an AI Radar banner and branch badge in the Retail Chains screen for side-by-side administrative review and one-click merging.',
+          logicAr:
+              '1. استخراج الترويسة المتقدمة: توسيع schema الذكاء الاصطناعي لاستخراج كود المتجر وPOS والعنوان والأرقام الضريبية من الفاتورة.\n2. التحقق من النواقص والتخزين المعلق (Non-Destructive Staging): مطابقة الفرع، وإذا كانت تنقصه أي من هذه الحقول، يتم تخزينها في pendingEnrichment دون تعديل البيانات الرسمية مباشرة.\n3. رادار الذكاء الاصطناعي وبطاقات الفروع: إظهار بنر علوي وشارة تفاعلية على بطاقة الفرع بشاشة السلاسل والمنافذ للتنبيه بوجود بيانات مرصودة.\n4. نافذة المراجعة المقارنة (Side-by-Side Review): عرض البيانات الحالية مقابل البيانات المرصودة مع زري [قبول ودمج ✅] و[تجاهل ❌]، مع إمكانية دمج كافة الفروع المعلقة دفعة واحدة.',
+          logicEn:
+              '1. Advanced Header Harvesting: AI extracts storeId, posNumber, branchAddress, taxNumber, and hotline from receipt headers.\n2. Non-Destructive Staging: checks if matched branch lacks any of these fields, staging newly discovered data in pendingEnrichment without direct overwrite.\n3. AI Radar Banner & Branch Badges: highlights pending branch updates in the Retail Chains screen with real-time counters.\n4. Side-by-Side Merge Governance: interactive modal displays old vs harvested values with one-click approve/dismiss actions and bulk merge capabilities.',
+          exampleInput:
+              'بون كاشير هايبر وان فرع الشيخ زايد يتضمن: "Store: 1, PoS: 9, فرع الشيخ زايد - مدخل 2" لفاتورة رقم 858/9/1/100926.',
+          exampleOutput:
+              'رصد كود المتجر (1) ونقطة البيع (9) وعنوان الفرع، وإدراجه كبيانات تكميلية مقترحة لفرع الشيخ زايد، وظهور شارة "مراجعة ودمج 🪄" في شاشة السلاسل مع إمكانية اعتماد البصمة بضغطة زر.',
+          tags: ['branch-harvesting', 'pos-enrichment', 'store-id', 'merge-governance', 'retail-chains', 'pending-enrichment', 'hyper-one', 'air-51'],
+          lastUpdated: '2026-09-11',
+        ),
+        const AiDirectiveModel(
+          id: 'AIR-52',
+          code: 'MULTI_CHAIN_CAMPAIGN_QUALIFICATION_AND_ZERO_FALSE_EXCLUSION_STANDARD',
+          orderIndex: 52,
+          category: AiDirectiveCategory.branchGovernance,
+          titleAr: 'معيار توحيد السلاسل المشتركة في الحملات ومنع الرفض الزائف للفروع المعتمدة (Multi-Chain Campaign Qualification & Zero False-Exclusion Standard)',
+          titleEn: 'Multi-Chain Campaign Qualification & Zero False-Exclusion Standard',
+          descriptionAr:
+              'عندما تتضمن الحملة الترويجية عدة سلاسل تجارية مشتركة (مثل: أسواق فتح الله • جملة ماركت)، يقوم النظام بصياغة تعليمات الذكاء الاصطناعي لتوضيح أن أي فاتورة صادرة من أيٍّ من هذه السلاسل معتمدة ومشمولة بالكامل. كما يقوم محرك المعالجة البعدية (Dart Post-Processing) بالتحقق من تطابق السلسلة التابعة ومطابقة كود المتجر (Store ID / POS) وتطهير أي شروط رفض زائفة من قائمة الملاحظات لمنع ظهور رسائل مثل "سلسلة غير مشمولة" للفروع المختارة.',
+          descriptionEn:
+              'When a promotional campaign spans multiple retail chains (e.g. Fathalla Markets • Gomla Market), the AI instructions explicitly mandate that any receipt from any of these chains is fully valid. Furthermore, Dart post-processing verifies individual chain inclusion and purges spurious AI rejection notes once store code and branch are matched.',
+          logicAr:
+              '1. تفكيك السلاسل المركبة في البرومبت: فصل أسماء السلاسل عند الرموز (• أو الفاصلة) وتوضيح أن الفاتورة مقبولة من أيٍّ منها.\n2. إزالة الأقواس المزدوجة والمحافظات المكررة: منع تكرار اسم المدينة مثل "المنصورة ((المنصورة))" أثناء توليد مسميات الفروع لضمان التطابق الحرفي.\n3. مطابقة كود المتجر (Store ID): ربط كود المتجر المطبوع (مثل Store: 426) بالفرع المعتمد (gomla-market_gml-426).\n4. تطهير شروط الرفض الزائفة (Zero False-Exclusion Invariant): إزالة أي نصوص رفض تتعلق بالسلسلة أو الفرع من unfulfilledConditions بمجرد تحقق isBranchMatched و isChainMatched.',
+          logicEn:
+              '1. Multi-Chain Prompt Decomposition: splits compound retail chains by bullets/commas, instructing Gemini that any constituent chain is qualified.\n2. Duplicate City & Parentheses Stripping: eliminates nested parentheses like ((Mansoura)) from branch display strings.\n3. Store ID Resolution: reconciles printed store codes (e.g. Store: 426) directly to registered branch models.\n4. Spurious Rejection Purging: cleanses conflicting chain/branch failure strings from unfulfilledConditions upon successful reconciliation.',
+          exampleInput:
+              'بون كاشير جملة ماركت فرع المنصورة يتضمن: "Store: 426, POS: 5, Gomla Market Elmansoura" في حملة تضم "أسواق فتح الله • جملة ماركت" وفرع المنصورة مشمول.',
+          exampleOutput:
+              'مطابقة السلسلة والفرع بنجاح 100%، واعتماد الفرع وإزالة أي رسائل رفض تدعي أن جملة ماركت غير مشمولة بالعرض.',
+        ),
+        const AiDirectiveModel(
+          id: 'AIR-53',
+          code: 'DYNAMIC_TENANT_CAMPAIGN_ISOLATION_AND_BRAND_LOCK_GOVERNANCE_STANDARD',
+          orderIndex: 53,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار استقلالية وعزل الحملات الترويجية والتحرير الديناميكي للعلامات التجارية (Dynamic Tenant Campaign Isolation & Brand-Lock Governance Standard)',
+          titleEn: 'Dynamic Tenant Campaign Isolation & Brand-Lock Governance Standard',
+          descriptionAr:
+              'حوكمة العزل التام والاستقلالية الكاملة للشركات والحملات الترويجية (Multi-Tenant Campaign Isolation). إلغاء أي قوائم مبرمجة يدوياً (Hardcoded Brand Lists) واستخلاص العلامات التجارية والأصناف المستهدفة ديناميكياً من بيانات الحملة النشطة المسجلة في لوحة التحكم (requiredBrands و selectedProductNames). وفي عروض الإنفاق الإجمالي (by_spend)، يتأهل تلقائياً أي منتج معتمد تابع للشركة الراعية (isTargetCompany == true) دون الحاجة لأي فحص مسبق لعلامات معينة، مما يضمن استقلالية تامة لحملات المراعي، يونيليفر، الضحى، وأي شركة جديدة مستقبلاً.',
+          descriptionEn:
+              'Enforces strict multi-tenant isolation and 100% dynamic brand resolution across all promotional campaigns. Eliminates static hardcoded brand sets, dynamically deriving qualifying brands directly from campaign definitions (requiredBrands and selectedProductNames). For spend-based company rules (by_spend), any verified company product (isTargetCompany == true) automatically qualifies for eligible spend, ensuring seamless zero-touch onboarding and flawless isolation for Almarai, Unilever, Al-Doha, and future tenants.',
+          logicAr:
+              '1. التحرير الديناميكي لجذور العلامات: تمرير العلامات المشروطة (requiredBrands) ديناميكياً لدالة فحص العلامات دون الاعتماد على قوائم ثابتة مسبقة.\n2. فحص تطابق اسم الصنف المباشر: التحقق من وجود العلامة في نص الصنف (pNorm.contains(tb)) وليس فقط في القوائم المحفوظة.\n3. تعميم حارس الإنفاق (Universal Company Spend Anchor): تأهيل أي منتج يحمل شارة الشركة الراعية (isTargetCompany) تلقائياً في كافة قواعد الإنفاق الإجمالي (by_spend).\n4. تجميع الأصناف المستهدفة من القواعد الترويجية: دمج الأصناف المحددة (selectedProductNames) والعلامات المشروطة من كافة القواعد الترويجية تلقائياً في قائمة الأصناف الممررة للذكاء الاصطناعي لمنع استبعاد أي علامة مشمولة بالحملة.',
+          logicEn:
+              '1. Dynamic Brand Roots: injects campaign-defined requiredBrands into root matching logic on the fly, eliminating static code hardcoding.\n2. Direct Token & Substring Matching: validates brand names directly against normalized receipt item text (pNorm.contains(tb)).\n3. Universal Company Spend Anchor: generalizes spend-based eligibility (by_spend) to all verified target company products (isTargetCompany == true).\n4. Cross-Rule Product Aggregation: aggregates rule-level selectedProductNames and requiredBrands into AI prompt conditions, ensuring zero brand omissions.',
+          exampleInput:
+              'بون كاشير أسواق فتح الله فرع الرحاب يتضمن: 9 حليب المراعي 1.5 لتر + 1 زبادي المراعي بإجمالي 642 ج.م في عرض "اشتري منتجات من المراعي بقيمة 400 ج.م".',
+          exampleOutput:
+              'مطابقة الفاتورة فورياً وديناميكياً مع قاعدة المراعي (rule_1) وتأهيلها التام بقيمة إنفاق 642 ج.م واستحقاق فرصة اللعب على عجلة الحظ وكروت الخربشة بنسبة 100% دون أي رفض.',
+          tags: ['multi-tenant-isolation', 'dynamic-brands', 'almarai', 'unilever', 'al-doha', 'spend-rules', 'air-53'],
+          lastUpdated: '2026-09-11',
+        ),
       ];
 }
 

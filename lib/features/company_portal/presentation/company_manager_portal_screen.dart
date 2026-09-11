@@ -80,16 +80,16 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     }
   }
 
-  void _copyPortalLink(BuildContext context, AppStrings strings, String effectiveSlug, String? eventId) {
+  void _copyPortalLink(BuildContext context, AppStrings strings, String effectiveSlug, [String? eventId]) {
     if (widget.isAgencyOpsMode) {
-      _copyAgencyOpsLink(context, strings, effectiveSlug, eventId);
+      _copyAgencyOpsLink(context, strings, effectiveSlug);
     } else {
-      _copyBrandExecutiveLink(context, strings, effectiveSlug, eventId);
+      _copyBrandExecutiveLink(context, strings, effectiveSlug);
     }
   }
 
-  void _copyAgencyOpsLink(BuildContext context, AppStrings strings, String effectiveSlug, String? eventId) {
-    final url = AppUrlBuilder.buildAgencyOpsUrl(effectiveSlug, eventId: eventId);
+  void _copyAgencyOpsLink(BuildContext context, AppStrings strings, String effectiveSlug, [String? eventId]) {
+    final url = AppUrlBuilder.buildAgencyOpsUrl(effectiveSlug);
     Clipboard.setData(ClipboardData(text: url));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -100,8 +100,8 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     );
   }
 
-  void _copyBrandExecutiveLink(BuildContext context, AppStrings strings, String effectiveSlug, String? eventId) {
-    final url = AppUrlBuilder.buildBrandExecutiveUrl(effectiveSlug, eventId: eventId);
+  void _copyBrandExecutiveLink(BuildContext context, AppStrings strings, String effectiveSlug, [String? eventId]) {
+    final url = AppUrlBuilder.buildBrandExecutiveUrl(effectiveSlug);
     Clipboard.setData(ClipboardData(text: url));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -112,8 +112,8 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     );
   }
 
-  void _copyPromoterLink(BuildContext context, AppStrings strings, String effectiveSlug, String? eventId) {
-    final url = AppUrlBuilder.buildPromoterUrl(effectiveSlug, eventId: eventId);
+  void _copyPromoterLink(BuildContext context, AppStrings strings, String effectiveSlug, [String? eventId]) {
+    final url = AppUrlBuilder.buildPromoterUrl(effectiveSlug);
     Clipboard.setData(ClipboardData(text: url));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

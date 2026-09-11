@@ -177,6 +177,76 @@ class RetailChainModel {
   }
 }
 
+/// Represents harvested branch metadata captured from customer / promoter receipts
+/// waiting for administrative review and merge into the official BranchModel & BranchReceiptSignature.
+class BranchPendingEnrichment {
+  final String storeId;
+  final String posNumber;
+  final String taxNumber;
+  final String commercialReg;
+  final String hotline;
+  final String branchAddress;
+  final String receiptNumber;
+  final String receiptDate;
+  final String sourceReceiptUrl;
+  final DateTime? detectedAt;
+
+  BranchPendingEnrichment({
+    this.storeId = '',
+    this.posNumber = '',
+    this.taxNumber = '',
+    this.commercialReg = '',
+    this.hotline = '',
+    this.branchAddress = '',
+    this.receiptNumber = '',
+    this.receiptDate = '',
+    this.sourceReceiptUrl = '',
+    this.detectedAt,
+  });
+
+  bool get hasActionableData =>
+      storeId.isNotEmpty ||
+      posNumber.isNotEmpty ||
+      taxNumber.isNotEmpty ||
+      commercialReg.isNotEmpty ||
+      hotline.isNotEmpty ||
+      branchAddress.isNotEmpty;
+
+  factory BranchPendingEnrichment.fromMap(Map<String, dynamic> data) {
+    return BranchPendingEnrichment(
+      storeId: (data['storeId'] ?? '').toString().trim(),
+      posNumber: (data['posNumber'] ?? '').toString().trim(),
+      taxNumber: (data['taxNumber'] ?? '').toString().trim(),
+      commercialReg: (data['commercialReg'] ?? '').toString().trim(),
+      hotline: (data['hotline'] ?? '').toString().trim(),
+      branchAddress: (data['branchAddress'] ?? data['address'] ?? '').toString().trim(),
+      receiptNumber: (data['receiptNumber'] ?? '').toString().trim(),
+      receiptDate: (data['receiptDate'] ?? '').toString().trim(),
+      sourceReceiptUrl: (data['sourceReceiptUrl'] ?? '').toString().trim(),
+      detectedAt: data['detectedAt'] is Timestamp
+          ? (data['detectedAt'] as Timestamp).toDate()
+          : (data['detectedAt'] is DateTime ? data['detectedAt'] as DateTime : null),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'storeId': storeId.trim(),
+      'posNumber': posNumber.trim(),
+      'taxNumber': taxNumber.trim(),
+      'commercialReg': commercialReg.trim(),
+      'hotline': hotline.trim(),
+      'branchAddress': branchAddress.trim(),
+      'receiptNumber': receiptNumber.trim(),
+      'receiptDate': receiptDate.trim(),
+      'sourceReceiptUrl': sourceReceiptUrl.trim(),
+      'detectedAt': detectedAt != null
+          ? Timestamp.fromDate(detectedAt!)
+          : FieldValue.serverTimestamp(),
+    };
+  }
+}
+
 /// Represents a Branch / POS Outlet belonging to a Retail Chain (e.g. فرع سموحة, فرع الهانوفيل, فرع عجمي ستار)
 class BranchModel {
   final String id;
@@ -187,6 +257,7 @@ class BranchModel {
   final String branchCode;
   final String address;
   final BranchReceiptSignature? receiptSignature;
+  final BranchPendingEnrichment? pendingEnrichment;
   final DateTime? createdAt;
 
   BranchModel({
@@ -198,6 +269,7 @@ class BranchModel {
     this.branchCode = '',
     this.address = '',
     this.receiptSignature,
+    this.pendingEnrichment,
     this.createdAt,
   });
 
@@ -213,6 +285,9 @@ class BranchModel {
       address: data['address'] ?? '',
       receiptSignature: data['receiptSignature'] != null && data['receiptSignature'] is Map<String, dynamic>
           ? BranchReceiptSignature.fromMap(data['receiptSignature'] as Map<String, dynamic>)
+          : null,
+      pendingEnrichment: data['pendingEnrichment'] != null && data['pendingEnrichment'] is Map<String, dynamic>
+          ? BranchPendingEnrichment.fromMap(data['pendingEnrichment'] as Map<String, dynamic>)
           : null,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
     );
@@ -230,6 +305,9 @@ class BranchModel {
       receiptSignature: data['receiptSignature'] != null && data['receiptSignature'] is Map<String, dynamic>
           ? BranchReceiptSignature.fromMap(data['receiptSignature'] as Map<String, dynamic>)
           : null,
+      pendingEnrichment: data['pendingEnrichment'] != null && data['pendingEnrichment'] is Map<String, dynamic>
+          ? BranchPendingEnrichment.fromMap(data['pendingEnrichment'] as Map<String, dynamic>)
+          : null,
       createdAt: data['createdAt'] is Timestamp
           ? (data['createdAt'] as Timestamp).toDate()
           : (data['createdAt'] is DateTime ? data['createdAt'] as DateTime : null),
@@ -245,6 +323,7 @@ class BranchModel {
       'branchCode': branchCode.trim(),
       'address': address.trim(),
       if (receiptSignature != null) 'receiptSignature': receiptSignature!.toMap(),
+      if (pendingEnrichment != null) 'pendingEnrichment': pendingEnrichment!.toMap(),
       'createdAt': createdAt != null
           ? Timestamp.fromDate(createdAt!)
           : FieldValue.serverTimestamp(),
@@ -260,6 +339,8 @@ class BranchModel {
     String? branchCode,
     String? address,
     BranchReceiptSignature? receiptSignature,
+    BranchPendingEnrichment? pendingEnrichment,
+    bool clearPendingEnrichment = false,
     DateTime? createdAt,
   }) {
     return BranchModel(
@@ -271,6 +352,7 @@ class BranchModel {
       branchCode: branchCode ?? this.branchCode,
       address: address ?? this.address,
       receiptSignature: receiptSignature ?? this.receiptSignature,
+      pendingEnrichment: clearPendingEnrichment ? null : (pendingEnrichment ?? this.pendingEnrichment),
       createdAt: createdAt ?? this.createdAt,
     );
   }

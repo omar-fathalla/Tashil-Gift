@@ -1258,6 +1258,447 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
     );
   }
 
+  // --- AUTOMATED BRANCH DATA ENRICHMENT MODALS ---
+
+  void _showBranchEnrichmentModal(BranchModel branch) {
+    final pe = branch.pendingEnrichment;
+    if (pe == null) return;
+
+    final isAr = ref.isArabic;
+    final cs = Theme.of(context).colorScheme;
+    final sig = branch.receiptSignature;
+
+    final List<_BranchFieldDiff> diffs = [];
+
+    if (pe.storeId.isNotEmpty) {
+      final currentStoreId = sig?.storeId.isNotEmpty == true ? sig!.storeId : branch.branchCode;
+      diffs.add(_BranchFieldDiff(
+        fieldLabel: isAr ? 'كود المتجر (Store ID)' : 'Store ID',
+        icon: Icons.confirmation_number_rounded,
+        oldValue: currentStoreId.isNotEmpty ? currentStoreId : (isAr ? 'غير مسجل' : 'Not set'),
+        newValue: pe.storeId,
+      ));
+    }
+
+    if (pe.posNumber.isNotEmpty) {
+      final currentPos = sig?.posNumberPattern ?? '';
+      diffs.add(_BranchFieldDiff(
+        fieldLabel: isAr ? 'رقم / نمط نقطة البيع (POS)' : 'POS Pattern',
+        icon: Icons.point_of_sale_rounded,
+        oldValue: currentPos.isNotEmpty ? currentPos : (isAr ? 'غير مسجل' : 'Not set'),
+        newValue: pe.posNumber,
+      ));
+    }
+
+    if (pe.branchAddress.isNotEmpty) {
+      diffs.add(_BranchFieldDiff(
+        fieldLabel: isAr ? 'العنوان التفصيلي' : 'Address',
+        icon: Icons.place_outlined,
+        oldValue: branch.address.isNotEmpty ? branch.address : (isAr ? 'غير مسجل' : 'Not set'),
+        newValue: pe.branchAddress,
+      ));
+    }
+
+    if (pe.taxNumber.isNotEmpty) {
+      final currentTax = sig?.taxNumber ?? '';
+      diffs.add(_BranchFieldDiff(
+        fieldLabel: isAr ? 'الرقم الضريبي' : 'Tax Number',
+        icon: Icons.receipt_outlined,
+        oldValue: currentTax.isNotEmpty ? currentTax : (isAr ? 'غير مسجل' : 'Not set'),
+        newValue: pe.taxNumber,
+      ));
+    }
+
+    if (pe.commercialReg.isNotEmpty) {
+      final currentComm = sig?.commercialReg ?? '';
+      diffs.add(_BranchFieldDiff(
+        fieldLabel: isAr ? 'السجل التجاري' : 'Commercial Reg',
+        icon: Icons.badge_outlined,
+        oldValue: currentComm.isNotEmpty ? currentComm : (isAr ? 'غير مسجل' : 'Not set'),
+        newValue: pe.commercialReg,
+      ));
+    }
+
+    if (pe.hotline.isNotEmpty) {
+      final currentHotline = sig?.hotline ?? '';
+      diffs.add(_BranchFieldDiff(
+        fieldLabel: isAr ? 'الخط الساخن' : 'Hotline',
+        icon: Icons.phone_in_talk_rounded,
+        oldValue: currentHotline.isNotEmpty ? currentHotline : (isAr ? 'غير مسجل' : 'Not set'),
+        newValue: pe.hotline,
+      ));
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: cs.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640, maxHeight: 750),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.deepPurple.shade700,
+                        Colors.purple.shade600,
+                      ],
+                    ),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.auto_awesome, color: Colors.white, size: 24),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isAr ? 'مراجعة وإثراء بيانات الفرع من الفاتورة الحية' : 'Live Receipt Branch Data Review & Merge',
+                              style: GoogleFonts.cairo(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            Text(
+                              '${branch.branchName} • ${branch.retailChainName}',
+                              style: GoogleFonts.cairo(
+                                fontSize: 12.5,
+                                color: Colors.white.withValues(alpha: 0.9),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, color: Colors.white),
+                        onPressed: () => Navigator.of(ctx).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Receipt Source Badge
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  color: Colors.deepPurple.withValues(alpha: 0.08),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.receipt_long_rounded, size: 16, color: Colors.deepPurple),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          isAr
+                              ? 'مصدر الرصد: فاتورة كاشير ${pe.receiptNumber.isNotEmpty ? "#${pe.receiptNumber}" : ""} ${pe.receiptDate.isNotEmpty ? "بتاريخ ${pe.receiptDate}" : ""}'
+                              : 'Source: Live Receipt ${pe.receiptNumber.isNotEmpty ? "#${pe.receiptNumber}" : ""} ${pe.receiptDate.isNotEmpty ? "dated ${pe.receiptDate}" : ""}',
+                          style: GoogleFonts.cairo(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.deepPurple.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Body Diff List
+                Flexible(
+                  child: ListView(
+                    padding: const EdgeInsets.all(20),
+                    shrinkWrap: true,
+                    children: [
+                      Text(
+                        isAr
+                            ? 'رصد الذكاء الاصطناعي بيانات تكميلية غير مكتملة في الفرع. يمكنك مراجعتها أدناه ودمجها مباشرة في قاعدة البيانات:'
+                            : 'AI detected missing metadata from a live receipt. Review and merge it into the database:',
+                        style: GoogleFonts.cairo(fontSize: 12.5, color: cs.onSurfaceVariant, height: 1.4),
+                      ),
+                      const SizedBox(height: 16),
+                      ...diffs.map((diff) => _buildEnrichmentDiffRow(cs, isAr, diff)),
+                    ],
+                  ),
+                ),
+
+                // Action Buttons
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerLow,
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+                    border: Border(top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.4))),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          foregroundColor: cs.error,
+                        ),
+                        icon: const Icon(Icons.delete_sweep_outlined, size: 18),
+                        label: Text(
+                          isAr ? 'تجاهل المقترح' : 'Dismiss Proposal',
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () async {
+                          Navigator.of(ctx).pop();
+                          await ref.read(retailChainsServiceProvider).dismissBranchEnrichment(branch.id);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  isAr ? 'تم تجاهل المقترح بنجاح' : 'Proposal dismissed',
+                                  style: GoogleFonts.cairo(),
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.deepPurple,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: const Icon(Icons.check_circle_rounded, size: 20),
+                        label: Text(
+                          isAr ? 'قبول ودمج البيانات التكميلية ✅' : 'Approve & Merge Metadata ✅',
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13.5),
+                        ),
+                        onPressed: () async {
+                          Navigator.of(ctx).pop();
+                          await ref.read(retailChainsServiceProvider).applyBranchEnrichment(branch.id);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                backgroundColor: Colors.teal.shade700,
+                                content: Text(
+                                  isAr
+                                      ? '✅ تم دمج البيانات التكميلية واعتماد البصمة الذكية لـ (${branch.branchName}) بنجاح!'
+                                      : '✅ Branch metadata successfully merged and verified!',
+                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _applyAllPendingEnrichmentsModal(List<BranchModel> pendingBranches) {
+    final isAr = ref.isArabic;
+    final cs = Theme.of(context).colorScheme;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: cs.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          icon: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.deepPurple.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.done_all_rounded, color: Colors.deepPurple, size: 32),
+          ),
+          title: Text(
+            isAr ? 'دمج بيانات جميع الفروع المرصودة' : 'Merge All Detected Branch Metadata',
+            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 16),
+            textAlign: TextAlign.center,
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                isAr
+                    ? 'هل تريد دمج واعتماد البيانات التكميلية لـ ${pendingBranches.length} فرع دفعة واحدة؟ سيتم تحديث أكواد المتاجر ونقاط البيع والعناوين والبصمات الذكية تلقائياً.'
+                    : 'Do you want to merge and verify harvested metadata for ${pendingBranches.length} branches at once? Store codes, POS numbers, addresses, and smart signatures will be updated.',
+                style: GoogleFonts.cairo(fontSize: 13, height: 1.5),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 150),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.all(10),
+                  itemCount: pendingBranches.length,
+                  separatorBuilder: (ctx, i) => const Divider(height: 8),
+                  itemBuilder: (_, i) {
+                    final b = pendingBranches[i];
+                    return Text(
+                      '• ${b.branchName} (${b.retailChainName})',
+                      style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(isAr ? 'إلغاء' : 'Cancel', style: GoogleFonts.cairo()),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.deepPurple),
+              onPressed: () async {
+                Navigator.of(ctx).pop();
+                final count = await ref.read(retailChainsServiceProvider).applyAllPendingEnrichments();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      backgroundColor: Colors.teal.shade700,
+                      content: Text(
+                        isAr
+                            ? '✅ تم بنجاح دمج وتحديث بيانات $count فرع في قاعدة البيانات!'
+                            : '✅ Successfully merged metadata for $count branches!',
+                        style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  );
+                }
+              },
+              child: Text(
+                isAr ? 'تأكيد دمج الكل ✨' : 'Confirm Merge All ✨',
+                style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildEnrichmentDiffRow(ColorScheme cs, bool isAr, _BranchFieldDiff diff) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(diff.icon, size: 16, color: Colors.deepPurple),
+              const SizedBox(width: 8),
+              Text(
+                diff.fieldLabel,
+                style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold, color: cs.onSurface),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: cs.surface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isAr ? 'البيانات الحالية:' : 'Current Value:',
+                        style: GoogleFonts.cairo(fontSize: 10, color: cs.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        diff.oldValue.isNotEmpty ? diff.oldValue : (isAr ? 'غير مسجل' : 'None'),
+                        style: GoogleFonts.cairo(
+                          fontSize: 12,
+                          color: diff.oldValue.isNotEmpty && diff.oldValue != 'غير مسجل' && diff.oldValue != 'Not set'
+                              ? cs.onSurface
+                              : cs.outline,
+                          decoration: diff.oldValue.isNotEmpty && diff.oldValue != 'غير مسجل' && diff.oldValue != 'Not set'
+                              ? TextDecoration.lineThrough
+                              : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8),
+                child: Icon(Icons.arrow_forward_rounded, size: 18, color: Colors.deepPurple),
+              ),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.withValues(alpha: 0.4)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isAr ? 'المقترح من الفاتورة:' : 'Harvested from Receipt:',
+                        style: GoogleFonts.cairo(fontSize: 10, color: Colors.green.shade800, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        diff.newValue,
+                        style: GoogleFonts.cairo(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   // --- HERO AI SCAN CARD WIDGET ---
 
   Widget _buildAiScanHeroCard(ColorScheme colorScheme, List<RetailChainModel> chains) {
@@ -1575,7 +2016,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                                 const SizedBox(width: 24),
                                 // Right Column: Directory of Chains & Branches
                                 Expanded(
-                                  child: _buildDirectoryCard(colorScheme, chains, filteredBranches, allBranches.length),
+                                  child: _buildDirectoryCard(colorScheme, chains, filteredBranches, allBranches.length, allBranches),
                                 ),
                               ],
                             )
@@ -1586,7 +2027,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                                 const SizedBox(height: 20),
                                 _buildBranchFormCard(colorScheme, chains),
                                 const SizedBox(height: 24),
-                                _buildDirectoryCard(colorScheme, chains, filteredBranches, allBranches.length),
+                                _buildDirectoryCard(colorScheme, chains, filteredBranches, allBranches.length, allBranches),
                               ],
                             ),
                         ],
@@ -1924,8 +2365,13 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
     ColorScheme colorScheme,
     List<RetailChainModel> chains,
     List<BranchModel> filteredBranches,
-    int totalBranchesCount,
-  ) {
+    int totalBranchesCount, [
+    List<BranchModel> allBranches = const [],
+  ]) {
+    final pendingEnrichmentBranches = allBranches
+        .where((b) => b.pendingEnrichment != null && b.pendingEnrichment!.hasActionableData)
+        .toList();
+
     // Filter chains based on chain search query
     final chainQuery = _chainSearchQuery.trim().toLowerCase().toEnglishDigits();
     final matchingChains = chains.where((c) {
@@ -1968,18 +2414,18 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                     children: [
                       Text(
                         _selectedDirectoryTab == 0
-                            ? 'دليل وإدارة السلاسل الرئيسية'
-                            : 'دليل وتصفية الفروع والمنافذ',
+                            ? 'دليل السلاسل التجارية المركزية'
+                            : 'دليل الفروع ونقاط البيع (POS)',
                         style: GoogleFonts.cairo(
-                          fontSize: 17,
+                          fontSize: 16,
                           fontWeight: FontWeight.bold,
                           color: colorScheme.onSurface,
                         ),
                       ),
                       Text(
                         _selectedDirectoryTab == 0
-                            ? 'عرض كافة السلاسل المسجلة مع إمكانية تعديلها أو حذفها بنقرة واحدة'
-                            : 'استعراض فروع كل سلسلة مع التصفية السريعة والبحث والتحكم',
+                            ? 'إدارة وحوكمة أسماء وشعارات السلاسل الرسمية'
+                            : 'استعراض وإدارة جميع الفروع وتعديل بصمات الكاشير الذكية',
                         style: GoogleFonts.cairo(
                           fontSize: 12,
                           color: colorScheme.onSurfaceVariant,
@@ -1988,21 +2434,17 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                     ],
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '${chains.length} سلسلة | $totalBranchesCount فرع',
-                    style: GoogleFonts.cairo(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.onPrimaryContainer,
+                // Quick Action: Add Chain or Branch
+                if (_selectedDirectoryTab == 0)
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
+                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                    label: Text('تحديث', style: GoogleFonts.cairo(fontSize: 12)),
+                    onPressed: () => setState(() {}),
                   ),
-                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -2097,6 +2539,24 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                                 color: _selectedDirectoryTab == 1 ? colorScheme.primary : colorScheme.onSurfaceVariant,
                               ),
                             ),
+                            if (pendingEnrichmentBranches.isNotEmpty) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.deepPurple,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '${pendingEnrichmentBranches.length} رادار ✨',
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -2185,6 +2645,81 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
 
             // --- VIEW 1: BRANCHES VIEW ---
             if (_selectedDirectoryTab == 1) ...[
+              // Radar Banner for Pending Enrichments
+              if (pendingEnrichmentBranches.isNotEmpty) ...[
+                Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.deepPurple.shade700,
+                        Colors.purple.shade600,
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.deepPurple.withValues(alpha: 0.25),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.radar_rounded, color: Colors.white, size: 24),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'رادار الذكاء الاصطناعي: تم رصد بيانات تكميلية لـ ${pendingEnrichmentBranches.length} فرع من الفواتير الحية',
+                              style: GoogleFonts.cairo(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            Text(
+                              'تم استخراج كود المتجر وPOS والعناوين والأرقام الضريبية تلقائياً من البونات الممسوحة.',
+                              style: GoogleFonts.cairo(
+                                fontSize: 11,
+                                color: Colors.white.withValues(alpha: 0.9),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.deepPurple.shade800,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          elevation: 0,
+                        ),
+                        icon: const Icon(Icons.done_all_rounded, size: 16),
+                        label: Text(
+                          'دمج الكل (${pendingEnrichmentBranches.length})',
+                          style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () => _applyAllPendingEnrichmentsModal(pendingEnrichmentBranches),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               // Search Bar for Branches
               TextField(
                 controller: _searchController,
@@ -2644,6 +3179,52 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                           ),
                           const SizedBox(width: 4),
                           const Icon(Icons.info_outline_rounded, size: 12, color: Colors.teal),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                if (branch.pendingEnrichment != null && branch.pendingEnrichment!.hasActionableData) ...[
+                  const SizedBox(height: 6),
+                  InkWell(
+                    onTap: () => _showBranchEnrichmentModal(branch),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.deepPurple.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.35)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.auto_awesome, size: 14, color: Colors.deepPurple),
+                          const SizedBox(width: 6),
+                          Text(
+                            'بيانات تكميلية مرصودة من فاتورة حية (${branch.pendingEnrichment!.receiptNumber.isNotEmpty ? "فاتورة #${branch.pendingEnrichment!.receiptNumber}" : "جاهزة للمراجعة"})',
+                            style: GoogleFonts.cairo(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.deepPurple.shade700,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.deepPurple,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'مراجعة ودمج 🪄',
+                              style: GoogleFonts.cairo(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),

@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
+import '../utils/file_download_helper.dart';
 
 /// A high-performance, interactive dialog for previewing, inspecting, zooming,
 /// and rotating receipt images across all desktop and mobile screens.
@@ -88,6 +90,7 @@ class _InteractiveReceiptViewerDialogState
   double _currentScale = 1.0;
   TapDownDetails? _doubleTapDetails;
   late int _currentPartIndex;
+  bool _isDownloading = false;
 
   List<String> get _activeUrls {
     if (widget.imageUrls != null && widget.imageUrls!.isNotEmpty) {
@@ -202,6 +205,146 @@ class _InteractiveReceiptViewerDialogState
       final uri = Uri.parse(_currentImageUrl);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    }
+  }
+
+  /// Downloads and saves the receipt image to the user's device or computer
+  Future<void> _downloadImage(BuildContext context, bool isAr) async {
+    if (_isDownloading) return;
+    setState(() {
+      _isDownloading = true;
+    });
+
+    try {
+      final rawNumber = widget.receiptNumber?.trim() ?? '';
+      final safeReceiptNo = rawNumber.isNotEmpty
+          ? rawNumber.replaceAll(RegExp(r'[^\w\-]'), '_')
+          : 'receipt_${DateTime.now().millisecondsSinceEpoch}';
+      final partSuffix = _activeUrls.length > 1 ? '_part${_currentPartIndex + 1}' : '';
+
+      List<int>? imageBytes;
+      String ext = 'jpg';
+      String mimeType = 'image/jpeg';
+
+      if (_currentImageUrl.startsWith('data:image')) {
+        final parts = _currentImageUrl.split(',');
+        final header = parts.first;
+        final data = parts.last;
+        imageBytes = base64Decode(data);
+        if (header.contains('png')) {
+          ext = 'png';
+          mimeType = 'image/png';
+        } else if (header.contains('webp')) {
+          ext = 'webp';
+          mimeType = 'image/webp';
+        } else {
+          ext = 'jpg';
+          mimeType = 'image/jpeg';
+        }
+      } else if (_currentImageUrl.startsWith('http')) {
+        try {
+          final response = await http.get(Uri.parse(_currentImageUrl));
+          if (response.statusCode == 200) {
+            imageBytes = response.bodyBytes;
+            final ct = (response.headers['content-type'] ?? '').toLowerCase();
+            if (ct.contains('png')) {
+              ext = 'png';
+              mimeType = 'image/png';
+            } else if (ct.contains('webp')) {
+              ext = 'webp';
+              mimeType = 'image/webp';
+            } else {
+              final uriPath = Uri.parse(_currentImageUrl).path.toLowerCase();
+              if (uriPath.endsWith('.png')) {
+                ext = 'png';
+                mimeType = 'image/png';
+              } else if (uriPath.endsWith('.webp')) {
+                ext = 'webp';
+                mimeType = 'image/webp';
+              }
+            }
+          }
+        } catch (_) {
+          // Fall through to fallback
+        }
+      }
+
+      final fileName = '$safeReceiptNo$partSuffix.$ext';
+
+      if (imageBytes != null && imageBytes.isNotEmpty) {
+        downloadFileBytes(
+          bytes: imageBytes,
+          fileName: fileName,
+          mimeType: mimeType,
+        );
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: const Color(0xFF10B981),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      isAr ? 'تم تحميل الفاتورة بنجاح: $fileName' : 'Invoice downloaded successfully: $fileName',
+                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      } else {
+        await _openImageInBrowser();
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: const Color(0xFF6366F1),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              content: Row(
+                children: [
+                  const Icon(Icons.open_in_new_rounded, color: Colors.white, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      isAr ? 'تم فتح صورة الفاتورة في نافذة جديدة لحفظها' : 'Receipt opened in a new tab to save',
+                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFFEF4444),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            content: Text(
+              isAr ? 'تعذر تحميل الفاتورة، يرجى المحاولة مرة أخرى' : 'Failed to download receipt, please try again',
+              style: GoogleFonts.cairo(color: Colors.white),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDownloading = false;
+        });
       }
     }
   }
@@ -475,6 +618,30 @@ class _InteractiveReceiptViewerDialogState
             const SizedBox(width: 8),
           ],
 
+          // Download / Save Action
+          IconButton.filledTonal(
+            icon: _isDownloading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF34D399),
+                    ),
+                  )
+                : const Icon(
+                    Icons.download_rounded,
+                    size: 20,
+                    color: Color(0xFF34D399),
+                  ),
+            style: IconButton.styleFrom(
+              backgroundColor: const Color(0xFF10B981).withValues(alpha: 0.15),
+            ),
+            onPressed: _isDownloading ? null : () => _downloadImage(context, isAr),
+            tooltip: isAr ? 'تحميل وحفظ الفاتورة على الجهاز' : 'Download and Save Invoice',
+          ),
+          const SizedBox(width: 8),
+
           // Close Button
           IconButton.filledTonal(
             icon: const Icon(Icons.close_rounded, size: 20, color: Colors.white70),
@@ -628,6 +795,23 @@ class _InteractiveReceiptViewerDialogState
             ),
           ],
 
+          const SizedBox(width: 6),
+          Container(
+            height: 20,
+            width: 1,
+            color: Colors.white.withValues(alpha: 0.15),
+          ),
+          const SizedBox(width: 6),
+
+          // ── Download Button ──
+          _buildToolbarButton(
+            icon: Icons.download_rounded,
+            tooltip: isAr ? 'تحميل وحفظ الفاتورة على جهازك' : 'Download and Save Invoice',
+            isLoading: _isDownloading,
+            iconColor: const Color(0xFF34D399),
+            onPressed: () => _downloadImage(context, isAr),
+          ),
+
           // ── Open In Browser Button ──
           if (_currentImageUrl.startsWith('http')) ...[
             const SizedBox(width: 4),
@@ -646,22 +830,33 @@ class _InteractiveReceiptViewerDialogState
     required IconData icon,
     required String tooltip,
     required VoidCallback onPressed,
+    Color? iconColor,
+    bool isLoading = false,
   }) {
     return Tooltip(
       message: tooltip,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: onPressed,
+          onTap: isLoading ? null : onPressed,
           borderRadius: BorderRadius.circular(20),
           hoverColor: Colors.white.withValues(alpha: 0.12),
           child: Padding(
             padding: const EdgeInsets.all(8.0),
-            child: Icon(
-              icon,
-              size: 20,
-              color: Colors.white,
-            ),
+            child: isLoading
+                ? SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: iconColor ?? Colors.white,
+                    ),
+                  )
+                : Icon(
+                    icon,
+                    size: 20,
+                    color: iconColor ?? Colors.white,
+                  ),
           ),
         ),
       ),

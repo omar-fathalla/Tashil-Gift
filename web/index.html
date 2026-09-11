@@ -62,23 +62,30 @@
     })();
   </script>
   <script>
-    // Proactively check and update service worker to avoid stale client-side caches
+    // Proactively unregister any legacy service workers and clear CacheStorage on every boot
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(function(registrations) {
         for (var i = 0; i < registrations.length; i++) {
-          registrations[i].update();
+          registrations[i].unregister();
         }
       });
     }
+    if ('caches' in window) {
+      caches.keys().then(function(keys) {
+        keys.forEach(function(key) {
+          caches.delete(key);
+        });
+      });
+    }
   </script>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
-
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
-  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    // Dynamic cache-busting loader for flutter_bootstrap.js to guarantee immediate updates without manual cache clearing
+    (function() {
+      var script = document.createElement('script');
+      script.src = 'flutter_bootstrap.js?v=' + new Date().getTime();
+      script.async = true;
+      document.body.appendChild(script);
+    })();
+  </script>
 </body>
 </html>

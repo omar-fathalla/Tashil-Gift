@@ -29,7 +29,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     // Verify prominent total wins counter badge is visible
-    expect(find.textContaining('عدد مرات الفوز: 2 مرتان (2 هدايا)'), findsOneWidget);
+    expect(find.textContaining('عدد مرات الفوز: مرتان (هديتان)'), findsOneWidget);
 
     // Verify current round headline
     expect(find.textContaining('الفرصة الحالية: اختيار الهدية رقم (1) من إجمالي (2) هدايا'), findsOneWidget);

@@ -568,6 +568,97 @@ class AppStrings {
   String get customerNameField => _t(ar: 'اسم العميل', en: 'Customer Name', hi: 'ग्राहक का नाम');
   String get customerPhoneField => _t(ar: 'رقم الهاتف', en: 'Phone Number', hi: 'फ़ोन नंबर');
 
+  // Rejection reasons & Smart Re-verification actions
+  String get recheckInvoiceAction => _t(ar: 'إعادة الفحص', en: 'Re-verify', hi: 'पुنः जाँचें');
+  String get recheckInvoiceTooltip => _t(
+    ar: 'إعادة فحص الفاتورة ومطابقتها لشروط الحملة المحدثة',
+    en: 'Re-verify receipt against updated campaign conditions',
+    hi: 'अद्यतन अभियान शर्तों के विरुद्ध रसीद की पुनः जाँच करें',
+  );
+  String get rejectionReasonLabel => _t(ar: 'سبب الرفض:', en: 'Rejection Reason:', hi: 'अस्वीकृति का कारण:');
+  String get recheckSuccessTitle => _t(
+    ar: 'تم قبول الفاتورة بنجاح!',
+    en: 'Receipt Approved Successfully!',
+    hi: 'रसीद सफलतापूर्वक स्वीकृत!',
+  );
+  String get recheckSuccessMessage => _t(
+    ar: 'أصبحت الفاتورة مطابقة لكافة الشروط والأحكام المعتمدة.',
+    en: 'The receipt now meets all campaign terms and rules.',
+    hi: 'रसीद अब सभी अभियान नियमों और शर्तों को पूरा करती है।',
+  );
+  String get recheckStillRejectedMessage => _t(
+    ar: 'لا تزال الفاتورة غير مستوفية لشروط الحملة',
+    en: 'Receipt still does not satisfy campaign requirements',
+    hi: 'रसीद अभी भी अभियान आवश्यकताओं को पूरा नहीं करती है',
+  );
+  String get quickRecheckTitle => _t(
+    ar: 'فحص سريع للقواعد الحالية',
+    en: 'Quick Rule Re-Match',
+    hi: 'त्वरित नियम मिलान',
+  );
+  String get quickRecheckSubtitle => _t(
+    ar: 'إعادة تدقيق الأصناف والفرع ضد شروط الحملة المحدثة (لحظي)',
+    en: 'Re-audit extracted items and branch against updated rules (Instant)',
+    hi: 'अद्यतन नियमों के विरुद्ध निकाले गए उत्पादों और शाखा का पुनः ऑडिट (त्वरित)',
+  );
+  String get fullAiRecheckTitle => _t(
+    ar: 'إعادة المسح الشامل بالذكاء الاصطناعي',
+    en: 'Full AI Re-Scan (Gemini 3.7)',
+    hi: 'पूर्ण एआई पुनः स्कैन (Gemini 3.7)',
+  );
+  String get fullAiRecheckSubtitle => _t(
+    ar: 'إعادة قراءة صورة الفاتورة الأصلية بأحدث كتالوج وتوجيهات للذكاء الاصطناعي',
+    en: 'Re-read original receipt image with updated catalog barcodes & directives',
+    hi: 'अद्यतन कैटलॉग बारकोड और निर्देशों के साथ मूल रसीद छवि को फिर से पढ़ें',
+  );
+  String get recheckingReceiptLoading => _t(
+    ar: 'جاري إعادة فحص الفاتورة...',
+    en: 'Re-verifying receipt...',
+    hi: 'रसीद की पुनः जाँच की जा रही है...',
+  );
+
+  // Promoter Invoices Dialog Date & Status filter strings
+  String get pickDateOrRangeTitle => _t(
+    ar: 'تحديد تاريخ أو فترة زمنية',
+    en: 'Select Date or Range',
+    hi: 'तारीख या अवधि चुनें',
+  );
+  String get singleDayOption => _t(
+    ar: 'اختيار يوم محدد',
+    en: 'Specific Single Day',
+    hi: 'एक विशिष्ट दिन',
+  );
+  String get singleDaySubtitle => _t(
+    ar: 'عرض فواتير يوم بعينه بالتقويم',
+    en: 'View receipts for a specific day',
+    hi: 'विशिष्ट दिन की रसीदें देखें',
+  );
+  String get dateRangeOption => _t(
+    ar: 'اختيار فترة زمنية (من - إلى)',
+    en: 'Date Range (From - To)',
+    hi: 'तिथि सीमा (से - तक)',
+  );
+  String get dateRangeSubtitle => _t(
+    ar: 'تحديد نطاق أيام مرن مع أنيميشن التحديد',
+    en: 'Flexible range selection with animated highlight',
+    hi: 'एनिमेटेड हाइलाइट के साथ लचीली रेंज',
+  );
+  String get filterAcceptedInvoices => _t(
+    ar: 'المعتمدة',
+    en: 'Approved',
+    hi: 'स्वीकृत',
+  );
+  String get filterRejectedInvoices => _t(
+    ar: 'المرفوضة',
+    en: 'Rejected',
+    hi: 'अस्वीकृत',
+  );
+  String get clearCustomDate => _t(
+    ar: 'إلغاء التاريخ المخصص',
+    en: 'Clear Custom Date',
+    hi: 'कस्टम तारीख हटाएं',
+  );
+
   // ---------------------------------------------------------------------------
   // Sound & Audio Effects (Material 3 & Google Sound System)
   // ---------------------------------------------------------------------------
@@ -2127,9 +2218,9 @@ class AppStrings {
     hi: 'शाखा अनपिन करें',
   );
   String get pinnedBranchBadge => _t(
-    ar: 'فرعي المثبت 📌',
-    en: 'Pinned Branch 📌',
-    hi: 'पिन की गई शाखा 📌',
+    ar: 'فرعي المثبت',
+    en: 'Pinned Branch',
+    hi: 'पिन की गई शाखा',
   );
   String get branchPinnedSuccess => _t(
     ar: 'تم تثبيت هذا الفرع كفرعك الافتراضي بنجاح',

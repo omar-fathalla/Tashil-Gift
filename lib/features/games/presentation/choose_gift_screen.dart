@@ -258,6 +258,134 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
     }
   }
 
+  Future<void> _handleBackNavigation() async {
+    if (_isConfirming) return;
+
+    final isAr = ref.read(localeProvider).languageCode == 'ar';
+    final totalChances = widget.totalChances > 0 ? widget.totalChances : 1;
+
+    if (_wonPrizes.isEmpty) {
+      final shouldLeave = await showDialog<bool>(
+        context: context,
+        builder: (dialogCtx) => Directionality(
+          textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            icon: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.arrow_back_rounded, color: Colors.amber.shade800, size: 30),
+            ),
+            title: Text(
+              isAr ? 'العودة لشاشة رفع الفواتير' : 'Return to Upload Receipts',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 17),
+            ),
+            content: Text(
+              isAr
+                  ? 'هل أنت متأكد من العودة دون اختيار أي هدية؟\n\nلن يتم تسجيل صرف أي هدية لهذه الفاتورة، ولن تُحتسب في المخزون، ويمكنك إعادة فحصها أو رفعها لاحقاً.'
+                  : 'Are you sure you want to return without choosing any gift?\n\nNo gift will be recorded or deducted for this receipt, and you can re-scan it later.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.cairo(fontSize: 13.5, height: 1.5),
+            ),
+            actionsAlignment: MainAxisAlignment.spaceBetween,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogCtx).pop(false),
+                child: Text(
+                  isAr ? 'البقاء واختيار هدية' : 'Stay & Pick Gift',
+                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                ),
+              ),
+              FilledButton.tonalIcon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.red.shade50,
+                  foregroundColor: Colors.red.shade700,
+                ),
+                onPressed: () => Navigator.of(dialogCtx).pop(true),
+                icon: const Icon(Icons.exit_to_app_rounded, size: 18),
+                label: Text(
+                  isAr ? 'نعم، إلغاء والعودة' : 'Yes, Cancel & Return',
+                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      if (shouldLeave != true) return;
+
+      // Clean up uncompleted pending transaction if not demo
+      if (!widget.isDemo && widget.transactionId.isNotEmpty) {
+        try {
+          final firestore = ref.read(firestoreProvider);
+          await firestore.collection('receipts_transactions').doc(widget.transactionId).delete();
+        } catch (e) {
+          debugPrint('Error cleaning up uncompleted transaction doc: $e');
+        }
+      }
+
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    } else {
+      final shouldLeave = await showDialog<bool>(
+        context: context,
+        builder: (dialogCtx) => Directionality(
+          textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            icon: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.check_circle_outline_rounded, color: Colors.blue.shade700, size: 30),
+            ),
+            title: Text(
+              isAr ? 'إنهاء الاختيار والعودة' : 'Finish & Exit',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 17),
+            ),
+            content: Text(
+              isAr
+                  ? 'لقد قمت باختيار (${_wonPrizes.length}) من إجمالي ($totalChances) هدايا.\n\nهل تريد إنهاء الجلسة والعودة بالهدايا التي تم اختيارها بالفعل؟'
+                  : 'You have chosen (${_wonPrizes.length}) of ($totalChances) gifts.\n\nDo you want to finish and exit with the chosen gifts?',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.cairo(fontSize: 13.5, height: 1.5),
+            ),
+            actionsAlignment: MainAxisAlignment.spaceBetween,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogCtx).pop(false),
+                child: Text(
+                  isAr ? 'متابعة بقية الهدايا' : 'Continue Picking',
+                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                ),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogCtx).pop(true),
+                child: Text(
+                  isAr ? 'نعم، اكتفيت بالهدايا' : 'Yes, Exit Now',
+                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      if (shouldLeave == true && mounted) {
+        Navigator.of(context).pop();
+      }
+    }
+  }
+
   void _resetDemo() {
     setState(() {
       _selectedGiftIndex = null;
@@ -281,23 +409,45 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
 
     return Directionality(
       textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
-      child: Scaffold(
-        backgroundColor: colorScheme.surface,
-        appBar: AppBar(
-          title: Text(
-            isAr
-                ? 'اختر هديتك ($totalChances ${totalChances == 1 ? 'هدية مستحقة' : 'هدايا مستحقة'})'
-                : 'Choose Your Gift ($totalChances ${totalChances == 1 ? 'Gift' : 'Gifts'})',
-            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: isMobile ? 16 : 18),
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) async {
+          if (didPop) return;
+          await _handleBackNavigation();
+        },
+        child: Scaffold(
+          backgroundColor: colorScheme.surface,
+          appBar: AppBar(
+            leading: BackButton(
+              onPressed: _handleBackNavigation,
+            ),
+            title: Text(
+              isAr
+                  ? 'اختر هديتك ($totalChances ${totalChances == 1 ? 'هدية مستحقة' : 'هدايا مستحقة'})'
+                  : 'Choose Your Gift ($totalChances ${totalChances == 1 ? 'Gift' : 'Gifts'})',
+              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: isMobile ? 16 : 18),
+            ),
+            centerTitle: true,
+            elevation: 0,
+            backgroundColor: Colors.transparent,
+            actions: [
+              TextButton.icon(
+                onPressed: _handleBackNavigation,
+                icon: const Icon(Icons.close_rounded, size: 18),
+                label: Text(
+                  isAr ? 'إلغاء والعودة' : 'Cancel',
+                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                style: TextButton.styleFrom(
+                  foregroundColor: colorScheme.error,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+              ),
+              const SizedBox(width: 4),
+              const GameSoundToggleButton(),
+              const SizedBox(width: 8),
+            ],
           ),
-          centerTitle: true,
-          elevation: 0,
-          backgroundColor: Colors.transparent,
-          actions: const [
-            GameSoundToggleButton(),
-            SizedBox(width: 8),
-          ],
-        ),
         bottomNavigationBar: _selectedGiftIndex != null
             ? Container(
                 padding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 24, vertical: isMobile ? 10 : 16),
@@ -435,7 +585,11 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 // 1. Top Badges Row: Total Qualified Wins & Remaining Counter
-                                Row(
+                                Wrap(
+                                  alignment: WrapAlignment.spaceBetween,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 8,
+                                  runSpacing: 8,
                                   children: [
                                     Container(
                                       padding: EdgeInsets.symmetric(
@@ -468,7 +622,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                           const SizedBox(width: 6),
                                           Text(
                                             isAr
-                                                ? 'عدد مرات الفوز: $totalChances ${totalChances == 1 ? 'مرة واحدة (هدية واحدة)' : totalChances == 2 ? 'مرتان (2 هدايا)' : '$totalChances مرات ($totalChances هدايا)'}'
+                                                ? 'عدد مرات الفوز: ${totalChances == 1 ? 'مرة واحدة (هدية واحدة)' : totalChances == 2 ? 'مرتان (هديتان)' : '$totalChances مرات ($totalChances هدايا)'}'
                                                 : 'Total Wins: $totalChances ${totalChances == 1 ? 'Gift' : 'Gifts'}',
                                             style: GoogleFonts.cairo(
                                               color: Colors.white,
@@ -479,40 +633,86 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                         ],
                                       ),
                                     ),
-                                    const Spacer(),
-                                    if (totalChances > 1)
-                                      Container(
-                                        padding: EdgeInsets.symmetric(
-                                          horizontal: isMobile ? 8 : 12,
-                                          vertical: isMobile ? 4 : 6,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withValues(alpha: 0.92),
-                                          borderRadius: BorderRadius.circular(20),
-                                          border: Border.all(
-                                            color: colorScheme.primary.withValues(alpha: 0.3),
-                                          ),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              Icons.hourglass_top_rounded,
-                                              size: isMobile ? 13 : 15,
-                                              color: colorScheme.primary,
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (totalChances > 1) ...[
+                                          Container(
+                                            padding: EdgeInsets.symmetric(
+                                              horizontal: isMobile ? 8 : 12,
+                                              vertical: isMobile ? 4 : 6,
                                             ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              isAr ? '$_remainingChances متبقية' : '$_remainingChances left',
-                                              style: GoogleFonts.cairo(
-                                                color: colorScheme.primary,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: isMobile ? 10.5 : 12,
+                                            decoration: BoxDecoration(
+                                              color: Colors.white.withValues(alpha: 0.92),
+                                              borderRadius: BorderRadius.circular(20),
+                                              border: Border.all(
+                                                color: colorScheme.primary.withValues(alpha: 0.3),
                                               ),
                                             ),
-                                          ],
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  Icons.hourglass_top_rounded,
+                                                  size: isMobile ? 13 : 15,
+                                                  color: colorScheme.primary,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  isAr ? '$_remainingChances متبقية' : '$_remainingChances left',
+                                                  style: GoogleFonts.cairo(
+                                                    color: colorScheme.primary,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: isMobile ? 10.5 : 12,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                        ],
+                                        // Direct Back / Return Quick Action Chip
+                                        Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            onTap: _handleBackNavigation,
+                                            borderRadius: BorderRadius.circular(20),
+                                            child: Container(
+                                              padding: EdgeInsets.symmetric(
+                                                horizontal: isMobile ? 8 : 12,
+                                                vertical: isMobile ? 4 : 6,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.red.shade50.withValues(alpha: 0.95),
+                                                borderRadius: BorderRadius.circular(20),
+                                                border: Border.all(
+                                                  color: Colors.red.shade200,
+                                                ),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    Icons.exit_to_app_rounded,
+                                                    size: isMobile ? 13 : 15,
+                                                    color: Colors.red.shade700,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    isAr ? 'عودة للفواتير' : 'Back to Receipts',
+                                                    style: GoogleFonts.cairo(
+                                                      color: Colors.red.shade700,
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: isMobile ? 10.5 : 12,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
                                         ),
-                                      ),
+                                      ],
+                                    ),
                                   ],
                                 ),
 
@@ -968,6 +1168,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
             ],
           ),
         ),
+      ),
       ),
     );
   }

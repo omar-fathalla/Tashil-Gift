@@ -444,8 +444,10 @@ class ReceiptValidationReportDialog extends StatelessWidget {
                                           context,
                                           icon: Icons.storefront_rounded,
                                           label: strings.dialogStoreChainLabel,
-                                          value: branch != null && branch!.isNotEmpty
-                                              ? '$storeChain ($branch)'
+                                          value: branch != null && branch!.trim().isNotEmpty
+                                              ? (branch!.trim().startsWith('(')
+                                                  ? '$storeChain ${branch!.trim()}'
+                                                  : '$storeChain (${branch!.trim()})')
                                               : storeChain!,
                                         ),
                                       if (receiptDate != null && receiptDate!.isNotEmpty)

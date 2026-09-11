@@ -49,7 +49,11 @@ class ExtractedProductItem {
       discountPercent > 0 ||
       (originalPrice != null && originalPrice! > price);
 
-  factory ExtractedProductItem.fromJson(Map<String, dynamic> json) {
+  factory ExtractedProductItem.fromJson(
+    Map<String, dynamic> json, {
+    String? targetCompany,
+    Iterable<String>? targetBrands,
+  }) {
     final name = json['name']?.toString().trim() ?? '';
     int quantity = (json['quantity'] as num?)?.toInt() ?? 1;
     if (quantity <= 0) quantity = 1;
@@ -126,34 +130,58 @@ class ExtractedProductItem {
     }
 
     final nameLower = name.toLowerCase();
+    final bool hasExplicitIsTarget =
+        json.containsKey('isTargetCompany') && json['isTargetCompany'] != null;
     bool isTarget = json['isTargetCompany'] == true;
-    if (!isTarget) {
-      if (nameLower.contains('تريزيم') ||
-          nameLower.contains('تريزم') ||
-          nameLower.contains('tresem') ||
-          nameLower.contains('كلير') ||
-          nameLower.contains('clear') ||
-          nameLower.contains('أكس') ||
-          nameLower.contains('اكس') ||
-          nameLower.contains('axe') ||
-          nameLower.contains('ريكسونا') ||
-          nameLower.contains('rexona') ||
-          nameLower.contains('صنسيلك') ||
-          nameLower.contains('صنسلك') ||
-          nameLower.contains('sunsilk') ||
-          nameLower.contains('دوف') ||
-          nameLower.contains('dove') ||
-          nameLower.contains('لايفبوي') ||
-          nameLower.contains('lifebuoy') ||
-          nameLower.contains('لوكس') ||
-          nameLower.contains('lux') ||
-          nameLower.contains('سيجنال') ||
-          nameLower.contains('signal') ||
-          nameLower.contains('كلوز اب') ||
-          nameLower.contains('close up') ||
-          nameLower.contains('فازلين') ||
-          nameLower.contains('vaseline')) {
-        isTarget = true;
+
+    // Only auto-infer if isTargetCompany was not explicitly set to false
+    if (!hasExplicitIsTarget) {
+      if (targetCompany != null && targetCompany.trim().isNotEmpty) {
+        if (nameLower.contains(targetCompany.trim().toLowerCase())) {
+          isTarget = true;
+        }
+      }
+      if (!isTarget && targetBrands != null && targetBrands.isNotEmpty) {
+        for (final tb in targetBrands) {
+          final tbLower = tb.trim().toLowerCase();
+          if (tbLower.isNotEmpty && nameLower.contains(tbLower)) {
+            isTarget = true;
+            break;
+          }
+        }
+      }
+      if (!isTarget) {
+        if (nameLower.contains('تريزيم') ||
+            nameLower.contains('تريزم') ||
+            nameLower.contains('tresem') ||
+            nameLower.contains('كلير') ||
+            nameLower.contains('clear') ||
+            nameLower.contains('أكس') ||
+            nameLower.contains('اكس') ||
+            nameLower.contains('axe') ||
+            nameLower.contains('ريكسونا') ||
+            nameLower.contains('rexona') ||
+            nameLower.contains('صنسيلك') ||
+            nameLower.contains('صنسلك') ||
+            nameLower.contains('sunsilk') ||
+            nameLower.contains('دوف') ||
+            nameLower.contains('dove') ||
+            nameLower.contains('لايفبوي') ||
+            nameLower.contains('lifebuoy') ||
+            nameLower.contains('لوكس') ||
+            nameLower.contains('lux') ||
+            nameLower.contains('سيجنال') ||
+            nameLower.contains('signal') ||
+            nameLower.contains('كلوز اب') ||
+            nameLower.contains('close up') ||
+            nameLower.contains('فازلين') ||
+            nameLower.contains('vaseline') ||
+            nameLower.contains('المراعي') ||
+            nameLower.contains('almarai') ||
+            nameLower.contains('الضحى') ||
+            nameLower.contains('doha')) {
+          isTarget = true;
+        }
       }
     }
 
@@ -235,6 +263,12 @@ class AiReceiptAnalysisResult {
   final bool isScreenCapture;
   final int fraudRiskScore;
   final List<String> fraudReasons;
+  final String storeId;
+  final String posNumber;
+  final String taxNumber;
+  final String commercialReg;
+  final String hotline;
+  final String branchAddress;
 
   AiReceiptAnalysisResult({
     required this.isValid,
@@ -264,6 +298,12 @@ class AiReceiptAnalysisResult {
     this.isScreenCapture = false,
     this.fraudRiskScore = 0,
     this.fraudReasons = const [],
+    this.storeId = '',
+    this.posNumber = '',
+    this.taxNumber = '',
+    this.commercialReg = '',
+    this.hotline = '',
+    this.branchAddress = '',
   }) : kpiRating =
            kpiRating ??
            calculateKpiRating(
@@ -294,14 +334,19 @@ class AiReceiptAnalysisResult {
   factory AiReceiptAnalysisResult.fromJson(
     Map<String, dynamic> json, {
     int durationMs = 0,
+    String? targetCompany,
+    Iterable<String>? targetBrands,
   }) {
     final productsRaw = json['extractedProducts'];
     List<ExtractedProductItem> productsList = [];
     if (productsRaw is List) {
       productsList = productsRaw
           .map(
-            (item) =>
-                ExtractedProductItem.fromJson(Map<String, dynamic>.from(item)),
+            (item) => ExtractedProductItem.fromJson(
+              Map<String, dynamic>.from(item),
+              targetCompany: targetCompany,
+              targetBrands: targetBrands,
+            ),
           )
           .toList();
     }
@@ -367,8 +412,8 @@ class AiReceiptAnalysisResult {
           (json['targetCompanyTotal'] as num?)?.toDouble() ?? 0.0,
       receiptDate: json['receiptDate']?.toString() ?? '',
       extractedProducts: productsList,
-      storeChainDetected: json['storeChainDetected']?.toString() ?? '',
-      branchDetected: json['branchDetected']?.toString() ?? '',
+      storeChainDetected: json['storeChainDetected']?.toString() ?? json['store_chain_detected']?.toString() ?? '',
+      branchDetected: json['branchDetected']?.toString() ?? json['branch_detected']?.toString() ?? '',
       isBranchMatched: json['isBranchMatched'] ?? true,
       message: json['message']?.toString() ?? '',
       unfulfilledConditions: unfulfilledList,
@@ -390,6 +435,12 @@ class AiReceiptAnalysisResult {
       isScreenCapture: isScreenCapture,
       fraudRiskScore: fraudRiskScore,
       fraudReasons: fraudReasonsList,
+      storeId: json['storeId']?.toString() ?? json['store_id']?.toString() ?? '',
+      posNumber: json['posNumber']?.toString() ?? json['pos_number']?.toString() ?? '',
+      taxNumber: json['taxNumber']?.toString() ?? json['tax_number']?.toString() ?? '',
+      commercialReg: json['commercialReg']?.toString() ?? json['commercial_reg']?.toString() ?? '',
+      hotline: json['hotline']?.toString() ?? '',
+      branchAddress: json['branchAddress']?.toString() ?? json['branch_address']?.toString() ?? '',
     );
   }
 
@@ -422,6 +473,12 @@ class AiReceiptAnalysisResult {
       'isScreenCapture': isScreenCapture,
       'fraudRiskScore': fraudRiskScore,
       'fraudReasons': fraudReasons,
+      'storeId': storeId,
+      'posNumber': posNumber,
+      'taxNumber': taxNumber,
+      'commercialReg': commercialReg,
+      'hotline': hotline,
+      'branchAddress': branchAddress,
     };
   }
 
@@ -452,6 +509,12 @@ class AiReceiptAnalysisResult {
     bool? isScreenCapture,
     int? fraudRiskScore,
     List<String>? fraudReasons,
+    String? storeId,
+    String? posNumber,
+    String? taxNumber,
+    String? commercialReg,
+    String? hotline,
+    String? branchAddress,
   }) {
     final double effectiveDurationSec = durationSeconds ?? this.durationSeconds;
     return AiReceiptAnalysisResult(
@@ -490,6 +553,12 @@ class AiReceiptAnalysisResult {
       isScreenCapture: isScreenCapture ?? this.isScreenCapture,
       fraudRiskScore: fraudRiskScore ?? this.fraudRiskScore,
       fraudReasons: fraudReasons ?? this.fraudReasons,
+      storeId: storeId ?? this.storeId,
+      posNumber: posNumber ?? this.posNumber,
+      taxNumber: taxNumber ?? this.taxNumber,
+      commercialReg: commercialReg ?? this.commercialReg,
+      hotline: hotline ?? this.hotline,
+      branchAddress: branchAddress ?? this.branchAddress,
     );
   }
 }
@@ -567,6 +636,30 @@ class AiReceiptService {
             'isBranchMatched': Schema.boolean(
               description:
                   'True if the detected store chain and branch match the required chain and allowed branches for this campaign. False if from an unapproved store or branch.',
+            ),
+            'storeId': Schema.string(
+              description:
+                  'Store number or branch ID code if printed (e.g. Store: 1 or فرع 224). Return empty string if not found.',
+            ),
+            'posNumber': Schema.string(
+              description:
+                  'POS terminal or register number if printed (e.g. PoS: 9 or كاشير 3). Return empty string if not found.',
+            ),
+            'taxNumber': Schema.string(
+              description:
+                  'Tax registration number or commercial register if printed on receipt. Return empty string if not found.',
+            ),
+            'commercialReg': Schema.string(
+              description:
+                  'Commercial registration number if printed on receipt. Return empty string if not found.',
+            ),
+            'hotline': Schema.string(
+              description:
+                  'Customer service hotline phone number printed on receipt. Return empty string if not found.',
+            ),
+            'branchAddress': Schema.string(
+              description:
+                  'Full branch address or location printed in receipt header or footer. Return empty string if not found.',
             ),
             'isHandwritten': Schema.boolean(
               description:
@@ -722,6 +815,17 @@ class AiReceiptService {
   }) async {
     final stopwatch = Stopwatch()..start();
     try {
+      final Set<String> effectiveRequiredProducts = Set<String>.from(requiredProducts);
+      for (final r in promotionalRules) {
+        for (final sp in r.selectedProductNames) {
+          if (sp.trim().isNotEmpty) effectiveRequiredProducts.add(sp.trim());
+        }
+        for (final rb in r.requiredBrands) {
+          if (rb.trim().isNotEmpty) effectiveRequiredProducts.add(rb.trim());
+        }
+      }
+      final resolvedRequiredProducts = effectiveRequiredProducts.toList();
+
       final List<Part> allImageParts = [
         DataPart(mimeType, imageBytes),
       ];
@@ -750,8 +854,10 @@ class AiReceiptService {
 ''';
       }
 
-      final productsCondition = requiredProducts.isNotEmpty
-          ? 'تنبيه خاص بالمنتجات المشروطة بالعرض: المنتجات المشمولة في هذا العرض هي فقط: [${requiredProducts.join("، ")}]. يجب أن تحتوي الفاتورة على واحد أو أكثر من هذه المنتجات المحددة، ويجب أن يتم حساب إجمالي (targetCompanyTotal) بناءً على أسعار هذه المنتجات المشترطة المحددة فقط وتجاهل أي منتجات أخرى حتى لو كانت تابعة لنفس الشركة لكنها ليست ضمن هذه القائمة.'
+      final productsCondition = resolvedRequiredProducts.isNotEmpty
+          ? (resolvedRequiredProducts.length <= 50
+              ? 'تنبيه خاص بالمنتجات المشروطة بالعرض: المنتجات المشمولة في هذا العرض هي: [${resolvedRequiredProducts.join("، ")}]. يجب أن تحتوي الفاتورة على واحد أو أكثر من هذه المنتجات المحددة، ويتم احتساب إجمالي (targetCompanyTotal) بناءً على أسعار منتجات شركة "$targetCompany" المشمولة بالعرض.'
+              : 'تنبيه خاص بالمنتجات المشروطة بالعرض: العرض يشمل ${resolvedRequiredProducts.length} صنفاً معتمداً لشركة "$targetCompany" (مثل: ${resolvedRequiredProducts.take(20).join("، ")}... إلخ). ابحث عن كافة أصناف وعلامات شركة "$targetCompany" بالفاتورة واحسب إجمالي (targetCompanyTotal) بناءً على المنتجات التابعة للشركة.')
           : 'ابحث عن كافة الأصناف المشتراة، وقم بتصفيتها لتحديد المنتجات التابعة لشركة "$targetCompany" فقط وجمع أسعارها.';
 
       String catalogCondition = '';
@@ -782,41 +888,82 @@ class AiReceiptService {
                   : (r.rewardAmount > 0
                         ? ' [قيمة نقدية: ${r.rewardAmount.toInt()} ج.م]'
                         : '');
-              return '$idx. [معرف ID: "$id"] "${r.ruleTitle}" ➔ الشرط: شراء (${r.minQuantity}) أو أكثر من [${r.triggerProduct}] ➔ الجائزة المستحقة: [${r.rewardValue}$voucherVal] (نوع: ${r.rewardType})$multText';
+              String conditionDetails;
+              if (r.isSpendBased) {
+                final minVal = r.effectiveMinSpend > 0
+                    ? r.effectiveMinSpend.toInt()
+                    : r.minSpend.toInt();
+                final tolText = r.discountTolerance > 0
+                    ? ' (سماحية خصم ${r.discountTolerance.toInt()} ج.م، أي تقبل الفاتورة بمشتريات صافية $minVal ج.م أو أكثر)'
+                    : '';
+                if (r.isCombo && r.requiredBrands.isNotEmpty) {
+                  conditionDetails =
+                      'شراء بقيمة إجمالية ($minVal ج.م$tolText) أو أكثر تشمل منتجات (${r.requiredBrands.join(" و ")}) معاً من أصناف [${r.triggerProduct}]';
+                } else if (r.hasSpendRange &&
+                    r.maxSpend != null &&
+                    r.maxSpend! > r.minSpend) {
+                  conditionDetails =
+                      'إنفاق في النطاق من ($minVal ج.م$tolText) حتى (${r.maxSpend!.toInt()} ج.م) من أصناف [${r.triggerProduct}]';
+                } else {
+                  conditionDetails =
+                      'إنفاق بقيمة ($minVal ج.م$tolText) أو أكثر من أصناف [${r.triggerProduct}]';
+                }
+              } else {
+                conditionDetails =
+                    'شراء (${r.minQuantity}) أو أكثر من [${r.triggerProduct}]';
+              }
+              return '$idx. [معرف ID: "$id"] "${r.ruleTitle}" ➔ الشرط: $conditionDetails ➔ الجائزة المستحقة: [${r.rewardValue}$voucherVal] (نوع: ${r.rewardType})$multText';
             })
             .join('\n');
+
+        final bool isUnileverOrPersonalCare = targetCompany.toLowerCase().contains('unilever') ||
+            targetCompany.contains('يونيليفر') ||
+            promotionalRules.any((r) =>
+                r.ruleTitle.contains('ريكسونا') ||
+                r.ruleTitle.contains('تريزيمي') ||
+                r.ruleTitle.contains('كلير') ||
+                r.ruleTitle.contains('أكس') ||
+                r.ruleTitle.contains('اكس') ||
+                r.ruleTitle.contains('رول') ||
+                r.ruleTitle.contains('اسبراي') ||
+                r.triggerProduct.contains('ريكسونا') ||
+                r.triggerProduct.contains('تريزيمي') ||
+                r.triggerProduct.contains('كلير') ||
+                r.triggerProduct.contains('أكس') ||
+                r.triggerProduct.contains('اكس'));
+
+        String categoryPackagingGuard = '';
+        if (isUnileverOrPersonalCare) {
+          categoryPackagingGuard = '''
+1. [حارس العزل الصارم للشكل الفيزيائي للعبوة (Physical Packaging & Form Guard)]:
+   - **الرول أون (Roll-on / Stick بحجم 50 مل)**: أي صنف رول أون / روول / ستيك (مثل "ريكسونا رول اون" أو "اكس رول اون" 50 مل) يطابق **حصراً** قواعد الرول أون المعتمدة (مثل شراء 2 رول أون -> فواتشر 50 ج.م)، ويُحظر تماماً ومطلقاً مطابقته مع أي قاعدة تخص الاسبراي (مثل عروض الـ 125 ج.م للقطعتين) حتى لو تضمنت كلمات القاعدة اسم "ريكسونا" أو "أكس" أو "حريمي" أو "رجالي".
+   - **الاسبراي (Aerosol Bodyspray بحجم 150 مل)**: أي صنف اسبراي / بخاخ مزيل عرق يطابق **حصراً** عروض الاسبراي (فواتشر 50 ج.م للقطعة أو 125 ج.م للقطعتين/الشرنك المزدوج)، ويُحظر من مطابقة عروض الرول أون.
+   - **الشامبو والبلسم (400 مل و 360 مل)**: عبوات تريزيمي 400 مل تطابق حصراً عروض تريزيمي (2 قطعة -> هدية 250 مل). عبوات كلير 360 مل تطابق حصراً عروض كلير (1 قطعة -> هدية 90 مل).
+   - **معجون الأسنان والمنتجات المستبعدة**: أي منتج معجون أسنان (مثل سنسوداين أو سيجنال غير مشروط) أو منظفات (مثل كلوركس) يُستبعد كلياً ولا يُمنح أي هدايا.
+   - **حزم البندل المزدوجة والشرنك (Twin Bundles)**: إذا احتوت الفاتورة على صنف حزمة مزدوجة أو شرنك (مثل عبوة أكس 2 قطعة أو سعر 335 ج.م بصافي 270 ج.م، أو ريكسونا 150 مل 275 ج.م، أو تريزيمي شامبو+بلسم 400 مل كود 6221155612182)، يُعامل الصنف كـ (2 قطعة) ويطابق فوراً قاعدة الـ 2 قطعة.
+''';
+        } else {
+          categoryPackagingGuard = '''
+1. [حوكمة أصناف وسلات شركة "$targetCompany" والعزل التام]:
+   - كافة الأصناف المشتراة التابعة لشركة "$targetCompany" (سواء ألبان، زبادي، حليب، أجبان، عصائر، بقوليات، إلخ) والمشمولة بشروط العرض تُدرج في (extractedProducts) وتحسب في (targetCompanyTotal).
+   - في عروض الإنفاق الإجمالي (by_spend): يُحسب إجمالي صافي الإنفاق لمنتجات شركة "$targetCompany" لمقارنته بالحد الأدنى المطلوب.
+''';
+        }
 
         promotionalRulesCondition =
             '''
 - محرك القواعد والعروض الترويجية والجوائز المعتمدة (Promotional Rules Engine):
 $rulesListFormatted
 
-⚠️ تعليمات مطابقة القواعد الترويجية وحساب المضاعفات والعزل الصارم للتصنيف الفيزيائي (Promotional Rules & Anti-Collision Instructions):
-1. [حارس العزل الصارم للشكل الفيزيائي للعبوة (Physical Packaging & Form Guard)]:
-   - **الرول أون (Roll-on / Stick بحجم 50 مل)**: أي صنف رول أون / روول / ستيك (مثل "ريكسونا رول اون" أو "اكس رول اون" 50 مل) يطابق **حصراً** قواعد الرول أون المعتمدة (مثل شراء 2 رول أون -> فواتشر 50 ج.م)، ويُحظر تماماً ومطلقاً مطابقته مع أي قاعدة تخص الاسبراي (مثل عروض الـ 125 ج.م للقطعتين) حتى لو تضمنت كلمات القاعدة اسم "ريكسونا" أو "أكس" أو "حريمي" أو "رجالي".
-   - **الاسبراي (Aerosol Bodyspray بحجم 150 مل)**: أي صنف اسبراي / بخاخ مزيل عرق يطابق **حصراً** عروض الاسبراي (فواتشر 50 ج.م للقطعة أو 125 ج.م للقطعتين/الشرنك المزدوج)، ويُحظر من مطابقة عروض الرول أون.
-   - **الشامبو والبلسم (400 مل و 360 مل)**: عبوات تريزيمي 400 مل تطابق حصراً عروض تريزيمي (2 قطعة -> هدية 250 مل). عبوات كلير 360 مل تطابق حصراً عروض كلير (1 قطعة -> هدية 90 مل).
-   - **معجون الأسنان والمنتجات المستبعدة**: أي منتج معجون أسنان (مثل سنسوداين أو سيجنال غير مشروط) أو منظفات (مثل كلوركس) يُستبعد كلياً ولا يُمنح أي هدايا.
-2. افحص بدقة أسماء الأصناف في الفاتورة مع مراعاة كافة الاختلافات الإملائية والطباعية في بونات الكاشير (مثال: "روول اون" = "رول اون", "اسبراى" = "اسبراي", "صنسلك" = "صنسيلك", "تريزمي" = "تريزيمي").
-3. [تجميع العروض المتزامنة (Multi-Offer Bundling)]: إذا اشترى العميل أصنافاً تحقق أكثر من عرض ترويجي مختلف في نفس الفاتورة (مثال: اشترى 1 اسبراي يستحق فواتشر 50 ج.م واشترى أيضاً 2 رول أون يستحق فواتشر 50 ج.م):
-   - قم بتضمين كافة معرفات القواعد المطابقة في حقل (matchedRuleIds) كقائمة (مثل: ["rule_3", "rule_5"]).
-   - قم بجمع إجمالي قيمة المكافآت المستحقة في (matchedRewardAmount) (مثال: 50 + 50 = 100.0).
-   - قم بكتابة ملخص الجوائز المجمعة في (matchedRewardValue) (مثال: "فواتشر 50 جنيه + فواتشر 50 جنيه").
-   - قم بتعيين (matchedRuleId) بمعرف القاعدة الأولى المطابقة.
-4. في حال وجود أكثر من قاعدة لنفس المنتج بمستويات كميات مختلفة (مثل: شراء 1 اسبراي ريكسونا -> 50 ج.م، وشراء 2 اسبراي ريكسونا -> 125 ج.م)، يجب عليك اختيار القاعدة ذات الكمية المشروطة الأعلى التي حققها العميل (مثال: إذا اشترى 2 اسبراي أو أكثر، اختر قاعدة الـ 125 ج.م).
-5. [حزم البندل وعروض الشرنك المزدوجة (Twin Bundles & Shrink)]: إذا احتوت الفاتورة على صنف حزمة مزدوجة أو شرنك (مثل عبوة أكس 2 قطعة أو سعر 335 ج.م مع خصم ~65 ج.م بصافي 270 ج.م، أو ريكسونا 150 مل بسعر 275 ج.م، أو احتوى الاسم على كلمات شرنك/مزدوج/2ق)، يُعامل الصنف كـ (2 قطعة) ويطابق فوراً قاعدة الـ 2 قطعة (عرض الـ 125 ج.م).
-6. [أصناف ريكسونا وأكس 150 مل]: أي صنف ريكسونا أو أكس بحجم 150 مل (مثل "ريكسونا 150 مل حر" أو "ريكسونا 150 مل رج" أو "اكس 150 مل") هو اسبراي مزيل عرق ويعامل كـ (اسبراي) ويطابق فوراً عروض الاسبراي (فواتشر 50 ج.م للقطعة أو 125 ج.م للقطعتين أو البكج المزدوج 275 ج.م).
-7. [عروض تريزيمي Tresemme المعتمدة وحزم البندل المزدوجة 400 مل]:
-   - عبوات وبكجات تريزيمي المزدوجة بحجم 400 مل (مثل 'تريزيمى شامبوزيت جوز الهند والصبار 400مل' أو 'تريزيمى شامبو + بلسم 400 ملى' أو باركود 6221155612182 أو باركود 6221155612199 أو باركود 6221155612168 أو بسعر 240+ ج.م مثل 295 ج.م أو 299 ج.م أو 378 ج.م)، تُعامل كـ (2 قطعة) وتحقق فوراً شرط الـ 2 قطعة لقاعدة تريزيمي (rule_2) وتمنح هدية تريزيمي 250 مل معتمدة (free_product).
-   - عبوات تريزيمي الفردية بحجم 600 مل أو 900 مل أو 200 مل (مثل 'تريزيمى بلسم 600 مل' أو باركود 6221155086228) ليست مدرجة في عرض الـ 400 مل وتُستبعد تماماً وتمنح 0 هدية تريزيمي.
-   - شراء عبوة فردية عادية واحدة بسعر عادي (~150 ج.م) من شامبو أو بلسم تريزيمي 400 مل لا يستحق الهدية بمفرده، حيث يشترط العرض شراء قطعتين (2 قطعة).
-8. [مضاعفة الجوائز والفرص]: إذا كانت القاعدة تتيح المضاعفة، وكان العميل قد اشترى مضاعفات الكمية المشروطة:
-   - احسب عدد مرات تكرار العرض واضرب قيمة المكافأة بعدد المرات (مثال: شراء 6 رول أون يطابق قاعدة الـ 2 رول أون بمضاعف 3x = 3 فواتشر فئة 50 ج.م بإجمالي 150 ج.م).
-9. قم بتعبئة حقل (matchedRuleId) بمعرف القاعدة المطابقة (مثل "rule_5" للرول أون أو "rule_2" لتريزيمي أو "rule_4" للاسبراي).
-10. قم بتعبئة حقل (matchedRuleTitle) بعنوان القاعدة المطابقة.
-11. قم بتعبئة حقل (matchedRewardType) بنوع المكافأة ("voucher" أو "free_product").
-12. [العزل الصارم للأصناف واستهلاك الكميات]: كل صنف يطابق قاعدة علامته التجارية ونوعه الفيزيائي فقط (مثال: رول أون ريكسونا يطابق قاعدة رول أون ريكسونا فقط، ولا يجوز إطلاقاً احتسابه في عروض الاسبراي أو تريزيمي أو كلير). تُخصم الكمية المستهلكة فوراً من السلة لمنع احتساب نفس القطعة في أكثر من عرض.
-13. إذا لم تنطبق أي من هذه القواعد الخاصة، اترك حقل (matchedRuleId) فارغاً "" وحقل (matchedRuleIds) كقائمة فارغة [].
+⚠️ تعليمات مطابقة القواعد الترويجية والعزل الصارم للشركات والعلامات (Strict Dynamic Rules & Tenant Isolation):
+$categoryPackagingGuard
+2. افحص بدقة أسماء الأصناف في الفاتورة مع مراعاة كافة الاختلافات الإملائية والطباعية في بونات الكاشير.
+3. [تجميع العروض المتزامنة (Multi-Offer Bundling)]: إذا اشترى العميل أصنافاً تحقق أكثر من عرض ترويجي مختلف في نفس الفاتورة، قم بتضمين كافة معرفات القواعد المطابقة في حقل (matchedRuleIds) كقائمة (مثل: ["rule_3", "rule_5"])، وجمع إجمالي قيمة المكافآت المستحقة في (matchedRewardAmount)، وكتابة ملخص الجوائز في (matchedRewardValue).
+4. في حال وجود أكثر من قاعدة لنفس المنتج بمستويات كميات أو إنفاق مختلفة، اختر دائماً القاعدة ذات المستوى المشروط الأعلى التي حققها العميل.
+5. [مضاعفة الجوائز والفرص]: إذا كانت القاعدة تتيح المضاعفة، وكان العميل قد اشترى مضاعفات الكمية أو الإنفاق المشروط، احسب عدد مرات تكرار العرض واضرب قيمة المكافأة بعدد المرات.
+6. قم بتعبئة حقل (matchedRuleId) بمعرف القاعدة المطابقة الأولى، و(matchedRuleTitle) بعنوان القاعدة، و(matchedRewardType) بنوع المكافأة.
+7. [العزل الصارم للأصناف واستهلاك الكميات]: كل صنف يطابق قاعدة علامته التجارية والشركة الراعية فقط، وتُخصم الكمية المستهلكة فوراً من السلة لمنع احتساب نفس القطعة في أكثر من عرض.
+8. إذا لم تنطبق أي من هذه القواعد، اترك حقل (matchedRuleId) فارغاً "" وحقل (matchedRuleIds) كقائمة فارغة [].
 ''';
       }
 
@@ -856,19 +1003,28 @@ $sigsList
 
       String branchCondition = '';
       if (retailChainName.trim().isNotEmpty) {
+        final chainList = retailChainName
+            .split(RegExp(r'[\•\,\،\/\-\|\+]'))
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+        final chainClarification = chainList.length > 1
+            ? 'تشمل أياً من السلاسل الآتية: [${chainList.join(" أو ")}] (أي فاتورة صادرة من أي سلسلة من هذه السلاسل معتمدة ومشمولة بالكامل، ويُحظر اعتبارها سلسلة غير مشمولة)'
+            : '"$retailChainName"';
+
         if (!isAllBranches && allowedBranches.isNotEmpty) {
           branchCondition =
               '''
-- السلسلة المعتمدة للحملة: "$retailChainName".
+- السلسلة/السلاسل المعتمدة للحملة: $chainClarification.
 - الفروع المعتمدة حصراً لهذا العرض: [${allowedBranches.join("، ")}].
-- المطلوب للفرع: افحص رأس الفاتورة وكود المتجر (Store ID / POS) بدقة واستخرج اسم السلسلة في (storeChainDetected) واسم الفرع أو عنوانه أو رقمه في (branchDetected). إذا كانت الفاتورة صادرة من أحد الفروع المعتمدة المذكورة أعلاه (أو يحمل كود المتجر لفرع معتمد)، حدد (isBranchMatched = true). إذا كانت من فرع آخر أو سلسلة أخرى، حدد (isBranchMatched = false) و (isValid = false) واكتب في (message) أن الفاتورة صادرة من فرع غير مشمول بالعرض.
+- المطلوب للفرع والسلسلة: افحص رأس الفاتورة وكود المتجر (Store ID / POS) بدقة واستخرج اسم السلسلة في (storeChainDetected) واسم الفرع أو عنوانه أو رقمه في (branchDetected). إذا كانت الفاتورة صادرة من أحد الفروع المعتمدة المذكورة أعلاه أو تحمل كود المتجر لفرع معتمد، حدد (isBranchMatched = true). إذا كانت الفاتورة تابعة لأيٍّ من السلاسل المعتمدة المذكورة أعلاه (${chainList.join(" أو ")}), فلا تعتبرها أبداً سلسلة غير مشمولة بل حدد (isBranchMatched = true) طالما الفرع أو كود المتجر معتمد.
 $branchSignaturesText
 ''';
         } else {
           branchCondition =
               '''
-- السلسلة المعتمدة للحملة: "$retailChainName" (كافة الفروع مشمولة).
-- المطلوب للفرع: استخرج اسم السلسلة في (storeChainDetected) والفرع في (branchDetected)، وحدد (isBranchMatched = true) إذا كانت تابعة لـ "$retailChainName".
+- السلسلة/السلاسل المعتمدة للحملة: $chainClarification (كافة الفروع مشمولة).
+- المطلوب للفرع: استخرج اسم السلسلة في (storeChainDetected) والفرع في (branchDetected)، وحدد (isBranchMatched = true) إذا كانت تابعة لأيٍّ من هذه السلاسل المعتمدة.
 $branchSignaturesText
 ''';
         }
@@ -938,9 +1094,14 @@ $productsCondition
 $promotionalRulesCondition
 $chancesCondition$multiPartInstructions
 
+🛑 حوكمة العزل الحصري لعلامات الشركة الراعية (Strict Tenant Brand Isolation):
+- الفاتورة يتم تدقيقها حصرياً لصالح شركة: "$targetCompany".
+- أي منتج بالفاتورة يتبع علامة تجارية أو شركة منافسة أو غير تابعة لـ "$targetCompany" (مثلاً: إذا كانت الشركة الراعية المراعي، فلا تحتسب منتجات جهينة أو لمار أو بيتي أو دانون أو يونيليفر؛ وإذا كانت الشركة الراعية يونيليفر، فلا تحتسب منتجات لوريال أو نيفيا أو بروكتر أند غامبل أو المراعي) يجب فوراً تعيينه: isTargetCompany = false واستبعاده كلياً من targetCompanyTotal ومن أي عرض ترويجي.
+- الأصناف المشروعة في (extractedProducts) مع (isTargetCompany = true) هي فقط الأصناف التابعة لشركة "$targetCompany".
+
 🛑 استراتيجية الفلترة الموجهة والمسح السريع الفائق (Targeted Fast-Scan Strategy):
 - ركز فورياً على رأس الفاتورة (Header) لاستخراج السلسلة والفرع وتاريخ الشراء ورقم الفاتورة.
-- عند قراءة أسطر المشتريات: ركز حصراً على أسطر منتجات وعلامات الشركة الراعية المشروطة، وتجاهل أي أسطر عامة أخرى (كاللحوم والخضار والفاكهة والمخبوزات والمنظفات غير التابعة) ولا تدرجها في extractedProducts، وذلك لتسريع الاستجابة والتركيز على منتجات العرض فقط.
+- عند قراءة أسطر المشتريات: ركز حصراً على أسطر منتجات وعلامات شركة "$targetCompany" المشروطة، وتجاهل أي أسطر عامة أخرى (كاللحوم والخضار والفاكهة والمخبوزات والمنظفات غير التابعة) ولا تدرجها في extractedProducts، وذلك لتسريع الاستجابة والتركيز على منتجات العرض فقط.
 
 🛑 تعليمات مكافحة التزوير والرفض الأمني (Anti-Fraud & Genuine Receipt Policy):
 - [بون الكاشير الإلكتروني]: الفواتير المقبولة فقط (isValid = true) هي بونات الكاشير الحرارية أو الإلكترونية المطبوعة آلياً من أنظمة ونقاط البيع المعتمدة (Thermal POS Receipts).
@@ -977,9 +1138,14 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         7. احسب الإجمالي المؤهل للحملة في حقل (targetCompanyTotal).
         8. $chancesCondition$multiPartInstructions
         
+        🛑 حوكمة العزل الحصري لعلامات الشركة الراعية (Strict Tenant Brand Isolation):
+        - الفاتورة يتم تدقيقها حصرياً لصالح شركة: "$targetCompany".
+        - أي منتج بالفاتورة يتبع علامة تجارية أو شركة منافسة أو غير تابعة لـ "$targetCompany" (مثلاً: إذا كانت الشركة الراعية المراعي، فلا تحتسب منتجات جهينة أو لمار أو بيتي أو دانون أو يونيليفر؛ وإذا كانت الشركة الراعية يونيليفر، فلا تحتسب منتجات لوريال أو نيفيا أو بروكتر أند غامبل أو المراعي) يجب فوراً تعيينه: isTargetCompany = false واستبعاده كلياً من targetCompanyTotal ومن أي عرض ترويجي.
+        - الأصناف المشروعة في (extractedProducts) مع (isTargetCompany = true) هي فقط الأصناف التابعة لشركة "$targetCompany".
+
         🛑 استراتيجية الفلترة الموجهة والمسح السريع الفائق (Targeted Fast-Scan Strategy):
         - ركز فورياً على رأس الفاتورة (Header) لاستخراج السلسلة والفرع وتاريخ الشراء ورقم الفاتورة.
-        - عند قراءة أسطر المشتريات: ركز حصراً على أسطر منتجات وعلامات الشركة الراعية المشروطة، وتجاهل أي أسطر عامة أخرى (كاللحوم والخضار والفاكهة والمخبوزات والمنظفات غير التابعة) ولا تدرجها في extractedProducts، وذلك لتسريع الاستجابة والتركيز على منتجات العرض فقط.
+        - عند قراءة أسطر المشتريات: ركز حصراً على أسطر منتجات وعلامات شركة "$targetCompany" المشروطة، وتجاهل أي أسطر عامة أخرى (كاللحوم والخضار والفاكهة والمخبوزات والمنظفات غير التابعة) ولا تدرجها في extractedProducts، وذلك لتسريع الاستجابة والتركيز على منتجات العرض فقط.
         
         🛑 تعليمات مكافحة التزوير والرفض الأمني (Anti-Fraud & Genuine Receipt Policy):
         - [بون الكاشير الإلكتروني]: الفواتير المقبولة فقط (isValid = true) هي بونات الكاشير الحرارية أو الإلكترونية المطبوعة آلياً من أنظمة ونقاط البيع المعتمدة (Thermal POS Receipts).
@@ -1046,6 +1212,8 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         var result = AiReceiptAnalysisResult.fromJson(
           jsonMap,
           durationMs: durationMs,
+          targetCompany: targetCompany,
+          targetBrands: resolvedRequiredProducts,
         );
 
         // 🛑 Strict Dart Anti-Fraud Gatekeeper
@@ -1445,6 +1613,64 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           }
         }
 
+        // Sanitize any nested or outer wrapper parentheses on branchDetected (e.g. ((المنصورة (المنصورة))) -> المنصورة (المنصورة))
+        if (result.branchDetected.contains('(') || result.branchDetected.contains(')')) {
+          var bNorm = result.branchDetected.trim();
+          while (bNorm.startsWith('(') && bNorm.endsWith(')') && '('.allMatches(bNorm).length > 1) {
+            bNorm = bNorm.substring(1, bNorm.length - 1).trim();
+          }
+          while (bNorm.startsWith('(') && '('.allMatches(bNorm).length > ')'.allMatches(bNorm).length) {
+            bNorm = bNorm.substring(1).trim();
+          }
+          while (bNorm.endsWith(')') && ')'.allMatches(bNorm).length > '('.allMatches(bNorm).length) {
+            bNorm = bNorm.substring(0, bNorm.length - 1).trim();
+          }
+          result = result.copyWith(branchDetected: bNorm);
+        }
+
+        // Multi-chain matching reconciliation
+        final allowedChains = retailChainName
+            .split(RegExp(r'[\•\,\،\/\-\|\+]'))
+            .map((s) => s.trim().toLowerCase())
+            .where((s) => s.isNotEmpty)
+            .toList();
+        final detChainNorm = result.storeChainDetected.trim().toLowerCase();
+        final isChainMatched = allowedChains.isEmpty || allowedChains.any((ac) {
+          return detChainNorm.contains(ac) ||
+              ac.contains(detChainNorm) ||
+              (detChainNorm.contains('جملة') && ac.contains('جملة')) ||
+              (detChainNorm.contains('فتح') && ac.contains('فتح')) ||
+              (detChainNorm.contains('كارفور') && ac.contains('كارفور')) ||
+              (detChainNorm.contains('سبينس') && ac.contains('سبينس')) ||
+              (detChainNorm.contains('خير') && ac.contains('خير')) ||
+              (detChainNorm.contains('بيت') && ac.contains('بيت'));
+        });
+
+        // If the branch and chain are matched, strip any spurious chain/branch rejection errors from AI unfulfilledConditions
+        if (result.isBranchMatched && isChainMatched) {
+          final cleanedUnfulfilled = result.unfulfilledConditions.where((c) {
+            final lower = c.toLowerCase();
+            final isSpuriousChainError = lower.contains('سلسلة غير مشمولة') ||
+                lower.contains('سلسله غير مشموله') ||
+                lower.contains('غير مشمولة بالعرض') ||
+                lower.contains('غير مشموله بالعرض') ||
+                (lower.contains('فرع غير مشمول') && !lower.contains('أقل من')) ||
+                lower.contains('فرع غير معتمد');
+            return !isSpuriousChainError;
+          }).toList();
+
+          final isStillFailed = cleanedUnfulfilled.isNotEmpty ||
+              (minimumSpend > 0 && result.targetCompanyTotal < minimumSpend);
+
+          result = result.copyWith(
+            unfulfilledConditions: cleanedUnfulfilled,
+            isValid: !isStillFailed,
+            message: !isStillFailed && (result.message.contains('فرع غير مشمول') || result.message.contains('سلسلة غير مشمولة'))
+                ? 'تم التحقق من الفاتورة ومطابقة الفرع بنجاح.'
+                : result.message,
+          );
+        }
+
         // Branch matching fallback validation
         if (retailChainName.trim().isNotEmpty &&
             !isAllBranches &&
@@ -1804,6 +2030,30 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
 
 /// Robust engine for resolving which promotional rule and gift/voucher is earned from receipt analysis.
 class PromotionalRuleMatcher {
+  /// Extracts all candidate brand names dynamically from promotional rules
+  /// (from requiredBrands, selectedProductNames, triggerProduct, ruleTitle).
+  static Set<String> _extractCampaignBrands(List<PromotionalRuleItem> rules) {
+    final Set<String> brands = {};
+    for (final rule in rules) {
+      for (final b in rule.requiredBrands) {
+        if (b.trim().isNotEmpty) brands.add(b.trim());
+      }
+      if (rule.triggerProduct.trim().isNotEmpty) {
+        brands.add(rule.triggerProduct.trim());
+      }
+      if (rule.ruleTitle.trim().isNotEmpty) {
+        brands.add(rule.ruleTitle.trim());
+      }
+      for (final pName in rule.selectedProductNames) {
+        final words = pName.trim().split(' ');
+        if (words.isNotEmpty && words.first.length >= 3) {
+          brands.add(words.first);
+        }
+      }
+    }
+    return brands;
+  }
+
   /// Resolves the winning promotional rule for an analyzed receipt.
   ///
   /// Priorities:
@@ -1870,6 +2120,7 @@ class PromotionalRuleMatcher {
     // 4. Smart NLP token, spend-based, and quantity-tiered match on extractedProducts
     if (effectiveProducts.isNotEmpty) {
       final matchingRulesWithScores = <PromotionalRuleItem, int>{};
+      final campaignBrands = _extractCampaignBrands(promotionalRules);
 
       for (final rule in promotionalRules) {
         if (rule.isSpendBased) {
@@ -1893,7 +2144,7 @@ class PromotionalRuleMatcher {
           double totalSpend = 0.0;
           int matchedItemCount = 0;
           for (final p in effectiveProducts) {
-            if (_matchesProduct(p, rule.triggerProduct, rule)) {
+            if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands)) {
               totalSpend += p.actualLineSpend;
               matchedItemCount++;
             }
@@ -1911,7 +2162,7 @@ class PromotionalRuleMatcher {
           int matchedItemCount = 0;
 
           for (final p in effectiveProducts) {
-            if (_matchesProduct(p, rule.triggerProduct, rule)) {
+            if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands)) {
               totalMatchedQty += getEffectiveProductQuantity(p);
               matchedItemCount++;
             }
@@ -1965,9 +2216,15 @@ class PromotionalRuleMatcher {
     // Calculate total quantity & spend of trigger products purchased
     int totalTriggerQty = 0;
     double totalTriggerSpend = 0.0;
+    final campaignBrands = _extractCampaignBrands(promotionalRules);
     if (effectiveProducts.isNotEmpty) {
       for (final p in effectiveProducts) {
-        if (_matchesProduct(p, matchedRule.triggerProduct, matchedRule)) {
+        if (_matchesProduct(
+          p,
+          matchedRule.triggerProduct,
+          matchedRule,
+          campaignBrands,
+        )) {
           final qty = getEffectiveProductQuantity(p);
           totalTriggerQty += qty;
           totalTriggerSpend += p.actualLineSpend;
@@ -2082,6 +2339,7 @@ class PromotionalRuleMatcher {
 
     final List<MatchedPromotionalRuleResult> allMatchedResults = [];
     final Set<String> matchedRuleIds = {};
+    final campaignBrands = _extractCampaignBrands(promotionalRules);
 
     // Track remaining unconsumed quantities per product item to guarantee Zero Double-Multiplication Invariant
     final Map<int, int> remainingItemQuantities = {};
@@ -2116,7 +2374,7 @@ class PromotionalRuleMatcher {
                   if (pNorm.contains(rbNorm) || isBarcodeMatch) {
                     // If matched by barcode or name contains brand root, register brand
                     if (pNorm.contains(rbNorm) ||
-                        _getBrandRootsInText(pNorm).contains(rbNorm)) {
+                        _getBrandRootsInText(pNorm, rule.requiredBrands).contains(rbNorm)) {
                       foundBrands.add(rb);
                     } else if (isBarcodeMatch) {
                       // Look up in rule's selectedProductNames for corresponding catalog brand
@@ -2156,7 +2414,7 @@ class PromotionalRuleMatcher {
             final p = effectiveProducts[i];
             final remaining = remainingItemQuantities[i] ?? 0;
             if (remaining > 0 &&
-                _matchesProduct(p, rule.triggerProduct, rule)) {
+                _matchesProduct(p, rule.triggerProduct, rule, campaignBrands)) {
               final totalEffectiveQty = getEffectiveProductQuantity(p);
               final double actualFullItemSpend = p.actualLineSpend;
               final double itemSpend = totalEffectiveQty > 0
@@ -2265,7 +2523,7 @@ class PromotionalRuleMatcher {
             final p = effectiveProducts[i];
             final remaining = remainingItemQuantities[i] ?? 0;
             if (remaining > 0 &&
-                _matchesProduct(p, rule.triggerProduct, rule)) {
+                _matchesProduct(p, rule.triggerProduct, rule, campaignBrands)) {
               availableQtyForRule += remaining;
               matchingProductIndices.add(i);
             }
@@ -2365,6 +2623,7 @@ class PromotionalRuleMatcher {
     if (matches.isNotEmpty) return const [];
 
     final reasons = <String>[];
+    final campaignBrands = _extractCampaignBrands(promotionalRules);
 
     // Check spend-based and combo rules
     for (final rule in promotionalRules) {
@@ -2380,7 +2639,7 @@ class PromotionalRuleMatcher {
                 foundBrands.add(rb);
               }
             }
-            if (_matchesProduct(p, rule.triggerProduct, rule)) {
+            if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands)) {
               currentSpend += p.actualLineSpend;
             }
           }
@@ -2404,7 +2663,7 @@ class PromotionalRuleMatcher {
         } else {
           double currentSpend = 0.0;
           for (final p in products) {
-            if (_matchesProduct(p, rule.triggerProduct, rule)) {
+            if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands)) {
               currentSpend += p.actualLineSpend;
             }
           }
@@ -2424,7 +2683,7 @@ class PromotionalRuleMatcher {
         // Quantity-based rule check
         int count = 0;
         for (final p in products) {
-          if (_matchesProduct(p, rule.triggerProduct, rule)) {
+          if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands)) {
             count += getEffectiveProductQuantity(p);
           }
         }
@@ -2591,6 +2850,9 @@ class PromotionalRuleMatcher {
     'الضحي',
     'الصحي',
     'الصحى',
+    'المراعي',
+    'المراعى',
+    'almarai',
   };
 
   static int? _extractSizeMl(String text) {
@@ -2602,17 +2864,23 @@ class PromotionalRuleMatcher {
     return null;
   }
 
-  static Set<String> _getBrandRootsInText(String text) {
+  static Set<String> _getBrandRootsInText(String text, [Iterable<String>? dynamicBrands]) {
     final norm = _normalize(text);
     final brands = <String>{};
-    for (final brand in _brandRoots) {
-      if (brand == 'اكس') {
+    final allBrandRoots = (dynamicBrands != null && dynamicBrands.isNotEmpty)
+        ? {..._brandRoots, ...dynamicBrands.map((b) => _normalize(b)).where((b) => b.isNotEmpty)}
+        : _brandRoots;
+
+    for (final brand in allBrandRoots) {
+      final brandNorm = _normalize(brand);
+      if (brandNorm.isEmpty) continue;
+      if (brandNorm == 'اكس' || brandNorm == 'axe') {
         // Must match standalone word 'اكس' / 'axe', NOT Arabic words derived from root (ك-س-ب) like 'واكسب', 'اكسب', 'مكسب'
         final words = norm.split(' ');
         final hasAxe = words.any((w) => (w == 'اكس' || w == 'axe') && !w.contains('كسب'));
-        if (hasAxe) brands.add(brand);
-      } else if (norm.contains(brand)) {
-        brands.add(brand);
+        if (hasAxe) brands.add(brandNorm);
+      } else if (norm.contains(brandNorm)) {
+        brands.add(brandNorm);
       }
     }
     return brands;
@@ -2622,6 +2890,7 @@ class PromotionalRuleMatcher {
     ExtractedProductItem product,
     String triggerProduct, [
     PromotionalRuleItem? rule,
+    Iterable<String>? dynamicBrands,
   ]) {
     if (triggerProduct.trim().isEmpty &&
         (rule == null ||
@@ -2630,6 +2899,36 @@ class PromotionalRuleMatcher {
                 rule.requiredBrands.isEmpty))) {
       return false;
     }
+
+    // 0. Strict Multi-Tenant Brand Isolation Guard:
+    // A competitor product (isTargetCompany == false) must NEVER match general promotional rules
+    // unless explicitly selected by barcode or exact product name in the campaign's catalog.
+    if (!product.isTargetCompany) {
+      final cleanBarcode = product.barcode.trim();
+      final bool isExplicitBarcodeMatch = cleanBarcode.isNotEmpty &&
+          rule != null &&
+          rule.selectedBarcodes.isNotEmpty &&
+          (rule.selectedBarcodes.contains(cleanBarcode) ||
+              (cleanBarcode.length >= 10 &&
+                  rule.selectedBarcodes.any((b) =>
+                      b.startsWith(cleanBarcode) ||
+                      cleanBarcode.startsWith(b))));
+
+      final bool isExplicitNameMatch = rule != null &&
+          rule.selectedProductNames.isNotEmpty &&
+          rule.selectedProductNames.any(
+            (sel) => _normalize(sel) == _normalize(product.name),
+          );
+
+      if (!isExplicitBarcodeMatch && !isExplicitNameMatch) {
+        return false;
+      }
+    }
+
+    final Set<String> allDynamicBrands = {
+      ...?dynamicBrands,
+      if (rule != null) ...rule.requiredBrands,
+    };
 
     // 0. Golden Barcode Priority Match:
     // If the rule has selected barcodes from catalog, or trigger contains barcode, match immediately!
@@ -2669,28 +2968,27 @@ class PromotionalRuleMatcher {
     final Set<String> triggerBrands = <String>{};
     if (rule != null && rule.requiredBrands.isNotEmpty) {
       for (final rb in rule.requiredBrands) {
-        final roots = _getBrandRootsInText(_normalize(rb));
-        if (roots.isNotEmpty) {
-          triggerBrands.addAll(roots);
-        } else {
-          triggerBrands.add(_normalize(rb));
+        final rbNorm = _normalize(rb);
+        if (rbNorm.isNotEmpty) {
+          triggerBrands.add(rbNorm);
         }
+        final roots = _getBrandRootsInText(rbNorm, allDynamicBrands);
+        triggerBrands.addAll(roots);
       }
     } else {
-      triggerBrands.addAll(_getBrandRootsInText(triggerProduct));
+      triggerBrands.addAll(_getBrandRootsInText(triggerProduct, allDynamicBrands));
       if (rule != null && triggerBrands.isEmpty) {
-        triggerBrands.addAll(_getBrandRootsInText(rule.ruleTitle));
+        triggerBrands.addAll(_getBrandRootsInText(rule.ruleTitle, allDynamicBrands));
       }
     }
     if (triggerBrands.isNotEmpty) {
-      final Set<String> productBrands = _getBrandRootsInText(pNorm);
+      final Set<String> productBrands = _getBrandRootsInText(pNorm, triggerBrands);
       final bool hasMatchingBrand = triggerBrands.any(
-        (tb) => productBrands.contains(tb),
+        (tb) => productBrands.contains(tb) || pNorm.contains(tb),
       );
       // In spend rules for a company, if AI confirmed product belongs to target company, do not reject solely on brand name root
       final bool isCompanySpendAnchor = (rule?.conditionType == 'by_spend') &&
-          product.isTargetCompany &&
-          (triggerBrands.contains('الضحي') || triggerBrands.contains('الضحى'));
+          product.isTargetCompany;
       if (!hasMatchingBrand && !isCompanySpendAnchor) {
         return false;
       }
@@ -2841,20 +3139,20 @@ class PromotionalRuleMatcher {
     final Set<String> effectiveRuleBrands = <String>{};
     if (rule != null && rule.requiredBrands.isNotEmpty) {
       for (final rb in rule.requiredBrands) {
-        final roots = _getBrandRootsInText(_normalize(rb));
-        if (roots.isNotEmpty) {
-          effectiveRuleBrands.addAll(roots);
-        } else {
-          effectiveRuleBrands.add(_normalize(rb));
+        final rbNorm = _normalize(rb);
+        if (rbNorm.isNotEmpty) {
+          effectiveRuleBrands.add(rbNorm);
         }
+        final roots = _getBrandRootsInText(rbNorm, allDynamicBrands);
+        effectiveRuleBrands.addAll(roots);
       }
     } else if (rule != null) {
-      effectiveRuleBrands.addAll(_getBrandRootsInText(rule.ruleTitle));
-      effectiveRuleBrands.addAll(_getBrandRootsInText(triggerProduct));
+      effectiveRuleBrands.addAll(_getBrandRootsInText(rule.ruleTitle, allDynamicBrands));
+      effectiveRuleBrands.addAll(_getBrandRootsInText(triggerProduct, allDynamicBrands));
     }
 
     if (effectiveRuleBrands.isNotEmpty) {
-      final Set<String> productBrands = _getBrandRootsInText(pNorm);
+      final Set<String> productBrands = _getBrandRootsInText(pNorm, effectiveRuleBrands);
       final bool hasRuleBrand = effectiveRuleBrands.any((rb) {
         final rbNorm = _normalize(rb);
         return productBrands.contains(rbNorm) || pNorm.contains(rbNorm);
@@ -2862,8 +3160,7 @@ class PromotionalRuleMatcher {
 
       // Also allow if product is flagged as target company and belongs to the same company scope in spend rules
       final bool isCompanyProductSpendRule = (rule?.conditionType == 'by_spend') &&
-          product.isTargetCompany &&
-          (hasRuleBrand || effectiveRuleBrands.contains('الضحي') || effectiveRuleBrands.contains('الضحى'));
+          product.isTargetCompany;
 
       if (hasRuleBrand || isCompanyProductSpendRule) {
         // Form & category validation
@@ -2959,7 +3256,7 @@ class PromotionalRuleMatcher {
           if (pWords.contains(targetWord) || pNorm.contains(targetWord)) {
             return true;
           }
-          return pWords.any((pw) => _isFuzzyWordMatch(pw, targetWord));
+          return pWords.any((pw) => _isFuzzyWordMatch(pw, targetWord, allDynamicBrands));
         });
         if (allWordsMatched) return true;
       }
@@ -2968,13 +3265,25 @@ class PromotionalRuleMatcher {
     return false;
   }
 
-  static bool _isFuzzyWordMatch(String w1, String w2) {
+  static bool _isFuzzyWordMatch(
+    String w1,
+    String w2, [
+    Iterable<String>? dynamicBrands,
+  ]) {
     if (w1 == w2) return true;
     if (w1.isEmpty || w2.isEmpty) return false;
 
     // Brand words require exact canonical root match
     if (_brandRoots.contains(w1) || _brandRoots.contains(w2)) {
       return false;
+    }
+    if (dynamicBrands != null) {
+      for (final b in dynamicBrands) {
+        final bNorm = _normalize(b);
+        if (bNorm.isNotEmpty && (w1 == bNorm || w2 == bNorm)) {
+          return false;
+        }
+      }
     }
 
     // Both words must share the same first character to prevent false phonetic matches (e.g. حريمي vs تريزيمي)
@@ -3170,7 +3479,8 @@ class PromotionalRuleMatcher {
     ExtractedProductItem p,
     String trigger, [
     PromotionalRuleItem? rule,
-  ]) => _matchesProduct(p, trigger, rule);
+    Iterable<String>? dynamicBrands,
+  ]) => _matchesProduct(p, trigger, rule, dynamicBrands);
 
   static List<String> _extractTokens(String trigger) {
     final parts = trigger.split(
