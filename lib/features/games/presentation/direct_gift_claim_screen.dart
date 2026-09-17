@@ -320,23 +320,48 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
           }
         }
 
-        for (final p in prizes) {
-          final matches = p['giftId'] == widget.prizeName ||
-              p['name'] == widget.prizeName ||
-              (discoveredName != null && p['name'] == discoveredName);
-          if (matches) {
-            if (widget.branchId != null &&
-                widget.branchId!.isNotEmpty &&
-                p['branchId'] == widget.branchId) {
-              foundRemaining = (p['remainingQuantity'] as num?)?.toInt() ?? 0;
-              if (p['branchName'] != null && p['branchName'].toString().isNotEmpty) {
-                branchNameFound = p['branchName'].toString();
-              }
-              break;
-            } else if (foundRemaining == -1) {
-              foundRemaining = (p['remainingQuantity'] as num?)?.toInt() ?? 0;
-              if (p['branchName'] != null && p['branchName'].toString().isNotEmpty) {
-                branchNameFound = p['branchName'].toString();
+        final targetPrizeName = (discoveredName != null && discoveredName.isNotEmpty)
+            ? discoveredName
+            : widget.prizeName;
+        final targetBranch = _resolvedBranchName ?? branchNameFound ?? widget.branchId;
+
+        final matchIdx = CompanyGiftsService.findBestPrizeMatchIndex(
+          prizes,
+          targetPrizeName,
+          branchId: targetBranch,
+          unitValue: discoveredUnitVal,
+          isVoucher: discoveredIsVoucher,
+          preferWithRemaining: true,
+        );
+
+        if (matchIdx != -1) {
+          foundRemaining = (prizes[matchIdx]['remainingQuantity'] as num?)?.toInt() ?? 0;
+          final pBranch = (prizes[matchIdx]['branchName'] ?? '').toString().trim();
+          if (pBranch.isNotEmpty) {
+            branchNameFound = pBranch;
+          }
+        } else {
+          for (final p in prizes) {
+            final matches = p['giftId'] == widget.prizeName ||
+                p['name'] == widget.prizeName ||
+                (discoveredName != null && p['name'] == discoveredName);
+            if (matches) {
+              final pBranchId = (p['branchId'] ?? '').toString().trim();
+              final pBranchName = (p['branchName'] ?? '').toString().trim();
+              final isBranchMatch = (targetBranch != null &&
+                  targetBranch.isNotEmpty &&
+                  (pBranchId == targetBranch ||
+                      pBranchName == targetBranch ||
+                      CompanyGiftsService.matchesBranchName(pBranchName, targetBranch)));
+
+              if (isBranchMatch) {
+                foundRemaining = (p['remainingQuantity'] as num?)?.toInt() ?? 0;
+                if (pBranchName.isNotEmpty) {
+                  branchNameFound = pBranchName;
+                }
+                break;
+              } else if (pBranchName.isEmpty && pBranchId.isEmpty && foundRemaining == -1) {
+                foundRemaining = (p['remainingQuantity'] as num?)?.toInt() ?? 0;
               }
             }
           }

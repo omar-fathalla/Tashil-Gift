@@ -36,6 +36,7 @@ import 'widgets/campaign_brief_dialog.dart';
 import 'widgets/promoter_invoices_dialog.dart';
 import 'widgets/unified_multi_campaign_claim_screen.dart';
 import '../../../core/services/multi_campaign_receipt_evaluator.dart';
+import '../../../core/services/receipt_deduplication_helper.dart';
 import '../../../core/widgets/campaign_suspended_screen.dart';
 
 
@@ -743,6 +744,50 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         return;
       }
 
+      final candidateReceiptNumber = result.receiptNumber.trim();
+      if (candidateReceiptNumber.isNotEmpty) {
+        final duplicateCheck = await ReceiptDeduplicationHelper.checkReceiptDuplicate(
+          firestore: firestore,
+          receiptNumber: candidateReceiptNumber,
+          companySlug: primaryTargetEvent.companySlug,
+          campaignId: isMultiScan ? null : _activeEvent?.id,
+          isMultiScan: isMultiScan,
+        );
+
+        if (duplicateCheck.isDuplicate) {
+          if (!mounted) return;
+          final activeCountry = ref.read(activeCountryProvider);
+          final strings = AppStrings.of(ref);
+
+          showReceiptValidationReportDialog(
+            context: context,
+            title: strings.duplicateReceiptAlreadyDrawnTitle,
+            subtitle: duplicateCheck.rejectionMessage,
+            conditions: [
+              ValidationConditionItem(
+                title: strings.duplicateReceiptConditionTitle,
+                description: duplicateCheck.rejectionMessage,
+                icon: Icons.history_toggle_off_rounded,
+                isMet: false,
+                value: duplicateCheck.existingPrizeWon,
+              ),
+            ],
+            receiptNumber: candidateReceiptNumber,
+            storeChain: result.storeChainDetected,
+            branch: result.branchDetected,
+            receiptDate: result.receiptDate,
+            totalValue: result.targetCompanyTotal,
+            requiredMinimum: isMultiScan ? 0.0 : (_activeEvent?.minimumSpend ?? 0.0),
+            currencySymbol: activeCountry.currencySymbol,
+            imageUrl: previewImgUrl,
+            imageUrls: previewUrls,
+            isDuplicate: true,
+          );
+          _resetFormForNextCustomer();
+          return;
+        }
+      }
+
       if (isMultiScan) {
         final summary = MultiCampaignReceiptEvaluator.evaluateAll(
           result: result,
@@ -840,6 +885,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                   'analysis_duration_seconds': result.durationSeconds,
                   'analysis_duration_ms': result.durationMs,
                   'ai_kpi_rating': result.kpiRating,
+                  'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
                 },
                 onDisbursalCompleted: () {
                   _resetFormForNextCustomer();
@@ -1027,16 +1073,26 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
 
       // Check for existing receipt in this specific campaign to update/upsert
       DocumentSnapshot<Map<String, dynamic>>? existingDoc;
-      if (receiptNumber.isNotEmpty) {
-        final existing = await firestore
-            .collection('receipts_transactions')
-            .where('receipt_number', isEqualTo: receiptNumber)
-            .where('campaignId', isEqualTo: _activeEvent!.id)
-            .limit(1)
-            .get();
+      final deterministicDocId = ReceiptDeduplicationHelper.getDeterministicDocId(
+        campaignId: _activeEvent!.id,
+        receiptNumber: receiptNumber,
+      );
 
-        if (existing.docs.isNotEmpty) {
-          existingDoc = existing.docs.first;
+      if (receiptNumber.isNotEmpty) {
+        final directSnap = await firestore.collection('receipts_transactions').doc(deterministicDocId).get();
+        if (directSnap.exists) {
+          existingDoc = directSnap;
+        } else {
+          final existing = await firestore
+              .collection('receipts_transactions')
+              .where('receipt_number', isEqualTo: receiptNumber)
+              .where('campaignId', isEqualTo: _activeEvent!.id)
+              .limit(1)
+              .get();
+
+          if (existing.docs.isNotEmpty) {
+            existingDoc = existing.docs.first;
+          }
         }
       }
 
@@ -1064,6 +1120,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
               contentType: 'image/jpeg',
               customMetadata: {
                 'receiptNumber': receiptNumber,
+                'campaignId': _activeEvent!.id,
                 'companySlug': _activeEvent!.companySlug,
                 'targetCompany': _activeEvent!.targetCompany,
                 'totalValue': totalValue.toString(),
@@ -1103,7 +1160,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
 
       final int calculatedChances = result.chancesEarned > 0 ? result.chancesEarned : 1;
       final DocumentReference<Map<String, dynamic>> transactionRef =
-          existingDoc != null ? existingDoc.reference : firestore.collection('receipts_transactions').doc();
+          existingDoc != null ? existingDoc.reference : firestore.collection('receipts_transactions').doc(deterministicDocId);
       final bool isExistingRecord = existingDoc != null;
       final existingData = existingDoc?.data() ?? {};
       final bool wasGamePlayed = existingData['game_played'] == true;

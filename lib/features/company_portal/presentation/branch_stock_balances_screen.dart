@@ -194,10 +194,12 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
         for (final branchName in branches) {
           for (final gift in masterGifts) {
             final giftKey = gift.id.isNotEmpty ? gift.id : gift.giftName;
-            final cellKey = '${event.id}_${branchName}_$giftKey';
-            final controller = _controllers[cellKey];
+            final targetEvent = _findEventForGift(gift, events) ?? event;
+            final cellKey = '${targetEvent.id}_${branchName}_$giftKey';
+            final controller = _controllers[cellKey] ?? _controllers['${event.id}_${branchName}_$giftKey'];
             final val = controller?.text.trim().toIntOrNull() ?? 0;
             cellAllocations[cellKey] = val;
+            cellAllocations['${event.id}_${branchName}_$giftKey'] = val;
           }
         }
       }
@@ -336,10 +338,12 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
             claimed = (giftData?['claimed'] as num?)?.toInt() ?? 0;
             remaining = (giftData?['returned'] as num?)?.toInt() ?? 0;
           } else {
-            final eventId = primaryEvent?.id ?? '';
+            final targetEvent = _findEventForGift(gift, events) ?? primaryEvent;
+            final eventId = targetEvent?.id ?? '';
             final cellKey = '${eventId}_${branch}_$giftKey';
-            alloc = _controllers[cellKey]?.text.trim().toIntOrNull() ?? 0;
-            claimed = _claimedCache[cellKey] ?? 0;
+            final ctrl = _controllers[cellKey] ?? _controllers['${primaryEvent?.id ?? ''}_${branch}_$giftKey'];
+            alloc = ctrl?.text.trim().toIntOrNull() ?? 0;
+            claimed = _claimedCache[cellKey] ?? _claimedCache['${primaryEvent?.id ?? ''}_${branch}_$giftKey'] ?? 0;
             remaining = (alloc - claimed).clamp(0, alloc);
           }
 
@@ -990,10 +994,26 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
   }
 
   static bool _matchesBranchName(String b1, String b2) {
-    if (b1 == b2) return true;
-    final c1 = b1.replaceAll(RegExp(r'\s*\([^)]*\)'), '').replaceAll(RegExp(r'فرع\s+'), '').trim().toLowerCase();
-    final c2 = b2.replaceAll(RegExp(r'\s*\([^)]*\)'), '').replaceAll(RegExp(r'فرع\s+'), '').trim().toLowerCase();
-    return c1 == c2 || b1.toLowerCase().contains(c2) || b2.toLowerCase().contains(c1);
+    return CompanyGiftsService.matchesBranchName(b1, b2);
+  }
+
+  static EventModel? _findEventForGift(CompanyGiftModel gift, List<EventModel> events) {
+    if (events.length == 1) return events.first;
+    for (final ev in events) {
+      if (ev.allocatedPrizes.any((p) =>
+          (p.giftId.isNotEmpty && p.giftId == gift.id) ||
+          p.name.trim().toLowerCase() == gift.giftName.trim().toLowerCase())) {
+        return ev;
+      }
+      if (ev.promotionalRules.any((r) =>
+          (r.linkedGiftId != null && r.linkedGiftId == gift.id) ||
+          r.linkedGifts.any((lg) =>
+              (lg.giftId.isNotEmpty && lg.giftId == gift.id) ||
+              lg.giftName.trim().toLowerCase() == gift.giftName.trim().toLowerCase()))) {
+        return ev;
+      }
+    }
+    return events.isNotEmpty ? events.first : null;
   }
 
   Widget _buildBalancesContent({
@@ -2759,11 +2779,16 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
           ),
         );
       } else {
-        final eventId = primaryEvent?.id ?? '';
+        final targetEvent = _findEventForGift(gift, events) ?? primaryEvent;
+        final eventId = targetEvent?.id ?? '';
         final cellKey = '${eventId}_${branchName}_$giftKey';
 
-        final controller = _controllers[cellKey] ?? TextEditingController(text: '0');
-        final claimed = _claimedCache[cellKey] ?? 0;
+        final controller = _controllers[cellKey] ??
+            _controllers['${primaryEvent?.id ?? ''}_${branchName}_$giftKey'] ??
+            TextEditingController(text: '0');
+        final claimed = _claimedCache[cellKey] ??
+            _claimedCache['${primaryEvent?.id ?? ''}_${branchName}_$giftKey'] ??
+            0;
         final currentAlloc = controller.text.trim().toIntOrNull() ?? 0;
         final remaining = (currentAlloc - claimed).clamp(0, currentAlloc);
 
@@ -3013,11 +3038,12 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
         } else {
           for (final gift in masterGifts) {
             final giftKey = gift.id.isNotEmpty ? gift.id : gift.giftName;
-            final eventId = primaryEvent?.id ?? '';
+            final targetEvent = _findEventForGift(gift, events) ?? primaryEvent;
+            final eventId = targetEvent?.id ?? '';
             final cellKey = '${eventId}_${branchName}_$giftKey';
-            final controller = _controllers[cellKey];
+            final controller = _controllers[cellKey] ?? _controllers['${primaryEvent?.id ?? ''}_${branchName}_$giftKey'];
             final alloc = controller?.text.trim().toIntOrNull() ?? 0;
-            final claimed = _claimedCache[cellKey] ?? 0;
+            final claimed = _claimedCache[cellKey] ?? _claimedCache['${primaryEvent?.id ?? ''}_${branchName}_$giftKey'] ?? 0;
             branchAllocatedSum += alloc;
             branchClaimedSum += claimed;
           }
@@ -3145,10 +3171,15 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                   );
                 }
 
-                final eventId = primaryEvent?.id ?? '';
+                final targetEvent = _findEventForGift(gift, events) ?? primaryEvent;
+                final eventId = targetEvent?.id ?? '';
                 final cellKey = '${eventId}_${branchName}_$giftKey';
-                final controller = _controllers[cellKey] ?? TextEditingController(text: '0');
-                final claimed = _claimedCache[cellKey] ?? 0;
+                final controller = _controllers[cellKey] ??
+                    _controllers['${primaryEvent?.id ?? ''}_${branchName}_$giftKey'] ??
+                    TextEditingController(text: '0');
+                final claimed = _claimedCache[cellKey] ??
+                    _claimedCache['${primaryEvent?.id ?? ''}_${branchName}_$giftKey'] ??
+                    0;
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),

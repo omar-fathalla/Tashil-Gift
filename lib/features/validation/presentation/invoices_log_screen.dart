@@ -24,6 +24,10 @@ import '../../../core/widgets/portal_screen_header_card.dart';
 import '../../../core/widgets/interactive_receipt_viewer_dialog.dart';
 import '../../../core/services/multi_campaign_receipt_evaluator.dart';
 import 'package:http/http.dart' as http;
+import '../../games/presentation/choose_gift_screen.dart';
+import '../../games/presentation/spin_the_wheel_screen.dart';
+import '../../games/presentation/scratch_card_screen.dart';
+import '../../games/presentation/direct_gift_claim_screen.dart';
 
 enum DateFilterType { all, today, last7Days, thisMonth, custom }
 
@@ -1334,15 +1338,23 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
 
       final int chances = winningEval.totalChances > 0 ? winningEval.totalChances : 1;
 
+      final bool isInteractiveReward = (winningCampaign.gameType.trim().toLowerCase() == 'choosegift') ||
+          (winningCampaign.gameType.trim().toLowerCase() == 'wheel') ||
+          (winningCampaign.gameType.trim().toLowerCase() == 'scratch') ||
+          (winningCampaign.gameType.trim().toLowerCase() == 'scratchcard') ||
+          (winningEval.resolvedLinkedGifts.length > 1 && winningCampaign.gameType.trim().toLowerCase() != 'directgift');
+
       final claimedGifts = <Map<String, dynamic>>[];
-      for (final g in winningEval.resolvedLinkedGifts) {
-        claimedGifts.add({
-          'giftId': g.giftId,
-          'giftName': g.giftName,
-          'quantity': g.quantity,
-          'unitValue': g.unitValue,
-          'isVoucher': g.isVoucher,
-        });
+      if (!isInteractiveReward) {
+        for (final g in winningEval.resolvedLinkedGifts) {
+          claimedGifts.add({
+            'giftId': g.giftId,
+            'giftName': g.giftName,
+            'quantity': g.quantity,
+            'unitValue': g.unitValue,
+            'isVoucher': g.isVoucher,
+          });
+        }
       }
 
       final canonical = winningEval.resolvedBranchName ?? _normalizeBranchName(rawBranch, winningCampaign.branchNames, isAr);
@@ -1365,6 +1377,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
         'canonical_branch': canonical,
         'branch_detected': canonical,
         if (claimedGifts.isNotEmpty) 'claimed_gifts': claimedGifts,
+        if (isInteractiveReward) 'game_played': false,
       });
 
       if (mounted) {
@@ -1375,6 +1388,12 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
           winningCampaign: winningCampaign,
           isReassignedToSisterCampaign: winningCampaign.id != activeEvent.id,
           prizeTitle: winningEval.designatedPrize,
+          docId: docId,
+          totalChances: chances,
+          resolvedBranchId: winningEval.resolvedBranchId,
+          resolvedLinkedGifts: winningEval.resolvedLinkedGifts,
+          resolvedUnitValue: winningEval.resolvedUnitValue,
+          resolvedIsVoucher: winningEval.resolvedIsVoucher,
           onViewAccepted: () {
             setState(() {
               _statusFilter = 'accepted';
@@ -1555,18 +1574,25 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
         orElse: () => summary.qualifiedCampaigns.first,
       );
       final winningCampaign = winningEval.campaign;
-
       final int chances = winningEval.totalChances > 0 ? winningEval.totalChances : 1;
 
+      final bool isInteractiveReward = (winningCampaign.gameType.trim().toLowerCase() == 'choosegift') ||
+          (winningCampaign.gameType.trim().toLowerCase() == 'wheel') ||
+          (winningCampaign.gameType.trim().toLowerCase() == 'scratch') ||
+          (winningCampaign.gameType.trim().toLowerCase() == 'scratchcard') ||
+          (winningEval.resolvedLinkedGifts.length > 1 && winningCampaign.gameType.trim().toLowerCase() != 'directgift');
+
       final claimedGifts = <Map<String, dynamic>>[];
-      for (final g in winningEval.resolvedLinkedGifts) {
-        claimedGifts.add({
-          'giftId': g.giftId,
-          'giftName': g.giftName,
-          'quantity': g.quantity,
-          'unitValue': g.unitValue,
-          'isVoucher': g.isVoucher,
-        });
+      if (!isInteractiveReward) {
+        for (final g in winningEval.resolvedLinkedGifts) {
+          claimedGifts.add({
+            'giftId': g.giftId,
+            'giftName': g.giftName,
+            'quantity': g.quantity,
+            'unitValue': g.unitValue,
+            'isVoucher': g.isVoucher,
+          });
+        }
       }
 
       final double computedTotal = result.extractedProducts.fold<double>(0.0, (acc, p) => acc + p.actualLineSpend);
@@ -1596,6 +1622,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
         'ai_kpi_rating': result.kpiRating,
         'chances_earned': chances,
         if (claimedGifts.isNotEmpty) 'claimed_gifts': claimedGifts,
+        if (isInteractiveReward) 'game_played': false,
       });
 
       if (mounted) {
@@ -1606,6 +1633,12 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
           winningCampaign: winningCampaign,
           isReassignedToSisterCampaign: winningCampaign.id != activeEvent.id,
           prizeTitle: winningEval.designatedPrize,
+          docId: docId,
+          totalChances: chances,
+          resolvedBranchId: winningEval.resolvedBranchId,
+          resolvedLinkedGifts: winningEval.resolvedLinkedGifts,
+          resolvedUnitValue: winningEval.resolvedUnitValue,
+          resolvedIsVoucher: winningEval.resolvedIsVoucher,
           onViewAccepted: () {
             setState(() {
               _statusFilter = 'accepted';
@@ -1682,8 +1715,42 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     EventModel? winningCampaign,
     bool isReassignedToSisterCampaign = false,
     String? prizeTitle,
+    String? docId,
+    int totalChances = 1,
+    String? resolvedBranchId,
+    List<LinkedGiftAllocation> resolvedLinkedGifts = const [],
+    double? resolvedUnitValue,
+    bool resolvedIsVoucher = false,
     VoidCallback? onViewAccepted,
   }) {
+    final gameType = winningCampaign?.gameType.trim().toLowerCase() ?? '';
+    final isChooseGift = gameType == 'choosegift' || (resolvedLinkedGifts.length > 1 && gameType != 'directgift');
+    final isWheel = gameType == 'wheel' || gameType == 'spinthewheel';
+    final isScratch = gameType == 'scratch' || gameType == 'scratchcard';
+    final isDirect = gameType == 'directgift' || (!isChooseGift && !isWheel && !isScratch);
+
+    // Extract available candidate prizes
+    List<String> candidatePrizes = [];
+    if (resolvedLinkedGifts.isNotEmpty) {
+      candidatePrizes = resolvedLinkedGifts.map((g) => g.giftName.trim()).where((n) => n.isNotEmpty).toSet().toList();
+    }
+    if (candidatePrizes.isEmpty && winningCampaign != null) {
+      candidatePrizes = winningCampaign.allocatedPrizes
+          .where((p) => p.remainingQuantity > 0)
+          .map((p) => p.name.trim())
+          .where((n) => n.isNotEmpty)
+          .toSet()
+          .toList();
+    }
+
+    // Clean display title for choice campaigns
+    String effectiveTitle = prizeTitle ?? '';
+    if (isChooseGift) {
+      effectiveTitle = isAr
+          ? 'عرض ترويجي بنظام اختيار الهدية (${candidatePrizes.length} خيارات متاحة)'
+          : 'Promotional Choice Reward (${candidatePrizes.length} Options)';
+    }
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1703,73 +1770,309 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
           textAlign: TextAlign.center,
           style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 18),
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              isReassignedToSisterCampaign
-                  ? (isAr
-                      ? 'تبيّن بعد التدقيق أن الفاتورة مطابقة ومستوفاة لشروط حملة (${winningCampaign?.eventName ?? ""}) وتم اعتمادها وحصولها على الهدية بنجاح!'
-                      : 'Receipt matches campaign (${winningCampaign?.eventName ?? ""}) and has been successfully approved!')
-                  : strings.recheckSuccessMessage,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.cairo(color: Colors.grey.shade700, fontSize: 13.5),
-            ),
-            if (prizeTitle != null && prizeTitle.isNotEmpty) ...[
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                isReassignedToSisterCampaign
+                    ? (isAr
+                        ? 'تبيّن بعد التدقيق أن الفاتورة مطابقة ومستوفاة لشروط حملة (${winningCampaign?.eventName ?? ""}) وتم اعتمادها بنجاح!'
+                        : 'Receipt matches campaign (${winningCampaign?.eventName ?? ""}) and has been successfully approved!')
+                    : strings.recheckSuccessMessage,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.cairo(color: Colors.grey.shade700, fontSize: 13.5),
+              ),
               const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.purple.shade50,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.purple.shade200),
+
+              // Interactive Game / Gift Selection Banner
+              if (isChooseGift) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50.withValues(alpha: 0.8),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.amber.shade300),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.shade200,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(Icons.touch_app_rounded, color: Colors.amber.shade900, size: 18),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  isAr ? 'نظام اختيار الهدية (Choice Reward) 🎁' : 'Choice Reward System 🎁',
+                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF452700)),
+                                ),
+                                Text(
+                                  isAr ? 'يحق للعميل اختيار هديته من بين الخيارات التالية:' : 'Customer can pick a gift from available choices:',
+                                  style: TextStyle(fontSize: 11, color: Colors.amber.shade900),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (candidatePrizes.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: candidatePrizes.map((p) => Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.amber.shade300),
+                              boxShadow: [
+                                BoxShadow(color: Colors.amber.shade100.withValues(alpha: 0.5), blurRadius: 3, offset: const Offset(0, 1)),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.card_giftcard_rounded, size: 13, color: Colors.amber.shade900),
+                                const SizedBox(width: 5),
+                                Text(
+                                  p,
+                                  style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold, color: const Color(0xFF452700)),
+                                ),
+                              ],
+                            ),
+                          )).toList(),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.card_giftcard_rounded, color: Colors.purple.shade700, size: 20),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        prizeTitle,
-                        style: GoogleFonts.cairo(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                          color: Colors.purple.shade900,
+              ] else if (isWheel) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.amber.shade300),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.rotate_right_rounded, color: Colors.amber.shade900, size: 24),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          isAr ? 'آلية الجائزة: عجلة الحظ 🎡 (قم بتدوير العجلة لتحديد الهدية)' : 'Wheel of Fortune 🎡 (Spin wheel to pick gift)',
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12.5, color: const Color(0xFF452700)),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
+              ] else if (isScratch) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.indigo.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.indigo.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.auto_awesome_rounded, color: Colors.indigo.shade700, size: 24),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          isAr ? 'آلية الجائزة: كارت الخربشة ✨ (قم بالخربشة لكشف الهدية)' : 'Scratch Card ✨ (Scratch to reveal gift)',
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12.5, color: Colors.indigo.shade900),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else ...[
+                // Direct Gift
+                if (effectiveTitle.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.purple.shade200),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.card_giftcard_rounded, color: Colors.purple.shade700, size: 20),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            effectiveTitle,
+                            style: GoogleFonts.cairo(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: Colors.purple.shade900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+
+              const SizedBox(height: 10),
+              Text(
+                isAr
+                    ? 'تم تحديث حالة الفاتورة ونقلها تلقائياً إلى قسم "الفواتير المقبولة" وحذف سبب الرفض.'
+                    : 'Status updated: Moved automatically to "Accepted Invoices" and rejection reason cleared.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
               ),
             ],
-            const SizedBox(height: 10),
-            Text(
-              isAr
-                  ? 'تم تحديث حالة الفاتورة ونقلها تلقائياً إلى قسم "الفواتير المقبولة" وحذف سبب الرفض.'
-                  : 'Status updated: Moved automatically to "Accepted Invoices" and rejection reason cleared.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
-            ),
-          ],
+          ),
         ),
         actionsAlignment: MainAxisAlignment.center,
         actions: [
+          // Primary Action Button (Game / Choice / Direct Claim)
+          if (docId != null && docId.isNotEmpty && winningCampaign != null) ...[
+            if (isChooseGift)
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => ChooseGiftScreen(
+                        transactionId: docId,
+                        eventId: winningCampaign.id,
+                        companySlug: winningCampaign.companySlug,
+                        prizes: candidatePrizes,
+                        totalChances: totalChances > 0 ? totalChances : 1,
+                        branchId: resolvedBranchId,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.card_giftcard_rounded, size: 18),
+                label: Text(
+                  isAr ? '🎁 اختيار وتسليم الهدية للعميل الآن' : '🎁 Pick & Claim Gift Now',
+                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.purple.shade700,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                ),
+              )
+            else if (isWheel)
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => SpinTheWheelScreen(
+                        transactionId: docId,
+                        eventId: winningCampaign.id,
+                        prizes: candidatePrizes,
+                        totalChances: totalChances > 0 ? totalChances : 1,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.rotate_right_rounded, size: 18),
+                label: Text(
+                  isAr ? '🎡 تدوير العجلة لتحديد الهدية' : '🎡 Spin Wheel for Gift',
+                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.amber.shade800,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                ),
+              )
+            else if (isScratch)
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => ScratchCardScreen(
+                        transactionId: docId,
+                        eventId: winningCampaign.id,
+                        prizes: candidatePrizes,
+                        totalChances: totalChances > 0 ? totalChances : 1,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+                label: Text(
+                  isAr ? '✨ خربشة الكارت لكشف الهدية' : '✨ Scratch Card for Gift',
+                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.indigo.shade700,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                ),
+              )
+            else if (isDirect)
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => DirectGiftClaimScreen(
+                        transactionId: docId,
+                        eventId: winningCampaign.id,
+                        prizeName: prizeTitle ?? 'هدية معتمدة',
+                        quantity: 1,
+                        branchId: resolvedBranchId,
+                        unitValue: resolvedUnitValue,
+                        isVoucher: resolvedIsVoucher,
+                        linkedGifts: resolvedLinkedGifts,
+                        requireVoucherSerials: winningCampaign.requireVoucherSerials,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+                label: Text(
+                  isAr ? '📦 صرف وتسليم الهدية للعميل' : '📦 Deliver Gift to Customer',
+                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.green.shade700,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                ),
+              ),
+          ],
+
           if (onViewAccepted != null)
-            FilledButton.icon(
+            OutlinedButton.icon(
               onPressed: () {
                 Navigator.pop(ctx);
                 onViewAccepted();
               },
-              icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+              icon: const Icon(Icons.visibility_outlined, size: 16),
               label: Text(
-                isAr ? 'عرض الفاتورة في المقبولة' : 'View in Accepted',
+                isAr ? 'عرض في المقبولة' : 'View in Accepted',
                 style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
               ),
-              style: FilledButton.styleFrom(
-                backgroundColor: Colors.green.shade700,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.green.shade800,
+                side: BorderSide(color: Colors.green.shade400),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               ),
             ),
           TextButton(

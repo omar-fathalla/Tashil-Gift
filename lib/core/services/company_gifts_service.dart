@@ -479,11 +479,15 @@ class CompanyGiftsService {
   }
 
   /// Helper to match branch names with fuzzy normalization (stripping city parentheticals and "فرع")
-  static bool _matchesBranchName(String b1, String b2) {
-    if (b1.trim().toLowerCase() == b2.trim().toLowerCase()) return true;
-    final c1 = b1.replaceAll(RegExp(r'\s*\([^)]*\)'), '').replaceAll(RegExp(r'فرع\s+'), '').trim().toLowerCase();
-    final c2 = b2.replaceAll(RegExp(r'\s*\([^)]*\)'), '').replaceAll(RegExp(r'فرع\s+'), '').trim().toLowerCase();
-    return c1 == c2 || b1.toLowerCase().contains(c2) || b2.toLowerCase().contains(c1);
+  static bool matchesBranchName(String b1, String b2) {
+    final t1 = b1.trim().toLowerCase();
+    final t2 = b2.trim().toLowerCase();
+    if (t1.isEmpty || t2.isEmpty) return false;
+    if (t1 == t2) return true;
+    final c1 = t1.replaceAll(RegExp(r'\s*\([^)]*\)'), '').replaceAll(RegExp(r'فرع\s+'), '').trim();
+    final c2 = t2.replaceAll(RegExp(r'\s*\([^)]*\)'), '').replaceAll(RegExp(r'فرع\s+'), '').trim();
+    if (c1.isEmpty || c2.isEmpty) return false;
+    return c1 == c2 || (c1.length >= 3 && t2.contains(c1)) || (c2.length >= 3 && t1.contains(c2));
   }
 
   /// High-performance bulk synchronization for multiple branch prize allocations across campaigns.
@@ -574,7 +578,7 @@ class CompanyGiftsService {
             final pGiftIdNorm = p.giftId.trim().toLowerCase();
             final pNameNorm = p.name.trim().toLowerCase();
 
-            final branchMatches = pBranchNorm == targetBranchNorm || _matchesBranchName(p.branchName, branchName);
+            final branchMatches = pBranchNorm == targetBranchNorm || matchesBranchName(p.branchName, branchName);
             final giftMatches = pGiftIdNorm == targetGiftKeyNorm ||
                 pNameNorm == targetGiftKeyNorm ||
                 pGiftIdNorm == gift.id.toLowerCase() ||
@@ -584,6 +588,11 @@ class CompanyGiftsService {
               matchedIndex = i;
               break;
             }
+          }
+
+          if (newAllocatedQuantity == 0 && matchedIndex == -1) {
+            // Do not pollute campaign with empty unallocated branch prize entries
+            continue;
           }
 
           int oldAllocated = 0;
@@ -655,6 +664,32 @@ class CompanyGiftsService {
               timestamp: DateTime.now(),
             );
             batch.set(movementRef, movement.toFirestore());
+          }
+        }
+
+        // If there is an unbranched general pool prize for this gift, ensure its remaining quantity reflects the active stock
+        for (int i = 0; i < prizes.length; i++) {
+          final p = prizes[i];
+          if (p.branchName.trim().isEmpty) {
+            final pGiftIdNorm = p.giftId.trim().toLowerCase();
+            final pNameNorm = p.name.trim().toLowerCase();
+            if (pGiftIdNorm == targetGiftKeyNorm ||
+                pNameNorm == targetGiftKeyNorm ||
+                pGiftIdNorm == gift.id.toLowerCase() ||
+                pNameNorm == gift.giftName.trim().toLowerCase()) {
+              final totalBranchRemaining = prizes
+                  .where((bp) =>
+                      bp.branchName.trim().isNotEmpty &&
+                      (bp.giftId.trim().toLowerCase() == targetGiftKeyNorm ||
+                          bp.name.trim().toLowerCase() == pNameNorm ||
+                          bp.giftId.trim().toLowerCase() == gift.id.toLowerCase() ||
+                          bp.name.trim().toLowerCase() == gift.giftName.trim().toLowerCase()))
+                  .fold<int>(0, (acc, bp) => acc + bp.remainingQuantity);
+              if (totalBranchRemaining > 0 && p.remainingQuantity < totalBranchRemaining) {
+                prizes[i] = p.copyWith(remainingQuantity: totalBranchRemaining);
+                eventModified = true;
+              }
+            }
           }
         }
       }

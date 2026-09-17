@@ -8,6 +8,7 @@ import '../../../../core/services/firebase_service.dart';
 import '../../../../core/services/company_gifts_service.dart';
 import '../../../../core/services/game_audio_service.dart';
 import '../../../../core/services/multi_campaign_receipt_evaluator.dart';
+import '../../../../core/services/receipt_deduplication_helper.dart';
 import '../../../../core/utils/error_handler.dart';
 import '../../../../core/utils/arabic_numbers_utils.dart';
 import '../../../../core/animations/m3_motion.dart';
@@ -184,6 +185,34 @@ class _UnifiedMultiCampaignClaimScreenState
     final giftsService = ref.read(companyGiftsServiceProvider);
 
     try {
+      final primaryCompanySlug = widget.qualifiedCampaigns.isNotEmpty
+          ? widget.qualifiedCampaigns.first.campaign.companySlug
+          : '';
+      if (primaryCompanySlug.isNotEmpty) {
+        final dupCheck = await ReceiptDeduplicationHelper.checkReceiptDuplicate(
+          firestore: firestore,
+          receiptNumber: widget.receiptNumber,
+          companySlug: primaryCompanySlug,
+          isMultiScan: true,
+        );
+        if (dupCheck.isDuplicate) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                dupCheck.rejectionMessage,
+                style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+              ),
+              backgroundColor: Colors.amber.shade900,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+          setState(() => _isClaiming = false);
+          return;
+        }
+      }
+
       final List<String> allAwardedPrizeSummaries = [];
 
       // Save a linked transaction for EACH qualified campaign
@@ -227,7 +256,13 @@ class _UnifiedMultiCampaignClaimScreenState
 
         allAwardedPrizeSummaries.add('${campaign.eventName}: ${q.designatedPrize}');
 
-        final txRef = firestore.collection('receipts_transactions').doc();
+        final deterministicDocId = ReceiptDeduplicationHelper.getDeterministicDocId(
+          campaignId: campaign.id,
+          receiptNumber: widget.receiptNumber,
+        );
+        final txRef = firestore.collection('receipts_transactions').doc(deterministicDocId);
+        final extractedProds = widget.initialAiMetadata?['extracted_products'];
+
         await txRef.set({
           'bundle_group_id': widget.bundleGroupId,
           'receipt_number': widget.receiptNumber,
@@ -257,6 +292,7 @@ class _UnifiedMultiCampaignClaimScreenState
           'bundle_campaign_count': widget.qualifiedCampaigns.length,
           'timestamp': FieldValue.serverTimestamp(),
           'total_value': q.qualifyingSpend,
+          'extracted_products': extractedProds ?? const [],
           if (widget.imageUrls.isNotEmpty) 'image_url': widget.imageUrls.first,
           if (widget.imageUrls.length > 1) 'image_urls': widget.imageUrls,
           if (widget.initialAiMetadata != null) ...widget.initialAiMetadata!,

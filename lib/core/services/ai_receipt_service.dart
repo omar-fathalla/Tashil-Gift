@@ -3173,7 +3173,15 @@ class PromotionalRuleMatcher {
         } else if (isTriggerShampoo && !isProductShampoo) {
           // Skip non-shampoo
         } else {
-          return true;
+          // Volume/size conflict guard for brand-level rules:
+          // If the rule specifies a volume (e.g. 600ml or 550ml), and the product specifies a different volume, skip!
+          final int? ruleSize = _extractSizeMl(fullRuleContext);
+          final int? pSize = _extractSizeMl(pNorm);
+          if (ruleSize != null && pSize != null && ruleSize != pSize) {
+            // Skip due to size mismatch
+          } else {
+            return true;
+          }
         }
       }
     }

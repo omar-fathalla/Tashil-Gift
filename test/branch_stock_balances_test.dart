@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:al_mraay/core/localization/app_strings.dart';
+import 'package:al_mraay/core/services/company_gifts_service.dart';
 import 'package:al_mraay/features/company_portal/presentation/branch_stock_balances_screen.dart';
 import 'package:al_mraay/features/company_portal/domain/campaign_stock_settlement_model.dart';
 
@@ -180,8 +181,24 @@ void main() {
       expect(map['totalClaimed'], equals(1644));
       expect(map['totalReturned'], equals(16657));
       expect(map['newAllocatedStock'], equals(400));
-      expect(map['branchSnapshots'], isNotEmpty);
       expect(map['branchSnapshots']['المنتزه']['totalReturned'], equals(142));
+    });
+
+    test('CompanyGiftsService.matchesBranchName prevents false-positive empty string matching and respects anti-collision', () {
+      // Empty branch must NEVER match a named branch
+      expect(CompanyGiftsService.matchesBranchName('', 'فرع جاردينيا (الإسكندرية)'), isFalse);
+      expect(CompanyGiftsService.matchesBranchName('فرع جاردينيا (الإسكندرية)', ''), isFalse);
+      expect(CompanyGiftsService.matchesBranchName('', ''), isFalse);
+
+      // Same branch with or without governorate/prefix
+      expect(CompanyGiftsService.matchesBranchName('فرع جاردينيا (الإسكندرية)', 'جاردينيا'), isTrue);
+      expect(CompanyGiftsService.matchesBranchName('فرع المنتزه (الإسكندرية)', 'المنتزه'), isTrue);
+      expect(CompanyGiftsService.matchesBranchName('فرع المندرة (الإسكندرية)', 'المندرة'), isTrue);
+
+      // Anti-collision: different branches in same city must NOT match
+      expect(CompanyGiftsService.matchesBranchName('فرع جاردينيا (الإسكندرية)', 'فرع سموحة (الإسكندرية)'), isFalse);
+      expect(CompanyGiftsService.matchesBranchName('فرع المندرة (الإسكندرية)', 'المنتزه (الإسكندرية)'), isFalse);
+      expect(CompanyGiftsService.matchesBranchName('التجمع (Tagmoo) (القاهرة)', 'عمارات العبور (القاهرة)'), isFalse);
     });
   });
 }

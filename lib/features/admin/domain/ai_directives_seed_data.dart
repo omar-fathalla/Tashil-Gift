@@ -1129,6 +1129,50 @@ class AiDirectivesSeedData {
           tags: ['multi-tenant-isolation', 'dynamic-brands', 'almarai', 'unilever', 'al-doha', 'spend-rules', 'air-53'],
           lastUpdated: '2026-09-11',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-54',
+          code: 'DETERMINISTIC_RECEIPT_DEDUPLICATION_AND_ZERO_DOUBLE_CLAIM_STANDARD',
+          orderIndex: 54,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار الحوكمة الصارمة لمنع تكرار الفواتير في الفحص المتوازي واستخدام المعرفات الحتمية (Deterministic Receipt Deduplication & Zero Double-Claim Invariant)',
+          titleEn: 'Deterministic Receipt Deduplication & Zero Double-Claim Invariant',
+          descriptionAr:
+              'حوكمة صارمة تمنع تكرار قبول أي فاتورة أو صرف جوائز مكررة لها سواء في الفحص المتوازي التلقائي لكافة الحملات (isMultiScan) أو الفحص الفردي. يعتمد المعيار على الفحص الاستباقي الصارم في Firestore قبل الانتقال لشاشة التسليم (UnifiedMultiCampaignClaimScreen) أو إجراء أي حفظ، وتوليد معرّف حتمي (Deterministic Document ID) لكل معاملة بصيغة rcpt_{campaignId}_{receiptNumber} مما يمنع فيزيائياً تكرار المستندات، بالإضافة إلى التوثيق الدقيق للأصناف المستخرجة (extracted_products).',
+          descriptionEn:
+              'Enforces strict receipt deduplication and zero double-claim governance across parallel multi-campaign scanning (isMultiScan) and single campaign auditing. Incorporates proactive Firestore uniqueness checks prior to navigating to disbursal screens, derives deterministic document IDs formatted as rcpt_{campaignId}_{receiptNumber} to physically preclude duplicate records, and guarantees persistence of extracted items.',
+          logicAr:
+              '1. الفحص الاستباقي قبل شاشة التسليم: الاستعلام الفوري في Firestore عند قراءة رقم الفاتورة والتحقق هل صُرفت الجائزة لها مسبقاً (game_played أو handed_over أو وجود جوائز سابقة) ورفضها فورياً بنافذة تحذير قبل فتح واجهة التسليم.\n2. استخدام المعرفات الحتمية (Deterministic Doc IDs): استبدال المعرفات العشوائية بمعرف مشتق من كود الحملة ورقم الفاتورة المُنظف (rcpt_{campaignId}_{receiptNumber}) لمنع أي ازدواج متزامن.\n3. تأمين الفحص المتوازي (Multi-Scan Lock): منع تكرار الفاتورة في وضع الفحص المتوازي التلقائي إذا سُجلت مسبقاً في أي من حملات الشركة الراعية.\n4. حفظ مصفوفة الأصناف الكاملة (Extracted Products Persistence): تمرير وحفظ أصناف الفاتورة المستخرجة بدقة في كل معاملة لمنع ظهور 0 أصناف في السجلات.',
+          logicEn:
+              '1. Proactive Pre-Disbursal Verification: immediately checks Firestore upon reading receiptNumber to confirm whether prizes were already claimed, rejecting duplicates prior to mounting claim screens.\n2. Deterministic Document IDs: switches from random doc IDs to rcpt_{campaignId}_{receiptNumber}, eliminating race-condition duplicates at the database level.\n3. Multi-Scan Protection: blocks re-evaluation in automatic multi-campaign mode if the receipt already holds claimed transactions under the company tenant.\n4. Full Line Item Persistence: ensures extracted_products array is completely written to each campaign transaction to prevent 0-item display anomalies.',
+          exampleInput:
+              'محاولة إعادة رفع بون كاشير رقم 194/5/224/110926 بقيمة 1371 ج.م تم صرف جوائزه مسبقاً في 11/09/2026 في وضع الفحص المتوازي لشركة يونيليفر.',
+          exampleOutput:
+              'رفض فوري استباقي 100% مع إظهار تقرير التكرار: "الفاتورة مسجلة ومستخدمة مسبقاً ⚠️ (الجائزة: قسائم مشتريات 175 ج.م - تاريخ البون: 11/09/2026) ومنع فتح شاشة التسليم نهائياً.',
+          tags: ['receipt-deduplication', 'deterministic-ids', 'zero-double-claim', 'multi-scan-security', 'air-54'],
+          lastUpdated: '2026-09-17',
+        ),
+        const AiDirectiveModel(
+          id: 'AIR-55',
+          code: 'PROMOTIONAL_RULE_VOLUME_AND_PACK_SIZE_SEGREGATION_GUARD',
+          orderIndex: 55,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار الحوكمة الصارمة لعزل الأحجام والعبوات في قواعد العروض ومنع تداخل الفئات الترويجية (Volume & Pack-Size Strict Segregation Guard)',
+          titleEn: 'Promotional Rule Volume & Pack-Size Strict Segregation Guard',
+          descriptionAr:
+              'العزل الصارم للأحجام وسعات العبوات (550 مل مقابل 600 مل مقابل 400 مل) عند مطابقة القواعد الترويجية على مستوى العلامة التجارية والكتالوج، لمنع أي صنف بحجم أصغر (مثل كلير 550 مل) من وراثة هدايا الحجم الأكبر (مثل كلير كول سبورت 360 مل)، وإلزام النظام بالمطابقة الحصرية للحجم المخصص للهدية (مثل كلير مين 180 مل).',
+          descriptionEn:
+              'Enforces volume and bottle size conflict segregation (550ml vs 600ml vs 400ml) in brand-level and catalog promotional matching, guaranteeing that smaller bottle variants (such as Clear 550ml) never inherit large-pack rewards (Clear 360ml) and strictly resolve to their designated pack size tiers (Clear 180ml).',
+          logicAr:
+              '1. استخراج سعة المنتج وسعة شرط القاعدة (_extractSizeMl): قراءة سعة المنتج المشتراة وسعة العبوة المشروطة في عنوان أو نص القاعدة الترويجية بدقة.\n2. حارس تضارب الأحجام على مستوى العلامة التجارية: عند فحص العلامة المشروطة في القاعدة، إذا كانت القاعدة تشترط حجماً محدداً (مثل 600 مل) بينما المنتج المشتري يحمل حجماً مخالفاً (مثل 550 مل)، يتم حجب القاعدة تلقائياً ومنع المطابقة.\n3. التوجيه الدقيق للقاعدة المستحقة: توجيه كلير 550 مل إلى قاعدة الحجم الأصغر المخصصة لها (rule_6) لمنح هدية كلير 180 مل حصرياً.\n4. الحفاظ على القواعد العامة: القواعد التي لا تنص على حجم محدد (مثل قواعد دوف العامة) تظل مرنة وشاملة لكافة الأحجام.',
+          logicEn:
+              '1. Volume Extraction: parses physical volume (ml) from both the receipt line item and the promotional rule title/context.\n2. Size-Conflict Guard in Brand Rules: blocks rule matching when a rule explicitly defines a size (e.g. 600ml) that conflicts with the line item size (e.g. 550ml).\n3. Tier-Specific Routing: routes Clear 550ml strictly to rule_6 awarding Clear 180ml.\n4. General Rule Compatibility: preserves generic rules without volume constraints across all product sizes.',
+          exampleInput:
+              'بون كاشير جملة ماركت المنصورة رقم 77/13/426/170926 يحتوي على: "كلير شامبو رجالي تنظيف نشط 3 * 1 550مل" باركود 6221155207456.',
+          exampleOutput:
+              'عزل قاعدة كلير 600 مل (Clear 360ml) وتطبيق حصري لقاعدة كلير 550 مل (rule_6) ومنح الهدية المعتمدة: Clear Men Sh 180Ml بنجاح 100%.',
+          tags: ['volume-segregation', 'pack-size-guard', 'clear-550ml-vs-600ml', 'clear-180ml', 'air-55'],
+          lastUpdated: '2026-09-17',
+        ),
       ];
 }
 

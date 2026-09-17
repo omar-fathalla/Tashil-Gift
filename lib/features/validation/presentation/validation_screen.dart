@@ -13,6 +13,7 @@ import '../../../core/services/ai_receipt_service.dart';
 import '../../../core/services/ai_product_discovery_service.dart';
 import '../../../core/services/company_products_service.dart';
 import '../../../core/services/retail_chains_service.dart';
+import '../../../core/services/receipt_deduplication_helper.dart';
 import '../../../core/utils/error_handler.dart';
 import '../../games/presentation/spin_the_wheel_screen.dart';
 import '../../games/presentation/scratch_card_screen.dart';
@@ -474,19 +475,70 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       }
 
       final receiptNumber = result.receiptNumber.trim();
+      if (receiptNumber.isNotEmpty) {
+        final dupCheck = await ReceiptDeduplicationHelper.checkReceiptDuplicate(
+          firestore: firestore,
+          receiptNumber: receiptNumber,
+          companySlug: activeEvent.companySlug,
+          campaignId: activeEvent.id,
+          isMultiScan: false,
+        );
+
+        if (dupCheck.isDuplicate) {
+          if (!mounted) return;
+          final activeCountry = ref.read(activeCountryProvider);
+          final strings = AppStrings.of(ref);
+
+          showReceiptValidationReportDialog(
+            context: context,
+            title: strings.duplicateReceiptAlreadyDrawnTitle,
+            subtitle: dupCheck.rejectionMessage,
+            conditions: [
+              ValidationConditionItem(
+                title: strings.duplicateReceiptConditionTitle,
+                description: dupCheck.rejectionMessage,
+                icon: Icons.history_toggle_off_rounded,
+                isMet: false,
+                value: dupCheck.existingPrizeWon,
+              ),
+            ],
+            receiptNumber: receiptNumber,
+            storeChain: result.storeChainDetected,
+            branch: result.branchDetected,
+            receiptDate: result.receiptDate,
+            totalValue: result.targetCompanyTotal,
+            requiredMinimum: activeEvent.minimumSpend,
+            currencySymbol: activeCountry.currencySymbol,
+            imageUrl: previewImgUrl,
+            imageUrls: previewUrls,
+            isDuplicate: true,
+          );
+          return;
+        }
+      }
 
       // Check for existing receipt in this specific campaign to update/upsert
       DocumentSnapshot<Map<String, dynamic>>? existingDoc;
-      if (receiptNumber.isNotEmpty) {
-        final existing = await firestore
-            .collection('receipts_transactions')
-            .where('receipt_number', isEqualTo: receiptNumber)
-            .where('campaignId', isEqualTo: activeEvent.id)
-            .limit(1)
-            .get();
+      final deterministicDocId = ReceiptDeduplicationHelper.getDeterministicDocId(
+        campaignId: activeEvent.id,
+        receiptNumber: receiptNumber,
+      );
 
-        if (existing.docs.isNotEmpty) {
-          existingDoc = existing.docs.first;
+      if (receiptNumber.isNotEmpty) {
+        final directSnap = await firestore.collection('receipts_transactions').doc(deterministicDocId).get();
+        if (directSnap.exists) {
+          existingDoc = directSnap;
+        } else {
+          final existing = await firestore
+              .collection('receipts_transactions')
+              .where('receipt_number', isEqualTo: receiptNumber)
+              .where('campaignId', isEqualTo: activeEvent.id)
+              .limit(1)
+              .get();
+
+          if (existing.docs.isNotEmpty) {
+            existingDoc = existing.docs.first;
+          }
         }
       }
 
@@ -623,7 +675,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         compositeBundle.totalChances,
       );
       final DocumentReference<Map<String, dynamic>> transactionRef =
-          existingDoc != null ? existingDoc.reference : firestore.collection('receipts_transactions').doc();
+          existingDoc != null ? existingDoc.reference : firestore.collection('receipts_transactions').doc(deterministicDocId);
       final bool isExistingRecord = existingDoc != null;
       final existingData = existingDoc?.data() ?? {};
       final bool wasGamePlayed = existingData['game_played'] == true;
