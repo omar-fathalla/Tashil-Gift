@@ -58,52 +58,49 @@ void main() {
     });
 
     test('WhatsAppGatewayConfigModel serializes and deserializes accurately', () {
-      final config = WhatsAppGatewayConfigModel(
-        provider: WhatsAppGatewayProvider.ultraMsg,
-        instanceId: 'inst_9988',
-        apiToken: 'tok_abcdef123',
+      final config = const WhatsAppGatewayConfigModel(
+        provider: WhatsAppGatewayProvider.waha,
+        instanceId: 'default',
+        apiToken: 'tashil_secret_token_2026',
+        customEndpointUrl: 'http://76.13.14.23:3000',
         delayBetweenMessagesSeconds: 4,
         isEnabled: true,
         isConnected: true,
-        connectedPhoneNumber: '201099887766',
+        connectedPhoneNumber: '201211857725',
       );
 
       final jsonMap = config.toMap();
-      expect(jsonMap['provider'], equals('ultramsg'));
-      expect(jsonMap['instanceId'], equals('inst_9988'));
+      expect(jsonMap['provider'], equals('waha'));
+      expect(jsonMap['customEndpointUrl'], equals('http://76.13.14.23:3000'));
       expect(jsonMap['delayBetweenMessagesSeconds'], equals(4));
 
       final restored = WhatsAppGatewayConfigModel.fromMap(jsonMap);
-      expect(restored.provider, equals(WhatsAppGatewayProvider.ultraMsg));
-      expect(restored.instanceId, equals('inst_9988'));
-      expect(restored.apiToken, equals('tok_abcdef123'));
+      expect(restored.provider, equals(WhatsAppGatewayProvider.waha));
+      expect(restored.customEndpointUrl, equals('http://76.13.14.23:3000'));
+      expect(restored.apiToken, equals('tashil_secret_token_2026'));
       expect(restored.delayBetweenMessagesSeconds, equals(4));
       expect(restored.isConnected, isTrue);
-      expect(restored.connectedPhoneNumber, equals('201099887766'));
+      expect(restored.connectedPhoneNumber, equals('201211857725'));
+
+      // Test that legacy ultramsg provider ID safely maps to waha
+      final legacyRestored = WhatsAppGatewayConfigModel.fromMap({'provider': 'ultramsg'});
+      expect(legacyRestored.provider, equals(WhatsAppGatewayProvider.waha));
     });
   });
 
   group('Mock HTTP Gateway Operations Tests', () {
-    test('UltraMsg testConnection returns connected when authenticated is true', () async {
+    test('WAHA testConnection returns connected when session is WORKING', () async {
       final mockClient = MockClient((request) async {
-        if (request.url.toString().contains('/instance/status')) {
+        if (request.url.toString().contains('/api/sessions/default')) {
+          expect(request.headers['X-Api-Key'], equals('tashil_secret_token_2026'));
           return http.Response(
             json.encode({
-              'status': {
-                'accountStatus': {
-                  'status': 'authenticated',
-                  'substatus': 'connected',
-                }
-              }
-            }),
-            200,
-          );
-        }
-        if (request.url.toString().contains('/instance/me')) {
-          return http.Response(
-            json.encode({
-              'id': '201012345678@c.us',
-              'name': 'Omar Fathalla',
+              'name': 'default',
+              'status': 'WORKING',
+              'me': {
+                'id': '201211857725@c.us',
+                'pushName': 'Omar Fathalla',
+              },
             }),
             200,
           );
@@ -113,14 +110,16 @@ void main() {
 
       final service = WhatsAppGatewayService();
       final config = const WhatsAppGatewayConfigModel(
-        provider: WhatsAppGatewayProvider.ultraMsg,
-        instanceId: 'inst_test',
-        apiToken: 'tok_test',
+        provider: WhatsAppGatewayProvider.waha,
+        instanceId: 'default',
+        apiToken: 'tashil_secret_token_2026',
+        customEndpointUrl: 'http://76.13.14.23:3000',
       );
 
       final status = await service.testConnection(config, client: mockClient);
       expect(status.isConnected, isTrue);
-      expect(status.phoneNumber, contains('201012345678'));
+      expect(status.phoneNumber, contains('201211857725'));
+      expect(status.phoneNumber, contains('Omar Fathalla'));
     });
 
     test('Green API testConnection returns connected when stateInstance is authorized', () async {
@@ -148,15 +147,18 @@ void main() {
       expect(status.statusDetails, contains('Authorized'));
     });
 
-    test('sendSingleMessage sends UltraMsg message successfully', () async {
+    test('sendSingleMessage sends WAHA message successfully', () async {
       final mockClient = MockClient((request) async {
-        if (request.url.toString().contains('/messages/chat')) {
+        if (request.url.toString().contains('/api/sendText')) {
           expect(request.method, equals('POST'));
+          expect(request.headers['X-Api-Key'], equals('tashil_secret_token_2026'));
+          final body = json.decode(request.body) as Map<String, dynamic>;
+          expect(body['session'], equals('default'));
+          expect(body['chatId'], equals('201012345678@c.us'));
+          expect(body['text'], equals('رسالة تجريبية'));
           return http.Response(
             json.encode({
-              'sent': 'true',
-              'message': 'ok',
-              'id': 'msg_12345',
+              'id': 'msg_waha_12345',
             }),
             200,
           );
@@ -166,9 +168,10 @@ void main() {
 
       final service = WhatsAppGatewayService();
       final config = const WhatsAppGatewayConfigModel(
-        provider: WhatsAppGatewayProvider.ultraMsg,
-        instanceId: 'inst_test',
-        apiToken: 'tok_test',
+        provider: WhatsAppGatewayProvider.waha,
+        instanceId: 'default',
+        apiToken: 'tashil_secret_token_2026',
+        customEndpointUrl: 'http://76.13.14.23:3000',
       );
 
       final result = await service.sendSingleMessage(
@@ -179,91 +182,31 @@ void main() {
       );
 
       expect(result.isSuccess, isTrue);
-      expect(result.messageId, equals('msg_12345'));
+      expect(result.messageId, equals('msg_waha_12345'));
     });
 
-    test('fetchStatistics retrieves UltraMsg live message metrics', () async {
+    test('fetchStatistics retrieves WAHA live message metrics', () async {
       final mockClient = MockClient((request) async {
-        if (request.url.toString().contains('/messages/statistics')) {
-          return http.Response(
-            json.encode({
-              'sent': 45,
-              'queue': 2,
-              'unsent': 1,
-              'invalid': 0,
-              'expired': 0,
-            }),
-            200,
-          );
-        }
-        return http.Response('Error', 500);
-      });
-
-      final service = WhatsAppGatewayService();
-      final config = const WhatsAppGatewayConfigModel(
-        provider: WhatsAppGatewayProvider.ultraMsg,
-        instanceId: 'instance190005',
-        apiToken: 'v699gpqwmv242cgq',
-      );
-
-      final stats = await service.fetchStatistics(config, client: mockClient);
-      expect(stats, isNotNull);
-      expect(stats!.sentCount, equals(45));
-      expect(stats.queueCount, equals(2));
-      expect(stats.unsentCount, equals(1));
-      expect(stats.totalTracked, equals(48));
-    });
-
-    test('restartInstance sends POST to restart UltraMsg session', () async {
-      final mockClient = MockClient((request) async {
-        if (request.url.toString().contains('/instance/restart')) {
-          return http.Response(json.encode({'status': 'restarting'}), 200);
-        }
-        return http.Response('Error', 500);
-      });
-
-      final service = WhatsAppGatewayService();
-      final config = const WhatsAppGatewayConfigModel(
-        provider: WhatsAppGatewayProvider.ultraMsg,
-        instanceId: 'instance190005',
-        apiToken: 'v699gpqwmv242cgq',
-      );
-
-      final success = await service.restartInstance(config, client: mockClient);
-      expect(success, isTrue);
-    });
-
-    test('fetchMessagesList parses UltraMsg outbox messages and pagination correctly', () async {
-      final mockClient = MockClient((request) async {
-        if (request.url.toString().contains('/messages')) {
-          expect(request.url.queryParameters['status'], equals('all'));
+        if (request.url.toString().contains('/api/default/chats')) {
           return http.Response.bytes(
-            utf8.encode(json.encode({
-              'total': 2,
-              'pages': 1,
-              'limit': 10,
-              'page': 1,
-              'messages': [
-                {
-                  'id': 2,
-                  'from': '201211857725@c.us',
-                  'to': '201285483486@c.us',
-                  'body': 'رسالة تجريبية 2',
-                  'status': 'invalid',
-                  'created_at': 1788040205,
-                  'sent_at': 1788040205,
+            utf8.encode(json.encode([
+              {
+                'id': {'_serialized': '201012345678@c.us'},
+                'lastMessage': {
+                  'fromMe': true,
+                  'body': 'مرحبا',
+                  'timestamp': 1789848307,
                 },
-                {
-                  'id': 1,
-                  'from': '201211857725@c.us',
-                  'to': '201147531222@c.us',
-                  'body': 'رسالة تجريبية 1',
-                  'status': 'sent',
-                  'created_at': 1788040199,
-                  'sent_at': 1788040200,
+              },
+              {
+                'id': {'_serialized': '201099887766@c.us'},
+                'lastMessage': {
+                  'fromMe': false,
+                  'body': 'شكرا',
+                  'timestamp': 1789848308,
                 },
-              ],
-            })),
+              },
+            ])),
             200,
             headers: {'content-type': 'application/json; charset=utf-8'},
           );
@@ -273,19 +216,163 @@ void main() {
 
       final service = WhatsAppGatewayService();
       final config = const WhatsAppGatewayConfigModel(
-        provider: WhatsAppGatewayProvider.ultraMsg,
-        instanceId: 'instance190005',
-        apiToken: 'v699gpqwmv242cgq',
+        provider: WhatsAppGatewayProvider.waha,
+        instanceId: 'default',
+        apiToken: 'tashil_secret_token_2026',
+        customEndpointUrl: 'http://76.13.14.23:3000',
+      );
+
+      final stats = await service.fetchStatistics(config, client: mockClient);
+      expect(stats, isNotNull);
+      expect(stats!.sentCount, equals(1));
+    });
+
+    test('restartInstance sends POST to restart WAHA session', () async {
+      final mockClient = MockClient((request) async {
+        if (request.url.toString().contains('/api/sessions/default/restart')) {
+          expect(request.headers['X-Api-Key'], equals('tashil_secret_token_2026'));
+          return http.Response(json.encode({'status': 'restarted'}), 200);
+        }
+        return http.Response('Error', 500);
+      });
+
+      final service = WhatsAppGatewayService();
+      final config = const WhatsAppGatewayConfigModel(
+        provider: WhatsAppGatewayProvider.waha,
+        instanceId: 'default',
+        apiToken: 'tashil_secret_token_2026',
+        customEndpointUrl: 'http://76.13.14.23:3000',
+      );
+
+      final success = await service.restartInstance(config, client: mockClient);
+      expect(success, isTrue);
+    });
+
+    test('fetchMessagesList parses WAHA outbox messages correctly', () async {
+      final mockClient = MockClient((request) async {
+        if (request.url.toString().contains('/api/default/chats')) {
+          return http.Response.bytes(
+            utf8.encode(json.encode([
+              {
+                'id': {'_serialized': '201285483486@c.us'},
+                'lastMessage': {
+                  'id': 'msg_002',
+                  'from': '201211857725@c.us',
+                  'to': '201285483486@c.us',
+                  'body': 'رسالة تجريبية 2',
+                  'fromMe': true,
+                  'timestamp': 1788040205,
+                  'ack': 3,
+                },
+              },
+              {
+                'id': {'_serialized': '201147531222@c.us'},
+                'lastMessage': {
+                  'id': 'msg_001',
+                  'from': '201211857725@c.us',
+                  'to': '201147531222@c.us',
+                  'body': 'رسالة تجريبية 1',
+                  'fromMe': true,
+                  'timestamp': 1788040199,
+                  'ack': 2,
+                },
+              },
+            ])),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }
+        return http.Response('Error', 500);
+      });
+
+      final service = WhatsAppGatewayService();
+      final config = const WhatsAppGatewayConfigModel(
+        provider: WhatsAppGatewayProvider.waha,
+        instanceId: 'default',
+        apiToken: 'tashil_secret_token_2026',
+        customEndpointUrl: 'http://76.13.14.23:3000',
       );
 
       final result = await service.fetchMessagesList(config: config, client: mockClient);
       expect(result.total, equals(2));
       expect(result.messages.length, equals(2));
-      expect(result.messages.first.id, equals('2'));
+      expect(result.messages.first.id, equals('msg_002'));
       expect(result.messages.first.toPhone, equals('201285483486'));
-      expect(result.messages.first.status, equals('invalid'));
-      expect(result.messages.last.id, equals('1'));
+      expect(result.messages.first.status, equals('sent'));
+      expect(result.messages.last.id, equals('msg_001'));
       expect(result.messages.last.status, equals('sent'));
+    });
+
+    test('sendPollMessage validates question and strips empty options, rejecting < 2 options', () async {
+      final service = WhatsAppGatewayService();
+      const config = WhatsAppGatewayConfigModel(
+        provider: WhatsAppGatewayProvider.waha,
+        instanceId: 'default',
+        apiToken: 'tashil_secret_token_2026',
+        customEndpointUrl: 'http://76.13.14.23:3000',
+      );
+
+      // Test 1: Empty question
+      final res1 = await service.sendPollMessage(
+        config: config,
+        toPhone: '01012345678',
+        pollTitle: '   ',
+        pollOptions: ['Option 1', 'Option 2'],
+      );
+      expect(res1.isSuccess, isFalse);
+      expect(res1.error, contains('سؤال الاستطلاع مطلوب'));
+
+      // Test 2: Less than 2 non-empty options
+      final res2 = await service.sendPollMessage(
+        config: config,
+        toPhone: '01012345678',
+        pollTitle: 'سؤال تجريبي',
+        pollOptions: ['Option 1', '  '],
+      );
+      expect(res2.isSuccess, isFalse);
+      expect(res2.error, contains('يتطلب الاستطلاع خيارين على الأقل'));
+    });
+
+    test('sendBatchStream correctly marks failure status on error', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response('{"error": "Forbidden"}', 403);
+      });
+
+      final service = WhatsAppGatewayService();
+      const config = WhatsAppGatewayConfigModel(
+        provider: WhatsAppGatewayProvider.waha,
+        instanceId: 'default',
+        apiToken: 'tashil_secret_token_2026',
+        customEndpointUrl: 'http://76.13.14.23:3000',
+      );
+
+      final contact = CustomerCampaignContact(
+        id: 'c1',
+        name: 'عميل تجريبي',
+        rawPhone: '01012345678',
+        cleanPhone: '201012345678',
+        totalSpend: 100,
+        totalInvoices: 1,
+        prizesWon: [],
+        branches: ['الفرع الرئيسي'],
+        lastBranch: 'الفرع الرئيسي',
+        status: ContactDispatchStatus.pending,
+      );
+
+      BatchProgressEvent? lastEvent;
+      await for (final event in service.sendBatchStream(
+        config: config,
+        contacts: [contact],
+        template: 'مرحبا {اسم_العميل}',
+        companyName: 'الشركة',
+        campaignName: 'الحملة',
+        client: mockClient,
+      )) {
+        lastEvent = event;
+      }
+
+      expect(lastEvent?.isCompleted, isTrue);
+      expect(contact.status, equals(ContactDispatchStatus.failed));
     });
   });
 }

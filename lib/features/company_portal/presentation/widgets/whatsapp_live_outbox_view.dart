@@ -7,6 +7,7 @@ import 'package:intl/intl.dart' as intl;
 import '../../../../core/localization/app_strings.dart';
 import '../../domain/whatsapp_gateway_config_model.dart';
 import '../../domain/whatsapp_gateway_service.dart';
+import 'whatsapp_campaign_dispatcher_dialog.dart';
 
 /// Live WhatsApp Gateway Outbox & Message Delivery Log View
 class WhatsAppLiveOutboxView extends StatefulWidget {
@@ -15,6 +16,7 @@ class WhatsAppLiveOutboxView extends StatefulWidget {
   final AppStrings strings;
   final bool isAr;
   final VoidCallback onOpenSettings;
+  final List<CustomerCampaignContact>? customerContacts;
 
   const WhatsAppLiveOutboxView({
     super.key,
@@ -23,6 +25,7 @@ class WhatsAppLiveOutboxView extends StatefulWidget {
     required this.strings,
     required this.isAr,
     required this.onOpenSettings,
+    this.customerContacts,
   });
 
   @override
@@ -39,6 +42,9 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
   bool _isLoading = false;
   WhatsAppOutboxPageResult _pageResult = const WhatsAppOutboxPageResult();
   WhatsAppGatewayStats? _stats;
+
+  /// Set of message IDs currently expanded to view multi-line content
+  final Set<String> _expandedMessageIds = <String>{};
 
   @override
   void initState() {
@@ -82,14 +88,15 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
   }
 
   Future<void> _resendMessage(WhatsAppOutboxMessage msg) async {
-    if (msg.toPhone.isEmpty) return;
+    final phone = _resolveDisplayPhone(msg);
+    if (phone.isEmpty) return;
 
     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     scaffoldMessenger.showSnackBar(
       SnackBar(
         content: Text(
-          widget.isAr ? 'جارٍ إعادة إرسال الرسالة إلى ${msg.toPhone}...' : 'Resending message to ${msg.toPhone}...',
+          widget.isAr ? 'جارٍ إعادة إرسال الرسالة إلى $phone...' : 'Resending message to $phone...',
           style: GoogleFonts.cairo(),
         ),
         duration: const Duration(seconds: 2),
@@ -98,7 +105,7 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
 
     final result = await _service.sendSingleMessage(
       config: widget.gatewayConfig,
-      toPhone: msg.toPhone,
+      toPhone: phone,
       messageText: msg.body,
     );
 
@@ -107,7 +114,7 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
         SnackBar(
           content: Text(
             result.isSuccess
-                ? (widget.isAr ? 'تمت إعادة الإرسال بنجاح ✅' : 'Message resent successfully ✅')
+                ? (widget.isAr ? 'تمت إعادة الإرسال بنجاح' : 'Message resent successfully')
                 : (widget.isAr ? 'فشل إعادة الإرسال: ${result.error}' : 'Resend failed: ${result.error}'),
             style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
           ),
@@ -120,7 +127,52 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
     }
   }
 
+  /// Resolves the contact name from WhatsApp or matched customer records
+  String _resolveContactName(WhatsAppOutboxMessage msg) {
+    if (msg.contactName.isNotEmpty && !msg.contactName.startsWith('+')) {
+      return msg.contactName;
+    }
+    // Check against campaign customer contacts if available
+    if (widget.customerContacts != null && widget.customerContacts!.isNotEmpty) {
+      final clean = WhatsAppGatewayService.formatInternationalPhone(msg.toPhone);
+      final match = widget.customerContacts!.where((c) => c.cleanPhone == clean || c.rawPhone == msg.toPhone).firstOrNull;
+      if (match != null && match.name.isNotEmpty) {
+        return match.name;
+      }
+    }
+    return WhatsAppGatewayService.getDiscoveredContactName(msg.toPhone) ?? '';
+  }
+
+  /// Resolves the actual mobile phone number
+  String _resolveDisplayPhone(WhatsAppOutboxMessage msg) {
+    if (msg.toPhone.isNotEmpty && !msg.toPhone.contains('@') && !msg.isGroup) {
+      return msg.toPhone;
+    }
+    if (widget.customerContacts != null) {
+      final match = widget.customerContacts!.where((c) => c.name == msg.contactName).firstOrNull;
+      if (match != null) return match.rawPhone;
+    }
+    return msg.toPhone;
+  }
+
+  /// Formats phone numbers nicely for visual presentation (e.g. +20 121 185 7725)
+  static String _formatDisplayPhone(String phone) {
+    if (phone.isEmpty) return '—';
+    final digits = phone.replaceAll(RegExp(r'\D'), '');
+    if (digits.length == 12 && digits.startsWith('20')) {
+      return '+${digits.substring(0, 2)} ${digits.substring(2, 5)} ${digits.substring(5, 8)} ${digits.substring(8)}';
+    } else if (digits.length == 11 && digits.startsWith('01')) {
+      return '${digits.substring(0, 4)} ${digits.substring(4, 7)} ${digits.substring(7)}';
+    } else if (digits.isNotEmpty) {
+      return '+$digits';
+    }
+    return phone;
+  }
+
   void _showMessageDetails(WhatsAppOutboxMessage msg, ColorScheme cs) {
+    final contactName = _resolveContactName(msg);
+    final displayPhone = _resolveDisplayPhone(msg);
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -156,9 +208,15 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
                   value: '#${msg.id}',
                   cs: cs,
                 ),
+                if (contactName.isNotEmpty)
+                  _buildDetailRow(
+                    label: widget.isAr ? 'اسم المستلم:' : 'Recipient Name:',
+                    value: contactName,
+                    cs: cs,
+                  ),
                 _buildDetailRow(
-                  label: widget.isAr ? 'المستلم:' : 'Recipient:',
-                  value: '+${msg.toPhone}',
+                  label: widget.isAr ? 'رقم الهاتف:' : 'Phone Number:',
+                  value: _formatDisplayPhone(displayPhone),
                   cs: cs,
                   isPhone: true,
                 ),
@@ -247,9 +305,14 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
                       style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: badgeColor),
                     ),
                   )
-                : Text(
-                    value,
-                    style: isPhone ? GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.bold) : GoogleFonts.cairo(fontSize: 13),
+                : Directionality(
+                    textDirection: isPhone ? TextDirection.ltr : Directionality.of(context),
+                    child: Text(
+                      value,
+                      style: isPhone
+                          ? GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.bold)
+                          : GoogleFonts.cairo(fontSize: 13),
+                    ),
                   ),
           ),
         ],
@@ -261,6 +324,8 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
     switch (status.toLowerCase()) {
       case 'sent':
         return widget.isAr ? 'مرسلة بنجاح' : 'Sent';
+      case 'received':
+        return widget.isAr ? 'واردة (مستلمة)' : 'Received';
       case 'queue':
         return widget.isAr ? 'في الانتظار' : 'In Queue';
       case 'unsent':
@@ -278,6 +343,8 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
     switch (status.toLowerCase()) {
       case 'sent':
         return const Color(0xFF198754);
+      case 'received':
+        return Colors.teal.shade700;
       case 'queue':
         return Colors.blue.shade700;
       case 'unsent':
@@ -295,6 +362,8 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
     switch (status.toLowerCase()) {
       case 'sent':
         return Icons.done_all_rounded;
+      case 'received':
+        return Icons.call_received_rounded;
       case 'queue':
         return Icons.hourglass_top_rounded;
       case 'unsent':
@@ -528,6 +597,7 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
     final filters = [
       {'id': 'all', 'label': widget.isAr ? 'الكل' : 'All'},
       {'id': 'sent', 'label': widget.isAr ? 'المرسلة' : 'Sent'},
+      {'id': 'received', 'label': widget.isAr ? 'الواردة' : 'Received'},
       {'id': 'queue', 'label': widget.isAr ? 'في الانتظار' : 'In Queue'},
       {'id': 'unsent', 'label': widget.isAr ? 'غير مرسلة' : 'Unsent'},
       {'id': 'invalid', 'label': widget.isAr ? 'خاطئة' : 'Invalid'},
@@ -588,6 +658,224 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
     );
   }
 
+  /// Builds the Recipient cell showing Contact Name, Group Badge, and clean Phone Number
+  Widget _buildRecipientCell(WhatsAppOutboxMessage msg, ColorScheme cs) {
+    if (msg.isGroup) {
+      final name = msg.groupName ?? msg.contactName;
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: cs.secondaryContainer.withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.groups_rounded, size: 13, color: cs.onSecondaryContainer),
+                const SizedBox(width: 4),
+                Text(
+                  widget.isAr ? 'مجموعة' : 'Group',
+                  style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.bold, color: cs.onSecondaryContainer),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              name.isNotEmpty ? name : (widget.isAr ? 'مجموعة واتساب' : 'WhatsApp Group'),
+              style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+    }
+
+    final displayName = _resolveContactName(msg);
+    final displayPhone = _resolveDisplayPhone(msg);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (displayName.isNotEmpty && !displayName.startsWith('+')) ...[
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.account_circle_rounded, size: 14, color: cs.primary),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  displayName,
+                  style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold, color: cs.onSurface),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+        ],
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _formatDisplayPhone(displayPhone),
+                style: GoogleFonts.robotoMono(fontSize: 12.5, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                icon: const Icon(Icons.copy_rounded, size: 13),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+                tooltip: widget.isAr ? 'نسخ الرقم' : 'Copy phone',
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: displayPhone));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(widget.isAr ? 'تم نسخ الرقم' : 'Phone copied'),
+                      behavior: SnackBarBehavior.floating,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Builds the Animated Expandable Message Text component (More / Less)
+  Widget _buildAnimatedMessageBody(WhatsAppOutboxMessage msg, ColorScheme cs) {
+    final text = msg.body.trim();
+    if (text.isEmpty) {
+      return Text(
+        widget.isAr ? '(رسالة بدون نص)' : '(Empty message)',
+        style: GoogleFonts.cairo(fontSize: 12, color: cs.onSurfaceVariant.withValues(alpha: 0.6)),
+      );
+    }
+
+    final isLong = text.length > 55 || text.contains('\n');
+    final isExpanded = _expandedMessageIds.contains(msg.id);
+
+    if (!isLong) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4.0),
+        child: Text(
+          text,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.cairo(fontSize: 12.5, height: 1.4, color: cs.onSurface),
+        ),
+      );
+    }
+
+    return AnimatedCrossFade(
+      duration: const Duration(milliseconds: 260),
+      firstCurve: Curves.easeInOutCubic,
+      secondCurve: Curves.easeInOutCubic,
+      sizeCurve: Curves.easeInOutCubic,
+      crossFadeState: isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+      firstChild: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2.0),
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.cairo(fontSize: 12.5, height: 1.4, color: cs.onSurface),
+            ),
+          ),
+          const SizedBox(height: 2),
+          InkWell(
+            onTap: () {
+              setState(() {
+                _expandedMessageIds.add(msg.id);
+              });
+            },
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    widget.isAr ? 'عرض المزيد' : 'More',
+                    style: GoogleFonts.cairo(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: cs.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: cs.primary),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+      secondChild: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
+            ),
+            child: SelectableText(
+              text,
+              style: GoogleFonts.cairo(fontSize: 12.5, height: 1.5, color: cs.onSurface),
+            ),
+          ),
+          InkWell(
+            onTap: () {
+              setState(() {
+                _expandedMessageIds.remove(msg.id);
+              });
+            },
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    widget.isAr ? 'عرض أقل' : 'Less',
+                    style: GoogleFonts.cairo(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: cs.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  Icon(Icons.keyboard_arrow_up_rounded, size: 16, color: cs.primary),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDesktopMessagesTable(ColorScheme cs) {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -619,16 +907,16 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
                           child: Row(
                             children: [
                               SizedBox(
-                                width: 60,
+                                width: 45,
                                 child: Text(
                                   '#',
                                   style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: cs.onSurface),
                                 ),
                               ),
                               SizedBox(
-                                width: 190,
+                                width: 230,
                                 child: Text(
-                                  widget.isAr ? 'المستلم' : 'Recipient Phone',
+                                  widget.isAr ? 'المستلم' : 'Recipient',
                                   style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: cs.onSurface),
                                 ),
                               ),
@@ -639,21 +927,21 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
                                 ),
                               ),
                               SizedBox(
-                                width: 180,
+                                width: 150,
                                 child: Text(
                                   widget.isAr ? 'حالة الإرسال' : 'Delivery Status',
                                   style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: cs.onSurface),
                                 ),
                               ),
                               SizedBox(
-                                width: 170,
+                                width: 160,
                                 child: Text(
                                   widget.isAr ? 'وقت الإرسال' : 'Sent Time',
                                   style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: cs.onSurface),
                                 ),
                               ),
                               SizedBox(
-                                width: 120,
+                                width: 100,
                                 child: Text(
                                   widget.isAr ? 'الإجراءات' : 'Actions',
                                   textAlign: TextAlign.center,
@@ -688,59 +976,27 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
                             child: Row(
                               children: [
                                 SizedBox(
-                                  width: 60,
-                                  child: Text(
-                                    '#${msg.id}',
-                                    style: GoogleFonts.robotoMono(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSurfaceVariant),
-                                  ),
-                                ),
-                                SizedBox(
-                                  width: 190,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Flexible(
-                                        child: SelectableText(
-                                          '+${msg.toPhone}',
-                                          style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.bold),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      IconButton(
-                                        icon: const Icon(Icons.copy_rounded, size: 14),
-                                        padding: EdgeInsets.zero,
-                                        constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                                        tooltip: widget.isAr ? 'نسخ الرقم' : 'Copy',
-                                        onPressed: () {
-                                          Clipboard.setData(ClipboardData(text: msg.toPhone));
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(content: Text(widget.isAr ? 'تم نسخ الرقم' : 'Phone copied')),
-                                          );
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Expanded(
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(8),
-                                      onTap: () => _showMessageDetails(msg, cs),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(vertical: 4.0),
-                                        child: Text(
-                                          msg.body,
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: GoogleFonts.cairo(fontSize: 12, height: 1.4),
-                                        ),
-                                      ),
+                                  width: 45,
+                                  child: Tooltip(
+                                    message: widget.isAr ? 'معرف الرسالة: ${msg.id}' : 'Message ID: ${msg.id}',
+                                    child: Text(
+                                      '${idx + 1}',
+                                      style: GoogleFonts.robotoMono(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSurfaceVariant),
                                     ),
                                   ),
                                 ),
                                 SizedBox(
-                                  width: 180,
+                                  width: 230,
+                                  child: _buildRecipientCell(msg, cs),
+                                ),
+                                Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                    child: _buildAnimatedMessageBody(msg, cs),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 150,
                                   child: Align(
                                     alignment: widget.isAr ? Alignment.centerRight : Alignment.centerLeft,
                                     child: Container(
@@ -768,14 +1024,14 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
                                   ),
                                 ),
                                 SizedBox(
-                                  width: 170,
+                                  width: 160,
                                   child: Text(
                                     timeStr,
                                     style: GoogleFonts.cairo(fontSize: 12, color: cs.onSurfaceVariant),
                                   ),
                                 ),
                                 SizedBox(
-                                  width: 120,
+                                  width: 100,
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
@@ -839,10 +1095,7 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Flexible(
-                      child: SelectableText(
-                        '+${msg.toPhone}',
-                        style: GoogleFonts.robotoMono(fontSize: 14, fontWeight: FontWeight.bold),
-                      ),
+                      child: _buildRecipientCell(msg, cs),
                     ),
                     const SizedBox(width: 8),
                     Container(
@@ -866,15 +1119,7 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                InkWell(
-                  onTap: () => _showMessageDetails(msg, cs),
-                  child: Text(
-                    msg.body,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.cairo(fontSize: 12, height: 1.4),
-                  ),
-                ),
+                _buildAnimatedMessageBody(msg, cs),
                 const SizedBox(height: 10),
                 const Divider(height: 1),
                 const SizedBox(height: 8),

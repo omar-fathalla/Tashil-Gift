@@ -18,17 +18,27 @@ import '../../../core/widgets/switch_point_branding.dart';
 import '../../admin/domain/event_model.dart';
 import '../domain/whatsapp_gateway_config_model.dart';
 import '../domain/whatsapp_gateway_service.dart';
+import '../domain/marketing_contact_model.dart';
+import 'widgets/customer_import_dialog.dart';
 import 'widgets/whatsapp_campaign_dispatcher_dialog.dart';
 import 'widgets/whatsapp_gateway_settings_dialog.dart';
 import 'widgets/whatsapp_live_outbox_view.dart';
+import 'widgets/whatsapp_screenshot_dialog.dart';
 
 enum MarketingMainTab {
   audience,
   liveOutbox,
 }
 
+enum MarketingMessageMode {
+  text,
+  media,
+  poll,
+}
+
 enum CustomerSegmentType {
   all,
+  activeWhatsApp,
   winners,
   topSpenders,
   repeatShoppers,
@@ -74,6 +84,17 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
   // Marketing message template state
   bool _isComposerExpanded = false;
   late final TextEditingController _messageController;
+  MarketingMessageMode _messageMode = MarketingMessageMode.text;
+  final TextEditingController _mediaUrlController = TextEditingController();
+  final TextEditingController _pollQuestionController = TextEditingController();
+  final List<TextEditingController> _pollOptionControllers = [
+    TextEditingController(text: 'نعم، أرغب في الاستلام'),
+    TextEditingController(text: 'سأزوركم خلال عطلة الأسبوع'),
+  ];
+  bool _pollMultipleAnswers = false;
+
+  // Verified active WhatsApp numbers cache across sessions
+  final Map<String, bool> _verifiedWhatsAppMap = {};
 
   // Memoization cache key and cached contact list (Rule 9: O(1) performance)
   String _lastCacheKey = '';
@@ -126,10 +147,49 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
     );
   }
 
+  void _openCustomerImportDialog({
+    required AppStrings strings,
+    required bool isAr,
+    required String companySlug,
+    required String companyName,
+    required List<String> availableBranches,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) => CustomerImportDialog(
+        companySlug: companySlug,
+        companyName: companyName,
+        availableBranches: availableBranches,
+        strings: strings,
+        isAr: isAr,
+        onImportSuccess: (savedCount) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                isAr
+                    ? 'تم حفظ $savedCount عميل بنجاح في قاعدة البيانات!'
+                    : '$savedCount customers successfully saved to database!',
+                style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+              ),
+              backgroundColor: const Color(0xFF198754),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
     _messageController.dispose();
+    _mediaUrlController.dispose();
+    _pollQuestionController.dispose();
+    for (final c in _pollOptionControllers) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -156,14 +216,15 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
     });
   }
 
-  /// Processes raw transaction documents into unified customer profiles
+  /// Processes raw transaction documents and stored marketing contacts into unified customer profiles
   void _aggregateCustomers({
     required List<QueryDocumentSnapshot> transactions,
     required List<EventModel> events,
     required String effectiveSlug,
     required String companyName,
+    List<MarketingContactModel> customContacts = const [],
   }) {
-    final cacheKey = '${transactions.length}_${events.length}_${_selectedCompany}_${_selectedEventId ?? 'all'}_${_selectedBranch ?? 'all'}';
+    final cacheKey = '${transactions.length}_${events.length}_${customContacts.length}_${_selectedCompany}_${_selectedEventId ?? 'all'}_${_selectedBranch ?? 'all'}';
     if (_lastCacheKey == cacheKey) {
       return;
     }
@@ -250,6 +311,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
           branches: branch.isNotEmpty ? [branch] : [],
           lastBranch: branch,
           lastVisitDate: visitDate,
+          isWhatsAppActive: _verifiedWhatsAppMap[cleanPhone],
         );
       } else {
         final existing = contactsMap[cleanPhone]!;
@@ -280,9 +342,53 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
           lastBranch: branch.isNotEmpty ? branch : existing.lastBranch,
           lastVisitDate: updatedDate,
           status: existing.status,
+          isWhatsAppActive: existing.isWhatsAppActive ?? _verifiedWhatsAppMap[cleanPhone],
         );
       }
       totalSpend += spendVal;
+    }
+
+    // Merge custom / Excel-imported marketing contacts
+    for (final cc in customContacts) {
+      final cleanPhone = cc.cleanPhone;
+      if (cleanPhone.isEmpty) continue;
+
+      // Filter branch if selected
+      if (_selectedBranch != null && _selectedBranch!.isNotEmpty && _selectedBranch != 'all') {
+        if (cc.branch.isNotEmpty && cc.branch != _selectedBranch) continue;
+      }
+
+      if (!contactsMap.containsKey(cleanPhone)) {
+        final ccc = cc.toCustomerCampaignContact();
+        ccc.isWhatsAppActive = _verifiedWhatsAppMap[cleanPhone];
+        contactsMap[cleanPhone] = ccc;
+      } else {
+        // Customer already exists from transactions, enrich name & branch & source
+        final existing = contactsMap[cleanPhone]!;
+        final updatedBranches = List<String>.from(existing.branches);
+        if (cc.branch.isNotEmpty && !updatedBranches.contains(cc.branch)) {
+          updatedBranches.add(cc.branch);
+        }
+        final updatedName = existing.name.isEmpty || existing.name == 'عميل بدون اسم'
+            ? cc.name
+            : existing.name;
+
+        contactsMap[cleanPhone] = CustomerCampaignContact(
+          id: existing.id,
+          name: updatedName,
+          rawPhone: existing.rawPhone,
+          cleanPhone: existing.cleanPhone,
+          totalSpend: existing.totalSpend,
+          totalInvoices: existing.totalInvoices,
+          prizesWon: existing.prizesWon,
+          branches: updatedBranches,
+          lastBranch: existing.lastBranch.isNotEmpty ? existing.lastBranch : cc.branch,
+          lastVisitDate: existing.lastVisitDate ?? cc.createdAt,
+          sourceTag: cc.source,
+          status: existing.status,
+          isWhatsAppActive: existing.isWhatsAppActive ?? _verifiedWhatsAppMap[cleanPhone],
+        );
+      }
     }
 
     final allContacts = contactsMap.values.toList();
@@ -313,6 +419,9 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
       // Segment filter
       switch (_selectedSegment) {
         case CustomerSegmentType.all:
+          break;
+        case CustomerSegmentType.activeWhatsApp:
+          if (contact.isWhatsAppActive != true) return false;
           break;
         case CustomerSegmentType.winners:
           if (!contact.isWinner) return false;
@@ -361,6 +470,37 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
       return;
     }
 
+    // Validate Poll if poll mode is active
+    if (_messageMode == MarketingMessageMode.poll) {
+      final q = _pollQuestionController.text.trim();
+      final validOpts = _pollOptionControllers.map((c) => c.text.trim()).where((s) => s.isNotEmpty).toList();
+      if (q.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(strings.pollQuestionRequired),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+      if (validOpts.length < 2) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(strings.pollRequiresTwoOptions),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+    }
+
+    // Reset dispatch status for all target contacts so fresh launch starts in pending state
+    for (final contact in targetContacts) {
+      contact.status = ContactDispatchStatus.pending;
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -372,8 +512,262 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
         companySlug: widget.lockedCompanySlug,
         strings: strings,
         isAr: isAr,
+        attachedMediaUrl: _messageMode == MarketingMessageMode.media ? _mediaUrlController.text.trim() : null,
+        pollTitle: _messageMode == MarketingMessageMode.poll ? _pollQuestionController.text.trim() : null,
+        pollOptions: _messageMode == MarketingMessageMode.poll
+            ? _pollOptionControllers.map((c) => c.text.trim()).where((s) => s.isNotEmpty).toList()
+            : null,
+        multiplePollAnswers: _pollMultipleAnswers,
       ),
     );
+  }
+
+  /// Feature 4: Filter Active WhatsApp Numbers (فحص وفلترة أرقام الواتساب النشطة)
+  Future<void> _checkActiveWhatsAppNumbers({
+    required List<CustomerCampaignContact> contactsToCheck,
+    required AppStrings strings,
+    required bool isAr,
+  }) async {
+    if (contactsToCheck.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(strings.noCustomersFound),
+          backgroundColor: Colors.orange.shade800,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    if (!_gatewayConfig.isConfigured) {
+      _openGatewaySettings(strings, isAr);
+      return;
+    }
+
+    bool isCancelled = false;
+    int processed = 0;
+    int activeCount = 0;
+    int inactiveCount = 0;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final cs = Theme.of(context).colorScheme;
+            final progress = contactsToCheck.isNotEmpty ? processed / contactsToCheck.length : 0.0;
+
+            if (processed == 0 && !isCancelled) {
+              Future.microtask(() async {
+                for (final contact in contactsToCheck) {
+                  if (isCancelled) break;
+                  final phone = contact.cleanPhone.isNotEmpty ? contact.cleanPhone : contact.rawPhone;
+                  final exists = await _gatewayService.checkNumberExists(
+                    config: _gatewayConfig,
+                    rawPhone: phone,
+                  );
+                  if (isCancelled) break;
+
+                  contact.isWhatsAppActive = exists;
+                  if (exists != null) {
+                    _verifiedWhatsAppMap[contact.cleanPhone] = exists;
+                  }
+                  processed++;
+                  if (exists == true) {
+                    activeCount++;
+                  } else {
+                    inactiveCount++;
+                  }
+
+                  if (dialogCtx.mounted) {
+                    setDialogState(() {});
+                  }
+                }
+
+                if (dialogCtx.mounted) {
+                  setDialogState(() {});
+                }
+              });
+            }
+
+            final isFinished = processed >= contactsToCheck.length || isCancelled;
+
+            return AlertDialog(
+              backgroundColor: cs.surface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF198754).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.phonelink_ring_rounded, color: Color(0xFF198754), size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      isAr ? 'فحص أرقام الواتساب النشطة' : 'Filter Active WhatsApp Numbers',
+                      style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 480,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      isAr
+                          ? 'جاري فحص قائمة العملاء والتأكد من وجود حساب واتساب مفعل لكل رقم عبر السيرفر الخاص...'
+                          : 'Checking customer contact list to verify active WhatsApp accounts via private server...',
+                      style: GoogleFonts.cairo(fontSize: 12, color: cs.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 16),
+                    LinearProgressIndicator(
+                      value: isFinished && !isCancelled ? 1.0 : progress,
+                      backgroundColor: cs.surfaceContainerHighest,
+                      color: const Color(0xFF198754),
+                      borderRadius: BorderRadius.circular(8),
+                      minHeight: 8,
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          isAr ? 'تم فحص $processed من ${contactsToCheck.length}' : 'Checked $processed of ${contactsToCheck.length}',
+                          style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          '${(progress * 100).toInt()}%',
+                          style: GoogleFonts.robotoMono(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF198754)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF198754).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFF198754).withValues(alpha: 0.4)),
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(Icons.check_circle_rounded, size: 16, color: Color(0xFF198754)),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '$activeCount',
+                                      style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF0F5132)),
+                                    ),
+                                  ],
+                                ),
+                                Text(
+                                  isAr ? 'حساب نشط' : 'Active WhatsApp',
+                                  style: GoogleFonts.cairo(fontSize: 11, color: const Color(0xFF0F5132), fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.phonelink_erase_rounded, size: 16, color: Colors.orange.shade800),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '$inactiveCount',
+                                      style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orange.shade900),
+                                    ),
+                                  ],
+                                ),
+                                Text(
+                                  isAr ? 'ليس لديه واتساب' : 'No WhatsApp',
+                                  style: GoogleFonts.cairo(fontSize: 11, color: Colors.orange.shade900, fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                if (!isFinished)
+                  TextButton(
+                    onPressed: () {
+                      isCancelled = true;
+                      Navigator.of(dialogCtx).pop();
+                    },
+                    child: Text(isAr ? 'إيقاف الفحص' : 'Cancel Check', style: GoogleFonts.cairo(color: Colors.red)),
+                  )
+                else ...[
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(dialogCtx).pop();
+                    },
+                    child: Text(isAr ? 'إغلاق' : 'Close', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                  ),
+                  if (activeCount > 0)
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF198754),
+                        foregroundColor: Colors.white,
+                      ),
+                      icon: const Icon(Icons.check_box_rounded, size: 18),
+                      label: Text(
+                        isAr ? 'تحديد الأرقام النشطة فقط ($activeCount)' : 'Select Active Only ($activeCount)',
+                        style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _selectedContactIds.clear();
+                          for (final c in contactsToCheck) {
+                            if (c.isWhatsAppActive == true) {
+                              _selectedContactIds.add(c.id);
+                            }
+                          }
+                          _selectedSegment = CustomerSegmentType.activeWhatsApp;
+                          _lastFilterCacheKey = '';
+                        });
+                        Navigator.of(dialogCtx).pop();
+                      },
+                    ),
+                ],
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    setState(() {
+      _lastFilterCacheKey = '';
+    });
   }
 
   /// Opens dialog to send a test WhatsApp message to any custom mobile number
@@ -387,6 +781,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
   }) {
     final phoneController = TextEditingController();
     final nameController = TextEditingController(text: isAr ? 'عميل تجريبي' : 'Test Customer');
+    bool isSending = false;
 
     showDialog(
       context: context,
@@ -584,69 +979,250 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                               ),
                               const SizedBox(height: 16),
 
-                              // Preview
-                              Text(
-                                strings.liveMessagePreview,
-                                style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSurfaceVariant),
-                              ),
-                              const SizedBox(height: 6),
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFDCF8C6).withValues(alpha: 0.35),
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: const Color(0xFF25D366).withValues(alpha: 0.4)),
+                               // Preview
+                              if (_messageMode == MarketingMessageMode.poll) ...[
+                                Row(
+                                  children: [
+                                    const Icon(Icons.poll_rounded, size: 16, color: Color(0xFF198754)),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      strings.pollPreviewTitle,
+                                      style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF0F5132)),
+                                    ),
+                                  ],
                                 ),
-                                child: SelectableText(
-                                  previewText,
-                                  style: GoogleFonts.cairo(fontSize: 13, height: 1.5, color: Colors.black87),
+                                const SizedBox(height: 6),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFDCF8C6).withValues(alpha: 0.35),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(color: const Color(0xFF25D366).withValues(alpha: 0.4)),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _pollQuestionController.text.trim().isNotEmpty
+                                            ? _pollQuestionController.text.trim()
+                                            : (isAr ? '(سؤال الاستطلاع)' : '(Poll Question)'),
+                                        style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                                      ),
+                                      const Divider(height: 14),
+                                      ..._pollOptionControllers
+                                          .map((c) => c.text.trim())
+                                          .where((s) => s.isNotEmpty)
+                                          .map((opt) => Padding(
+                                                padding: const EdgeInsets.symmetric(vertical: 2),
+                                                child: Row(
+                                                  children: [
+                                                    const Icon(Icons.radio_button_unchecked, size: 14, color: Color(0xFF198754)),
+                                                    const SizedBox(width: 8),
+                                                    Expanded(child: Text(opt, style: GoogleFonts.cairo(fontSize: 12))),
+                                                  ],
+                                                ),
+                                              )),
+                                    ],
+                                  ),
                                 ),
-                              ),
+                              ] else ...[
+                                Text(
+                                  strings.liveMessagePreview,
+                                  style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSurfaceVariant),
+                                ),
+                                const SizedBox(height: 6),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFDCF8C6).withValues(alpha: 0.35),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(color: const Color(0xFF25D366).withValues(alpha: 0.4)),
+                                  ),
+                                  child: SelectableText(
+                                    previewText,
+                                    style: GoogleFonts.cairo(fontSize: 13, height: 1.5, color: Colors.black87),
+                                  ),
+                                ),
+                              ],
                               const SizedBox(height: 20),
+
+                              // Active Gateway Status Indicator
+                              if (_gatewayConfig.isConfigured)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  margin: const EdgeInsets.only(bottom: 14),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF198754).withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: const Color(0xFF198754).withValues(alpha: 0.25)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.cloud_done_rounded, size: 18, color: Color(0xFF198754)),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          isAr
+                                              ? 'البوابة المعتمدة: ${_gatewayConfig.provider.displayName} (إرسال سحابي فوري بالخلفية بدون متصفح)'
+                                              : 'Active Gateway: ${_gatewayConfig.provider.displayName} (Instant Background Dispatch without Browser)',
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: const Color(0xFF0F5132),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
 
                               // Launch WhatsApp Test Button
                               SizedBox(
                                 height: 48,
                                 child: FilledButton.icon(
                                   style: FilledButton.styleFrom(
-                                    backgroundColor: const Color(0xFF25D366),
+                                    backgroundColor: const Color(0xFF198754),
                                     foregroundColor: Colors.white,
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                                   ),
-                                  icon: const Icon(Icons.send_rounded, size: 18),
+                                  icon: isSending
+                                      ? const SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                        )
+                                      : const Icon(Icons.send_rounded, size: 18),
                                   label: Text(
-                                    strings.sendTestWhatsApp,
+                                    isSending
+                                        ? (isAr ? 'جاري الإرسال عبر البوابة...' : 'Sending via Gateway...')
+                                        : (_gatewayConfig.isConfigured
+                                            ? (isAr ? 'إرسال فوري عبر بوابة ${_gatewayConfig.provider.displayName}' : 'Send via ${_gatewayConfig.provider.displayName}')
+                                            : strings.sendTestWhatsApp),
                                     style: GoogleFonts.cairo(fontSize: isMobile ? 13 : 14, fontWeight: FontWeight.bold),
                                   ),
-                                  onPressed: isValidPhone
-                                      ? () async {
+                                  onPressed: (!isValidPhone || isSending)
+                                      ? null
+                                      : () async {
                                           final messenger = ScaffoldMessenger.of(context);
-                                          final url = 'https://wa.me/$formattedPhone?text=${Uri.encodeComponent(previewText)}';
-                                          final uri = Uri.parse(url);
-                                          try {
-                                            await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                            if (dialogCtx.mounted) {
-                                              Navigator.of(dialogCtx).pop();
+                                          if (_gatewayConfig.isConfigured) {
+                                            setDialogState(() {
+                                              isSending = true;
+                                            });
+                                            try {
+                                              final WhatsAppGatewayResult result;
+                                              if (_messageMode == MarketingMessageMode.poll && _pollQuestionController.text.trim().isNotEmpty) {
+                                                final opts = _pollOptionControllers.map((c) => c.text.trim()).where((s) => s.isNotEmpty).toList();
+                                                result = await _gatewayService.sendPollMessage(
+                                                  config: _gatewayConfig,
+                                                  toPhone: formattedPhone,
+                                                  pollTitle: _pollQuestionController.text.trim(),
+                                                  pollOptions: opts,
+                                                  multipleAnswers: _pollMultipleAnswers,
+                                                );
+                                              } else if (_messageMode == MarketingMessageMode.media && _mediaUrlController.text.trim().isNotEmpty) {
+                                                result = await _gatewayService.sendMediaMessage(
+                                                  config: _gatewayConfig,
+                                                  toPhone: formattedPhone,
+                                                  mediaUrl: _mediaUrlController.text.trim(),
+                                                  caption: previewText,
+                                                );
+                                              } else {
+                                                result = await _gatewayService.sendSingleMessage(
+                                                  config: _gatewayConfig,
+                                                  toPhone: formattedPhone,
+                                                  messageText: previewText,
+                                                );
+                                              }
+                                              if (result.isSuccess) {
+                                                if (dialogCtx.mounted) {
+                                                  Navigator.of(dialogCtx).pop();
+                                                }
+                                                messenger.showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      isAr
+                                                          ? 'تم إرسال رسالة الاختبار بنجاح عبر بوابة ${_gatewayConfig.provider.displayName}! 🚀'
+                                                          : 'Test message sent successfully via ${_gatewayConfig.provider.displayName}! 🚀',
+                                                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                                                    ),
+                                                    backgroundColor: const Color(0xFF198754),
+                                                    behavior: SnackBarBehavior.floating,
+                                                  ),
+                                                );
+                                              } else {
+                                                setDialogState(() {
+                                                  isSending = false;
+                                                });
+                                                messenger.showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      result.error ?? (isAr ? 'فشل الإرسال عبر البوابة' : 'Failed to send via Gateway'),
+                                                      style: GoogleFonts.cairo(),
+                                                    ),
+                                                    backgroundColor: Colors.red.shade700,
+                                                    behavior: SnackBarBehavior.floating,
+                                                    duration: const Duration(seconds: 5),
+                                                  ),
+                                                );
+                                              }
+                                            } catch (e) {
+                                              setDialogState(() {
+                                                isSending = false;
+                                              });
+                                              messenger.showSnackBar(
+                                                SnackBar(
+                                                  content: Text(strings.operationFailed(e.toString())),
+                                                  backgroundColor: Colors.red.shade700,
+                                                  behavior: SnackBarBehavior.floating,
+                                                ),
+                                              );
                                             }
-                                            messenger.showSnackBar(
-                                              SnackBar(
-                                                content: Text(strings.testMessageSentSuccess),
-                                                backgroundColor: const Color(0xFF198754),
-                                                behavior: SnackBarBehavior.floating,
-                                              ),
-                                            );
-                                          } catch (e) {
-                                            messenger.showSnackBar(
-                                              SnackBar(
-                                                content: Text(strings.operationFailed(e.toString())),
-                                                backgroundColor: Colors.red.shade700,
-                                              ),
-                                            );
+                                          } else {
+                                            final url = 'https://wa.me/$formattedPhone?text=${Uri.encodeComponent(previewText)}';
+                                            final uri = Uri.parse(url);
+                                            try {
+                                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                              if (dialogCtx.mounted) {
+                                                Navigator.of(dialogCtx).pop();
+                                              }
+                                              messenger.showSnackBar(
+                                                SnackBar(
+                                                  content: Text(strings.testMessageSentSuccess),
+                                                  backgroundColor: const Color(0xFF198754),
+                                                  behavior: SnackBarBehavior.floating,
+                                                ),
+                                              );
+                                            } catch (e) {
+                                              messenger.showSnackBar(
+                                                SnackBar(
+                                                  content: Text(strings.operationFailed(e.toString())),
+                                                  backgroundColor: Colors.red.shade700,
+                                                ),
+                                              );
+                                            }
                                           }
-                                        }
-                                      : null,
+                                        },
                                 ),
                               ),
+                              if (_gatewayConfig.isConfigured) ...[
+                                const SizedBox(height: 6),
+                                Center(
+                                  child: TextButton.icon(
+                                    icon: const Icon(Icons.open_in_new_rounded, size: 14),
+                                    label: Text(
+                                      isAr ? 'أو فتح الرسالة في تطبيق/ويب واتساب يدوياً' : 'Or open manually in WhatsApp Web/App',
+                                      style: GoogleFonts.cairo(fontSize: 11, color: cs.onSurfaceVariant),
+                                    ),
+                                    onPressed: (!isValidPhone || isSending)
+                                        ? null
+                                        : () async {
+                                            final url = 'https://wa.me/$formattedPhone?text=${Uri.encodeComponent(previewText)}';
+                                            final uri = Uri.parse(url);
+                                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                          },
+                                  ),
+                                ),
+                              ],
                               const SizedBox(height: 10),
 
                               // Secondary Action: Add to Current Audience List
@@ -887,18 +1463,36 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
           transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: effectiveSlug);
         }
 
+        // Query custom & Excel marketing contacts
+        Query customContactsQuery = firestore.collection('marketing_contacts');
+        if (effectiveSlug.isNotEmpty) {
+          customContactsQuery = customContactsQuery.where('companySlug', isEqualTo: effectiveSlug);
+        }
+
         return StreamBuilder<QuerySnapshot>(
           stream: transactionsQuery.snapshots(),
           builder: (context, transSnapshot) {
-            final transDocs = transSnapshot.data?.docs ?? [];
+            return StreamBuilder<QuerySnapshot>(
+              stream: customContactsQuery.snapshots(),
+              builder: (context, customSnapshot) {
+                final transDocs = transSnapshot.data?.docs ?? [];
+                final customDocs = customSnapshot.data?.docs ?? [];
+                final customContacts = customDocs.map((d) {
+                  try {
+                    return MarketingContactModel.fromFirestore(d);
+                  } catch (_) {
+                    return null;
+                  }
+                }).whereType<MarketingContactModel>().toList();
 
-            // Aggregate customers with memoization
-            _aggregateCustomers(
-              transactions: transDocs,
-              events: companyEvents,
-              effectiveSlug: effectiveSlug,
-              companyName: effectiveCompanyName,
-            );
+                // Aggregate customers with memoization
+                _aggregateCustomers(
+                  transactions: transDocs,
+                  events: companyEvents,
+                  effectiveSlug: effectiveSlug,
+                  companyName: effectiveCompanyName,
+                  customContacts: customContacts,
+                );
 
             final filteredContacts = _getFilteredContacts();
             final activeCampaignName = _selectedEventId != null && _selectedEventId != 'all'
@@ -970,8 +1564,90 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                     ],
                                   ),
                                 ),
+                                if (!isMobile) ...[
+                                  const SizedBox(width: 12),
+                                  FilledButton.tonalIcon(
+                                    style: FilledButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    ),
+                                    icon: const Icon(Icons.screenshot_monitor_rounded, size: 18),
+                                    label: Text(
+                                      isAr ? 'لقطة الشاشة الحية' : 'Live Screen',
+                                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                                    ),
+                                    onPressed: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (ctx) => WhatsAppScreenshotDialog(
+                                          config: _gatewayConfig,
+                                          strings: strings,
+                                          isAr: isAr,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  const SizedBox(width: 8),
+                                  OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    ),
+                                    icon: const Icon(Icons.tune_rounded, size: 18),
+                                    label: Text(
+                                      strings.whatsappGatewayTitle,
+                                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                                    ),
+                                    onPressed: () => _openGatewaySettings(strings, isAr),
+                                  ),
+                                ],
                               ],
                             ),
+                            if (isMobile) ...[
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: FilledButton.tonalIcon(
+                                      style: FilledButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                      icon: const Icon(Icons.screenshot_monitor_rounded, size: 16),
+                                      label: Text(
+                                        isAr ? 'شاشة حية' : 'Screen',
+                                        style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
+                                      ),
+                                      onPressed: () {
+                                        showDialog(
+                                          context: context,
+                                          builder: (ctx) => WhatsAppScreenshotDialog(
+                                            config: _gatewayConfig,
+                                            strings: strings,
+                                            isAr: isAr,
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                      icon: const Icon(Icons.tune_rounded, size: 16),
+                                      label: Text(
+                                        isAr ? 'إعدادات البوابة' : 'Settings',
+                                        style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
+                                      ),
+                                      onPressed: () => _openGatewaySettings(strings, isAr),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                             const SizedBox(height: 14),
 
                             // Main View Switcher (Audience vs Live Outbox)
@@ -1059,6 +1735,8 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                   filteredContacts: filteredContacts,
                                   companyName: effectiveCompanyName,
                                   campaignName: activeCampaignName,
+                                  companySlug: effectiveSlug,
+                                  availableBranches: sortedBranches,
                                 ),
                               ),
                             ],
@@ -1077,6 +1755,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                             strings: strings,
                             isAr: isAr,
                             onOpenSettings: () => _openGatewaySettings(strings, isAr),
+                            customerContacts: _cachedContacts,
                           ),
                         ),
                       )
@@ -1124,7 +1803,9 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
         );
       },
     );
-  }
+  },
+);
+}
 
   /// Builds the 4 executive KPI summary cards with adaptive responsive layouts
   Widget _buildKpiMetricsGrid(ColorScheme cs, double screenWidth, AppStrings strings, bool isAr) {
@@ -1546,40 +2227,281 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Preset template pills
-                  Text(
-                    strings.presetTemplatesTitle,
-                    style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSurfaceVariant),
+                  // 1. Message Mode Selector (SegmentedButton M3)
+                  SizedBox(
+                    width: double.infinity,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: SegmentedButton<MarketingMessageMode>(
+                        style: SegmentedButton.styleFrom(
+                          selectedBackgroundColor: cs.primaryContainer,
+                          selectedForegroundColor: cs.onPrimaryContainer,
+                        ),
+                        segments: [
+                          ButtonSegment<MarketingMessageMode>(
+                            value: MarketingMessageMode.text,
+                            label: Text(isAr ? 'رسالة نصية' : 'Text Message', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12)),
+                            icon: const Icon(Icons.article_outlined, size: 18),
+                          ),
+                          ButtonSegment<MarketingMessageMode>(
+                            value: MarketingMessageMode.media,
+                            label: Text(isAr ? 'بوستر وعرض مصور' : 'Media Poster', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12)),
+                            icon: const Icon(Icons.image_outlined, size: 18),
+                          ),
+                          ButtonSegment<MarketingMessageMode>(
+                            value: MarketingMessageMode.poll,
+                            label: Text(isAr ? 'استطلاع رأي تفاعلي' : 'Interactive Poll', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12)),
+                            icon: const Icon(Icons.poll_outlined, size: 18),
+                          ),
+                        ],
+                        selected: {_messageMode},
+                        onSelectionChanged: (newSelection) {
+                          setState(() {
+                            _messageMode = newSelection.first;
+                          });
+                        },
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      ActionChip(
-                        avatar: const Icon(Icons.campaign_rounded, size: 16, color: Color(0xFF0F5132)),
-                        label: Text(strings.templateNewEvent, style: GoogleFonts.cairo(fontSize: 12)),
-                        onPressed: () => _applyPresetTemplate(
-                          'أهلاً بك {اسم_العميل}! يسر {الشركة} دعوتك لمهرجان وعروض {الحملة} في فرع {الفرع}. زُرنا اليوم واربح جوائز فورية وقسائم مشتريات قيمة!',
-                        ),
+                  const SizedBox(height: 14),
+
+                  // Feature 1: Media Poster & Image Attachment
+                  if (_messageMode == MarketingMessageMode.media) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: cs.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
                       ),
-                      ActionChip(
-                        avatar: const Icon(Icons.card_giftcard_rounded, size: 16, color: Color(0xFF0F5132)),
-                        label: Text(strings.templateRewardVoucher, style: GoogleFonts.cairo(fontSize: 12)),
-                        onPressed: () => _applyPresetTemplate(
-                          'مرحباً {اسم_العميل}، شكراً لتسوقك الدائم لمنتجات {الشركة}. يسعدنا إهداؤك فرصة حصرية في مهرجاننا الجديد {الحملة} بفرع {الفرع}. ننتظرك لتستلم هديتك!',
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.photo_library_rounded, size: 18, color: Color(0xFF198754)),
+                              const SizedBox(width: 8),
+                              Text(
+                                isAr ? 'رابط صورة أو بوستر العرض (Media Poster URL)' : 'Media Poster / Image URL',
+                                style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _mediaUrlController,
+                            onChanged: (_) => setState(() {}),
+                            decoration: InputDecoration(
+                              hintText: 'https://example.com/promotions/supermarket_offer.jpg',
+                              hintStyle: GoogleFonts.cairo(fontSize: 12),
+                              prefixIcon: const Icon(Icons.link_rounded, size: 20),
+                              suffixIcon: _mediaUrlController.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear_rounded, size: 18),
+                                      onPressed: () => setState(() => _mediaUrlController.clear()),
+                                    )
+                                  : null,
+                              filled: true,
+                              fillColor: cs.surfaceContainerLow,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
+                            style: GoogleFonts.robotoMono(fontSize: 12),
+                          ),
+                          if (_mediaUrlController.text.trim().isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                constraints: const BoxConstraints(maxHeight: 180),
+                                width: double.infinity,
+                                color: cs.surfaceContainerHighest,
+                                child: Image.network(
+                                  _mediaUrlController.text.trim(),
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (context, error, stackTrace) => Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Center(
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.broken_image_rounded, size: 16, color: Colors.orange.shade900),
+                                          const SizedBox(width: 6),
+                                          Flexible(
+                                            child: Text(
+                                              isAr ? 'تعذر تحميل المعاينة، يرجى التأكد من صحة الرابط المباشر للصورة' : 'Unable to preview image from URL',
+                                              style: GoogleFonts.cairo(fontSize: 12, color: Colors.orange.shade900),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 8),
+                          Text(
+                            isAr
+                                ? 'ℹ️ سيتم إرسال الصورة بجانب نص الرسالة الترويجي أدناه معاً كرسالة وسائط متكاملة (Media Message).'
+                                : 'ℹ️ The image will be dispatched together with the caption text below as a single media bundle.',
+                            style: GoogleFonts.cairo(fontSize: 11, color: cs.onSurfaceVariant),
+                          ),
+                        ],
                       ),
-                      ActionChip(
-                        avatar: const Icon(Icons.local_fire_department_rounded, size: 16, color: Colors.orange),
-                        label: Text(strings.templateWeekendOffer, style: GoogleFonts.cairo(fontSize: 12)),
-                        onPressed: () => _applyPresetTemplate(
-                          'عروض حصرية من {الشركة} لنهاية الأسبوع بفرع {الفرع}! خصومات استثنائية وجوائز فورية بانتظارك في {الحملة}. لا تفوّت الفرصة!',
-                        ),
+                    ),
+                  ],
+
+                  // Feature 2: Interactive WhatsApp Polls
+                  if (_messageMode == MarketingMessageMode.poll) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: cs.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.poll_rounded, size: 18, color: Color(0xFF198754)),
+                              const SizedBox(width: 8),
+                              Text(
+                                isAr ? 'استطلاع الرأي التفاعلي (WhatsApp Poll)' : 'Interactive WhatsApp Poll',
+                                style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _pollQuestionController,
+                            onChanged: (_) => setState(() {}),
+                            decoration: InputDecoration(
+                              labelText: isAr ? 'سؤال أو عنوان الاستطلاع' : 'Poll Question',
+                              hintText: isAr ? 'مثال: ما هو فرعك المفضل لاستلام الجائزة؟ أو ما رأيك في هدايا العرض؟' : 'e.g. Which branch do you prefer?',
+                              prefixIcon: const Icon(Icons.help_outline_rounded, size: 20),
+                              filled: true,
+                              fillColor: cs.surfaceContainerLow,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
+                            style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            isAr ? 'خيارات التصويت المتاحة للعميل:' : 'Poll Choices for Customer:',
+                            style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSurfaceVariant),
+                          ),
+                          const SizedBox(height: 8),
+                          ...List.generate(_pollOptionControllers.length, (optIdx) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 12,
+                                    backgroundColor: cs.primaryContainer,
+                                    child: Text(
+                                      '${optIdx + 1}',
+                                      style: GoogleFonts.robotoMono(fontSize: 11, fontWeight: FontWeight.bold, color: cs.onPrimaryContainer),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: TextField(
+                                      controller: _pollOptionControllers[optIdx],
+                                      onChanged: (_) => setState(() {}),
+                                      decoration: InputDecoration(
+                                        hintText: isAr ? 'الخيار رقم ${optIdx + 1}' : 'Option ${optIdx + 1}',
+                                        filled: true,
+                                        fillColor: cs.surfaceContainerLow,
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                      ),
+                                      style: GoogleFonts.cairo(fontSize: 12),
+                                    ),
+                                  ),
+                                  if (_pollOptionControllers.length > 2)
+                                    IconButton(
+                                      icon: const Icon(Icons.remove_circle_outline_rounded, size: 20, color: Colors.red),
+                                      onPressed: () {
+                                        setState(() {
+                                          _pollOptionControllers.removeAt(optIdx).dispose();
+                                        });
+                                      },
+                                    ),
+                                ],
+                              ),
+                            );
+                          }),
+                          if (_pollOptionControllers.length < 12)
+                            TextButton.icon(
+                              icon: const Icon(Icons.add_rounded, size: 18),
+                              label: Text(isAr ? 'إضافة خيار تصويت آخر' : 'Add Poll Option', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                              onPressed: () {
+                                setState(() {
+                                  _pollOptionControllers.add(TextEditingController());
+                                });
+                              },
+                            ),
+                          const Divider(height: 1),
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                              isAr ? 'السماح باختيارات متعددة في التصويت' : 'Allow multiple poll answers',
+                              style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                            value: _pollMultipleAnswers,
+                            activeThumbColor: const Color(0xFF198754),
+                            onChanged: (val) => setState(() => _pollMultipleAnswers = val),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  // Preset template pills (shown in text mode)
+                  if (_messageMode != MarketingMessageMode.poll) ...[
+                    Text(
+                      _messageMode == MarketingMessageMode.media
+                          ? (isAr ? 'شرح وصياغة البوستر الترويجي (Caption):' : 'Promotional Caption:')
+                          : strings.presetTemplatesTitle,
+                      style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ActionChip(
+                          avatar: const Icon(Icons.campaign_rounded, size: 16, color: Color(0xFF0F5132)),
+                          label: Text(strings.templateNewEvent, style: GoogleFonts.cairo(fontSize: 12)),
+                          onPressed: () => _applyPresetTemplate(
+                            'أهلاً بك {اسم_العميل}! يسر {الشركة} دعوتك لمهرجان وعروض {الحملة} في فرع {الفرع}. زُرنا اليوم واربح جوائز فورية وقسائم مشتريات قيمة!',
+                          ),
+                        ),
+                        ActionChip(
+                          avatar: const Icon(Icons.card_giftcard_rounded, size: 16, color: Color(0xFF0F5132)),
+                          label: Text(strings.templateRewardVoucher, style: GoogleFonts.cairo(fontSize: 12)),
+                          onPressed: () => _applyPresetTemplate(
+                            'مرحباً {اسم_العميل}، شكراً لتسوقك الدائم لمنتجات {الشركة}. يسعدنا إهداؤك فرصة حصرية في مهرجاننا الجديد {الحملة} بفرع {الفرع}. ننتظرك لتستلم هديتك!',
+                          ),
+                        ),
+                        ActionChip(
+                          avatar: const Icon(Icons.local_fire_department_rounded, size: 16, color: Colors.orange),
+                          label: Text(strings.templateWeekendOffer, style: GoogleFonts.cairo(fontSize: 12)),
+                          onPressed: () => _applyPresetTemplate(
+                            'عروض حصرية من {الشركة} لنهاية الأسبوع بفرع {الفرع}! خصومات استثنائية وجوائز فورية بانتظارك في {الحملة}. لا تفوّت الفرصة!',
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
 
                   // Message Editor TextField
                   TextField(
@@ -1793,6 +2715,8 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
     required List<CustomerCampaignContact> filteredContacts,
     required String companyName,
     required String campaignName,
+    required String companySlug,
+    required List<String> availableBranches,
   }) {
     final allFilteredSelected = filteredContacts.isNotEmpty &&
         filteredContacts.every((c) => _selectedContactIds.contains(c.id));
@@ -1812,6 +2736,15 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
               _buildSegmentTab(CustomerSegmentType.topSpenders, strings.filterSegmentTopSpenders, Icons.star_border_rounded, cs),
               const SizedBox(width: 8),
               _buildSegmentTab(CustomerSegmentType.repeatShoppers, strings.filterSegmentRepeat, Icons.repeat_rounded, cs),
+              const SizedBox(width: 8),
+              _buildSegmentTab(
+                CustomerSegmentType.activeWhatsApp,
+                isAr
+                    ? 'أرقام واتساب نشطة (${_verifiedWhatsAppMap.values.where((v) => v).length})'
+                    : 'Active WhatsApp (${_verifiedWhatsAppMap.values.where((v) => v).length})',
+                Icons.verified_rounded,
+                cs,
+              ),
             ],
           ),
         ),
@@ -1857,6 +2790,50 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                     runSpacing: 8,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
+                      // Add / Import Customers Button (Mobile)
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF0F5132),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: const Icon(Icons.person_add_alt_1_rounded, size: 16),
+                        label: Text(
+                          strings.addOrImportCustomers,
+                          style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () => _openCustomerImportDialog(
+                          strings: strings,
+                          isAr: isAr,
+                          companySlug: companySlug,
+                          companyName: companyName,
+                          availableBranches: availableBranches,
+                        ),
+                      ),
+
+                      // Feature 4: Filter Active WhatsApp Numbers (Mobile)
+                      FilledButton.tonalIcon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.15),
+                          foregroundColor: const Color(0xFF0F5132),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: const Icon(Icons.phonelink_ring_rounded, size: 16),
+                        label: Text(
+                          isAr ? 'فحص الواتساب' : 'Check WhatsApp',
+                          style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: filteredContacts.isEmpty
+                            ? null
+                            : () => _checkActiveWhatsAppNumbers(
+                                  contactsToCheck: filteredContacts,
+                                  strings: strings,
+                                  isAr: isAr,
+                                ),
+                      ),
+
                       // Select All / Deselect button
                       OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
@@ -2018,6 +2995,51 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                     runSpacing: 8,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
+                      // Add / Import Customers Button (Desktop)
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF0F5132),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 1,
+                        ),
+                        icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+                        label: Text(
+                          strings.addOrImportCustomers,
+                          style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () => _openCustomerImportDialog(
+                          strings: strings,
+                          isAr: isAr,
+                          companySlug: companySlug,
+                          companyName: companyName,
+                          availableBranches: availableBranches,
+                        ),
+                      ),
+
+                      // Feature 4: Filter Active WhatsApp Numbers (Desktop)
+                      FilledButton.tonalIcon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.15),
+                          foregroundColor: const Color(0xFF0F5132),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: const Icon(Icons.phonelink_ring_rounded, size: 18),
+                        label: Text(
+                          isAr ? 'فحص أرقام الواتساب' : 'Check Active WhatsApp',
+                          style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: filteredContacts.isEmpty
+                            ? null
+                            : () => _checkActiveWhatsAppNumbers(
+                                  contactsToCheck: filteredContacts,
+                                  strings: strings,
+                                  isAr: isAr,
+                                ),
+                      ),
+
                       // Select All / Deselect button
                       OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
@@ -2268,11 +3290,41 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                         ),
                                         const SizedBox(width: 10),
                                         Expanded(
-                                          child: Text(
-                                            c.name.isNotEmpty ? c.name : (isAr ? 'عميل بدون اسم' : 'Unnamed Customer'),
-                                            style: GoogleFonts.cairo(fontWeight: FontWeight.w600, fontSize: 13),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                c.name.isNotEmpty ? c.name : (isAr ? 'عميل بدون اسم' : 'Unnamed Customer'),
+                                                style: GoogleFonts.cairo(fontWeight: FontWeight.w600, fontSize: 13),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              if (c.sourceTag != null && c.sourceTag!.isNotEmpty) ...[
+                                                const SizedBox(height: 2),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                                  decoration: BoxDecoration(
+                                                    color: c.sourceTag == 'excel_import'
+                                                        ? const Color(0xFF107C41).withValues(alpha: 0.12)
+                                                        : const Color(0xFF6750A4).withValues(alpha: 0.12),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                  ),
+                                                  child: Text(
+                                                    c.sourceTag == 'excel_import'
+                                                        ? strings.excelSourceTag
+                                                        : strings.manualSourceTag,
+                                                    style: GoogleFonts.cairo(
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: c.sourceTag == 'excel_import'
+                                                          ? const Color(0xFF107C41)
+                                                          : const Color(0xFF6750A4),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
                                           ),
                                         ),
                                       ],
@@ -2283,9 +3335,27 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                 DataCell(
                                   Directionality(
                                     textDirection: TextDirection.ltr,
-                                    child: Text(
-                                      c.rawPhone,
-                                      style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w600),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          c.rawPhone,
+                                          style: GoogleFonts.robotoMono(fontSize: 13, fontWeight: FontWeight.w600),
+                                        ),
+                                        if (c.isWhatsAppActive != null) ...[
+                                          const SizedBox(width: 6),
+                                          Tooltip(
+                                            message: c.isWhatsAppActive == true
+                                                ? (isAr ? 'رقم واتساب نشط ومفعل' : 'Active WhatsApp account')
+                                                : (isAr ? 'لا يوجد حساب واتساب مرتبط' : 'No WhatsApp account found'),
+                                            child: Icon(
+                                              c.isWhatsAppActive == true ? Icons.verified_rounded : Icons.phonelink_erase_rounded,
+                                              size: 16,
+                                              color: c.isWhatsAppActive == true ? const Color(0xFF25D366) : cs.error,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
                                     ),
                                   ),
                                 ),
@@ -2654,17 +3724,60 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                c.name.isNotEmpty ? c.name : (isAr ? 'عميل بدون اسم' : 'Unnamed Customer'),
-                                style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      c.name.isNotEmpty ? c.name : (isAr ? 'عميل بدون اسم' : 'Unnamed Customer'),
+                                      style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (c.sourceTag != null && c.sourceTag!.isNotEmpty) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: c.sourceTag == 'excel_import'
+                                            ? const Color(0xFF107C41).withValues(alpha: 0.12)
+                                            : const Color(0xFF6750A4).withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        c.sourceTag == 'excel_import'
+                                            ? strings.excelSourceTag
+                                            : strings.manualSourceTag,
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                          color: c.sourceTag == 'excel_import'
+                                              ? const Color(0xFF107C41)
+                                              : const Color(0xFF6750A4),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                               Directionality(
                                 textDirection: TextDirection.ltr,
-                                child: Text(
-                                  c.rawPhone,
-                                  style: GoogleFonts.robotoMono(fontSize: 12, color: cs.onSurfaceVariant),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      c.rawPhone,
+                                      style: GoogleFonts.robotoMono(fontSize: 12, color: cs.onSurfaceVariant),
+                                    ),
+                                    if (c.isWhatsAppActive != null) ...[
+                                      const SizedBox(width: 4),
+                                      Icon(
+                                        c.isWhatsAppActive == true ? Icons.verified_rounded : Icons.phonelink_erase_rounded,
+                                        size: 14,
+                                        color: c.isWhatsAppActive == true ? const Color(0xFF25D366) : cs.error,
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ),
                             ],

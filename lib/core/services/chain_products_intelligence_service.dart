@@ -439,6 +439,9 @@ class ChainProductsIntelligenceService {
     if (s.contains('رجب') || s.contains('ragab')) return 'أولاد رجب';
     if (s.contains('محلاوي') || s.contains('mahallawy')) return 'المحلاوي';
     if (s.contains('الراية') || s.contains('raya')) return 'أسواق الراية';
+    if (s.contains('الهواري') || s.contains('hawary') || s.contains('el hawary')) return 'الهواري';
+    if (s.contains('اوسكار') || s.contains('أوسكار') || s.contains('oscar')) return 'أوسكار';
+    if (s.contains('الفار') || s.contains('el far') || s.contains('elfar')) return 'الفار';
     return rawChain.trim();
   }
 

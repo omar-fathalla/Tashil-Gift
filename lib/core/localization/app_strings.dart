@@ -3024,8 +3024,8 @@ class AppStrings {
     hi: 'व्हाट्सएप ग्राहक गेटवे',
   );
   String get whatsappGatewaySubtitle => _t(
-    ar: 'إعدادات ربط بوابة UltraMsg أو Wasapi أو Custom Webhook للإرسال الآلي للرسائل والعروض الترويجية',
-    en: 'Configure UltraMsg, Wasapi, or Custom Webhook for automated messaging and promotions',
+    ar: 'إعدادات سيرفر الواتساب الخاص (WAHA) أو البوابة السحابية للإرسال الآلي للرسائل والعروض الترويجية بدون اشتراكات',
+    en: 'Configure Private WhatsApp Server (WAHA) or Custom Gateway for automated promotions with zero fees',
     hi: 'स्वचालित संदेशों के लिए अल्ट्रा-मैसेज या वासापी गेटवे सेटिंग्स',
   );
   String get gatewayProviderLabel => _t(ar: 'مزود خدمة البوابة', en: 'Gateway Provider', hi: 'गेटवे प्रदाता');
@@ -3037,13 +3037,38 @@ class AppStrings {
   String get gatewayDisconnectedBadge => _t(ar: 'غير متصل', en: 'Not Configured', hi: 'कॉन्फ़िगर नहीं किया गया');
   String get testGatewayConnection => _t(ar: 'اختبار الاتصال بالبوابة', en: 'Test Gateway Connection', hi: 'गेटवे कनेक्शन का परीक्षण करें');
   String get saveGatewaySettings => _t(ar: 'حفظ إعدادات البوابة', en: 'Save Gateway Settings', hi: 'गेटवे सेटिंग्स سहेजें');
-  String get autoGatewayDispatchMode => _t(ar: 'إرسال آلي عبر البوابة (UltraMsg / Wasapi)', en: 'Auto Dispatch via Gateway (UltraMsg / Wasapi)', hi: 'गेटवे के माध्यम से स्वचालित प्रेषण');
+  String get autoGatewayDispatchMode => _t(ar: 'إرسال آلي عبر سيرفر الواتساب (WAHA)', en: 'Auto Dispatch via WhatsApp Server (WAHA)', hi: 'गेटवे के माध्यम से स्वचालित प्रेषण');
   String get manualDispatchMode => _t(ar: 'إرسال يدوي فردي (WhatsApp Web / App)', en: 'Manual One-by-One Dispatch (WhatsApp Web / App)', hi: 'मैन्युअल एक-एक करके प्रेषण');
   String get autoAdvanceToggle => _t(ar: 'الانتقال التلقائي للعميل التالي بعد الإرسال', en: 'Auto-advance to next customer after dispatch', hi: 'भेजने के बाद स्वचालित रूप से अगले ग्राहक पर जाएं');
   String get gatewayNotConfiguredBadge => _t(ar: 'البوابة غير مهيأة', en: 'Gateway Not Configured', hi: 'गेटवे कॉन्फ़िगर नहीं किया गया');
   String get autoDispatchTitle => _t(ar: 'حملة الإرسال التلقائي', en: 'Automated Campaign Dispatcher', hi: 'स्वचालित अभियान प्रेषण');
   String get autoDispatchNotice => _t(ar: 'سيتم إرسال الرسائل المخصصة لكل عميل تباعاً عبر البوابة مع مراعاة الفاصل الزمني لتجنب حظر الأرقام.', en: 'Customized messages will be sent sequentially via the gateway with safety delays to prevent number banning.', hi: 'सुरक्षा देरी के साथ गेटवे के माध्यम से संदेश स्वचालित रूप से भेजे जाएंगे।');
   String get startAutoDispatch => _t(ar: 'بدء الإرسال الآلي الآن', en: 'Start Auto Dispatch Now', hi: 'अब स्वचालित प्रेषण शुरू करें');
+  String get resendToAllNow => _t(
+    ar: 'إعادة الإرسال الآلي للجميع الآن',
+    en: 'Resend to All Contacts Now',
+    hi: 'अब सभी संपर्कों को पुनः प्रेषित करें',
+  );
+  String get resetContactStatuses => _t(
+    ar: 'إعادة تعيين الحالة (قيد الانتظار)',
+    en: 'Reset Statuses (Pending)',
+    hi: 'स्थिति रीसेट करें',
+  );
+  String get pollRequiresTwoOptions => _t(
+    ar: 'يتطلب استطلاع الرأي خيارين على الأقل للتصويت',
+    en: 'Poll requires at least 2 voting options',
+    hi: 'मतदान के लिए कम से कम 2 विकल्पों की आवश्यकता है',
+  );
+  String get pollQuestionRequired => _t(
+    ar: 'يرجى إدخال سؤال الاستطلاع قبل الإرسال',
+    en: 'Please enter poll question before dispatching',
+    hi: 'कृपया भेजने से पहले मतदान प्रश्न दर्ज करें',
+  );
+  String get pollPreviewTitle => _t(
+    ar: 'استطلاع رأي تفاعلي (WhatsApp Poll)',
+    en: 'Interactive WhatsApp Poll',
+    hi: 'इंटरएक्टिव व्हाट्सएप पोल',
+  );
   String get resumeDispatch => _t(ar: 'استئناف الإرسال', en: 'Resume Dispatch', hi: 'प्रेषण फिर से शुरू करें');
   String get pauseDispatch => _t(ar: 'إيقاف مؤقت', en: 'Pause Dispatch', hi: 'प्रेषण रोकें');
   String get cancelDispatch => _t(ar: 'إلغاء الحملة', en: 'Cancel Dispatch', hi: 'अभियान रद्द करें');
@@ -3355,6 +3380,54 @@ class AppStrings {
     en: 'Campaign Performance Progression across Sequential Weekends',
     hi: 'क्रमिक सप्ताहांतों में अभियान प्रदर्शन प्रगति',
   );
+
+  // ---------------------------------------------------------------------------
+  // 24. Customer Management & Excel Import (إدارة واستيراد العملاء)
+  // ---------------------------------------------------------------------------
+  String get addCustomerOrImportExcel => _t(ar: 'إضافة عملاء / استيراد إكسيل', en: 'Add Customers / Excel Import', hi: 'ग्राहक जोड़ें / एक्सेल आयात');
+  String get addOrImportCustomers => addCustomerOrImportExcel;
+  String get addSingleCustomer => _t(ar: 'إضافة عميل يدوي', en: 'Add Manual Customer', hi: 'मैन्युअल ग्राहक जोड़ें');
+  String get importExcelBulk => _t(ar: 'استيراد جماعي من Excel', en: 'Bulk Excel/CSV Import', hi: 'एक्सेल/सीएसवी से थोक आयात');
+  String get downloadExcelTemplate => _t(ar: 'تحميل نموذج Excel جاهز للتعبئة', en: 'Download Excel Template', hi: 'एक्सेल टेम्पलेट डाउनलोड करें');
+  String get customerImportTitle => _t(ar: 'إدارة وإضافة عملاء الحملات', en: 'Campaign Customer Management', hi: 'अभियान ग्राहक प्रबंधन');
+  String get customerImportSubtitle => _t(ar: 'إدخال عملاء جدد يدوياً أو رفع ملف Excel/CSV لإرسال رسائل وحملات الواتساب', en: 'Enter new customers manually or upload Excel/CSV to send WhatsApp campaigns', hi: 'व्हाट्सएप अभियान भेजने के लिए मैन्युअल रूप से ग्राहक जोड़ें या एक्सेल अपलोड करें');
+  String get selectExcelOrCsvFile => _t(ar: 'اختر ملف Excel (.xlsx) أو CSV', en: 'Select Excel (.xlsx) or CSV File', hi: 'एक्सेल या सीएसवी फ़ाइल चुनें');
+  String get fileParsedSuccessfully => _t(ar: 'تم فحص الملف واستخراج العملاء بنجاح', en: 'File analyzed & customers extracted successfully', hi: 'फ़ाइल का विश्लेषण किया गया और ग्राहक सफलतापूर्वक निकाले गए');
+  String get confirmImportCustomers => _t(ar: 'تأكيد وحفظ العملاء في النظام', en: 'Confirm & Save Customers', hi: 'पुष्टि करें और ग्राहकों को सहेजें');
+  String get importedFromExcelBadge => _t(ar: 'استيراد إكسيل', en: 'Excel Import', hi: 'एक्सेल आयात');
+  String get excelSourceTag => importedFromExcelBadge;
+  String get manuallyAddedBadge => _t(ar: 'إدخال يدوي', en: 'Manual Entry', hi: 'मैन्युअल प्रविष्टि');
+  String get manualSourceTag => manuallyAddedBadge;
+  String get customerAddedSuccess => _t(ar: 'تمت إضافة العميل وحفظه في قاعدة البيانات بنجاح', en: 'Customer added and saved successfully', hi: 'ग्राहक सफलतापूर्वक जोड़ा और सहेजा गया');
+  String get customersImportedSuccess => _t(ar: 'تم استيراد وحفظ العملاء بنجاح في قاعدة البيانات', en: 'Customers imported and saved successfully', hi: 'ग्राहक सफलतापूर्वक आयात और सहेजे गए');
+  String get validNumbersCount => _t(ar: 'أرقام صالحة', en: 'Valid Numbers', hi: 'मान्य नंबर');
+  String get invalidNumbersCount => _t(ar: 'أرقام غير صالحة', en: 'Invalid Numbers', hi: 'अमान्य नंबर');
+  String get duplicateNumbersCount => _t(ar: 'أرقام مكررة تم استبعادها', en: 'Duplicates Filtered', hi: 'डुप्लिकेट हटाए गए');
+  String get branchNameCol => _t(ar: 'الفرع أو المدينة', en: 'Branch / City', hi: 'शाखा या शहर');
+
+  // ---------------------------------------------------------------------------
+  // 25. Advanced WhatsApp WAHA Server Features (ميزات سيرفر الواتساب المتقدمة)
+  // ---------------------------------------------------------------------------
+  String get liveScreenshotBtn => _t(ar: 'شاشة واتساب الحية', en: 'Live WhatsApp Screen', hi: 'लाइव व्हाट्सएप स्क्रीन');
+  String get liveScreenshotTooltip => _t(ar: 'عرض لقطة شاشة مباشرة لشاشة واتساب ويب داخل السيرفر', en: 'View live screenshot of server WhatsApp Web session', hi: 'सर्वर व्हाट्सएप वेब स्क्रीन का लाइव स्क्रीनशॉट देखें');
+  String get verifyActiveWhatsAppNumbers => _t(ar: 'فحص أرقام الواتساب النشطة', en: 'Verify Active WhatsApp Numbers', hi: 'सक्रिय व्हाट्सएप नंबर सत्यापित करें');
+  String get verifyingNumbers => _t(ar: 'جارٍ فحص أرقام الواتساب للعملاء...', en: 'Verifying customer WhatsApp numbers...', hi: 'ग्राहक व्हाट्सएप नंबर सत्यापित कर रहे हैं...');
+  String get activeWhatsAppOnlyFilter => _t(ar: 'أرقام واتساب نشطة فقط', en: 'Active WhatsApp Only', hi: 'केवल सक्रिय व्हाट्सएप');
+  String get activeWhatsAppBadge => _t(ar: 'واتساب نشط', en: 'WhatsApp Active', hi: 'व्हाट्सएप सक्रिय');
+  String get unregisteredWhatsAppBadge => _t(ar: 'غير مسجل بالواتساب', en: 'No WhatsApp', hi: 'व्हाट्सएप नहीं है');
+  String get mediaMessageTab => _t(ar: 'إرفاق بوستر العرض', en: 'Attach Offer Poster', hi: 'ऑफ़र पोस्टर संलग्न करें');
+  String get textMessageTab => _t(ar: 'رسالة نصية', en: 'Text Message', hi: 'टेक्स्ट संदेश');
+  String get pollMessageTab => _t(ar: 'استطلاع رأي تفاعلي', en: 'Interactive Poll', hi: 'इंटरएक्टिव पोल');
+  String get mediaUrlHint => _t(ar: 'رابط صورة أو بوستر العرض (URL)', en: 'Poster/Image URL', hi: 'छवि यूआरएल');
+  String get pollQuestionLabel => _t(ar: 'سؤال استطلاع الرأي', en: 'Poll Question', hi: 'पोल प्रश्न');
+  String get pollOptionLabel => _t(ar: 'خيار الإجابة', en: 'Option', hi: 'विकल्प');
+  String get addPollOptionBtn => _t(ar: 'إضافة خيار', en: 'Add Option', hi: 'विकल्प जोड़ें');
+  String get typingSimulatorLabel => _t(ar: 'محاكاة الكتابة الحقيقية (Typing Simulator)', en: 'Typing Simulator', hi: 'टाइपिंग सिम्युलेटर');
+  String get typingSimulatorDesc => _t(ar: 'تشغيل إشارة "يكتب الآن..." قبل الإرسال لمحاكاة السلوك البشري الطبيعي وحماية الرقم من الحظر.', en: 'Display "Typing..." indicator before sending to mimic natural human messaging and protect number.', hi: 'मानव व्यवहार की नकल करने के लिए टाइपिंग दिखाएं।');
+  String get aiAutoReplyLabel => _t(ar: 'المجيب الآلي الذكي (AI Auto-Reply Bot)', en: 'AI Auto-Reply Bot', hi: 'एआई ऑटो-रिप्लाई बॉट');
+  String get aiAutoReplyDesc => _t(ar: 'الرد الفوري والذكي على ردود واستفسارات العملاء على الواتساب بذكاء Gemini 3.7 Flash.', en: 'Instant intelligent replies to incoming customer queries using Gemini 3.7 Flash.', hi: 'जेमिनी 3.7 फ्लैश के साथ स्वचालित उत्तर।');
+
+
 }
 
 

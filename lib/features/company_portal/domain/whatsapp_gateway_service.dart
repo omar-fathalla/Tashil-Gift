@@ -106,11 +106,14 @@ class WhatsAppGatewayService {
       debugPrint('Error loading WhatsApp gateway config: $e');
     }
     return const WhatsAppGatewayConfigModel(
-      provider: WhatsAppGatewayProvider.ultraMsg,
-      instanceId: 'instance190005',
-      apiToken: 'v699gpqwmv242cgq',
+      provider: WhatsAppGatewayProvider.waha,
+      instanceId: 'default',
+      apiToken: 'tashil_secret_token_2026',
+      customEndpointUrl: 'http://76.13.14.23:3000',
       delayBetweenMessagesSeconds: 3,
       isEnabled: true,
+      isConnected: true,
+      connectedPhoneNumber: '01211857725',
     );
   }
 
@@ -150,52 +153,6 @@ class WhatsAppGatewayService {
     final httpClient = client ?? http.Client();
     try {
       switch (config.provider) {
-        case WhatsAppGatewayProvider.ultraMsg:
-          final instance = config.instanceId.trim();
-          final token = config.apiToken.trim();
-          final statusUrl = Uri.parse('https://api.ultramsg.com/$instance/instance/status?token=$token');
-          final statusResponse = await httpClient.get(statusUrl).timeout(const Duration(seconds: 12));
-          if (statusResponse.statusCode == 200) {
-            final data = json.decode(statusResponse.body) as Map<String, dynamic>? ?? {};
-            
-            // UltraMsg nested structure: {"status": {"accountStatus": {"status": "authenticated", "substatus": "connected"}}}
-            final statusMap = data['status'] is Map ? (data['status'] as Map<String, dynamic>) : null;
-            final accountStatusMap = statusMap?['accountStatus'] is Map ? (statusMap!['accountStatus'] as Map<String, dynamic>) : null;
-            final statusStr = (accountStatusMap?['status'] ?? data['status'] ?? '').toString().toLowerCase();
-            final substatusStr = (accountStatusMap?['substatus'] ?? '').toString().toLowerCase();
-            final isConnected = statusStr == 'authenticated' ||
-                substatusStr == 'connected' ||
-                statusStr.contains('authenticated') ||
-                statusStr.contains('connected') ||
-                data['authenticated'] == true;
-
-            String? phone;
-            String? userName;
-            if (isConnected) {
-              try {
-                final meUrl = Uri.parse('https://api.ultramsg.com/$instance/instance/me?token=$token');
-                final meRes = await httpClient.get(meUrl).timeout(const Duration(seconds: 8));
-                if (meRes.statusCode == 200) {
-                  final meData = json.decode(meRes.body) as Map<String, dynamic>?;
-                  phone = meData?['id']?.toString().replaceAll('@c.us', '');
-                  userName = meData?['name']?.toString();
-                }
-              } catch (_) {}
-            }
-
-            return WhatsAppGatewayConnectionStatus(
-              isConnected: isConnected,
-              instanceStatus: substatusStr.isNotEmpty ? substatusStr : statusStr,
-              phoneNumber: phone != null && phone.isNotEmpty
-                  ? '+$phone${userName != null && userName.isNotEmpty ? " ($userName)" : ""}'
-                  : data['phone']?.toString(),
-              statusDetails: isConnected ? 'متصل بنجاح وجاهز للإرسال' : 'غير متصل بالواتساب، يرجى مسح QR Code من لوحة مزود البوابة',
-            );
-          }
-          return WhatsAppGatewayConnectionStatus(
-            isConnected: false,
-            statusDetails: 'فشل الاتصال: كود الرد (${statusResponse.statusCode})',
-          );
 
         case WhatsAppGatewayProvider.greenApi:
           final url = Uri.parse('https://api.green-api.com/waInstance${config.instanceId.trim()}/getStateInstance/${config.apiToken.trim()}');
@@ -236,6 +193,39 @@ class WhatsAppGatewayService {
             statusDetails: 'فشل الاتصال بـ Whapi: (${response.statusCode})',
           );
 
+        case WhatsAppGatewayProvider.waha:
+          final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+          final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
+          final url = Uri.parse('$endpoint/api/sessions/$session');
+          final headers = <String, String>{};
+          if (config.apiToken.trim().isNotEmpty) {
+            headers['X-Api-Key'] = config.apiToken.trim();
+          }
+          final response = await httpClient.get(url, headers: headers).timeout(const Duration(seconds: 12));
+          if (response.statusCode == 200) {
+            final data = json.decode(response.body) as Map<String, dynamic>? ?? {};
+            final status = data['status']?.toString().toUpperCase() ?? '';
+            final isConnected = status == 'WORKING';
+            final me = data['me'] as Map<String, dynamic>?;
+            final rawPhone = me?['id']?.toString().replaceAll('@c.us', '') ?? '';
+            final pushName = me?['pushName']?.toString() ?? '';
+            final displayPhone = rawPhone.isNotEmpty
+                ? '+$rawPhone${pushName.isNotEmpty ? " ($pushName)" : ""}'
+                : null;
+            return WhatsAppGatewayConnectionStatus(
+              isConnected: isConnected,
+              instanceStatus: status,
+              phoneNumber: displayPhone,
+              statusDetails: isConnected
+                  ? 'متصل بنجاح وجاهز للإرسال (سيرفر WAHA الخاص)'
+                  : 'حالة السيرفر: $status (يلزم الربط بالرمز أو QR Code)',
+            );
+          }
+          return WhatsAppGatewayConnectionStatus(
+            isConnected: false,
+            statusDetails: 'فشل الاتصال بسيرفر WAHA: رمز (${response.statusCode})',
+          );
+
         case WhatsAppGatewayProvider.custom:
           final endpoint = config.customEndpointUrl.trim();
           final url = Uri.parse(endpoint.endsWith('/status') ? endpoint : '$endpoint/status');
@@ -250,9 +240,13 @@ class WhatsAppGatewayService {
           );
       }
     } catch (e) {
+      final errorStr = e.toString();
+      final isFetchError = errorStr.contains('Failed to fetch') || errorStr.contains('XMLHttpRequest') || errorStr.contains('ClientException');
       return WhatsAppGatewayConnectionStatus(
         isConnected: false,
-        statusDetails: 'تعذر الوصول للمزود: $e',
+        statusDetails: isFetchError
+            ? 'تعذر الاتصال بالخادم (${config.customEndpointUrl.isNotEmpty ? config.customEndpointUrl : config.instanceId}): يرجى التحقق من عمل الخادم وصحة المفتاح.'
+            : 'تعذر الوصول للمزود: $e',
       );
     } finally {
       if (client == null) {
@@ -261,26 +255,35 @@ class WhatsAppGatewayService {
     }
   }
 
-  /// Fetches real-time message statistics from UltraMsg / Provider
+  /// Fetches real-time message statistics from WAHA / Gateway
   Future<WhatsAppGatewayStats?> fetchStatistics(WhatsAppGatewayConfigModel config, {http.Client? client}) async {
-    if (!config.isConfigured || config.provider != WhatsAppGatewayProvider.ultraMsg) {
+    if (!config.isConfigured || config.provider != WhatsAppGatewayProvider.waha) {
       return null;
     }
     final httpClient = client ?? http.Client();
     try {
-      final url = 'https://api.ultramsg.com/${config.instanceId.trim()}/messages/statistics?token=${config.apiToken.trim()}';
-      final response = await httpClient.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+      final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
+      final url = Uri.parse('$endpoint/api/$session/chats?limit=100');
+      final headers = <String, String>{};
+      if (config.apiToken.trim().isNotEmpty) {
+        headers['X-Api-Key'] = config.apiToken.trim();
+      }
+      final response = await httpClient.get(url, headers: headers).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
-        final data = json.decode(response.body) as Map<String, dynamic>? ?? {};
-        final statsMap = data['messages_statistics'] is Map
-            ? (data['messages_statistics'] as Map<String, dynamic>)
-            : data;
+        final list = json.decode(utf8.decode(response.bodyBytes)) as List? ?? [];
+        int sent = 0;
+        for (final chat in list) {
+          if (chat is Map && chat['lastMessage'] is Map && chat['lastMessage']['fromMe'] == true) {
+            sent++;
+          }
+        }
         return WhatsAppGatewayStats(
-          sentCount: (statsMap['sent'] as num?)?.toInt() ?? 0,
-          queueCount: (statsMap['queue'] as num?)?.toInt() ?? 0,
-          unsentCount: (statsMap['unsent'] as num?)?.toInt() ?? 0,
-          invalidCount: (statsMap['invalid'] as num?)?.toInt() ?? 0,
-          expiredCount: (statsMap['expired'] as num?)?.toInt() ?? 0,
+          sentCount: sent,
+          queueCount: 0,
+          unsentCount: 0,
+          invalidCount: 0,
+          expiredCount: 0,
         );
       }
     } catch (e) {
@@ -291,7 +294,24 @@ class WhatsAppGatewayService {
     return null;
   }
 
-  /// Fetches paginated list of live outbox messages from UltraMsg
+  /// Fetches paginated list of live outbox messages from WAHA
+  /// Discovered and verified WhatsApp contact names cached in-memory across the session
+  static final Map<String, String> _discoveredWhatsAppNames = {};
+
+  /// Saves a discovered contact name for a given phone number
+  static void saveDiscoveredContactName(String phone, String name) {
+    final clean = formatInternationalPhone(phone);
+    if (clean.isNotEmpty && name.trim().isNotEmpty) {
+      _discoveredWhatsAppNames[clean] = name.trim();
+    }
+  }
+
+  /// Retrieves a saved contact name if discovered
+  static String? getDiscoveredContactName(String phone) {
+    final clean = formatInternationalPhone(phone);
+    return _discoveredWhatsAppNames[clean];
+  }
+
   Future<WhatsAppOutboxPageResult> fetchMessagesList({
     required WhatsAppGatewayConfigModel config,
     String status = 'all',
@@ -299,45 +319,137 @@ class WhatsAppGatewayService {
     int limit = 20,
     http.Client? client,
   }) async {
-    if (!config.isConfigured || config.provider != WhatsAppGatewayProvider.ultraMsg) {
+    if (!config.isConfigured || config.provider != WhatsAppGatewayProvider.waha) {
       return const WhatsAppOutboxPageResult();
     }
     final httpClient = client ?? http.Client();
     try {
-      final params = {
-        'token': config.apiToken.trim(),
-        'page': page.toString(),
-        'limit': limit.toString(),
-        'status': status,
-        'sort': 'desc',
-      };
-      final uri = Uri.https(
-        'api.ultramsg.com',
-        '/${config.instanceId.trim()}/messages',
-        params,
-      );
-      final response = await httpClient.get(uri).timeout(const Duration(seconds: 12));
+      final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
+      final url = Uri.parse('$endpoint/api/$session/chats?limit=$limit');
+      final headers = <String, String>{};
+      if (config.apiToken.trim().isNotEmpty) {
+        headers['X-Api-Key'] = config.apiToken.trim();
+      }
+      final response = await httpClient.get(url, headers: headers).timeout(const Duration(seconds: 12));
       if (response.statusCode == 200) {
-        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>? ?? {};
-        final rawMessages = data['messages'] as List? ?? [];
-        final messages = rawMessages
-            .map((m) {
-              if (m is Map<String, dynamic>) {
-                return WhatsAppOutboxMessage.fromUltraMsgJson(m);
-              }
-              if (m is Map) {
-                return WhatsAppOutboxMessage.fromUltraMsgJson(Map<String, dynamic>.from(m));
-              }
-              return null;
-            })
-            .whereType<WhatsAppOutboxMessage>()
-            .toList();
+        final list = json.decode(utf8.decode(response.bodyBytes)) as List? ?? [];
+        final messages = <WhatsAppOutboxMessage>[];
+        for (final item in list) {
+          if (item is! Map) continue;
+          final lastMsg = item['lastMessage'] as Map?;
+          if (lastMsg == null) continue;
+          final id = lastMsg['id'] is Map
+              ? (lastMsg['id']['id']?.toString() ?? lastMsg['id']['_serialized']?.toString() ?? '')
+              : (lastMsg['id']?.toString() ?? '');
 
+          // Extract Chat JID details
+          String chatServer = '';
+          String chatUser = '';
+          String chatIdSerialized = '';
+          if (item['id'] is Map) {
+            chatServer = (item['id']['server'] ?? '').toString();
+            chatUser = (item['id']['user'] ?? '').toString();
+            chatIdSerialized = (item['id']['_serialized'] ?? '').toString();
+          } else if (item['id'] is String) {
+            chatIdSerialized = item['id'].toString();
+            final parts = chatIdSerialized.split('@');
+            if (parts.length == 2) {
+              chatUser = parts[0];
+              chatServer = parts[1];
+            } else {
+              chatUser = chatIdSerialized;
+            }
+          }
+
+          final isGroup = item['isGroup'] == true || chatServer == 'g.us' || chatUser.contains('-');
+          final chatName = (item['name'] ?? '').toString().trim();
+          final notifyName = (lastMsg['_data'] is Map ? lastMsg['_data']['notifyName'] : null)?.toString().trim() ?? '';
+
+          String contactName = '';
+          String? groupName;
+          if (isGroup) {
+            groupName = chatName.isNotEmpty ? chatName : 'مجموعة واتساب';
+            contactName = groupName;
+          } else {
+            if (chatName.isNotEmpty && !chatName.startsWith('+')) {
+              contactName = chatName;
+            } else if (notifyName.isNotEmpty) {
+              contactName = notifyName;
+            } else if (chatName.isNotEmpty) {
+              contactName = chatName;
+            }
+          }
+
+          // Extract and normalize phone numbers
+          final fromMe = lastMsg['fromMe'] == true;
+          final rawTo = (lastMsg['to']?.toString() ?? '').replaceAll('@c.us', '').replaceAll('@lid', '').replaceAll('@g.us', '');
+          final rawFrom = (lastMsg['from']?.toString() ?? '').replaceAll('@c.us', '').replaceAll('@lid', '').replaceAll('@g.us', '');
+
+          String targetPhone = '';
+          // 1. Check if chatName itself contains a formatted phone number (e.g. "+20 12 84814490")
+          if (chatName.startsWith('+') || chatName.startsWith('01') || (chatName.length >= 10 && RegExp(r'^\+?[\d\s-]+$').hasMatch(chatName))) {
+            targetPhone = formatInternationalPhone(chatName);
+          }
+          // 2. Check chatUser if on c.us
+          if (targetPhone.isEmpty && chatServer == 'c.us' && RegExp(r'^\d+$').hasMatch(chatUser)) {
+            targetPhone = chatUser;
+          }
+          // 3. Check from / to if ending with c.us
+          if (targetPhone.isEmpty) {
+            final toStr = (lastMsg['to']?.toString() ?? '');
+            final fromStr = (lastMsg['from']?.toString() ?? '');
+            final connectedNum = config.connectedPhoneNumber?.trim() ?? '';
+            final hasConnected = connectedNum.isNotEmpty;
+            if (toStr.contains('@c.us') && (!hasConnected || !toStr.contains(connectedNum))) {
+              targetPhone = toStr.replaceAll('@c.us', '').replaceAll(RegExp(r'\D'), '');
+            } else if (fromStr.contains('@c.us') && (!hasConnected || !fromStr.contains(connectedNum))) {
+              targetPhone = fromStr.replaceAll('@c.us', '').replaceAll(RegExp(r'\D'), '');
+            }
+          }
+          // 4. Fallback to rawTo / rawFrom
+          if (targetPhone.isEmpty) {
+            targetPhone = fromMe ? rawTo : rawFrom;
+          }
+
+          // Clean up if it was a group or lid without phone
+          if (isGroup) {
+            targetPhone = groupName ?? chatName;
+          }
+
+          // If we found a valid phone and a valid contact name, cache it!
+          if (targetPhone.isNotEmpty && contactName.isNotEmpty && !contactName.startsWith('+') && !isGroup) {
+            saveDiscoveredContactName(targetPhone, contactName);
+          } else if (contactName.isEmpty && targetPhone.isNotEmpty) {
+            contactName = getDiscoveredContactName(targetPhone) ?? '';
+          }
+
+          final body = lastMsg['body']?.toString() ?? '';
+          final ts = lastMsg['timestamp'] as num?;
+          final sentAt = ts != null && ts > 0 ? DateTime.fromMillisecondsSinceEpoch(ts.toInt() * 1000) : null;
+          final ack = lastMsg['ack']?.toString();
+
+          messages.add(
+            WhatsAppOutboxMessage(
+              id: id,
+              toPhone: targetPhone,
+              fromPhone: rawFrom,
+              contactName: contactName,
+              isGroup: isGroup,
+              groupName: groupName,
+              body: body,
+              status: fromMe ? 'sent' : 'received',
+              ack: ack,
+              createdAt: sentAt,
+              sentAt: sentAt,
+            ),
+          );
+        }
         return WhatsAppOutboxPageResult(
-          total: (data['total'] as num?)?.toInt() ?? messages.length,
-          totalPages: (data['pages'] as num?)?.toInt() ?? 1,
-          page: (data['page'] as num?)?.toInt() ?? page,
-          limit: (data['limit'] as num?)?.toInt() ?? limit,
+          total: messages.length,
+          totalPages: 1,
+          page: 1,
+          limit: limit,
           messages: messages,
         );
       }
@@ -351,17 +463,23 @@ class WhatsAppGatewayService {
 
   /// Triggers a remote restart of the WhatsApp gateway instance
   Future<bool> restartInstance(WhatsAppGatewayConfigModel config, {http.Client? client}) async {
-    if (!config.isConfigured || config.provider != WhatsAppGatewayProvider.ultraMsg) {
+    if (!config.isConfigured) {
       return false;
     }
     final httpClient = client ?? http.Client();
     try {
-      final url = 'https://api.ultramsg.com/${config.instanceId.trim()}/instance/restart';
-      final response = await httpClient.post(
-        Uri.parse(url),
-        body: {'token': config.apiToken.trim()},
-      ).timeout(const Duration(seconds: 15));
-      return response.statusCode == 200;
+      if (config.provider == WhatsAppGatewayProvider.waha) {
+        final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+        final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
+        final url = Uri.parse('$endpoint/api/sessions/$session/restart');
+        final headers = <String, String>{};
+        if (config.apiToken.trim().isNotEmpty) {
+          headers['X-Api-Key'] = config.apiToken.trim();
+        }
+        final response = await httpClient.post(url, headers: headers).timeout(const Duration(seconds: 15));
+        return response.statusCode >= 200 && response.statusCode < 300;
+      }
+      return false;
     } catch (e) {
       debugPrint('Error restarting WhatsApp gateway instance: $e');
       return false;
@@ -372,17 +490,23 @@ class WhatsAppGatewayService {
 
   /// Triggers a remote logout of the WhatsApp gateway instance
   Future<bool> logoutInstance(WhatsAppGatewayConfigModel config, {http.Client? client}) async {
-    if (!config.isConfigured || config.provider != WhatsAppGatewayProvider.ultraMsg) {
+    if (!config.isConfigured) {
       return false;
     }
     final httpClient = client ?? http.Client();
     try {
-      final url = 'https://api.ultramsg.com/${config.instanceId.trim()}/instance/logout';
-      final response = await httpClient.post(
-        Uri.parse(url),
-        body: {'token': config.apiToken.trim()},
-      ).timeout(const Duration(seconds: 15));
-      return response.statusCode == 200;
+      if (config.provider == WhatsAppGatewayProvider.waha) {
+        final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+        final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
+        final url = Uri.parse('$endpoint/api/sessions/$session/logout');
+        final headers = <String, String>{};
+        if (config.apiToken.trim().isNotEmpty) {
+          headers['X-Api-Key'] = config.apiToken.trim();
+        }
+        final response = await httpClient.post(url, headers: headers).timeout(const Duration(seconds: 15));
+        return response.statusCode >= 200 && response.statusCode < 300;
+      }
+      return false;
     } catch (e) {
       debugPrint('Error logging out WhatsApp gateway instance: $e');
       return false;
@@ -410,26 +534,37 @@ class WhatsAppGatewayService {
     final httpClient = client ?? http.Client();
     try {
       switch (config.provider) {
-        case WhatsAppGatewayProvider.ultraMsg:
-          final url = Uri.parse('https://api.ultramsg.com/${config.instanceId.trim()}/messages/chat');
+        case WhatsAppGatewayProvider.waha:
+          final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+          final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
+          final url = Uri.parse('$endpoint/api/sendText');
+          final headers = <String, String>{
+            'Content-Type': 'application/json',
+          };
+          if (config.apiToken.trim().isNotEmpty) {
+            headers['X-Api-Key'] = config.apiToken.trim();
+          }
           final response = await httpClient.post(
             url,
-            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-            body: {
-              'token': config.apiToken.trim(),
-              'to': cleanPhone,
-              'body': messageText,
-            },
+            headers: headers,
+            body: json.encode({
+              'session': session,
+              'chatId': '$cleanPhone@c.us',
+              'text': messageText,
+            }),
           ).timeout(const Duration(seconds: 15));
 
           if (response.statusCode >= 200 && response.statusCode < 300) {
             final data = json.decode(response.body);
-            if (data['error'] != null) {
-              return WhatsAppGatewayResult.failure(error: data['error']?.toString() ?? 'خطأ غير معروف من UltraMsg', statusCode: response.statusCode);
-            }
-            return WhatsAppGatewayResult.success(messageId: data['id']?.toString(), statusCode: response.statusCode);
+            final msgId = (data is Map && data['_data'] is Map && data['_data']['id'] is Map)
+                ? data['_data']['id']['id']?.toString()
+                : (data is Map ? (data['id'] is Map ? data['id']['id']?.toString() : data['id']?.toString()) : null);
+            return WhatsAppGatewayResult.success(messageId: msgId, statusCode: response.statusCode);
           }
-          return WhatsAppGatewayResult.failure(error: 'خطأ إرسال UltraMsg (${response.statusCode}): ${response.body}', statusCode: response.statusCode);
+          return WhatsAppGatewayResult.failure(
+            error: 'خطأ إرسال سيرفر WAHA (${response.statusCode}): ${response.body}',
+            statusCode: response.statusCode,
+          );
 
         case WhatsAppGatewayProvider.greenApi:
           final url = Uri.parse('https://api.green-api.com/waInstance${config.instanceId.trim()}/sendMessage/${config.apiToken.trim()}');
@@ -490,11 +625,276 @@ class WhatsAppGatewayService {
           return WhatsAppGatewayResult.failure(error: 'خطأ إرسال السيرفر المخصص (${response.statusCode}): ${response.body}', statusCode: response.statusCode);
       }
     } catch (e) {
+      final errorStr = e.toString();
+      if (errorStr.contains('Failed to fetch') || errorStr.contains('XMLHttpRequest') || errorStr.contains('ClientException')) {
+        return WhatsAppGatewayResult.failure(
+          error: 'تعذر الاتصال بخادم الواتساب (${config.customEndpointUrl.isNotEmpty ? config.customEndpointUrl : config.instanceId}): يرجى التحقق من اتصال السيرفر وصحة الإعدادات.',
+        );
+      }
       return WhatsAppGatewayResult.failure(error: 'فشل الاتصال: $e');
     } finally {
       if (client == null) {
         httpClient.close();
       }
+    }
+  }
+
+  /// Sends an image or media file to a phone number via WAHA
+  Future<WhatsAppGatewayResult> sendMediaMessage({
+    required WhatsAppGatewayConfigModel config,
+    required String toPhone,
+    required String mediaUrl,
+    String? caption,
+    String? filename,
+    String? mimeType,
+    http.Client? client,
+  }) async {
+    final cleanPhone = formatInternationalPhone(toPhone);
+    if (cleanPhone.isEmpty || cleanPhone.length < 9) {
+      return WhatsAppGatewayResult.failure(error: 'رقم الهاتف غير صالح: $toPhone');
+    }
+
+    if (!config.isConfigured) {
+      return WhatsAppGatewayResult.failure(error: 'بوابة الواتساب غير مضبوطة، يرجى ضبط الإعدادات أولاً');
+    }
+
+    final httpClient = client ?? http.Client();
+    try {
+      if (config.provider == WhatsAppGatewayProvider.waha) {
+        final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+        final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
+        final url = Uri.parse('$endpoint/api/sendImage');
+        final headers = <String, String>{
+          'Content-Type': 'application/json',
+        };
+        if (config.apiToken.trim().isNotEmpty) {
+          headers['X-Api-Key'] = config.apiToken.trim();
+        }
+        final body = {
+          'session': session,
+          'chatId': '$cleanPhone@c.us',
+          'file': {
+            'mimetype': mimeType ?? 'image/jpeg',
+            'filename': filename ?? 'offer_poster.jpg',
+            'url': mediaUrl,
+          },
+          'caption': caption ?? '',
+        };
+        final response = await httpClient.post(
+          url,
+          headers: headers,
+          body: json.encode(body),
+        ).timeout(const Duration(seconds: 25));
+
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          final data = json.decode(response.body);
+          final msgId = (data is Map && data['_data'] is Map && data['_data']['id'] is Map)
+              ? data['_data']['id']['id']?.toString()
+              : (data is Map ? (data['id'] is Map ? data['id']['id']?.toString() : data['id']?.toString()) : null);
+          return WhatsAppGatewayResult.success(messageId: msgId, statusCode: response.statusCode);
+        }
+        return WhatsAppGatewayResult.failure(
+          error: 'خطأ إرسال الوسائط سيرفر WAHA (${response.statusCode}): ${response.body}',
+          statusCode: response.statusCode,
+        );
+      }
+      return sendSingleMessage(
+        config: config,
+        toPhone: toPhone,
+        messageText: caption != null && caption.isNotEmpty ? '$caption\n\n$mediaUrl' : mediaUrl,
+        client: httpClient,
+      );
+    } catch (e) {
+      return WhatsAppGatewayResult.failure(error: 'فشل إرسال الوسائط: $e');
+    } finally {
+      if (client == null) httpClient.close();
+    }
+  }
+
+  /// Sends an interactive poll to a phone number via WAHA
+  Future<WhatsAppGatewayResult> sendPollMessage({
+    required WhatsAppGatewayConfigModel config,
+    required String toPhone,
+    required String pollTitle,
+    required List<String> pollOptions,
+    bool multipleAnswers = false,
+    http.Client? client,
+  }) async {
+    final cleanPhone = formatInternationalPhone(toPhone);
+    if (cleanPhone.isEmpty || cleanPhone.length < 9) {
+      return WhatsAppGatewayResult.failure(error: 'رقم الهاتف غير صالح: $toPhone');
+    }
+
+    if (!config.isConfigured) {
+      return WhatsAppGatewayResult.failure(error: 'بوابة الواتساب غير مضبوطة، يرجى ضبط الإعدادات أولاً');
+    }
+
+    final trimmedTitle = pollTitle.trim();
+    final cleanOptions = pollOptions.map((o) => o.trim()).where((o) => o.isNotEmpty).toList();
+    if (trimmedTitle.isEmpty) {
+      return WhatsAppGatewayResult.failure(error: 'سؤال الاستطلاع مطلوب');
+    }
+    if (cleanOptions.length < 2) {
+      return WhatsAppGatewayResult.failure(error: 'يتطلب الاستطلاع خيارين على الأقل للتصويت');
+    }
+
+    final httpClient = client ?? http.Client();
+    try {
+      if (config.provider == WhatsAppGatewayProvider.waha) {
+        final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+        final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
+        final url = Uri.parse('$endpoint/api/sendPoll');
+        final headers = <String, String>{
+          'Content-Type': 'application/json',
+        };
+        if (config.apiToken.trim().isNotEmpty) {
+          headers['X-Api-Key'] = config.apiToken.trim();
+        }
+        final body = {
+          'session': session,
+          'chatId': '$cleanPhone@c.us',
+          'poll': {
+            'name': trimmedTitle,
+            'options': cleanOptions,
+            'multipleAnswers': multipleAnswers,
+          },
+        };
+        final response = await httpClient.post(
+          url,
+          headers: headers,
+          body: json.encode(body),
+        ).timeout(const Duration(seconds: 15));
+
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          final data = json.decode(response.body);
+          final msgId = (data is Map && data['_data'] is Map && data['_data']['id'] is Map)
+              ? data['_data']['id']['id']?.toString()
+              : (data is Map ? (data['id'] is Map ? data['id']['id']?.toString() : data['id']?.toString()) : null);
+          return WhatsAppGatewayResult.success(messageId: msgId, statusCode: response.statusCode);
+        }
+        return WhatsAppGatewayResult.failure(
+          error: 'خطأ إرسال الاستطلاع سيرفر WAHA (${response.statusCode}): ${response.body}',
+          statusCode: response.statusCode,
+        );
+      }
+      return WhatsAppGatewayResult.failure(error: 'استطلاعات الرأي مدعومة حصرياً على سيرفر WAHA الخاص');
+    } catch (e) {
+      return WhatsAppGatewayResult.failure(error: 'فشل إرسال الاستطلاع: $e');
+    } finally {
+      if (client == null) httpClient.close();
+    }
+  }
+
+  /// Triggers typing indicator (يكتب الآن...) on a chat
+  Future<bool> startTyping({
+    required WhatsAppGatewayConfigModel config,
+    required String toPhone,
+    http.Client? client,
+  }) async {
+    final cleanPhone = formatInternationalPhone(toPhone);
+    if (cleanPhone.isEmpty || config.provider != WhatsAppGatewayProvider.waha) return false;
+    final httpClient = client ?? http.Client();
+    try {
+      final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
+      final url = Uri.parse('$endpoint/api/startTyping');
+      final headers = <String, String>{'Content-Type': 'application/json'};
+      if (config.apiToken.trim().isNotEmpty) headers['X-Api-Key'] = config.apiToken.trim();
+      final response = await httpClient.post(
+        url,
+        headers: headers,
+        body: json.encode({'session': session, 'chatId': '$cleanPhone@c.us'}),
+      ).timeout(const Duration(seconds: 5));
+      return response.statusCode >= 200 && response.statusCode < 300;
+    } catch (_) {
+      return false;
+    } finally {
+      if (client == null) httpClient.close();
+    }
+  }
+
+  /// Stops typing indicator on a chat
+  Future<bool> stopTyping({
+    required WhatsAppGatewayConfigModel config,
+    required String toPhone,
+    http.Client? client,
+  }) async {
+    final cleanPhone = formatInternationalPhone(toPhone);
+    if (cleanPhone.isEmpty || config.provider != WhatsAppGatewayProvider.waha) return false;
+    final httpClient = client ?? http.Client();
+    try {
+      final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
+      final url = Uri.parse('$endpoint/api/stopTyping');
+      final headers = <String, String>{'Content-Type': 'application/json'};
+      if (config.apiToken.trim().isNotEmpty) headers['X-Api-Key'] = config.apiToken.trim();
+      final response = await httpClient.post(
+        url,
+        headers: headers,
+        body: json.encode({'session': session, 'chatId': '$cleanPhone@c.us'}),
+      ).timeout(const Duration(seconds: 5));
+      return response.statusCode >= 200 && response.statusCode < 300;
+    } catch (_) {
+      return false;
+    } finally {
+      if (client == null) httpClient.close();
+    }
+  }
+
+  /// Checks whether a given phone number has an active registered WhatsApp account
+  Future<bool?> checkNumberExists({
+    required WhatsAppGatewayConfigModel config,
+    required String rawPhone,
+    http.Client? client,
+  }) async {
+    final cleanPhone = formatInternationalPhone(rawPhone);
+    if (cleanPhone.isEmpty || config.provider != WhatsAppGatewayProvider.waha) return null;
+    final httpClient = client ?? http.Client();
+    try {
+      final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
+      final url = Uri.parse('$endpoint/api/contacts/check-exists?session=$session&phone=$cleanPhone');
+      final headers = <String, String>{};
+      if (config.apiToken.trim().isNotEmpty) headers['X-Api-Key'] = config.apiToken.trim();
+      final response = await httpClient.get(url, headers: headers).timeout(const Duration(seconds: 8));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is Map && data.containsKey('numberExists')) {
+          return data['numberExists'] == true;
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error checking number exists: $e');
+      return null;
+    } finally {
+      if (client == null) httpClient.close();
+    }
+  }
+
+  /// Fetches a live rendered screenshot PNG of the server WhatsApp Web session
+  Future<Uint8List?> fetchLiveScreenshot({
+    required WhatsAppGatewayConfigModel config,
+    http.Client? client,
+  }) async {
+    if (config.provider != WhatsAppGatewayProvider.waha) return null;
+    final httpClient = client ?? http.Client();
+    try {
+      final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
+      final url = Uri.parse('$endpoint/api/screenshot?session=$session');
+      final headers = <String, String>{};
+      if (config.apiToken.trim().isNotEmpty) headers['X-Api-Key'] = config.apiToken.trim();
+      final response = await httpClient.get(url, headers: headers).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+        return response.bodyBytes;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error fetching WAHA live screenshot: $e');
+      return null;
+    } finally {
+      if (client == null) httpClient.close();
     }
   }
 
@@ -525,7 +925,12 @@ class WhatsAppGatewayService {
     required String template,
     required String companyName,
     required String campaignName,
+    String? attachedMediaUrl,
+    String? pollTitle,
+    List<String>? pollOptions,
+    bool multiplePollAnswers = false,
     bool Function()? isCancelled,
+    http.Client? client,
   }) async* {
     final random = math.Random();
     int successCount = 0;
@@ -547,12 +952,28 @@ class WhatsAppGatewayService {
       }
 
       final contact = contacts[i];
+      final targetPhone = contact.cleanPhone.isNotEmpty ? contact.cleanPhone : contact.rawPhone;
       final personalizedMessage = buildPersonalizedMessage(
         template: template,
         contact: contact,
         companyName: companyName,
         campaignName: campaignName,
       );
+
+      // 1. Optional Typing Simulation
+      if (config.enableTypingSimulation) {
+        yield BatchProgressEvent(
+          currentIndex: i + 1,
+          totalContacts: contacts.length,
+          successCount: successCount,
+          failureCount: failureCount,
+          currentContact: contact,
+          isCompleted: false,
+          statusMessage: 'جاري محاكاة الكتابة للعميل: ${contact.name.isNotEmpty ? contact.name : contact.rawPhone}...',
+        );
+        await startTyping(config: config, toPhone: targetPhone, client: client);
+        await Future.delayed(Duration(seconds: math.max(1, config.typingDurationSeconds)));
+      }
 
       yield BatchProgressEvent(
         currentIndex: i + 1,
@@ -564,17 +985,51 @@ class WhatsAppGatewayService {
         statusMessage: 'جاري الإرسال للعميل: ${contact.name.isNotEmpty ? contact.name : contact.rawPhone}...',
       );
 
-      final result = await sendSingleMessage(
-        config: config,
-        toPhone: contact.cleanPhone.isNotEmpty ? contact.cleanPhone : contact.rawPhone,
-        messageText: personalizedMessage,
-      );
+      // 2. Dispatch Media, Poll, or Standard Text
+      final WhatsAppGatewayResult result;
+      if (pollOptions != null && pollOptions.isNotEmpty && pollTitle != null && pollTitle.isNotEmpty) {
+        final personalizedPollTitle = buildPersonalizedMessage(
+          template: pollTitle,
+          contact: contact,
+          companyName: companyName,
+          campaignName: campaignName,
+        );
+        result = await sendPollMessage(
+          config: config,
+          toPhone: targetPhone,
+          pollTitle: personalizedPollTitle,
+          pollOptions: pollOptions,
+          multipleAnswers: multiplePollAnswers,
+          client: client,
+        );
+      } else if (attachedMediaUrl != null && attachedMediaUrl.trim().isNotEmpty) {
+        result = await sendMediaMessage(
+          config: config,
+          toPhone: targetPhone,
+          mediaUrl: attachedMediaUrl.trim(),
+          caption: personalizedMessage,
+          client: client,
+        );
+      } else {
+        result = await sendSingleMessage(
+          config: config,
+          toPhone: targetPhone,
+          messageText: personalizedMessage,
+          client: client,
+        );
+      }
+
+      // Stop typing simulation if it was triggered
+      if (config.enableTypingSimulation) {
+        await stopTyping(config: config, toPhone: targetPhone, client: client);
+      }
 
       if (result.isSuccess) {
         successCount++;
         contact.status = ContactDispatchStatus.sent;
       } else {
         failureCount++;
+        contact.status = ContactDispatchStatus.failed;
       }
 
       yield BatchProgressEvent(

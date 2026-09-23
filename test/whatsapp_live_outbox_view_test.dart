@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:al_mraay/core/localization/app_strings.dart';
 import 'package:al_mraay/features/company_portal/domain/whatsapp_gateway_config_model.dart';
 import 'package:al_mraay/features/company_portal/presentation/widgets/whatsapp_live_outbox_view.dart';
+import 'package:al_mraay/features/company_portal/presentation/widgets/whatsapp_campaign_dispatcher_dialog.dart';
 
 void main() {
   group('WhatsAppLiveOutboxView Widget Tests', () {
@@ -11,7 +12,7 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: WhatsAppLiveOutboxView(
-              gatewayConfig: const WhatsAppGatewayConfigModel(),
+              gatewayConfig: const WhatsAppGatewayConfigModel(customEndpointUrl: ''),
               strings: AppStrings('ar'),
               isAr: true,
               onOpenSettings: () {},
@@ -30,9 +31,10 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
 
       const configuredGateway = WhatsAppGatewayConfigModel(
-        provider: WhatsAppGatewayProvider.ultraMsg,
-        instanceId: 'instance190005',
-        apiToken: 'v699gpqwmv242cgq',
+        provider: WhatsAppGatewayProvider.waha,
+        instanceId: 'default',
+        apiToken: 'tashil_secret_token_2026',
+        customEndpointUrl: 'http://76.13.14.23:3000',
       );
 
       await tester.pumpWidget(
@@ -63,9 +65,10 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
 
       const configuredGateway = WhatsAppGatewayConfigModel(
-        provider: WhatsAppGatewayProvider.ultraMsg,
-        instanceId: 'instance190005',
-        apiToken: 'v699gpqwmv242cgq',
+        provider: WhatsAppGatewayProvider.waha,
+        instanceId: 'default',
+        apiToken: 'tashil_secret_token_2026',
+        customEndpointUrl: 'http://76.13.14.23:3000',
       );
 
       await tester.pumpWidget(
@@ -78,6 +81,19 @@ void main() {
                 strings: AppStrings('ar'),
                 isAr: true,
                 onOpenSettings: () {},
+                customerContacts: [
+                  CustomerCampaignContact(
+                    id: 'c1',
+                    name: 'عمر فتح الله',
+                    rawPhone: '01211857725',
+                    cleanPhone: '201211857725',
+                    totalSpend: 500,
+                    totalInvoices: 2,
+                    prizesWon: [],
+                    branches: ['سموحة'],
+                    lastBranch: 'سموحة',
+                  ),
+                ],
               ),
             ),
           ),

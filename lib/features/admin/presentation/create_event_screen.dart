@@ -22,6 +22,7 @@ import '../domain/company_model.dart';
 import '../domain/event_model.dart';
 import '../domain/company_gift_model.dart';
 import '../domain/retail_chain_model.dart';
+import 'widgets/smart_branch_batch_importer_dialog.dart';
 
 
 class CreateEventScreen extends ConsumerStatefulWidget {
@@ -425,6 +426,50 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         },
       ),
     );
+  }
+
+  Future<void> _openSmartBranchImporter(List<RetailChainModel> cleanChains) async {
+    final allBranches = await ref.read(retailChainsServiceProvider).getAllBranches();
+
+    if (!mounted) return;
+
+    final result = await SmartBranchBatchImporterDialog.show(
+      context: context,
+      existingChains: cleanChains,
+      existingBranches: allBranches,
+    );
+
+    if (result != null && result.totalBranchesCount > 0) {
+      setState(() {
+        for (final cId in result.chainIds) {
+          if (!_selectedRetailChainIds.contains(cId)) {
+            _selectedRetailChainIds.add(cId);
+            _selectedRetailChainNames.add(result.chainNames[cId] ?? cId);
+          }
+          _chainIsAllBranchesMap[cId] = false;
+          _chainSelectedBranchIdsMap[cId] = Set<String>.from(result.chainSelectedBranchIds[cId] ?? {});
+          _chainSelectedBranchNamesMap[cId] = Set<String>.from(result.chainSelectedBranchNames[cId] ?? {});
+        }
+        _updateAvailableBranches();
+      });
+
+      for (final cId in result.chainIds) {
+        _loadBranchesForChain(cId);
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'تم استيراد واعتماد ${result.totalBranchesCount} فرعاً عبر ${result.chainIds.length} سلاسل تجارية في الحملة بنجاح! ✓',
+              style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+            ),
+            backgroundColor: Colors.teal.shade700,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _showQuickAddBranchDialog([String? targetChainId, String? targetChainName]) async {
@@ -3375,7 +3420,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                       const SizedBox(width: 4),
                                       Text(
                                         isVoucherMatch
-                                            ? 'إجمالي قيمة الكروت المربوطة: ${currentAllocatedTotal.toInt()} ج.م (مطابقة تامة ومكتملة ✓)'
+                                            ? ((dialogLinkedGifts.any((g) => g.isVoucher) || rewardType == 'voucher')
+                                                ? 'إجمالي قيمة الكروت المربوطة: ${currentAllocatedTotal.toInt()} ج.م (مطابقة تامة ومكتملة ✓)'
+                                                : 'تم ربط ${dialogLinkedGifts.length} هدايا عينية من المخزون (مطابقة تامة ومكتملة ✓)')
                                             : 'إجمالي الكروت: ${currentAllocatedTotal.toInt()} ج.م (المطلوب: ${targetVoucherAmt.toInt()} ج.م - فرق ${(targetVoucherAmt - currentAllocatedTotal).toInt()} ج.م ⚠️)',
                                         style: GoogleFonts.cairo(
                                           fontSize: 10.5,
@@ -7101,6 +7148,29 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           title: 'سلاسل الماركت والفروع المستهدفة (Retail Chains & Outlets)',
           subtitle: 'اختر السلاسل التجارية المسجلة في النظام والفروع المشمولة في الحملة الترويجية',
           children: [
+            // Smart Importer Action Button Banner
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.tonalIcon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: colorScheme.primaryContainer,
+                      foregroundColor: colorScheme.onPrimaryContainer,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    onPressed: () => _openSmartBranchImporter(cleanChains),
+                    icon: const Icon(Icons.auto_awesome_rounded, size: 20),
+                    label: Text(
+                      '✨ استيراد وتحديد الفروع بالذكاء الاصطناعي (لصق نص • ملف إكسيل • صورة / PDF)',
+                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+
             // Row 1: Dropdown Selector for registered chains + Register new chain system button
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,

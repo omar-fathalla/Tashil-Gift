@@ -20,7 +20,9 @@ class CustomerCampaignContact {
   final List<String> branches;
   final String lastBranch;
   final DateTime? lastVisitDate;
+  final String? sourceTag;
   ContactDispatchStatus status;
+  bool? isWhatsAppActive;
 
   CustomerCampaignContact({
     required this.id,
@@ -33,7 +35,9 @@ class CustomerCampaignContact {
     required this.branches,
     required this.lastBranch,
     this.lastVisitDate,
+    this.sourceTag,
     this.status = ContactDispatchStatus.pending,
+    this.isWhatsAppActive,
   });
 
   bool get isWinner => prizesWon.isNotEmpty;
@@ -64,6 +68,10 @@ class WhatsappCampaignDispatcherDialog extends StatefulWidget {
   final String? companySlug;
   final AppStrings strings;
   final bool isAr;
+  final String? attachedMediaUrl;
+  final String? pollTitle;
+  final List<String>? pollOptions;
+  final bool multiplePollAnswers;
 
   const WhatsappCampaignDispatcherDialog({
     super.key,
@@ -74,6 +82,10 @@ class WhatsappCampaignDispatcherDialog extends StatefulWidget {
     this.companySlug,
     required this.strings,
     required this.isAr,
+    this.attachedMediaUrl,
+    this.pollTitle,
+    this.pollOptions,
+    this.multiplePollAnswers = false,
   });
 
   /// Formats phone number for WhatsApp international standard (e.g. 2010... or country code)
@@ -160,6 +172,34 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
       return;
     }
 
+    // Validate Poll if in poll mode
+    if (widget.pollTitle != null && widget.pollTitle!.trim().isNotEmpty) {
+      final validOpts = widget.pollOptions?.where((s) => s.trim().isNotEmpty).toList() ?? [];
+      if (validOpts.length < 2) {
+        setState(() {
+          _currentAutoStatus = widget.strings.pollRequiresTwoOptions;
+        });
+        return;
+      }
+    }
+
+    // If all contacts were already marked sent, auto-reset to pending so they can be broadcasted!
+    var contactsToDispatch = widget.contacts.where((c) => c.status != ContactDispatchStatus.sent).toList();
+    if (contactsToDispatch.isEmpty && widget.contacts.isNotEmpty) {
+      for (final c in widget.contacts) {
+        c.status = ContactDispatchStatus.pending;
+      }
+      contactsToDispatch = widget.contacts.toList();
+    }
+
+    if (contactsToDispatch.isEmpty) {
+      setState(() {
+        _isAutoDispatching = false;
+        _currentAutoStatus = widget.strings.noData;
+      });
+      return;
+    }
+
     setState(() {
       _isAutoDispatching = true;
       _isAutoPaused = false;
@@ -169,15 +209,6 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
       _currentAutoStatus = widget.isAr ? 'جاري بدء الإرسال التلقائي...' : 'Starting automated dispatch...';
     });
 
-    final contactsToDispatch = widget.contacts.where((c) => c.status != ContactDispatchStatus.sent).toList();
-    if (contactsToDispatch.isEmpty) {
-      setState(() {
-        _isAutoDispatching = false;
-        _currentAutoStatus = widget.isAr ? 'تم إرسال الرسائل لجميع العملاء مسبقاً!' : 'All messages already sent!';
-      });
-      return;
-    }
-
     try {
       await for (final event in _gatewayService.sendBatchStream(
         config: _gatewayConfig,
@@ -185,6 +216,10 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
         template: widget.messageTemplate,
         companyName: widget.companyName,
         campaignName: widget.campaignName,
+        attachedMediaUrl: widget.attachedMediaUrl,
+        pollTitle: widget.pollTitle,
+        pollOptions: widget.pollOptions,
+        multiplePollAnswers: widget.multiplePollAnswers,
         isCancelled: () => _isAutoCancelled,
       )) {
         if (!mounted) break;
@@ -722,6 +757,89 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
               ),
             ),
 
+          // Active Poll Preview Card
+          if (widget.pollTitle != null && widget.pollTitle!.trim().isNotEmpty) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF198754).withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: const Color(0xFF198754).withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF198754).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.poll_rounded, color: Color(0xFF198754), size: 18),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        widget.strings.pollPreviewTitle,
+                        style: GoogleFonts.cairo(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: const Color(0xFF0F5132),
+                        ),
+                      ),
+                      const Spacer(),
+                      if (widget.multiplePollAnswers)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF198754).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            widget.isAr ? 'خيارات متعددة مسموحة' : 'Multiple choices allowed',
+                            style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF0F5132)),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    widget.pollTitle!,
+                    style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.bold, color: cs.onSurface),
+                  ),
+                  if (widget.pollOptions != null && widget.pollOptions!.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: widget.pollOptions!
+                          .where((opt) => opt.trim().isNotEmpty)
+                          .map((opt) => Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: cs.surface,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: const Color(0xFF198754).withValues(alpha: 0.25)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.radio_button_unchecked_rounded, size: 13, color: Color(0xFF198754)),
+                                    const SizedBox(width: 6),
+                                    Text(opt, style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600)),
+                                  ],
+                                ),
+                              ))
+                          .toList(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+
           // Automated Dispatch Status Card
           Container(
             padding: const EdgeInsets.all(18),
@@ -804,7 +922,37 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+
+                // Reset Statuses Button if any contacts were already sent
+                if (_sentCount > 0 && !_isAutoDispatching) ...[
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: TextButton.icon(
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        foregroundColor: cs.primary,
+                      ),
+                      icon: const Icon(Icons.refresh_rounded, size: 15),
+                      label: Text(
+                        widget.strings.resetContactStatuses,
+                        style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          for (final c in widget.contacts) {
+                            c.status = ContactDispatchStatus.pending;
+                          }
+                          _currentAutoStatus = widget.isAr
+                              ? 'تمت إعادة تعيين حالة جميع العملاء إلى قيد الانتظار'
+                              : 'All customer statuses reset to pending';
+                        });
+                      },
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 12),
 
                 // Live status message box
                 if (_currentAutoStatus.isNotEmpty)
@@ -821,25 +969,30 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                     ),
                   ),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
 
                 // Auto Dispatch Action Buttons
                 if (!_isAutoDispatching)
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF198754),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                      icon: const Icon(Icons.bolt_rounded, size: 22),
-                      label: Text(
-                        widget.strings.startAutoDispatch,
-                        style: GoogleFonts.cairo(fontSize: 15, fontWeight: FontWeight.bold),
-                      ),
-                      onPressed: _startAutomatedDispatch,
-                    ),
+                  Builder(
+                    builder: (context) {
+                      final allSent = _totalCount > 0 && _sentCount == _totalCount;
+                      return SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: allSent ? const Color(0xFF0F5132) : const Color(0xFF198754),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          icon: Icon(allSent ? Icons.replay_rounded : Icons.bolt_rounded, size: 22),
+                          label: Text(
+                            allSent ? widget.strings.resendToAllNow : widget.strings.startAutoDispatch,
+                            style: GoogleFonts.cairo(fontSize: 15, fontWeight: FontWeight.bold),
+                          ),
+                          onPressed: _startAutomatedDispatch,
+                        ),
+                      );
+                    },
                   )
                 else
                   Row(
@@ -1375,18 +1528,44 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
-            FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF198754),
-                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              ),
-              icon: const Icon(Icons.done_all_rounded),
-              label: Text(
-                widget.strings.confirm,
-                style: GoogleFonts.cairo(fontSize: 15, fontWeight: FontWeight.bold),
-              ),
-              onPressed: () => Navigator.of(context).pop(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  icon: const Icon(Icons.replay_rounded),
+                  label: Text(
+                    widget.strings.resendToAllNow,
+                    style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      for (final c in widget.contacts) {
+                        c.status = ContactDispatchStatus.pending;
+                      }
+                      _autoProcessedCount = 0;
+                    });
+                    _startAutomatedDispatch();
+                  },
+                ),
+                const SizedBox(width: 12),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF198754),
+                    padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  icon: const Icon(Icons.done_all_rounded),
+                  label: Text(
+                    widget.strings.confirm,
+                    style: GoogleFonts.cairo(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
             ),
           ],
         ),

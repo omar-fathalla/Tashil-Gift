@@ -2,53 +2,54 @@ import 'dart:convert';
 
 /// Supported WhatsApp Gateway Providers
 enum WhatsAppGatewayProvider {
-  ultraMsg,
+  waha,
+  custom,
   greenApi,
   whapi,
-  custom,
 }
 
 extension WhatsAppGatewayProviderExtension on WhatsAppGatewayProvider {
   String get id {
     switch (this) {
-      case WhatsAppGatewayProvider.ultraMsg:
-        return 'ultramsg';
+      case WhatsAppGatewayProvider.waha:
+        return 'waha';
+      case WhatsAppGatewayProvider.custom:
+        return 'custom';
       case WhatsAppGatewayProvider.greenApi:
         return 'greenapi';
       case WhatsAppGatewayProvider.whapi:
         return 'whapi';
-      case WhatsAppGatewayProvider.custom:
-        return 'custom';
     }
   }
 
   String get displayName {
     switch (this) {
-      case WhatsAppGatewayProvider.ultraMsg:
-        return 'UltraMsg (سحابي سريع)';
+      case WhatsAppGatewayProvider.waha:
+        return 'سيرفر الواتساب الخاص (WAHA - مجاني 100%)';
+      case WhatsAppGatewayProvider.custom:
+        return 'سيرفر مخصص (Custom Endpoint)';
       case WhatsAppGatewayProvider.greenApi:
         return 'Green API (سحابي متقدم)';
       case WhatsAppGatewayProvider.whapi:
         return 'Whapi.cloud (سحابي احترافي)';
-      case WhatsAppGatewayProvider.custom:
-        return 'سيرفر مخصص (Custom Endpoint / Self-Hosted)';
     }
   }
 
   static WhatsAppGatewayProvider fromId(String? id) {
     switch (id?.toLowerCase().trim()) {
+      case 'custom':
+      case 'self_hosted':
+        return WhatsAppGatewayProvider.custom;
       case 'greenapi':
       case 'green_api':
         return WhatsAppGatewayProvider.greenApi;
       case 'whapi':
       case 'whapi_cloud':
         return WhatsAppGatewayProvider.whapi;
-      case 'custom':
-      case 'self_hosted':
-        return WhatsAppGatewayProvider.custom;
       case 'ultramsg':
+      case 'waha':
       default:
-        return WhatsAppGatewayProvider.ultraMsg;
+        return WhatsAppGatewayProvider.waha;
     }
   }
 }
@@ -64,21 +65,29 @@ class WhatsAppGatewayConfigModel {
   final DateTime? lastTestedAt;
   final bool isConnected;
   final String? connectedPhoneNumber;
+  final bool enableTypingSimulation;
+  final int typingDurationSeconds;
+  final bool enableAiAutoReply;
+  final String aiCustomSystemPrompt;
 
   const WhatsAppGatewayConfigModel({
-    this.provider = WhatsAppGatewayProvider.ultraMsg,
-    this.instanceId = '',
-    this.apiToken = '',
-    this.customEndpointUrl = '',
+    this.provider = WhatsAppGatewayProvider.waha,
+    this.instanceId = 'default',
+    this.apiToken = 'tashil_secret_token_2026',
+    this.customEndpointUrl = 'http://76.13.14.23:3000',
     this.delayBetweenMessagesSeconds = 3,
-    this.isEnabled = false,
+    this.isEnabled = true,
     this.lastTestedAt,
-    this.isConnected = false,
-    this.connectedPhoneNumber,
+    this.isConnected = true,
+    this.connectedPhoneNumber = '01211857725',
+    this.enableTypingSimulation = true,
+    this.typingDurationSeconds = 2,
+    this.enableAiAutoReply = false,
+    this.aiCustomSystemPrompt = '',
   });
 
   bool get isConfigured {
-    if (provider == WhatsAppGatewayProvider.custom) {
+    if (provider == WhatsAppGatewayProvider.waha || provider == WhatsAppGatewayProvider.custom) {
       return customEndpointUrl.trim().isNotEmpty;
     }
     return instanceId.trim().isNotEmpty && apiToken.trim().isNotEmpty;
@@ -94,6 +103,10 @@ class WhatsAppGatewayConfigModel {
     DateTime? lastTestedAt,
     bool? isConnected,
     String? connectedPhoneNumber,
+    bool? enableTypingSimulation,
+    int? typingDurationSeconds,
+    bool? enableAiAutoReply,
+    String? aiCustomSystemPrompt,
   }) {
     return WhatsAppGatewayConfigModel(
       provider: provider ?? this.provider,
@@ -105,6 +118,10 @@ class WhatsAppGatewayConfigModel {
       lastTestedAt: lastTestedAt ?? this.lastTestedAt,
       isConnected: isConnected ?? this.isConnected,
       connectedPhoneNumber: connectedPhoneNumber ?? this.connectedPhoneNumber,
+      enableTypingSimulation: enableTypingSimulation ?? this.enableTypingSimulation,
+      typingDurationSeconds: typingDurationSeconds ?? this.typingDurationSeconds,
+      enableAiAutoReply: enableAiAutoReply ?? this.enableAiAutoReply,
+      aiCustomSystemPrompt: aiCustomSystemPrompt ?? this.aiCustomSystemPrompt,
     );
   }
 
@@ -119,6 +136,10 @@ class WhatsAppGatewayConfigModel {
       'lastTestedAt': lastTestedAt?.toIso8601String(),
       'isConnected': isConnected,
       'connectedPhoneNumber': connectedPhoneNumber,
+      'enableTypingSimulation': enableTypingSimulation,
+      'typingDurationSeconds': typingDurationSeconds,
+      'enableAiAutoReply': enableAiAutoReply,
+      'aiCustomSystemPrompt': aiCustomSystemPrompt.trim(),
     };
   }
 
@@ -134,6 +155,10 @@ class WhatsAppGatewayConfigModel {
       lastTestedAt: map['lastTestedAt'] != null ? DateTime.tryParse(map['lastTestedAt'].toString()) : null,
       isConnected: map['isConnected'] == true,
       connectedPhoneNumber: map['connectedPhoneNumber']?.toString(),
+      enableTypingSimulation: map['enableTypingSimulation'] != false,
+      typingDurationSeconds: int.tryParse(map['typingDurationSeconds']?.toString() ?? '') ?? 2,
+      enableAiAutoReply: map['enableAiAutoReply'] == true,
+      aiCustomSystemPrompt: map['aiCustomSystemPrompt']?.toString() ?? '',
     );
   }
 
@@ -172,8 +197,11 @@ class WhatsAppOutboxMessage {
   final String id;
   final String toPhone;
   final String fromPhone;
+  final String contactName;
+  final bool isGroup;
+  final String? groupName;
   final String body;
-  final String status; // 'sent', 'queue', 'unsent', 'invalid', 'expired'
+  final String status; // 'sent', 'queue', 'unsent', 'invalid', 'expired', 'received'
   final String? failedReason;
   final String? ack;
   final DateTime? createdAt;
@@ -183,6 +211,9 @@ class WhatsAppOutboxMessage {
     required this.id,
     required this.toPhone,
     this.fromPhone = '',
+    this.contactName = '',
+    this.isGroup = false,
+    this.groupName,
     required this.body,
     required this.status,
     this.failedReason,
@@ -191,7 +222,7 @@ class WhatsAppOutboxMessage {
     this.sentAt,
   });
 
-  factory WhatsAppOutboxMessage.fromUltraMsgJson(Map<String, dynamic> json) {
+  factory WhatsAppOutboxMessage.fromJson(Map<String, dynamic> json) {
     DateTime? parseUnix(dynamic val) {
       if (val is num && val > 0) {
         return DateTime.fromMillisecondsSinceEpoch(val.toInt() * 1000);
@@ -199,13 +230,16 @@ class WhatsAppOutboxMessage {
       return null;
     }
 
-    final rawTo = (json['to'] ?? '').toString().replaceAll('@c.us', '');
-    final rawFrom = (json['from'] ?? '').toString().replaceAll('@c.us', '');
+    final rawTo = (json['to'] ?? '').toString().replaceAll('@c.us', '').replaceAll('@lid', '').replaceAll('@g.us', '');
+    final rawFrom = (json['from'] ?? '').toString().replaceAll('@c.us', '').replaceAll('@lid', '').replaceAll('@g.us', '');
 
     return WhatsAppOutboxMessage(
       id: (json['id'] ?? '').toString(),
       toPhone: rawTo,
       fromPhone: rawFrom,
+      contactName: (json['contact_name'] ?? json['name'] ?? '').toString().trim(),
+      isGroup: json['is_group'] == true || json['isGroup'] == true,
+      groupName: json['group_name']?.toString() ?? json['groupName']?.toString(),
       body: (json['body'] ?? '').toString(),
       status: (json['status'] ?? 'unknown').toString().toLowerCase().trim(),
       failedReason: json['failed_reason']?.toString(),
@@ -214,6 +248,9 @@ class WhatsAppOutboxMessage {
       sentAt: parseUnix(json['sent_at']),
     );
   }
+
+  factory WhatsAppOutboxMessage.fromUltraMsgJson(Map<String, dynamic> json) =>
+      WhatsAppOutboxMessage.fromJson(json);
 }
 
 /// Paginated result of live outbox messages
