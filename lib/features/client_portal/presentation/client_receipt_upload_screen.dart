@@ -1282,7 +1282,10 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         compositeBundle.totalChances,
       );
 
-      final gameType = currentEvent?.gameType ?? (totalValue >= 500 ? 'scratchCard' : 'spinTheWheel');
+      final ruleLevelGame = (compositeBundle.resolvedGameType != null && compositeBundle.resolvedGameType!.trim().isNotEmpty)
+          ? compositeBundle.resolvedGameType!.trim()
+          : null;
+      final gameType = ruleLevelGame ?? currentEvent?.gameType ?? (totalValue >= 500 ? 'scratchCard' : 'spinTheWheel');
 
       // Smart branch ID resolution matching AI-detected branch name with campaign branches
       String? resolvedBranchId;

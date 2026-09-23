@@ -97,6 +97,7 @@ class PromotionalRuleItem {
   final String? linkedGiftId; // ID of the linked CompanyGiftModel from inventory (legacy/fallback)
   final String? linkedGiftName; // Friendly display name of the linked gift (legacy/fallback)
   final List<LinkedGiftAllocation> linkedGifts; // Multiple allocated gifts/vouchers for this rule
+  final String? gameType; // Specific delivery game: 'directGift' | 'scratch' | 'wheel' | 'chooseGift' | null (inherit from event)
 
   PromotionalRuleItem({
     required this.id,
@@ -119,6 +120,7 @@ class PromotionalRuleItem {
     this.linkedGiftId,
     this.linkedGiftName,
     this.linkedGifts = const [],
+    this.gameType,
   });
 
   bool get hasLinkedGifts => linkedGifts.isNotEmpty || (linkedGiftId != null && linkedGiftId!.isNotEmpty);
@@ -252,6 +254,7 @@ class PromotionalRuleItem {
       linkedGiftId: rawGiftId,
       linkedGiftName: rawGiftName,
       linkedGifts: parsedLinkedGifts,
+      gameType: data['gameType']?.toString(),
     );
   }
 
@@ -280,6 +283,7 @@ class PromotionalRuleItem {
       if (effectiveGiftId.isNotEmpty) 'linkedGiftId': effectiveGiftId,
       if (effectiveGiftName.isNotEmpty) 'linkedGiftName': effectiveGiftName,
       if (linkedGifts.isNotEmpty) 'linkedGifts': linkedGifts.map((g) => g.toMap()).toList(),
+      if (gameType != null && gameType!.isNotEmpty) 'gameType': gameType,
     };
   }
 
@@ -304,6 +308,7 @@ class PromotionalRuleItem {
     String? linkedGiftId,
     String? linkedGiftName,
     List<LinkedGiftAllocation>? linkedGifts,
+    String? gameType,
   }) {
     return PromotionalRuleItem(
       id: id ?? this.id,
@@ -326,6 +331,7 @@ class PromotionalRuleItem {
       linkedGiftId: linkedGiftId ?? this.linkedGiftId,
       linkedGiftName: linkedGiftName ?? this.linkedGiftName,
       linkedGifts: linkedGifts ?? this.linkedGifts,
+      gameType: gameType ?? this.gameType,
     );
   }
 }

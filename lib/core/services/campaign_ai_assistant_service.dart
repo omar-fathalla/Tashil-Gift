@@ -328,7 +328,10 @@ $rawIdeaText
         } else {
           buffer.writeln('   - الشرط: شراء كمية (${r.minQuantity} قطعة) أو أكثر من أصناف [${r.triggerProduct}]');
         }
-        buffer.writeln('   - المكافأة المستحقة: [${r.rewardValue}$voucherVal] (نوع: ${r.rewardType})$giftBinding$multText');
+        final gameDelivery = (r.gameType != null && r.gameType!.isNotEmpty)
+            ? ' (طريقة التسليم: ${r.gameType == 'directGift' ? 'هدية فورية مباشرة' : (r.gameType == 'scratch' ? 'خربش واكسب' : (r.gameType == 'wheel' ? 'عجلة الحظ' : 'اختر هديتك'))})'
+            : '';
+        buffer.writeln('   - المكافأة المستحقة: [${r.rewardValue}$voucherVal] (نوع: ${r.rewardType})$giftBinding$gameDelivery$multText');
       }
       buffer.writeln();
       buffer.writeln('⚠️ تعليمات هامة للذكاء الاصطناعي أثناء التدقيق ومطابقة القواعد (Mandatory Invariants):');

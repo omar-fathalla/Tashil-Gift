@@ -3637,6 +3637,7 @@ class CompositePromotionalBundle {
   final String compositePrizeTitle;
   final double totalVoucherValue;
   final int totalChances;
+  final String? resolvedGameType;
 
   CompositePromotionalBundle({
     required this.matchedRules,
@@ -3644,6 +3645,7 @@ class CompositePromotionalBundle {
     required this.compositePrizeTitle,
     this.totalVoucherValue = 0.0,
     this.totalChances = 1,
+    this.resolvedGameType,
   });
 
   static CompositePromotionalBundle fromMatchedRules(
@@ -3657,16 +3659,21 @@ class CompositePromotionalBundle {
         compositePrizeTitle: fallbackTitle,
         totalVoucherValue: 0.0,
         totalChances: 1,
+        resolvedGameType: null,
       );
     }
 
     final Map<String, LinkedGiftAllocation> consolidatedGifts = {};
     double totalVoucher = 0.0;
     int chances = 0;
+    String? ruleLevelGameType;
 
     for (final r in rules) {
       totalVoucher += r.totalRewardAmount;
       chances += r.multiplier;
+      if (r.rule.gameType != null && r.rule.gameType!.trim().isNotEmpty) {
+        ruleLevelGameType = r.rule.gameType!.trim();
+      }
       final ruleGifts = r.multipliedLinkedGifts.isNotEmpty
           ? r.multipliedLinkedGifts
           : [
@@ -3706,6 +3713,7 @@ class CompositePromotionalBundle {
       compositePrizeTitle: title,
       totalVoucherValue: totalVoucher,
       totalChances: chances > 0 ? chances : 1,
+      resolvedGameType: ruleLevelGameType,
     );
   }
 }

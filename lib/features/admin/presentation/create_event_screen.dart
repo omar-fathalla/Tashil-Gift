@@ -2609,6 +2609,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     final rewardAmtController = TextEditingController(text: (existingRule?.rewardAmount ?? 0.0).toString());
     String conditionType = existingRule?.conditionType ?? 'by_quantity';
     String rewardType = existingRule?.rewardType ?? 'free_product';
+    String? selectedRuleGameType = existingRule?.gameType;
     bool allowMultipliers = existingRule?.allowMultipliers ?? true;
     List<String> selectedProductIds = List<String>.from(existingRule?.selectedProductIds ?? []);
     List<String> selectedBarcodes = List<String>.from(existingRule?.selectedBarcodes ?? []);
@@ -3266,6 +3267,106 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         const SizedBox(height: 12),
                       ],
 
+                      // Game Type Delivery Selector for this specific Rule / Tier
+                      Builder(
+                        builder: (fieldCtx) {
+                          final fColorScheme = Theme.of(fieldCtx).colorScheme;
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: fColorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: fColorScheme.outlineVariant.withValues(alpha: 0.5)),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.sports_esports_rounded, size: 20, color: fColorScheme.primary),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: DropdownButtonFormField<String?>(
+                                    initialValue: selectedRuleGameType,
+                                    decoration: InputDecoration(
+                                      labelText: 'طريقة تسليم الجائزة (نوع اللعبة للشريحة)',
+                                      labelStyle: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                                      border: InputBorder.none,
+                                      isDense: true,
+                                    ),
+                                    style: GoogleFonts.cairo(fontSize: 12.5, color: fColorScheme.onSurface),
+                                items: [
+                                  DropdownMenuItem<String?>(
+                                    value: null,
+                                    child: Text(
+                                      '⚙️ الافتراضي (حسب لعبة الحملة العامة: ${_selectedGameType == 'scratch' ? 'خربش واكسب' : (_selectedGameType == 'wheel' ? 'عجلة الحظ' : (_selectedGameType == 'directGift' ? 'هدية فورية' : 'اختر هديتك'))})',
+                                      style: GoogleFonts.cairo(fontWeight: FontWeight.normal),
+                                    ),
+                                  ),
+                                  DropdownMenuItem<String?>(
+                                    value: 'directGift',
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.redeem_rounded, size: 16, color: Colors.teal),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          '🎁 هدية فورية مباشرة (Direct Gift)',
+                                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: Colors.teal.shade800),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  DropdownMenuItem<String?>(
+                                    value: 'scratch',
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.style_rounded, size: 16, color: Colors.purple),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          '🎟️ كارت خربش واكسب (Scratch Card)',
+                                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: Colors.purple.shade800),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  DropdownMenuItem<String?>(
+                                    value: 'wheel',
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.casino_rounded, size: 16, color: Colors.indigo),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          '🎡 عجلة الحظ (Spin The Wheel)',
+                                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: Colors.indigo.shade800),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  DropdownMenuItem<String?>(
+                                    value: 'chooseGift',
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.grid_view_rounded, size: 16, color: Colors.orange),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          '📦 اختر هديتك (Choose Gift)',
+                                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: Colors.orange.shade800),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                                onChanged: (val) {
+                                  setDialogState(() {
+                                    selectedRuleGameType = val;
+                                  });
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+
                       // Multi-Gift / Multi-Voucher Allocation Builder Inside Dialog
                       if (_companyGifts.isNotEmpty) ...[
                         Container(
@@ -3555,6 +3656,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                           ? finalLinkedGifts.map((d) => d.quantity > 1 ? '${d.quantity}x ${d.giftName}' : d.giftName).join(' + ')
                           : selectedGift?.giftName,
                       linkedGifts: finalLinkedGifts,
+                      gameType: selectedRuleGameType,
                     );
 
                     setState(() {
@@ -6489,6 +6591,63 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             ),
                           ),
                         ),
+                        if (rule.gameType != null && rule.gameType!.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: rule.gameType == 'directGift'
+                                  ? Colors.teal.shade100
+                                  : (rule.gameType == 'scratch'
+                                      ? Colors.purple.shade100
+                                      : (rule.gameType == 'wheel'
+                                          ? Colors.indigo.shade100
+                                          : Colors.orange.shade100)),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  rule.gameType == 'directGift'
+                                      ? Icons.redeem_rounded
+                                      : (rule.gameType == 'scratch'
+                                          ? Icons.style_rounded
+                                          : (rule.gameType == 'wheel'
+                                              ? Icons.casino_rounded
+                                              : Icons.grid_view_rounded)),
+                                  size: 11,
+                                  color: rule.gameType == 'directGift'
+                                      ? Colors.teal.shade900
+                                      : (rule.gameType == 'scratch'
+                                          ? Colors.purple.shade900
+                                          : (rule.gameType == 'wheel'
+                                              ? Colors.indigo.shade900
+                                              : Colors.orange.shade900)),
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  rule.gameType == 'directGift'
+                                      ? 'هدية فورية مباشرة'
+                                      : (rule.gameType == 'scratch'
+                                          ? 'خربش واكسب'
+                                          : (rule.gameType == 'wheel'
+                                              ? 'عجلة الحظ'
+                                              : 'اختر هديتك')),
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: rule.gameType == 'directGift'
+                                        ? Colors.teal.shade900
+                                        : (rule.gameType == 'scratch'
+                                            ? Colors.purple.shade900
+                                            : (rule.gameType == 'wheel'
+                                                ? Colors.indigo.shade900
+                                                : Colors.orange.shade900)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         if (rule.isCombo)
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),

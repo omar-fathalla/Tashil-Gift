@@ -19,6 +19,22 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   configureAppPathUrlStrategy();
   
+  // Filter out harmless Flutter Web engine Hot-Restart / disposed view assertions
+  final originalOnError = FlutterError.onError;
+  FlutterError.onError = (details) {
+    final msg = details.exceptionAsString();
+    if (msg.contains('disposed EngineFlutterView') ||
+        msg.contains('Trying to render a disposed EngineFlutterView')) {
+      // Harmless web engine teardown noise during hot-restart or browser tab refresh
+      return;
+    }
+    if (originalOnError != null) {
+      originalOnError(details);
+    } else {
+      FlutterError.presentError(details);
+    }
+  };
+
   // Initialize Firebase with the mock/configured options.
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,

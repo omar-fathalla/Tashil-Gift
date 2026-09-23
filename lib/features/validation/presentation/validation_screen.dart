@@ -800,9 +800,12 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         _selectedPreviewIndex = 0;
       });
 
-      // Route based on game type configured in the campaign
+      // Route based on rule-level game type or fallback to campaign game type
       final prizeNames = activeEvent.availablePrizeNames;
-      final gameType = activeEvent.gameType;
+      final ruleLevelGame = (compositeBundle.resolvedGameType != null && compositeBundle.resolvedGameType!.trim().isNotEmpty)
+          ? compositeBundle.resolvedGameType!.trim()
+          : null;
+      final gameType = ruleLevelGame ?? activeEvent.gameType;
 
       // Smart branch ID resolution matching AI-detected branch name with campaign branches
       String? resolvedBranchId;
