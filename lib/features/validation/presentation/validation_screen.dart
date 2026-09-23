@@ -1476,46 +1476,53 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
                               const SizedBox(height: 10),
                             ],
 
-                            // Add next part button & Clear all action
-                            Row(
-                              children: [
-                                if (_receiptImages.length < 4)
-                                  Expanded(
-                                    child: FilledButton.tonalIcon(
-                                      onPressed: _showAddPartModal,
-                                      icon: const Icon(Icons.add_a_photo_rounded, size: 18),
-                                      label: Text(
-                                        strings.addNextReceiptPartBtn,
-                                        style: GoogleFonts.cairo(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      style: FilledButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(vertical: 12),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                if (_receiptImages.length < 4) const SizedBox(width: 8),
-                                TextButton.icon(
-                                  onPressed: _clearAllParts,
-                                  icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+                            // Add next part button & Clear all action (Responsive column layout)
+                            if (_receiptImages.length < 4) ...[
+                              SizedBox(
+                                width: double.infinity,
+                                child: FilledButton.tonalIcon(
+                                  onPressed: _showAddPartModal,
+                                  icon: const Icon(Icons.add_a_photo_rounded, size: 20),
                                   label: Text(
-                                    strings.isAr ? 'مسح الكل' : 'Clear All',
+                                    strings.addNextReceiptPartBtn,
                                     style: GoogleFonts.cairo(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: colorScheme.error,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
                                     ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: colorScheme.error,
+                                  style: FilledButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 16),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
                                   ),
                                 ),
-                              ],
+                              ),
+                              const SizedBox(height: 6),
+                            ],
+                            Center(
+                              child: TextButton.icon(
+                                onPressed: _clearAllParts,
+                                icon: Icon(
+                                  Icons.delete_sweep_rounded,
+                                  size: 18,
+                                  color: colorScheme.error,
+                                ),
+                                label: Text(
+                                  strings.clearAllPartsBtn,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.error,
+                                  ),
+                                ),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: colorScheme.error,
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                                ),
+                              ),
                             ),
                           ],
 

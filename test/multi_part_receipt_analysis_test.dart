@@ -59,6 +59,7 @@ void main() {
         final maxAlert = strings.maxPartsReachedAlert;
         final pickGallery = strings.pickNextPartGallery;
         final captureCamera = strings.captureNextPartCamera;
+        final clearAll = strings.clearAllPartsBtn;
 
         expect(addNextPart.isNotEmpty, true, reason: 'Failed for lang: $lang');
         expect(longTip.isNotEmpty, true, reason: 'Failed for lang: $lang');
@@ -68,6 +69,7 @@ void main() {
         expect(maxAlert.isNotEmpty, true, reason: 'Failed for lang: $lang');
         expect(pickGallery.isNotEmpty, true, reason: 'Failed for lang: $lang');
         expect(captureCamera.isNotEmpty, true, reason: 'Failed for lang: $lang');
+        expect(clearAll.isNotEmpty, true, reason: 'Failed for lang: $lang');
 
         // Verify index substitution in partIndexLabel
         expect(partIndex.contains('2'), true, reason: 'Missing current index for $lang');
@@ -84,6 +86,10 @@ void main() {
       expect(ar.addNextReceiptPartBtn, contains('إضافة جزء تالٍ للفاتورة'));
       expect(en.addNextReceiptPartBtn, contains('Add Next Part'));
       expect(hi.addNextReceiptPartBtn, contains('लंबी रसीद के लिए अगला भाग जोड़ें'));
+
+      expect(ar.clearAllPartsBtn, equals('مسح الكل'));
+      expect(en.clearAllPartsBtn, equals('Clear All'));
+      expect(hi.clearAllPartsBtn, equals('सभी साफ़ करें'));
 
       expect(ar.longReceiptTip, contains('إذا كانت الفاتورة طويلة'));
       expect(en.longReceiptTip, contains('For long receipts'));

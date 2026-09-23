@@ -2353,52 +2353,62 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                               const SizedBox(height: 10),
                             ],
 
-                            // Add next part button & Clear all action
-                            Row(
-                              children: [
-                                if (_receiptImages.length < 4)
-                                  Expanded(
-                                    child: FilledButton.tonalIcon(
-                                      onPressed: _showAddPartModal,
-                                      icon: const Icon(Icons.add_a_photo_rounded, size: 18),
-                                      label: Text(
-                                        strings.addNextReceiptPartBtn,
-                                        style: GoogleFonts.cairo(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      style: FilledButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(vertical: 12),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                if (_receiptImages.length < 4) const SizedBox(width: 8),
-                                TextButton.icon(
-                                  onPressed: _clearAllParts,
-                                  icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+                            // Add next part button & Clear all action (Responsive column layout)
+                            if (_receiptImages.length < 4) ...[
+                              SizedBox(
+                                width: double.infinity,
+                                child: FilledButton.tonalIcon(
+                                  onPressed: _showAddPartModal,
+                                  icon: const Icon(Icons.add_a_photo_rounded, size: 20),
                                   label: Text(
-                                    strings.isAr ? 'مسح الكل' : 'Clear All',
+                                    strings.addNextReceiptPartBtn,
                                     style: GoogleFonts.cairo(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: colorScheme.error,
+                                      fontSize: isMobile ? 13.5 : 14.5,
+                                      fontWeight: FontWeight.bold,
                                     ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: colorScheme.error,
+                                  style: FilledButton.styleFrom(
+                                    padding: EdgeInsets.symmetric(
+                                      vertical: isMobile ? 12 : 14,
+                                      horizontal: 16,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
                                   ),
                                 ),
-                              ],
+                              ),
+                              const SizedBox(height: 6),
+                            ],
+                            Center(
+                              child: TextButton.icon(
+                                onPressed: _clearAllParts,
+                                icon: Icon(
+                                  Icons.delete_sweep_rounded,
+                                  size: 18,
+                                  color: colorScheme.error,
+                                ),
+                                label: Text(
+                                  strings.clearAllPartsBtn,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.error,
+                                  ),
+                                ),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: colorScheme.error,
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                                ),
+                              ),
                             ),
                           ],
 
                           // 4. M3 Action Button & Progress Tracker
                           if (_receiptImages.isNotEmpty) ...[
-                            SizedBox(height: isMobile ? 18 : 24),
+                            SizedBox(height: isMobile ? 16 : 22),
                             if (_isAiLoading) ...[
                               Text(
                                 _aiPhaseText,
@@ -2414,6 +2424,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                               const SizedBox(height: 16),
                             ],
                             M3ActionButton(
+                              width: double.infinity,
                               label: _isAiLoading
                                   ? strings.auditingProgressText
                                   : (_receiptImages.length > 1

@@ -1267,9 +1267,14 @@ class AppStrings {
     hi: 'इस भाग को हटाएं',
   );
   String analyzeMultiPartsBtn(int count) => _t(
-    ar: 'تدقيق الفاتورة بالذكاء الاصطناعي ($count أجزاء) 🎁',
+    ar: 'فحص الفاتورة بالذكاء الاصطناعي ($count أجزاء) 🎁',
     en: 'Audit Receipt with AI ($count parts) 🎁',
     hi: 'एआई से रसीद जांचें ($count भाग) 🎁',
+  );
+  String get clearAllPartsBtn => _t(
+    ar: 'مسح الكل',
+    en: 'Clear All',
+    hi: 'सभी साफ़ करें',
   );
   String get maxPartsReachedAlert => _t(
     ar: 'الحد الأقصى لأجزاء الفاتورة الواحدة هو 4 أجزاء متتالية.',
@@ -1395,7 +1400,7 @@ class AppStrings {
     hi: 'गैलरी से अपलोड करें (फ़ाइलें)',
   );
   String get auditReceiptActionBtn => _t(
-    ar: 'فحص وتدقيق الفاتورة بالذكاء الاصطناعي',
+    ar: 'فحص الفاتورة بالذكاء الاصطناعي',
     en: 'Verify Receipt with AI',
     hi: 'एआई के साथ रसीद सत्यापित करें',
   );
