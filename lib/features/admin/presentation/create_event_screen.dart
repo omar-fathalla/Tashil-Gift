@@ -1791,6 +1791,23 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       );
       setState(() => _promotionalRules.add(newRule));
       _syncPromptFromRules(showSnackbar: false);
+    } else if (presetKey == 'sunsilk_2pc_50') {
+      final decomposed = CampaignAiAssistantService.decomposeVoucherAmount(50.0, _companyGifts);
+      final newRule = PromotionalRuleItem(
+        id: 'rule_${_promotionalRules.length + 1}',
+        ruleTitle: 'عرض صانسيلك (شراء قطعتين للحصول على فوتشر 50 ج.م)',
+        triggerProduct: 'صانسيلك، صنسيلك، sunsilk، شامبو صانسيلك، بلسم صانسيلك، صانسيلك شامبو نعومه الحرير 350 مل + بلسم، 6221155611154',
+        minQuantity: 2,
+        rewardType: 'voucher',
+        rewardValue: 'قسيمة مشتريات بقيمة 50 ج.م',
+        rewardAmount: 50.0,
+        allowMultipliers: true,
+        linkedGifts: decomposed,
+        linkedGiftId: decomposed.firstOrNull?.giftId,
+        linkedGiftName: decomposed.firstOrNull?.giftName,
+      );
+      setState(() => _promotionalRules.add(newRule));
+      _syncPromptFromRules(showSnackbar: false);
     } else if (presetKey == 'axe_twin_shrink') {
       final decomposed = CampaignAiAssistantService.decomposeVoucherAmount(125.0, _companyGifts);
       final newRule = PromotionalRuleItem(
@@ -6173,6 +6190,10 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         DropdownMenuItem(
                           value: 'axe_twin_shrink',
                           child: Text('💳 شراء عرض شرنك أكس المزدوج (بندل 2 قطعة) -> فواتشر 125 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'sunsilk_2pc_50',
+                          child: Text('💳 شراء 2 صانسيلك (أو عرض شامبو+بلسم المزدوج) -> فواتشر 50 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
                         ),
                       ],
                       onChanged: (val) {

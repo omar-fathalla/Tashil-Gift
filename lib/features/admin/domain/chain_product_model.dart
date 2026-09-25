@@ -264,6 +264,56 @@ class ChainProductItem {
     return priceHistory.first.hasDiscount;
   }
 
+  /// True if product is currently on promotion at any competitor and NOT on promotion at Fathalla Markets
+  /// (أو غير متوفر على الإطلاق بأسواق فتح الله — كمرجع أساسي، وهي فرصة استيراد وإضافة)
+  bool get isCompetitorPromoNotAtFathalla {
+    final hasCompPromo = isAnyCompetitorOnPromotion;
+    if (!hasCompPromo) return false;
+    return !hasFathallaPrice || !isFathallaOnPromotion;
+  }
+
+  /// True if any competitor chain has an active promotional discount on this product
+  bool get isAnyCompetitorOnPromotion {
+    final hasInSummaries = chainSummaries.entries.any(
+      (e) => e.key != 'أسواق فتح الله' && (e.value.isOnPromotion || e.value.unitDiscount > 0),
+    );
+    if (hasInSummaries) return true;
+
+    final hasInPrices = latestRegularPricesByChain.entries.any((e) {
+      if (e.key == 'أسواق فتح الله') return false;
+      final net = latestPricesByChain[e.key];
+      return net != null && e.value > (net + 0.05);
+    });
+    if (hasInPrices) return true;
+
+    return priceHistory.any((e) => e.storeChain != 'أسواق فتح الله' && e.hasDiscount);
+  }
+
+  /// True if a competitor is selling cheaper than Fathalla AND currently has a promotional discount
+  bool get isThreatWithPromo {
+    if (!isUnderpricedByCompetitors) return false;
+    final cheapestComp = cheapestCompetitorName;
+    if (cheapestComp.isNotEmpty && isChainOnPromotion(cheapestComp)) return true;
+    return isAnyCompetitorOnPromotion || isCurrentlyOnPromotion;
+  }
+
+  /// True if Fathalla currently has an active promotional discount on this product
+  bool get isFathallaOnPromotion => isChainOnPromotion('أسواق فتح الله');
+
+  /// Checks if a specific enterprise chain has an active promotion on this product
+  bool isChainOnPromotion(String chain) {
+    final summary = chainSummaries[chain];
+    if (summary != null && (summary.isOnPromotion || summary.unitDiscount > 0)) {
+      return true;
+    }
+    final reg = latestRegularPricesByChain[chain];
+    final net = latestPricesByChain[chain];
+    if (reg != null && net != null && reg > (net + 0.05)) {
+      return true;
+    }
+    return priceHistory.any((e) => e.storeChain == chain && e.hasDiscount);
+  }
+
   /// -------------------------------------------------------------------------
   /// Fathalla Price Defense & Competitor Threat Intelligence Getters
   /// -------------------------------------------------------------------------

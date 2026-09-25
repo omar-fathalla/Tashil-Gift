@@ -66,6 +66,222 @@ class ChainProductsIntelligenceService {
         ((p['price'] as num?)?.toDouble() ?? 0.0) > 0);
   }
 
+  /// Ingests a single receipt transaction in real-time and updates the aggregated `chain_products_catalog`.
+  /// This ensures that as soon as any invoice is uploaded or audited, threat alerts and competitor promotions
+  /// update immediately without requiring manual recalculation or page refreshes.
+  Future<void> ingestReceiptLive({
+    required Map<String, dynamic> receiptData,
+  }) async {
+    if (_firestore == null) return;
+    if (!isReceiptEligibleForPriceIntelligence(receiptData)) return;
+
+    final String receiptNumber = receiptData['receipt_number']?.toString() ?? '';
+    final String receiptDate = receiptData['receipt_date']?.toString() ?? '';
+    final String rawStoreChain = (receiptData['store_chain_detected']?.toString().trim().isNotEmpty == true)
+        ? receiptData['store_chain_detected'].toString().trim()
+        : (receiptData['retail_chain_name']?.toString().trim() ?? 'غير محدد');
+    final String canonicalChain = normalizeRetailChain(rawStoreChain);
+    final String branchName = receiptData['branch_detected']?.toString().trim() ?? '';
+    final String imageUrl = receiptData['image_url']?.toString() ?? '';
+    final String companySlug = receiptData['companySlug']?.toString() ?? '';
+
+    DateTime? timestamp;
+    final rawTs = receiptData['timestamp'];
+    if (rawTs is Timestamp) {
+      timestamp = rawTs.toDate();
+    } else if (rawTs is String) {
+      timestamp = DateTime.tryParse(rawTs);
+    } else if (rawTs is DateTime) {
+      timestamp = rawTs;
+    } else {
+      timestamp = DateTime.now();
+    }
+
+    final rawProducts = receiptData['extracted_products'] as List<dynamic>? ?? [];
+    if (rawProducts.isEmpty) return;
+
+    final batch = _firestore.batch();
+    int opsCount = 0;
+
+    for (final p in rawProducts) {
+      if (p is! Map) continue;
+      final name = p['name']?.toString().trim() ?? '';
+      if (name.isEmpty) continue;
+
+      int quantity = (p['quantity'] as num?)?.toInt() ?? 1;
+      if (quantity <= 0) quantity = 1;
+
+      double price = (p['price'] as num?)?.toDouble() ?? 0.0;
+      String barcode = p['barcode']?.toString().trim() ?? '';
+      double? originalPrice = (p['originalPrice'] as num?)?.toDouble();
+      double discountAmount = (p['discountAmount'] as num?)?.toDouble() ?? 0.0;
+      final double discountPercent = (p['discountPercent'] as num?)?.toDouble() ?? 0.0;
+      final double? totalLinePrice = (p['totalPrice'] as num?)?.toDouble() ?? (p['totalLinePrice'] as num?)?.toDouble();
+
+      // Auto-heal line total vs unit price math anomalies
+      if (quantity > 1) {
+        final bool isAlreadyUnitPrice = totalLinePrice != null &&
+            totalLinePrice > 0 &&
+            (price * quantity - totalLinePrice).abs() < 1.5;
+
+        if (!isAlreadyUnitPrice) {
+          if (originalPrice != null && originalPrice > 0) {
+            if (price >= originalPrice * 1.5) {
+              price = price / quantity;
+            }
+            if (originalPrice >= 1.8 * price && originalPrice > 50) {
+              originalPrice = originalPrice / quantity;
+            }
+          } else if (totalLinePrice != null && totalLinePrice > 0 && (price == totalLinePrice || price >= totalLinePrice * 0.95)) {
+            price = price / quantity;
+          }
+
+          if (discountAmount >= price && discountAmount > 0) {
+            discountAmount = discountAmount / quantity;
+          }
+        }
+      }
+
+      if (originalPrice != null && originalPrice <= 0) {
+        originalPrice = null;
+      }
+
+      final skuKey = barcode.isNotEmpty && barcode.length >= 4 ? barcode : normalizeName(name);
+      final docRef = _firestore.collection('chain_products_catalog').doc(skuKey);
+
+      final newHistoryEntry = ProductPriceHistoryEntry(
+        price: price,
+        originalPrice: originalPrice,
+        discountAmount: discountAmount,
+        discountPercent: discountPercent,
+        receiptDate: receiptDate,
+        timestamp: timestamp,
+        receiptNumber: receiptNumber,
+        storeChain: canonicalChain,
+        branchName: branchName,
+        receiptImageUrl: imageUrl,
+        companySlug: companySlug,
+        quantity: quantity,
+      );
+
+      final existingSnap = await docRef.get();
+      ChainProductItem item;
+
+      if (existingSnap.exists && existingSnap.data() != null) {
+        final existingItem = ChainProductItem.fromJson(existingSnap.data()!);
+
+        final updatedLatestPrices = Map<String, double>.from(existingItem.latestPricesByChain);
+        final updatedRegularPrices = Map<String, double>.from(existingItem.latestRegularPricesByChain);
+        final updatedDates = Map<String, String>.from(existingItem.latestDatesByChain);
+        final updatedPosNames = Map<String, String>.from(existingItem.latestPosNameByChain);
+        final updatedAliases = Map<String, List<String>>.from(existingItem.chainAliases);
+        final updatedSummaries = Map<String, ChainPricingSummary>.from(existingItem.chainSummaries);
+        final updatedLatestEntries = Map<String, ProductPriceHistoryEntry>.from(existingItem.latestEntryByChain);
+        final updatedHistory = List<ProductPriceHistoryEntry>.from(existingItem.priceHistory);
+
+        // Update latest for this chain
+        updatedLatestPrices[canonicalChain] = price;
+        updatedRegularPrices[canonicalChain] = originalPrice ?? (discountAmount > 0 ? price + discountAmount : price);
+        updatedDates[canonicalChain] = receiptDate;
+        updatedPosNames[canonicalChain] = name;
+        updatedLatestEntries[canonicalChain] = newHistoryEntry;
+
+        final currentChainAliases = List<String>.from(updatedAliases[canonicalChain] ?? []);
+        if (!currentChainAliases.contains(name)) {
+          currentChainAliases.add(name);
+          updatedAliases[canonicalChain] = currentChainAliases;
+        }
+
+        final existingSummary = updatedSummaries[canonicalChain];
+        final totalScans = (existingSummary?.totalScans ?? 0) + 1;
+        final totalQty = (existingSummary?.totalQuantity ?? 0) + quantity;
+        final branches = Set<String>.from(existingSummary?.branchesObserved ?? []);
+        if (branchName.isNotEmpty) branches.add(branchName);
+
+        final regularPrice = originalPrice ?? (discountAmount > 0 ? price + discountAmount : price);
+        final isOnPromo = discountAmount > 0 || (originalPrice != null && originalPrice > price);
+
+        updatedSummaries[canonicalChain] = ChainPricingSummary(
+          chainName: canonicalChain,
+          regularUnitPrice: regularPrice,
+          netUnitPrice: price,
+          unitDiscount: discountAmount,
+          discountPercent: discountPercent,
+          isOnPromotion: isOnPromo,
+          lastReceiptDate: receiptDate,
+          totalScans: totalScans,
+          totalQuantity: totalQty,
+          branchesObserved: branches.toList(),
+        );
+
+        updatedHistory.insert(0, newHistoryEntry);
+
+        item = ChainProductItem(
+          id: skuKey,
+          name: existingItem.name.isNotEmpty ? existingItem.name : name,
+          barcode: existingItem.barcode.isNotEmpty ? existingItem.barcode : barcode,
+          companySlug: existingItem.companySlug.isNotEmpty ? existingItem.companySlug : companySlug,
+          category: existingItem.category.isNotEmpty ? existingItem.category : inferCategory(name),
+          brand: existingItem.brand.isNotEmpty ? existingItem.brand : inferBrand(name),
+          latestPricesByChain: updatedLatestPrices,
+          latestRegularPricesByChain: updatedRegularPrices,
+          latestDatesByChain: updatedDates,
+          latestPosNameByChain: updatedPosNames,
+          chainAliases: updatedAliases,
+          chainSummaries: updatedSummaries,
+          latestEntryByChain: updatedLatestEntries,
+          priceHistory: updatedHistory,
+          totalScansCount: existingItem.totalScansCount + 1,
+          totalQuantitySold: existingItem.totalQuantitySold + quantity,
+          isBarcodeAutoLinked: existingItem.isBarcodeAutoLinked || (barcode.isNotEmpty && existingItem.barcode.isEmpty),
+        );
+      } else {
+        final regularPrice = originalPrice ?? (discountAmount > 0 ? price + discountAmount : price);
+        final isOnPromo = discountAmount > 0 || (originalPrice != null && originalPrice > price);
+
+        final summary = ChainPricingSummary(
+          chainName: canonicalChain,
+          regularUnitPrice: regularPrice,
+          netUnitPrice: price,
+          unitDiscount: discountAmount,
+          discountPercent: discountPercent,
+          isOnPromotion: isOnPromo,
+          lastReceiptDate: receiptDate,
+          totalScans: 1,
+          totalQuantity: quantity,
+          branchesObserved: branchName.isNotEmpty ? [branchName] : [],
+        );
+
+        item = ChainProductItem(
+          id: skuKey,
+          name: name,
+          barcode: barcode,
+          companySlug: companySlug,
+          category: inferCategory(name),
+          brand: inferBrand(name),
+          latestPricesByChain: {canonicalChain: price},
+          latestRegularPricesByChain: {canonicalChain: regularPrice},
+          latestDatesByChain: {canonicalChain: receiptDate},
+          latestPosNameByChain: {canonicalChain: name},
+          chainAliases: {canonicalChain: [name]},
+          chainSummaries: {canonicalChain: summary},
+          latestEntryByChain: {canonicalChain: newHistoryEntry},
+          priceHistory: [newHistoryEntry],
+          totalScansCount: 1,
+          totalQuantitySold: quantity,
+          isBarcodeAutoLinked: false,
+        );
+      }
+
+      batch.set(docRef, item.toJson(), SetOptions(merge: true));
+      opsCount++;
+    }
+
+    if (opsCount > 0) {
+      await batch.commit();
+    }
+  }
+
   /// Pure function to aggregate raw receipt documents into rich ChainProductItem models
   static List<ChainProductItem> aggregateProductsFromReceipts(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,

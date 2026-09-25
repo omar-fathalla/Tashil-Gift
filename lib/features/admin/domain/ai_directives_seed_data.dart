@@ -1173,6 +1173,72 @@ class AiDirectivesSeedData {
           tags: ['volume-segregation', 'pack-size-guard', 'clear-550ml-vs-600ml', 'clear-180ml', 'air-55'],
           lastUpdated: '2026-09-17',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-56',
+          code: 'NET_PROMOTIONAL_PRICE_AND_REALTIME_COMPETITOR_RADAR_GOVERNANCE_STANDARD',
+          orderIndex: 56,
+          category: AiDirectiveCategory.unitEconomics,
+          titleAr: 'معيار استخراج السعر بعد العرض والخصم الترويجي والتحديث اللحظي لرادار كسر الأسعار (Net Promo Price & Real-time Competitor Radar Governance Standard)',
+          titleEn: 'Net Promotional Price Extraction & Real-time Competitor Radar Governance Standard',
+          descriptionAr:
+              'إلزام الذكاء الاصطناعي باستخراج سعر بيع القطعة الواحدة الصافي الفعلي بعد تطبيق أي عرض أو خصم ترويجي على سطر الفاتورة (Net Selling Price after Promo Discount)، وتسجيل السعر الأصلي وقيمة الخصم بشكل مستقل. بالإضافة إلى التحديث اللحظي الديناميكي (0ms) لكتالوج رادار حماية الأسعار والمنافسين فور رفع أو فحص أي فاتورة جديدة دون الحاجة لإعادة تدقيق يدوي، والتركيز على تنبيهات كسر الأسعار وعروض المنافسين غير المتوفرة بفتح الله.',
+          descriptionEn:
+              'Mandates that AI receipt extraction strictly records the net selling price per single piece AFTER active promotional discounts or offers, keeping shelf regular price and discount magnitude segregated. Additionally guarantees real-time (0ms) ingestion into the cross-chain price defense catalog upon receipt upload without requiring manual audits, with direct emphasis on competitor undercutting threats and competitor promos unavailable at Fathalla.',
+          logicAr:
+              '1. اعتماد السعر الصافي الفعلي بعد الخصم: حقل price يمثل حتماً وبصرامة سعر بيع القطعة بعد الخصم والعرض الترويجي (الذي يدفعه العميل بالفعل)، بينما يحمل originalPrice السعر الأصلي قبل الخصم، ويحمل discountAmount مقدار خصم القطعة الواحدة.\n2. منع تضخيم الأسعار وتجاهل الخصم: يُمنع منعاً باتاً اعتماد السعر قبل الخصم كـ price عند وجود تخفيض أو عرض ترويجي صريح في الفاتورة لضمان دقة كشف كسر الأسعار الحقيقي في السوق.\n3. التحديث اللحظي للرادار (Live Ingestion): عند حفظ أو فحص أي فاتورة جديدة، يتم استدعاء ingestReceiptLive فورياً لتحديث مستندات الأصناف في chain_products_catalog، مما يحدث عدادات كسر الأسعار وعروض المنافسين ديناميكياً.\n4. استخلاص فرص الإضافة (Competitor Promos not at Baseline): تصنيف الأصناف التي عليها عروض ترويجية نشطة لدى المنافسين وغير مسجلة في أسواق فتح الله كفرص تجارية واستيرادية ذات أولوية عالية.',
+          logicEn:
+              '1. Net Promo Price Dominance: price strictly reflects net unit price after promotional discount, while originalPrice retains pre-discount shelf price and discountAmount holds unit discount.\n2. Anti-Gross Distortion: prohibits ignoring printed line discounts so competitor undercutting reflects actual customer payment.\n3. Live Radar Ingestion: triggers ingestReceiptLive immediately upon receipt persistence in receipts_transactions, dynamically incrementing price threat counters in 0ms without manual re-auditing.\n4. Competitor Promo Acquisition Opportunities: highlights active competitor promotions missing from Fathalla baseline as prime stock introduction opportunities.',
+          exampleInput:
+              'بون كاشير جملة ماركت يحتوي على: "تريزيمي شامبو 400 مل" بسعر أصلي 220 ج.م وخصم ترويجي 45 ج.م (الصافي المدفوع 175 ج.م) بينما يباع في فتح الله بسعر 200 ج.م.',
+          exampleOutput:
+              'استخراج price = 175.0 و originalPrice = 220.0 و discountAmount = 45.0، وتحديث فوري لرادار كسر الأسعار بإشعار "🚨 جملة ماركت أرخص بـ 25 ج.م (عرض ترويجي)" دون الحاجة لضغط زر تدقيق.',
+          tags: ['net-promo-price', 'promotional-discounts', 'real-time-radar', 'competitor-threats', 'fathalla-defense', 'air-56'],
+          lastUpdated: '2026-09-25',
+        ),
+        const AiDirectiveModel(
+          id: 'AIR-57',
+          code: 'SUNSILK_TWIN_BUNDLE_PROMO_RESOLVER_AND_PHYSICAL_PIECE_EXPANSION_STANDARD',
+          orderIndex: 57,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار تفكيك حزم صانسيلك المزدوجة الترويجية (شامبو + بلسم) واحتساب القطع الفيزيائية في عروض يونيليفر (Sunsilk Twin Bundle Promo Resolver & Physical Piece Expansion Standard)',
+          titleEn: 'Sunsilk Twin Bundle Promo Resolver & Physical Piece Expansion Standard',
+          descriptionAr:
+              'التعرف التلقائي الذكي على حزم وبكجات صانسيلك المزدوجة (شامبو + بلسم بحجم 350 مل باركود 6221155611154 أو المسعرة بـ 170+ ج.م مثل 184 ج.م بجملة ماركت) ومعاملتها فيزيائياً كـ (2 قطعة) في محرك احتساب الكميات الفعالة getEffectiveProductQuantity حتى لو طُبعت الكمية = 1 في بون الكاشير، مما يضمن استحقاق قسيمة المشتريات (فوتشر 50 ج.م لشراء قطعتين) فورياً ومنع رسائل الرفض الخاطئة تماماً.',
+          descriptionEn:
+              'Directly identifies Sunsilk twin bundle combo packs (Shampoo + Conditioner 350ml under barcode 6221155611154 or priced >= 170 EGP, e.g. 184 EGP in Gomla Market), immediately treating them as 2 physical pieces (effectiveQty = 2) in getEffectiveProductQuantity even when printed as qty = 1 on POS receipts. This guarantees instantaneous qualification for the 2-piece voucher reward (50 EGP Voucher) and prevents false rejections.',
+          logicAr:
+              '1. اعتماد الباركود الترويجي المباشر (_knownTwinBundleBarcodes): إدراج باركود صانسيلك شامبو 350 مل + بلسم (6221155611154) ضمن قائمة الباركودات المعتمدة كحزمة مزدوجة (2 قطعة).\n2. كاشف حزم الشامبو والبلسم (Combo Heuristic): أي صنف صانسيلك يتضمن في اسمه "شامبو" و "بلسم" معاً، أو مسعر بـ 170+ ج.م (مثل 184.00 ج.م) يُعامل فيزيائياً كـ 2 قطعة.\n3. التوفيق التلقائي في محرك Dart (Deterministic Promo Reconciliation): عند فحص نتائج الذكاء الاصطناعي، إذا كان الصنف يحقق شروط العرض الترويجي برصيد قطعتين فيزيائيتين، يتم تطهير أي رسالة خطأ سابقة عن نقص الكمية المشتراة وتأكيد صحة الفاتورة (isValid = true) فورياً.\n4. تحديث برومبت الذكاء الاصطناعي: تزويد نموذج Gemini بتعليمات واضحة بأن عبوات صانسيلك شامبو+بلسم كود 6221155611154 بسعر 184 ج.م هي حزمة 2 قطعة مطابقة لعرض القطعتين.',
+          logicEn:
+              '1. Barcode Whitelist: adds Sunsilk 350ml Shampoo + Conditioner barcode 6221155611154 to _knownTwinBundleBarcodes to expand effective quantity to 2.\n2. Shampoo + Conditioner Combo Heuristic: any Sunsilk item with both "شامبو" and "بلسم" or priced >= 170 EGP is resolved as 2 physical pieces.\n3. Deterministic Dart Reconciliation: if PromotionalRuleMatcher matches the 2-piece rule via effective quantity, clears any spurious AI quantity error and asserts isValid = true.\n4. AI Prompt Directive: instructs Gemini that Sunsilk combo packs (barcode 6221155611154, 184 EGP) are 2-piece promo packs qualifying for the 2-piece voucher.',
+          exampleInput:
+              'بون كاشير جملة ماركت المنتزه رقم 11/16/418/250926 يحتوي على: "صانسيلك شامبو نعومه الحرير 350 مل + بلسم" باركود 6221155611154 بسعر 184.00 ج.م والكمية المطبوعة 1.',
+          exampleOutput:
+              'احتساب الصنف كـ (2 قطعة) واستحقاق فوري لقاعدة "عرض صانسيلك قطعتين -> فوتشر 50 ج.م"، واعتماد الفاتورة (isValid = true) ومنح قسيمة 50 ج.م بنجاح 100% دون أي رفض.',
+          tags: ['sunsilk-twin-bundle', 'barcode-6221155611154', 'shampoo-conditioner-350ml', 'gomla-market-montazah', 'voucher-50egp', 'unilever', 'air-57'],
+          lastUpdated: '2026-09-25',
+        ),
+        const AiDirectiveModel(
+          id: 'AIR-58',
+          code: 'COMPLEMENTARY_RECEIPTS_AND_SIDE_BY_SIDE_MULTI_BOND_AGGREGATION_STANDARD',
+          orderIndex: 58,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار دمج بونات التكملة المتعددة والبونات المجمعة جنباً إلى جنب في كادر واحد (Complementary Receipts & Side-by-Side Multi-Bond Aggregation Standard)',
+          titleEn: 'Complementary Receipts & Side-by-Side Multi-Bond Aggregation Standard',
+          descriptionAr:
+              'حوكمة استيعاب ومطابقة الحالات التي يشتري فيها العميل بونين أو أكثر لتكملة قيمة العرض الترويجي (مثل حملة كادبوري بون 751 ج.م + بون تكميلي 55 ج.م = 806 ج.م لاستحقاق 2 فوتشر)، سواء التُقط البونان معاً في كادر واحد جنباً إلى جنب أو رُفعا عبر خاصية الأجزاء المتعددة (+ إضافة جزء / بون مكمل). يدمج الذكاء الاصطناعي أرقام البونين برابط " + "، ويجمع منتجات الشركة الراعية في سلة موحدة، ويحسب الإجمالي التراكمي المشترك وتتضاعف الجوائز عليه تلقائياً مع اعتبار هوامش البروموتر (مثل "تكملة الفاتورة" و"تم استلام 2 فوتشر") تعليقات تشغيلية معتمدة.',
+          descriptionEn:
+              'Standardizes complementary multi-receipt aggregation when a customer purchases across two or more receipts to fulfill promo spend thresholds (e.g. Cadbury receipt 751 EGP + complementary receipt 55 EGP = 806 EGP qualifying for 2 vouchers), captured either side-by-side in a single photo or uploaded sequentially via multi-part photos (+ Add Next Part / Complementary Receipt). The AI joins receipt IDs with " + ", aggregates target products into a unified basket, computes cumulative spend, multiplies rewards accordingly, and recognizes promoter annotations ("تكملة الفاتورة", "تم استلام 2 فوتشر") as valid operational margin notes.',
+          logicAr:
+              '1. دعم الكادر المزدوج (Side-by-Side Single Frame): عند التقاط بونين متجاورين في صورة واحدة، يستخرج الذكاء الاصطناعي رقمي البونين مدمجين بفاصل " + " (مثل: "64/6/241/250926 + 109/8/241/250926").\n2. دعم رفع الصور المتتابعة (Multi-Image Upload Flow): يتيح زر (+ إضافة جزء / بون مكمل) التقاط البون الأساسي ثم البون التكميلي بشكل منفصل مع دمجهما برمجياً في استدعاء الذكاء الاصطناعي.\n3. السلة التراكمية المشتركة (Cumulative Target Basket): يتم تجميع كافة أصناف الشركة الراعية من كلا البونين في extractedProducts وحساب targetCompanyTotal بإجمالي مجموع البونين (751.00 + 55.00 = 806.00 ج.م).\n4. مضاعفة الجوائز واستحقاق الفوتشرات: يتم مطابقة قواعد الإنفاق وحساب عدد الفرص/الفوتشرات بناءً على الإجمالي التراكمي المجمع (806 ج.م >= 800 ج.م -> استحقاق 2 فوتشر 100 ج.م).\n5. حوكمة الهوامش والملاحظات التشغيلية: الكلمات اليدوية مثل "تكملة الفاتورة" أو "تم استلام 2 فوتشر" لا تعتبر تحريراً يدوياً للفاتورة ولا تُبطل البونين طالما أن الأصل بونان إلكترونيان مطبوعان من طابعة الكاشير.',
+          logicEn:
+              '1. Side-by-Side In-Frame Support: when two receipts are placed side-by-side in a single shot, AI extracts both IDs joined with " + " (e.g. "64/6/241/250926 + 109/8/241/250926").\n2. Multi-Part Upload Flow: the UI button (+ Add Next Part / Complementary Receipt) allows capturing base and complementary receipts in separate frames and sending them together to AI.\n3. Cumulative Target Basket: aggregates target company items from both receipts into extractedProducts and computes targetCompanyTotal as their combined sum (751 + 55 = 806 EGP).\n4. Reward Multiplication & Voucher Entitlement: spend rules and multiplier chances evaluate against the cumulative total (806 >= 800 EGP -> 2 x 100 EGP vouchers).\n5. Promoter Marginal Notes Whitelist: manual annotations like "تكملة الفاتورة" or "تم استلام 2 فوتشر" are treated as legitimate promoter audit notes and never trigger handwritten rejection flags as long as both receipts are thermal POS printouts.',
+          exampleInput:
+              'صورة بونين من أسواق فتح الله المحلة: البون الأول بقيمة 751 ج.م (Trans 64)، والبون الثاني مدون عليه "تكملة الفاتورة" بقيمة 55 ج.م (Trans 109) لنفس العميل واليوم.',
+          exampleOutput:
+              'استخراج receiptNumber = "64/6/241/250926 + 109/8/241/250926"، واحتساب targetCompanyTotal = 806.0 ج.م، واعتماد الفاتورة (isValid = true) واستحقاق 2 فوتشر 100 ج.م بنجاح.',
+          tags: ['complementary-receipts', 'side-by-side', 'cadbury', 'multi-receipt', 'fathalla-mahalla', 'voucher-multipliers', 'air-58'],
+          lastUpdated: '2026-09-25',
+        ),
       ];
 }
 

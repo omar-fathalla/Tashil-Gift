@@ -13,6 +13,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/services/firebase_service.dart';
 import '../../../core/services/ai_receipt_service.dart';
 import '../../../core/services/ai_product_discovery_service.dart';
+import '../../../core/services/chain_products_intelligence_service.dart';
 import '../../../core/services/company_products_service.dart';
 import '../../../core/services/retail_chains_service.dart';
 import '../../../core/utils/error_handler.dart';
@@ -1222,6 +1223,11 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         branch: result.branchDetected,
         receiptNumber: receiptNumber,
         extractedProducts: result.extractedProducts,
+      ));
+
+      // Live Ingest into Cross-Chain Price Intelligence & Competitor Threat Catalog (0ms dynamic radar update)
+      unawaited(ref.read(chainProductsIntelligenceServiceProvider).ingestReceiptLive(
+        receiptData: transactionData,
       ));
 
       if (!mounted) return;
@@ -2631,6 +2637,11 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         branch: result.branchDetected,
         receiptNumber: receiptNumber,
         extractedProducts: result.extractedProducts,
+      ));
+
+      // Live Ingest into Cross-Chain Price Intelligence & Competitor Threat Catalog (0ms dynamic radar update)
+      unawaited(ref.read(chainProductsIntelligenceServiceProvider).ingestReceiptLive(
+        receiptData: transactionData,
       ));
     } catch (e) {
       debugPrint('Error recording rejected receipt transaction to Firestore: $e');

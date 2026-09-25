@@ -130,9 +130,12 @@ class CompanyProductsService {
     // 1. Check by barcode for this company (if barcode is provided)
     if (normBarcode.isNotEmpty) {
       try {
+        final slugs = (slug == '512' || slug == 'unilever' || slug == 'يونيليفر')
+            ? ['512', 'unilever']
+            : [slug];
         final barcodeQuery = await _firestore
             .collection('company_products')
-            .where('companySlug', isEqualTo: slug)
+            .where('companySlug', whereIn: slugs)
             .where('barcode', isEqualTo: normBarcode)
             .limit(1)
             .get()
@@ -473,9 +476,18 @@ class CompanyProductsService {
 
   /// Fetches registered products catalog for a company
   Future<List<CompanyProductItem>> getProductsForCompany(String companySlug) async {
+    final cleanSlug = companySlug.trim().toLowerCase();
+    final isUnilever = cleanSlug == '512' || cleanSlug == 'unilever' || cleanSlug == 'يونيليفر';
+    if (isUnilever) {
+      final query = await _firestore
+          .collection('company_products')
+          .where('companySlug', whereIn: ['512', 'unilever'])
+          .get();
+      return query.docs.map((doc) => CompanyProductItem.fromFirestore(doc)).toList();
+    }
     final query = await _firestore
         .collection('company_products')
-        .where('companySlug', isEqualTo: companySlug.toLowerCase())
+        .where('companySlug', isEqualTo: cleanSlug)
         .get();
 
     return query.docs.map((doc) => CompanyProductItem.fromFirestore(doc)).toList();

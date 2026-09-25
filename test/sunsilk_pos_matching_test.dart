@@ -88,5 +88,57 @@ void main() {
       expect(matches.first.rule.id, equals('rule_4'));
       expect(matches.first.rule.rewardValue, equals('Sunsilk e Hair Msk 220Ml'));
     });
+
+    test('Case 4: Sunsilk twin bundle (شامبو 350 مل + بلسم) expands to effective quantity = 2', () {
+      final twinBundleItem = ExtractedProductItem(
+        name: 'صانسيلك شامبو نعومه الحرير 350 مل + بلسم',
+        barcode: '6221155611154',
+        price: 184.0,
+        quantity: 1,
+        isTargetCompany: true,
+      );
+
+      final effectiveQty = PromotionalRuleMatcher.getEffectiveProductQuantity(twinBundleItem);
+      expect(effectiveQty, equals(2));
+    });
+
+    test('Case 5: Sunsilk twin bundle item qualifies for 2-piece Sunsilk 50 EGP voucher rule', () {
+      final sunsilk2pcRule = PromotionalRuleItem(
+        id: 'rule_sunsilk_voucher',
+        ruleTitle: 'عرض صانسيلك (شراء قطعتين للحصول على فوتشر 50 ج.م)',
+        triggerProduct: 'صانسيلك، صنسيلك، sunsilk، شامبو صانسيلك، بلسم صانسيلك',
+        minQuantity: 2,
+        rewardType: 'voucher',
+        rewardValue: 'قسيمة مشتريات بقيمة 50 ج.م',
+        rewardAmount: 50.0,
+        allowMultipliers: true,
+      );
+
+      final twinBundleItem = ExtractedProductItem(
+        name: 'صانسيلك شامبو نعومه الحرير 350 مل + بلسم',
+        barcode: '6221155611154',
+        price: 184.0,
+        quantity: 1,
+        isTargetCompany: true,
+      );
+
+      final matches = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: [twinBundleItem],
+        promotionalRules: [sunsilk2pcRule],
+        allowCampaignMultipliers: true,
+      );
+
+      expect(matches.length, equals(1));
+      expect(matches.first.rule.id, equals('rule_sunsilk_voucher'));
+      expect(matches.first.rule.rewardAmount, equals(50.0));
+      expect(matches.first.multiplier, equals(1));
+
+      final unfulfilledReasons = PromotionalRuleMatcher.getUnfulfilledPromotionReasons(
+        extractedProducts: [twinBundleItem],
+        promotionalRules: [sunsilk2pcRule],
+      );
+      expect(unfulfilledReasons, isEmpty);
+    });
   });
 }
+

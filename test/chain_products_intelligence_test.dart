@@ -341,6 +341,96 @@ void main() {
       expect(multiCompetitorProduct.competitorUnderpricedPercent, closeTo(17.64, 0.05));
       expect(multiCompetitorProduct.isFathallaCheapest, isFalse);
     });
+
+    test('Promotional intelligence getters correctly identify competitor promos not available at Fathalla (Priority 2)', () {
+      final promoProduct = ChainProductItem(
+        id: '6221155000001',
+        name: 'منتج عرض ترويجي حصري للمنافس',
+        barcode: '6221155000001',
+        latestPricesByChain: {
+          'جملة ماركت': 85.0,
+        },
+        chainSummaries: {
+          'جملة ماركت': ChainPricingSummary(
+            chainName: 'جملة ماركت',
+            netUnitPrice: 85.0,
+            regularUnitPrice: 120.0,
+            unitDiscount: 35.0,
+            isOnPromotion: true,
+            discountPercent: 29.16,
+          ),
+        },
+      );
+
+      // Not at Fathalla at all, but has promo at Gomla Market
+      expect(promoProduct.hasFathallaPrice, isFalse);
+      expect(promoProduct.isAnyCompetitorOnPromotion, isTrue);
+      expect(promoProduct.isCompetitorPromoNotAtFathalla, isTrue);
+      expect(promoProduct.isChainOnPromotion('جملة ماركت'), isTrue);
+      expect(promoProduct.isChainOnPromotion('أسواق فتح الله'), isFalse);
+
+      // Now add Fathalla regular price (not on promo)
+      final promoWithFathallaRegular = promoProduct.copyWith(
+        latestPricesByChain: {
+          'أسواق فتح الله': 110.0,
+          'جملة ماركت': 85.0,
+        },
+        chainSummaries: {
+          'أسواق فتح الله': ChainPricingSummary(
+            chainName: 'أسواق فتح الله',
+            netUnitPrice: 110.0,
+            regularUnitPrice: 110.0,
+            unitDiscount: 0.0,
+            isOnPromotion: false,
+            discountPercent: 0.0,
+          ),
+          'جملة ماركت': ChainPricingSummary(
+            chainName: 'جملة ماركت',
+            netUnitPrice: 85.0,
+            regularUnitPrice: 120.0,
+            unitDiscount: 35.0,
+            isOnPromotion: true,
+            discountPercent: 29.16,
+          ),
+        },
+      );
+
+      // Fathalla has it, but Fathalla does NOT have a promo on it!
+      expect(promoWithFathallaRegular.hasFathallaPrice, isTrue);
+      expect(promoWithFathallaRegular.isFathallaOnPromotion, isFalse);
+      expect(promoWithFathallaRegular.isCompetitorPromoNotAtFathalla, isTrue);
+      expect(promoWithFathallaRegular.isUnderpricedByCompetitors, isTrue);
+      expect(promoWithFathallaRegular.isThreatWithPromo, isTrue);
+
+      // If Fathalla also matches the promo:
+      final bothOnPromo = promoProduct.copyWith(
+        latestPricesByChain: {
+          'أسواق فتح الله': 85.0,
+          'جملة ماركت': 85.0,
+        },
+        chainSummaries: {
+          'أسواق فتح الله': ChainPricingSummary(
+            chainName: 'أسواق فتح الله',
+            netUnitPrice: 85.0,
+            regularUnitPrice: 120.0,
+            unitDiscount: 35.0,
+            isOnPromotion: true,
+            discountPercent: 29.16,
+          ),
+          'جملة ماركت': ChainPricingSummary(
+            chainName: 'جملة ماركت',
+            netUnitPrice: 85.0,
+            regularUnitPrice: 120.0,
+            unitDiscount: 35.0,
+            isOnPromotion: true,
+            discountPercent: 29.16,
+          ),
+        },
+      );
+
+      expect(bothOnPromo.isFathallaOnPromotion, isTrue);
+      expect(bothOnPromo.isCompetitorPromoNotAtFathalla, isFalse);
+    });
   });
 }
 

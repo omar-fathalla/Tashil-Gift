@@ -130,5 +130,45 @@ void main() {
 
       expect(find.text('السلاسل النشطة فقط'), findsOneWidget);
     });
+
+    testWidgets('ChainProductsMatrixTable renders Head-to-Head 1-on-1 comparison correctly', (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: Directionality(
+                textDirection: TextDirection.rtl,
+                child: ChainProductsMatrixTable(
+                  products: mockProducts,
+                  distinctChains: distinctChains,
+                  isHeadToHead: true,
+                  anchorChain: 'أسواق فتح الله',
+                  comparisonChain: 'جملة ماركت',
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Pinned header shows baseline chain
+      expect(find.text('أسواق فتح الله (المرجع)'), findsOneWidget);
+
+      // Pane B shows comparison chain
+      expect(find.text('جملة ماركت'), findsWidgets);
+
+      // Pane B does not show other competitors like Hyper One or Carrefour in 1-on-1 mode
+      expect(find.text('هايبر وان'), findsNothing);
+      expect(find.text('كارفور'), findsNothing);
+
+      // Head-to-Head column header is rendered
+      expect(find.text('المقارنة المباشرة'), findsOneWidget);
+    });
   });
 }

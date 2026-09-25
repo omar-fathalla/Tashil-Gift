@@ -15,11 +15,17 @@ import 'product_price_history_dialog.dart';
 class ChainProductsMatrixTable extends ConsumerStatefulWidget {
   final List<ChainProductItem> products;
   final List<String> distinctChains;
+  final bool isHeadToHead;
+  final String? anchorChain;
+  final String? comparisonChain;
 
   const ChainProductsMatrixTable({
     super.key,
     required this.products,
     required this.distinctChains,
+    this.isHeadToHead = false,
+    this.anchorChain,
+    this.comparisonChain,
   });
 
   @override
@@ -117,15 +123,19 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
     final isAr = ref.isArabic;
     final totalCount = widget.products.length;
 
-    // Resolve competitor chains list (excluding Fathalla which is always pinned)
+    final String baselineChain = widget.anchorChain ?? 'أسواق فتح الله';
+
+    // Resolve competitor chains list (excluding baseline chain which is always pinned)
     final List<String> competitorChains;
-    if (_showAllRegisteredChains) {
+    if (widget.isHeadToHead && widget.comparisonChain != null) {
+      competitorChains = [widget.comparisonChain!];
+    } else if (_showAllRegisteredChains) {
       competitorChains = ChainProductsIntelligenceService.canonicalRetailChains
-          .where((c) => c != 'أسواق فتح الله')
+          .where((c) => c != baselineChain)
           .toList();
     } else {
       competitorChains = widget.distinctChains
-          .where((c) => c != 'أسواق فتح الله')
+          .where((c) => c != baselineChain)
           .toList();
     }
 
@@ -371,6 +381,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                       colProductWidth: colProductWidth,
                       colBrandWidth: colBrandWidth,
                       colFathallaWidth: colFathallaWidth,
+                      baselineChain: baselineChain,
                     ),
 
                     // Pinned Data Rows
@@ -412,13 +423,14 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                                 cs: cs,
                               ),
 
-                              // 3. Fathalla Baseline Price Cell
+                              // 3. Fathalla / Baseline Price Cell
                               _buildFathallaCell(
                                 item: item,
                                 width: colFathallaWidth,
                                 cs: cs,
                                 currency: currency,
                                 isAr: isAr,
+                                baselineChain: baselineChain,
                               ),
                             ],
                           ),
@@ -439,102 +451,139 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
               ),
 
               // ---------------------------------------------------------------
-              // PANE B: Horizontally Scrollable Competitors & Analysis Pane
+              // PANE B: Horizontally Scrollable Competitors & Analysis Pane (Dynamic Full-Width Scaling)
               // ---------------------------------------------------------------
               Expanded(
-                child: Scrollbar(
-                  controller: _horizontalScrollController,
-                  thumbVisibility: true,
-                  trackVisibility: true,
-                  thickness: 8,
-                  radius: const Radius.circular(4),
-                  child: SingleChildScrollView(
-                    controller: _horizontalScrollController,
-                    scrollDirection: Axis.horizontal,
-                    physics: const ClampingScrollPhysics(),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Competitors Header Row
-                        _buildCompetitorsHeader(
-                          competitorChains: competitorChains,
-                          cs: cs,
-                          isAr: isAr,
-                          strings: strings,
-                          headerHeight: headerHeight,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final numCompetitors = competitorChains.length;
+                    const double fixedSummaryWidth = 440.0;
+                    final double baseCompWidth = _isDenseMode ? 128.0 : 140.0;
+                    final double totalMinWidth = (numCompetitors * baseCompWidth) + fixedSummaryWidth;
+                    final availableWidth = constraints.maxWidth.isFinite ? constraints.maxWidth : totalMinWidth;
+
+                    final double effectiveCompetitorWidth;
+                    final double effectivePositionWidth;
+                    final double totalPaneWidth;
+
+                    if (availableWidth > totalMinWidth && numCompetitors > 0) {
+                      // Dynamically distribute extra viewport space so table fills 100% of the screen width
+                      final extra = availableWidth - totalMinWidth;
+                      effectiveCompetitorWidth = baseCompWidth + (extra * 0.65 / numCompetitors);
+                      effectivePositionWidth = 220.0 + (extra * 0.35);
+                      totalPaneWidth = availableWidth;
+                    } else {
+                      effectiveCompetitorWidth = baseCompWidth;
+                      effectivePositionWidth = 220.0;
+                      totalPaneWidth = totalMinWidth > availableWidth ? totalMinWidth : availableWidth;
+                    }
+
+                    return Scrollbar(
+                      controller: _horizontalScrollController,
+                      thumbVisibility: true,
+                      trackVisibility: true,
+                      thickness: 8,
+                      radius: const Radius.circular(4),
+                      child: SingleChildScrollView(
+                        controller: _horizontalScrollController,
+                        scrollDirection: Axis.horizontal,
+                        physics: const ClampingScrollPhysics(),
+                        child: SizedBox(
+                          width: totalPaneWidth,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Competitors Header Row
+                              _buildCompetitorsHeader(
+                                competitorChains: competitorChains,
+                                cs: cs,
+                                isAr: isAr,
+                                strings: strings,
+                                headerHeight: headerHeight,
+                                totalWidth: totalPaneWidth,
+                                competitorWidth: effectiveCompetitorWidth,
+                                positionWidth: effectivePositionWidth,
+                              ),
+
+                              // Competitors Data Rows
+                              ...pageProducts.asMap().entries.map((entry) {
+                                final rowIndex = entry.key;
+                                final item = entry.value;
+                                final isHovered = _hoveredRowIndex == rowIndex;
+                                final isEven = rowIndex % 2 == 0;
+                                final rowColor = isHovered
+                                    ? cs.primary.withValues(alpha: 0.08)
+                                    : (isEven ? Colors.transparent : cs.surfaceContainerHighest.withValues(alpha: 0.22));
+
+                                return MouseRegion(
+                                  onEnter: (_) => setState(() => _hoveredRowIndex = rowIndex),
+                                  onExit: (_) => setState(() => _hoveredRowIndex = null),
+                                  child: Container(
+                                    height: rowHeight,
+                                    width: totalPaneWidth,
+                                    decoration: BoxDecoration(
+                                      color: rowColor,
+                                      border: Border(
+                                        bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.25), width: 0.8),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.max,
+                                      children: [
+                                        // Dynamic Competitor Price Cells
+                                        ...competitorChains.map((chain) {
+                                          return _buildCompetitorPriceCell(
+                                            chain: chain,
+                                            item: item,
+                                            cs: cs,
+                                            currency: currency,
+                                            isAr: isAr,
+                                            width: effectiveCompetitorWidth,
+                                            baselineChain: baselineChain,
+                                          );
+                                        }),
+
+                                        // Summary Column: Fathalla Market Position
+                                        _buildPositionCell(
+                                          item: item,
+                                          cs: cs,
+                                          currency: currency,
+                                          isAr: isAr,
+                                          strings: strings,
+                                          width: effectivePositionWidth,
+                                          baselineChain: baselineChain,
+                                        ),
+
+                                        // Summary Column: Price Variance %
+                                        _buildVarianceCell(
+                                          item: item,
+                                          cs: cs,
+                                        ),
+
+                                        // Summary Column: Best Promo %
+                                        _buildPromoCell(
+                                          item: item,
+                                          cs: cs,
+                                        ),
+
+                                        // Summary Column: Proof & Log Button
+                                        _buildActionCell(
+                                          item: item,
+                                          cs: cs,
+                                          isAr: isAr,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ],
+                          ),
                         ),
-
-                        // Competitors Data Rows
-                        ...pageProducts.asMap().entries.map((entry) {
-                          final rowIndex = entry.key;
-                          final item = entry.value;
-                          final isHovered = _hoveredRowIndex == rowIndex;
-                          final isEven = rowIndex % 2 == 0;
-                          final rowColor = isHovered
-                              ? cs.primary.withValues(alpha: 0.08)
-                              : (isEven ? Colors.transparent : cs.surfaceContainerHighest.withValues(alpha: 0.22));
-
-                          return MouseRegion(
-                            onEnter: (_) => setState(() => _hoveredRowIndex = rowIndex),
-                            onExit: (_) => setState(() => _hoveredRowIndex = null),
-                            child: Container(
-                              height: rowHeight,
-                              decoration: BoxDecoration(
-                                color: rowColor,
-                                border: Border(
-                                  bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.25), width: 0.8),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  // Dynamic Competitor Price Cells
-                                  ...competitorChains.map((chain) {
-                                    return _buildCompetitorPriceCell(
-                                      chain: chain,
-                                      item: item,
-                                      cs: cs,
-                                      currency: currency,
-                                      isAr: isAr,
-                                    );
-                                  }),
-
-                                  // Summary Column: Fathalla Market Position
-                                  _buildPositionCell(
-                                    item: item,
-                                    cs: cs,
-                                    currency: currency,
-                                    isAr: isAr,
-                                    strings: strings,
-                                  ),
-
-                                  // Summary Column: Price Variance %
-                                  _buildVarianceCell(
-                                    item: item,
-                                    cs: cs,
-                                  ),
-
-                                  // Summary Column: Best Promo %
-                                  _buildPromoCell(
-                                    item: item,
-                                    cs: cs,
-                                  ),
-
-                                  // Summary Column: Proof & Log Button
-                                  _buildActionCell(
-                                    item: item,
-                                    cs: cs,
-                                    isAr: isAr,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }),
-                      ],
-                    ),
-                  ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ],
@@ -675,7 +724,9 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
     required double colProductWidth,
     required double colBrandWidth,
     required double colFathallaWidth,
+    String baselineChain = 'أسواق فتح الله',
   }) {
+    final isDefaultAnchor = baselineChain == 'أسواق فتح الله';
     return Container(
       height: headerHeight,
       decoration: BoxDecoration(
@@ -721,7 +772,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
             ),
           ),
 
-          // Column 3: Fathalla Anchor Header
+          // Column 3: Anchor Header
           Container(
             width: colFathallaWidth,
             padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -729,22 +780,31 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
               decoration: BoxDecoration(
-                color: Colors.indigo.shade50,
+                color: isDefaultAnchor ? Colors.indigo.shade50 : cs.primaryContainer.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.indigo.shade300, width: 1),
+                border: Border.all(
+                  color: isDefaultAnchor ? Colors.indigo.shade300 : cs.primary.withValues(alpha: 0.5),
+                  width: 1,
+                ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.account_balance_rounded, size: 12, color: Colors.indigo),
+                  Icon(
+                    isDefaultAnchor ? Icons.account_balance_rounded : Icons.storefront_rounded,
+                    size: 12,
+                    color: isDefaultAnchor ? Colors.indigo : cs.primary,
+                  ),
                   const SizedBox(width: 4),
                   Flexible(
                     child: Text(
-                      isAr ? 'أسواق فتح الله (المرجع)' : 'Fathalla (Anchor)',
+                      isDefaultAnchor
+                          ? (isAr ? 'أسواق فتح الله (المرجع)' : 'Fathalla (Anchor)')
+                          : (isAr ? '$baselineChain (المرجع)' : '$baselineChain (Anchor)'),
                       style: GoogleFonts.cairo(
                         fontWeight: FontWeight.w800,
                         fontSize: 10.5,
-                        color: Colors.indigo.shade900,
+                        color: isDefaultAnchor ? Colors.indigo.shade900 : cs.onPrimaryContainer,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -902,9 +962,10 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
     required ColorScheme cs,
     required String currency,
     required bool isAr,
+    String baselineChain = 'أسواق فتح الله',
   }) {
-    final summary = item.chainSummaries['أسواق فتح الله'];
-    final price = item.latestPricesByChain['أسواق فتح الله'];
+    final summary = item.chainSummaries[baselineChain];
+    final price = item.latestPricesByChain[baselineChain];
 
     if (price == null && summary == null) {
       return Container(
@@ -914,18 +975,19 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
       );
     }
 
+    final isDefaultAnchor = baselineChain == 'أسواق فتح الله';
     final netUnitPrice = summary?.netUnitPrice ?? price ?? 0.0;
-    final regularPrice = summary?.regularUnitPrice ?? item.latestRegularPricesByChain['أسواق فتح الله'] ?? netUnitPrice;
+    final regularPrice = summary?.regularUnitPrice ?? item.latestRegularPricesByChain[baselineChain] ?? netUnitPrice;
     final isOnPromo = summary?.isOnPromotion == true || (regularPrice > netUnitPrice);
     final discountPct = summary?.discountPercent ?? (regularPrice > 0 ? ((regularPrice - netUnitPrice) / regularPrice) * 100 : 0.0);
-    final date = summary?.lastReceiptDate ?? item.latestDatesByChain['أسواق فتح الله'] ?? '';
+    final date = summary?.lastReceiptDate ?? item.latestDatesByChain[baselineChain] ?? '';
 
     return Container(
       width: width,
       alignment: Alignment.center,
       padding: const EdgeInsets.symmetric(horizontal: 6),
       child: Tooltip(
-        message: 'أسواق فتح الله (المرجع الأساسي)\n'
+        message: '$baselineChain (${isDefaultAnchor ? (isAr ? 'المرجع الأساسي' : 'Primary Anchor') : (isAr ? 'سلسلة الأساس' : 'Baseline')})\n'
             '${isAr ? 'سعر البيع المعتمد' : 'Net Price'}: $netUnitPrice $currency\n'
             '${isOnPromo ? '${isAr ? 'السعر الأصلي قبل الخصم' : 'Regular'}: $regularPrice $currency (-${discountPct.toStringAsFixed(0)}%)\n' : ''}'
             '${isAr ? 'تاريخ الفاتورة' : 'Receipt Date'}: ${date.isNotEmpty ? date : '—'}\n'
@@ -936,9 +998,12 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
           child: Container(
             padding: EdgeInsets.symmetric(horizontal: _isDenseMode ? 6 : 8, vertical: _isDenseMode ? 3 : 5),
             decoration: BoxDecoration(
-              color: Colors.indigo.shade50.withValues(alpha: 0.8),
+              color: isDefaultAnchor ? Colors.indigo.shade50.withValues(alpha: 0.8) : cs.primaryContainer.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.indigo.shade200, width: 0.9),
+              border: Border.all(
+                color: isDefaultAnchor ? Colors.indigo.shade200 : cs.primary.withValues(alpha: 0.4),
+                width: 0.9,
+              ),
             ),
             child: FittedBox(
               fit: BoxFit.scaleDown,
@@ -950,7 +1015,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                     style: GoogleFonts.cairo(
                       fontWeight: FontWeight.w900,
                       fontSize: _isDenseMode ? 11.5 : 12.5,
-                      color: Colors.indigo.shade900,
+                      color: isDefaultAnchor ? Colors.indigo.shade900 : cs.onPrimaryContainer,
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
@@ -1003,10 +1068,12 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
     required bool isAr,
     required AppStrings strings,
     required double headerHeight,
+    double? totalWidth,
+    double competitorWidth = 128.0,
+    double positionWidth = 220.0,
   }) {
-    const double colCompetitorWidth = 128.0;
-
     return Container(
+      width: totalWidth,
       height: headerHeight,
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
@@ -1018,7 +1085,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
           // Competitors Columns
           ...competitorChains.map((chain) {
             return Container(
-              width: colCompetitorWidth,
+              width: competitorWidth,
               padding: const EdgeInsets.symmetric(horizontal: 6),
               alignment: Alignment.center,
               child: Row(
@@ -1043,9 +1110,9 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
             );
           }),
 
-          // Column: Fathalla Market Position
+          // Column: Fathalla / Baseline Market Position
           Container(
-            width: 220.0,
+            width: positionWidth,
             padding: const EdgeInsets.symmetric(horizontal: 8),
             alignment: Alignment.center,
             child: Row(
@@ -1055,7 +1122,9 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                 const SizedBox(width: 5),
                 Flexible(
                   child: Text(
-                    strings.fathallaMarketPositionLabel,
+                    widget.isHeadToHead
+                        ? (isAr ? 'المقارنة المباشرة' : 'Head-to-Head')
+                        : strings.fathallaMarketPositionLabel,
                     style: GoogleFonts.cairo(
                       fontWeight: FontWeight.w700,
                       fontSize: _isDenseMode ? 11 : 12,
@@ -1124,14 +1193,15 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
     required ColorScheme cs,
     required String currency,
     required bool isAr,
+    double width = 128.0,
+    String baselineChain = 'أسواق فتح الله',
   }) {
-    const double colCompetitorWidth = 128.0;
     final summary = item.chainSummaries[chain];
     final price = item.latestPricesByChain[chain];
 
     if (price == null && summary == null) {
       return Container(
-        width: colCompetitorWidth,
+        width: width,
         alignment: Alignment.center,
         child: Text(
           '—',
@@ -1151,7 +1221,9 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
     final maxPrice = item.maxPrice;
 
     final isCheapestInMarket = hasMultiple && (netUnitPrice - minPrice).abs() < 0.05;
-    final isCheaperThanFathalla = item.hasFathallaPrice && netUnitPrice < ((item.fathallaPrice ?? 0.0) - 0.05);
+    final baselinePrice = item.latestPricesByChain[baselineChain];
+    final hasBaselinePrice = baselinePrice != null;
+    final isCheaperThanBaseline = hasBaselinePrice && netUnitPrice < (baselinePrice - 0.05);
 
     Color bgColor = cs.surfaceContainerLow.withValues(alpha: 0.7);
     Color textColor = cs.onSurface;
@@ -1161,7 +1233,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
       bgColor = Colors.green.shade50;
       textColor = Colors.green.shade900;
       border = Border.all(color: Colors.green.shade300, width: 1);
-    } else if (isCheaperThanFathalla) {
+    } else if (isCheaperThanBaseline) {
       bgColor = Colors.amber.shade50;
       textColor = Colors.amber.shade900;
       border = Border.all(color: Colors.amber.shade300, width: 0.8);
@@ -1170,16 +1242,16 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
       textColor = Colors.red.shade900;
     }
 
-    final double priceDiffBelowFathalla = item.hasFathallaPrice ? (item.fathallaPrice! - netUnitPrice) : 0.0;
+    final double priceDiffBelowBaseline = hasBaselinePrice ? (baselinePrice - netUnitPrice) : 0.0;
 
     return Container(
-      width: colCompetitorWidth,
+      width: width,
       alignment: Alignment.center,
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Tooltip(
         message: '$chain\n'
             '${isAr ? 'سعر البيع' : 'Net Price'}: $netUnitPrice $currency\n'
-            '${isCheaperThanFathalla ? '${isAr ? 'أرخص من فتح الله بـ' : 'Cheaper than Fathalla by'}: ${priceDiffBelowFathalla.toStringAsFixed(1)} $currency\n' : ''}'
+            '${isCheaperThanBaseline ? '${isAr ? 'أرخص من $baselineChain بـ' : 'Cheaper than $baselineChain by'}: ${priceDiffBelowBaseline.toStringAsFixed(1)} $currency\n' : ''}'
             '${isOnPromo ? '${isAr ? 'السعر قبل الخصم' : 'Regular'}: $regularPrice $currency (-${discountPct.toStringAsFixed(0)}%)\n' : ''}'
             '${isAr ? 'تاريخ الفاتورة' : 'Receipt Date'}: ${date.isNotEmpty ? date : '—'}\n'
             '${isAr ? 'انقر لمعاينة البون والإثبات 🧾' : 'Click to view receipt proof 🧾'}',
@@ -1260,20 +1332,171 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
     required String currency,
     required bool isAr,
     required AppStrings strings,
+    double width = 220.0,
+    String baselineChain = 'أسواق فتح الله',
   }) {
-    const double colWidth = 220.0;
+    // 1. Head-to-Head Direct Mode Evaluation
+    if (widget.isHeadToHead && widget.comparisonChain != null) {
+      final compChain = widget.comparisonChain!;
+      final pBaseline = item.latestPricesByChain[baselineChain];
+      final pComp = item.latestPricesByChain[compChain];
 
+      if (pBaseline != null && pComp != null) {
+        if (pComp < (pBaseline - 0.05)) {
+          final diff = pBaseline - pComp;
+          final pct = (diff / pBaseline) * 100;
+          return Container(
+            width: width,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            alignment: Alignment.center,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.shade300, width: 1),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.trending_down_rounded, size: 13, color: Colors.red),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      isAr
+                          ? '$compChain أرخص بفارق ${diff.toStringAsFixed(1)} $currency (-${pct.toStringAsFixed(0)}%)'
+                          : '$compChain cheaper by ${diff.toStringAsFixed(1)} $currency',
+                      style: GoogleFonts.cairo(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.red.shade900,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        } else if (pBaseline < (pComp - 0.05)) {
+          final diff = pComp - pBaseline;
+          final pct = (diff / pComp) * 100;
+          return Container(
+            width: width,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            alignment: Alignment.center,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.shade300, width: 1),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.stars_rounded, size: 14, color: Colors.amber),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      isAr
+                          ? '$baselineChain أرخص بفارق ${diff.toStringAsFixed(1)} $currency (+${pct.toStringAsFixed(0)}%)'
+                          : '$baselineChain cheaper by ${diff.toStringAsFixed(1)} $currency',
+                      style: GoogleFonts.cairo(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.green.shade900,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        } else {
+          return Container(
+            width: width,
+            alignment: Alignment.center,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                isAr ? 'السعر متطابق بين السلسلتين' : 'Equal Price',
+                style: GoogleFonts.cairo(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ),
+          );
+        }
+      }
+    }
+
+    // 2. Competitor Promo NOT at Fathalla (Priority 2)
+    if (baselineChain == 'أسواق فتح الله' && item.isCompetitorPromoNotAtFathalla) {
+      final compPromoChains = item.chainSummaries.entries
+          .where((e) => e.key != 'أسواق فتح الله' && e.value.isOnPromotion)
+          .map((e) => e.key)
+          .join(', ');
+      return Container(
+        width: width,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        alignment: Alignment.center,
+        child: Tooltip(
+          message: isAr
+              ? 'عرض ترويجي نشط لدى ($compPromoChains) وغير متوفر بفتح الله — فرصة توريد وإضافة 💡'
+              : 'Active promo at ($compPromoChains) missing from Fathalla — expansion opportunity',
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: Colors.purple.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.purple.shade300, width: 1),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.lightbulb_rounded, size: 13, color: Colors.purple),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    isAr ? 'عرض غير متوفر بفتح الله 💡' : 'Promo not in Fathalla 💡',
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.purple.shade900,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // 3. Price Threat (Competitor Undercutting Baseline)
     if (item.isUnderpricedByCompetitors) {
       final diff = item.competitorUnderpricedDiff;
       final pct = item.competitorUnderpricedPercent;
       final competitor = item.cheapestCompetitorName;
       return Container(
-        width: colWidth,
+        width: width,
         padding: const EdgeInsets.symmetric(horizontal: 6),
         alignment: Alignment.center,
         child: Tooltip(
           message: isAr
-              ? 'إنذار كسر سعر: $competitor تبيع بسعر أرخص من فتح الله بفارق ${diff.toStringAsFixed(1)} $currency (-${pct.toStringAsFixed(0)}%)'
+              ? 'إنذار كسر سعر: $competitor تبيع بسعر أرخص من $baselineChain بفارق ${diff.toStringAsFixed(1)} $currency (-${pct.toStringAsFixed(0)}%)'
               : 'Price Threat: $competitor is cheaper by ${diff.toStringAsFixed(1)} $currency (-${pct.toStringAsFixed(0)}%)',
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -1308,7 +1531,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
       );
     } else if (item.isFathallaCheapest && item.isMultiChain) {
       return Container(
-        width: colWidth,
+        width: width,
         padding: const EdgeInsets.symmetric(horizontal: 6),
         alignment: Alignment.center,
         child: Container(
@@ -1324,7 +1547,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
               const Icon(Icons.stars_rounded, size: 14, color: Colors.amber),
               const SizedBox(width: 4),
               Text(
-                isAr ? 'فتح الله الأرخص في السوق 🌟' : 'Fathalla Best Price 🌟',
+                isAr ? '$baselineChain الأرخص في السوق 🌟' : '$baselineChain Best Price 🌟',
                 style: GoogleFonts.cairo(
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
@@ -1337,7 +1560,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
       );
     } else if (item.isPricesEqual) {
       return Container(
-        width: colWidth,
+        width: width,
         alignment: Alignment.center,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
@@ -1357,7 +1580,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
       );
     } else if (!item.hasFathallaPrice) {
       return Container(
-        width: colWidth,
+        width: width,
         alignment: Alignment.center,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
@@ -1367,7 +1590,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
             border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
           ),
           child: Text(
-            isAr ? 'غير مسجل بفتح الله' : 'Not in Fathalla',
+            isAr ? 'غير مسجل بـ $baselineChain' : 'Not in $baselineChain',
             style: GoogleFonts.cairo(
               fontSize: 10,
               color: cs.outlineVariant,
@@ -1378,7 +1601,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
       );
     } else {
       return Container(
-        width: colWidth,
+        width: width,
         alignment: Alignment.center,
         child: Text('—', style: GoogleFonts.cairo(color: cs.outlineVariant, fontSize: 11)),
       );

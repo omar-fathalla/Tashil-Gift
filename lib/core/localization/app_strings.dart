@@ -1247,14 +1247,14 @@ class AppStrings {
     hi: 'रसीद संसाधित करते समय एक त्रुटि हुई',
   );
   String get addNextReceiptPartBtn => _t(
-    ar: 'إضافة جزء تالٍ للفاتورة الطويلة',
-    en: 'Add Next Part for Long Receipt',
-    hi: 'लंबी रसीद के लिए अगला भाग जोड़ें',
+    ar: 'إضافة جزء أو بون مكمل',
+    en: 'Add Next Part / Complementary Receipt',
+    hi: 'अगला भाग / पूरक रसीद जोड़ें',
   );
   String get longReceiptTip => _t(
-    ar: 'إذا كانت الفاتورة طويلة، التقطها على 2 إلى 4 لقطات متتابعة لضمان دقة القراءة 100%.',
-    en: 'For long receipts, take 2 to 4 consecutive close-ups to ensure 100% reading accuracy.',
-    hi: 'लंबी रसीदों के लिए, 100% सटीकता सुनिश्चित करने के लिए 2 से 4 लगातार तस्वीरें लें।',
+    ar: 'للفواتير الطويلة أو عند وجود بون تكميلي لنفس العميل لتكملة القيمة، أضف صور البونات المتتابعة لدمج الحسابين بدقة 100%.',
+    en: 'For long receipts or complementary receipts to complete promo spend, add consecutive receipt photos to merge both totals accurately.',
+    hi: 'लंबी रसीदों या अतिरिक्त पूरक रसीद के लिए, दोनों योगों को सटीक रूप से जोड़ने के लिए लगातार तस्वीरें जोड़ें।',
   );
   String partIndexLabel(int index) => _t(
     ar: 'جزء $index',
@@ -2404,6 +2404,46 @@ class AppStrings {
     ar: 'تنبيهات كسر الأسعار (المنافس أرخص 🚨)',
     en: 'Price Threat Alerts (Competitor Cheaper 🚨)',
     hi: 'मूल्य खतरा अलर्ट (प्रतियोगी सस्ता 🚨)',
+  );
+  String get metricCompetitorPromosNotAtFathalla => _t(
+    ar: 'عروض غير متوفرة بفتح الله (فرص 💡)',
+    en: 'Competitor Promos not at Fathalla 💡',
+    hi: 'प्रतियोगी ऑफर जो फथल्ला में नहीं हैं 💡',
+  );
+  String get metricCompetitorPromosNotAtFathallaSubtitle => _t(
+    ar: 'فرص إضافة وتوفير أصناف جديدة',
+    en: 'New SKU Sourcing Opportunities',
+    hi: 'नए उत्पाद सोर्सिंग अवसर',
+  );
+  String get metricAllCompetitorPromotions => _t(
+    ar: 'كافة عروض وخصومات المنافسين 🏷️',
+    en: 'All Competitor Active Promos 🏷️',
+    hi: 'सभी प्रतियोगी सक्रिय ऑफर 🏷️',
+  );
+  String get metricThreatsWithPromo => _t(
+    ar: 'كسر أسعار بعروض ترويجية ⚡',
+    en: 'Threats with Promo Discount ⚡',
+    hi: 'प्रमोशन के साथ मूल्य खतरे ⚡',
+  );
+  String get headToHeadModeLabel => _t(
+    ar: 'مقارنة مباشرة بين سلسلتين (Head-to-Head ⚔️)',
+    en: 'Head-to-Head Chain Comparison ⚔️',
+    hi: 'आमने-सामने श्रृंखला तुलना ⚔️',
+  );
+  String get omniRadarModeLabel => _t(
+    ar: 'رادار مراقبة السوق الشامل 🌐',
+    en: 'Omni-Chain Market Radar 🌐',
+    hi: 'सर्वव्यापी बाजार रडार 🌐',
+  );
+  String get chain1SelectorLabel => _t(
+    ar: 'السلسلة الأولى (المرجع)',
+    en: 'First Chain (Anchor)',
+    hi: 'पहली श्रृंखला (आधार)',
+  );
+  String get chain2SelectorLabel => _t(
+    ar: 'السلسلة الثانية (المنافس)',
+    en: 'Second Chain (Competitor)',
+    hi: 'दूसरी श्रृंखला (प्रतियोगी)',
   );
   String get metricFathallaWinning => _t(
     ar: 'أصناف تفوق فتح الله (أنت الأرخص 🏆)',

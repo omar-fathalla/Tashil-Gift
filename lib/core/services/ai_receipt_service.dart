@@ -598,10 +598,22 @@ class AiReceiptService {
         '- عمود "السعر" المطبوع (مثل 69.00) يمثل سعر بيع القطعة الواحدة بالفعل (Single Unit Price).\n'
         '- عمود "القيمة" المطبوع (مثل 138.00) يمثل إجمالي السطر (Line Total = السعر × الكمية).\n'
         '- يُمنع منعاً باتاً قسمة عمود "السعر" على الكمية مرة أخرى (فإذا كان السعر 69.00 والكمية 2 والقيمة 138.00، يكون price = 69.00 و totalLinePrice = 138.00 وليس 34.50).\n\n'
+        '🛑 قاعدة العروض والخصومات الترويجية وسعر البيع الفعلي (Promotional Offers & Net Promo Price Rule):\n'
+        'يجب أخذ العروض والخصومات الترويجية في الحسبان دائماً عند فحص الفواتير والأسعار:\n'
+        '1. حقل price يمثل حتماً وبصرامة سعر بيع القطعة الواحدة الصافي الفعلي بعد تطبيق الخصم أو العرض الترويجي (Net Selling Price after Promo Discount).\n'
+        '2. إذا كان الصنف مشمولاً بعرض ترويجي (مثل تخفيض سعر، عرض خاص، خصم كاشير، أو بون تخفيض)، ضع السعر الأصلي للقطعة قبل الخصم في originalPrice، ومقدار خصم القطعة الواحدة في discountAmount، ونسبة الخصم في discountPercent، ويكون price هو السعر المخفض النهائي الذي يدفعه العميل بالفعل.\n'
+        '3. يُمنع منعاً باتاً تسجيل السعر الأصلي كـ price وتجاهل الخصم الترويجي، لضمان دقة رصد ومقارنة أسعار السوق الحقيقية.\n\n'
         '⚡ استراتيجية المسح السريع الفائق وتصفية الأصناف (Targeted Fast-Scan Policy):\n'
         '1. افحص رأس الفاتورة (Header) لاستخراج السلسلة، الفرع، التاريخ، ورقم الفاتورة.\n'
         '2. عند فحص بنود المشتريات: ركز حصراً على أسطر منتجات الشركة الراعية المشروطة في الحملة، وتجاوز فورياً أي أصناف غذائية أو استهلاكية عامة غير تابعة للشركة (مثل: اللحوم، الخضار، الفاكهة، المخبوزات، الأجبان، البقوليات، الشوكولاتة، المنظفات غير التابعة) دون إدراجها في قائمة extractedProducts.\n'
-        '3. أدرج في قائمة extractedProducts فقط المنتجات التابعة للشركة الراعية مع أسعارها الدقيقة وكمياتها لتقليص زمن الاستجابة وزيادة السرعة لأقصى حد.',
+        '3. أدرج في قائمة extractedProducts فقط المنتجات التابعة للشركة الراعية مع أسعارها الدقيقة وكمياتها لتقليص زمن الاستجابة وزيادة السرعة لأقصى حد.\n\n'
+        '🛑 قاعدة بونات التكملة المتعددة والبونات المجمعة جنباً إلى جنب (Complementary & Side-by-Side Multi-Receipt Rule - AIR-58):\n'
+        '1. في حال ظهور بونين كاشير مطبوعين إلكترونياً جنباً إلى جنب في نفس الصورة، أو تم رفعهما عبر صور متعددة لنفس السلسلة والفرع في نفس اليوم وكان أحدهما بوناً تكميلياً للآخر (مثل وجود ملاحظة "تكملة الفاتورة" أو شراء صنف إضافي لنفس العميل لتكملة الحد الأدنى للعرض):\n'
+        '   * [رقم الفاتورة]: استخرج رقمي الفاتورة معاً مدمجين بفاصل " + " في حقل (receiptNumber) (مثال: "64/6/241/250926 + 109/8/241/250926").\n'
+        '   * [سلة المنتجات المجمعة]: اجمع كافة أصناف الشركة الراعية المؤهلة من كلا البونين في قائمة (extractedProducts) دون إسقاط أي صنف.\n'
+        '   * [إجمالي الإنفاق التراكمي]: احسب (targetCompanyTotal) بجمع إجمالي منتجات الشركة المؤهلة من كلا البونين معاً (مثال: 751.00 + 55.00 = 806.00 ج.م).\n'
+        '   * [استحقاق الجوائز]: طبّق القواعد الترويجية ومضاعفات الهدايا والفرص على الإجمالي التراكمي للبونين معاً.\n'
+        '   * [الملاحظات اليدوية في الهوامش]: العبارات التوضيحية مثل "تكملة الفاتورة" أو "تم استلام 2 فوتشر" هي هوامش توضيحية تنظيمية معتمدة من البروموتر، وتؤكد صحة البونين ولا تُعد تشويهاً أو تحريراً يدوياً للفاتورة الأصلية طالما أن أصل البونين مطبوع إلكترونياً من الكاشير.',
       ),
       generationConfig: GenerationConfig(
         responseMimeType: 'application/json',
@@ -696,7 +708,7 @@ class AiReceiptService {
                   ),
                   'price': Schema.number(
                     description:
-                        'Net selling unit price per single piece in EGP/AED. In dual-column receipts with "السعر" and "القيمة", use the "السعر" column directly without re-dividing.',
+                        'Net actual selling unit price per single piece in EGP/AED AFTER any promotional discounts or offers. In dual-column receipts with "السعر" and "القيمة", use the "السعر" column directly without re-dividing.',
                   ),
                   'quantity': Schema.integer(
                     description: 'Quantity purchased (e.g. 1, 2, 3).',
@@ -841,16 +853,14 @@ class AiReceiptService {
         final totalParts = allImageParts.length;
         multiPartInstructions = '''
 
-🧩 تعليمات دمج وتدقيق الفاتورة المقسمة على عدة أجزاء (Multi-Part Long Receipt Stitching & Deduplication):
-- المرفق يحتوي على ($totalParts) صور متتالية لنفس الفاتورة الطويلة تم التقاطها على أجزاء متتابعة من الأعلى إلى الأسفل:
-  * الجزء 1 (الصورة الأولى): رأس الفاتورة (Header) واسم السلسلة والفرع ورقم البون وتاريخ الشراء والأسطر العلوية.
-  * الأجزاء الوسطى (إن وجدت): استكمال أسطر المنتجات المشتراة.
-  * الجزء الأخير (الصورة رقم $totalParts): الأسطر الأخيرة، إجماليات الفاتورة الكلية، وتذييل الباركود (Footer).
-- [قاعدة منع تكرار الأسطر المتداخلة عند فواصل الصور (Cross-Seam Deduplication)]:
-  * قد تتداخل بعض أسطر المشتريات بين نهاية صورة وبداية الصورة التالية بسبب تراكب لقطات الكاميرا لضمان عدم ضياع أي صنف.
-  * يجب عليك تدقيق أرقام الباركود وأسماء الأصناف وأسعارها بدقة؛ إذا تكرر نفس السطر بنفس الباركود/السعر في نهاية جزء وبداية الجزء التالي، احسبه مرة واحدة فقط ولا تضاعفه.
-- [دمج سلة مشتريات الشركة الراعية]:
-  * قم بجمع كافة المنتجات المؤهلة المشروطة للشركة الراعية الموزعة عبر جميع الأجزاء ($totalParts صور) في سلة واحدة مجمعة متكاملة في (extractedProducts)، مع احتساب (targetCompanyTotal) بدقة.
+🧩 تعليمات دمج وتدقيق الفواتير المقسمة أو بونات التكملة المتعددة (Multi-Part & Complementary Receipts Stitching - AIR-58):
+- المرفق يحتوي على ($totalParts) صور متتالية:
+  * [النمط 1: أجزاء فاتورة واحدة طويلة]: تم التقاطها على أجزاء متتابعة من الأعلى إلى الأسفل. قم بدمج الأجزاء ومنع تكرار الأسطر المتداخلة عند فواصل الصور (Cross-Seam Deduplication).
+  * [النمط 2: بونات مشتريات متعددة / بون مكمل لنفس العميل لتكملة القيمة (Complementary Receipts)]: إذا كانت الصور تمثل بونات كاشير مطبوعة لنفس السلسلة والفرع في نفس اليوم (أحدها بون أساسي والآخر بون تكميلي مثل "تكملة الفاتورة" لزيادة القيمة والوصول للحد الأدنى للعرض):
+    - ادمج أرقام الفواتير في (receiptNumber) برابط " + " (مثال: "64/6/241/250926 + 109/8/241/250926").
+    - اجمع كافة المنتجات المؤهلة المشروطة للشركة الراعية الموزعة عبر جميع الأجزاء ($totalParts صور) في سلة واحدة مجمعة متكاملة في (extractedProducts).
+    - احسب إجمالي (targetCompanyTotal) التراكمي المشترك لكافة البونات بدقة، وطبّق عليه قواعد الجوائز ومضاعفات الفرص.
+    - الملاحظات اليدوية مثل "تكملة الفاتورة" أو "تم استلام 2 فوتشر" هي هوامش توضيحية تنظيمية معتمدة من البروموتر وليست تزويراً.
 ''';
       }
 
@@ -940,7 +950,7 @@ class AiReceiptService {
    - **الاسبراي (Aerosol Bodyspray بحجم 150 مل)**: أي صنف اسبراي / بخاخ مزيل عرق يطابق **حصراً** عروض الاسبراي (فواتشر 50 ج.م للقطعة أو 125 ج.م للقطعتين/الشرنك المزدوج)، ويُحظر من مطابقة عروض الرول أون.
    - **الشامبو والبلسم (400 مل و 360 مل)**: عبوات تريزيمي 400 مل تطابق حصراً عروض تريزيمي (2 قطعة -> هدية 250 مل). عبوات كلير 360 مل تطابق حصراً عروض كلير (1 قطعة -> هدية 90 مل).
    - **معجون الأسنان والمنتجات المستبعدة**: أي منتج معجون أسنان (مثل سنسوداين أو سيجنال غير مشروط) أو منظفات (مثل كلوركس) يُستبعد كلياً ولا يُمنح أي هدايا.
-   - **حزم البندل المزدوجة والشرنك (Twin Bundles)**: إذا احتوت الفاتورة على صنف حزمة مزدوجة أو شرنك (مثل عبوة أكس 2 قطعة أو سعر 335 ج.م بصافي 270 ج.م، أو ريكسونا 150 مل 275 ج.م، أو تريزيمي شامبو+بلسم 400 مل كود 6221155612182)، يُعامل الصنف كـ (2 قطعة) ويطابق فوراً قاعدة الـ 2 قطعة.
+   - **حزم البندل المزدوجة والشرنك (Twin Bundles)**: إذا احتوت الفاتورة على صنف حزمة مزدوجة أو شرنك (مثل عبوة أكس 2 قطعة أو سعر 335 ج.م بصافي 270 ج.م، أو ريكسونا 150 مل 275 ج.م، أو تريزيمي شامبو+بلسم 400 مل كود 6221155612182، أو صانسيلك شامبو+بلسم 350 مل كود 6221155611154 بسعر 184 ج.م، أو أي صنف يتضمن شامبو + بلسم معاً في نفس السطر)، يُعامل الصنف كـ (2 قطعة فيزيائية) ويطابق فوراً قاعدة الـ 2 قطعة وتمنح الجائزة المقررة مباشرة حتى لو طُبعت الكمية = 1 في بون الكاشير.
 ''';
         } else {
           categoryPackagingGuard = '''
@@ -1105,7 +1115,8 @@ $chancesCondition$multiPartInstructions
 
 🛑 تعليمات مكافحة التزوير والرفض الأمني (Anti-Fraud & Genuine Receipt Policy):
 - [بون الكاشير الإلكتروني]: الفواتير المقبولة فقط (isValid = true) هي بونات الكاشير الحرارية أو الإلكترونية المطبوعة آلياً من أنظمة ونقاط البيع المعتمدة (Thermal POS Receipts).
-- [ملاحظات وهوامش البروموتر/الكاشير]: إذا كان أصل الفاتورة بون كاشير مطبوع إلكترونياً، وتوجد عليه كتابة يدوية في الهوامش أو الرأس مثل "تم تسليم الهدية" أو توقيع أو علامة استلام أو رقم تليفون أو علامات صح، فهذا بون كاشير أصلي معتمد وسليم (isThermalPosReceipt = true و isHandwritten = false و isTampered = false) ويجب قبوله.
+- [ملاحظات وهوامش البروموتر/الكاشير]: إذا كان أصل الفاتورة بون كاشير مطبوع إلكترونياً، وتوجد عليه كتابة يدوية في الهوامش أو الرأس مثل "تم تسليم الهدية" أو "تكملة الفاتورة" أو "تم استلام 2 فوتشر" أو توقيع أو علامة استلام أو رقم تليفون أو علامات صح، فهذا بون كاشير أصلي معتمد وسليم (isThermalPosReceipt = true و isHandwritten = false و isTampered = false) ويجب قبوله.
+- [بونات التكملة المتعددة في كادر واحد جنباً إلى جنب - AIR-58]: إذا احتوت الصورة على بونين كاشير مطبوعين إلكترونياً جنباً إلى جنب لنفس السوبرماركت واليوم لتكملة القيمة (أحدهما بون أساسي والآخر بون تكميلي مثل مدون عليه "تكملة الفاتورة"): استخرج رقمي البونين مدمجين بفاصل " + " في (receiptNumber) (مثال: "64/6/241/250926 + 109/8/241/250926")، واجمع كافة أصناف الشركة الراعية المؤهلة من كلا البونين في (extractedProducts)، واحسب إجمالي مجموع قيمتهما المشترك في (targetCompanyTotal) (مثال: 751.00 + 55.00 = 806.00 ج.م)، وطبّق العرض ومضاعفات الجوائز على الإجمالي التراكمي.
 - [كشف الفواتير المحررة يدوياً]: إذا كانت الفاتورة نفسها مسودة أو محررة بالكامل في دفتر يدوي وبنودها وأسعارها مكتوبة باليد، عيّن isHandwritten = true و isThermalPosReceipt = false و isValid = false واكتب رسالة رفض واضحة: "عذراً، تم رفض الفاتورة لأنها محررة بخط اليد. العرض يشترط بون كاشير مطبوع إلكترونياً من ماكينة السوبرماركت."
 - [كشف الشطب والتلاعب في الأرقام]: إذا وجد شطب أو تلاعب وتعديل يدوي في أرقام وأسعار الأصناف المطبوعة لتغيير قيمتها، عيّن isTampered = true و isValid = false.
 - [كشف تصوير الشاشات]: إذا كانت الصورة ملتقطة لشاشة هاتف أو حاسوب، عيّن isScreenCapture = true و isValid = false.
@@ -1149,7 +1160,8 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         
         🛑 تعليمات مكافحة التزوير والرفض الأمني (Anti-Fraud & Genuine Receipt Policy):
         - [بون الكاشير الإلكتروني]: الفواتير المقبولة فقط (isValid = true) هي بونات الكاشير الحرارية أو الإلكترونية المطبوعة آلياً من أنظمة ونقاط البيع المعتمدة (Thermal POS Receipts).
-        - [ملاحظات وهوامش البروموتر/الكاشير]: إذا كان أصل الفاتورة بون كاشير مطبوع إلكترونياً، وتوجد عليه كتابة يدوية في الهوامش أو الرأس مثل "تم تسليم الهدية" أو توقيع أو علامة استلام أو رقم تليفون أو علامات صح، فهذا بون كاشير أصلي معتمد وسليم (isThermalPosReceipt = true و isHandwritten = false و isTampered = false) ويجب قبوله.
+        - [ملاحظات وهوامش البروموتر/الكاشير]: إذا كان أصل الفاتورة بون كاشير مطبوع إلكترونياً، وتوجد عليه كتابة يدوية في الهوامش أو الرأس مثل "تم تسليم الهدية" أو "تكملة الفاتورة" أو "تم استلام 2 فوتشر" أو توقيع أو علامة استلام أو رقم تليفون أو علامات صح، فهذا بون كاشير أصلي معتمد وسليم (isThermalPosReceipt = true و isHandwritten = false و isTampered = false) ويجب قبوله.
+        - [بونات التكملة المتعددة في كادر واحد جنباً إلى جنب - AIR-58]: إذا احتوت الصورة على بونين كاشير مطبوعين إلكترونياً جنباً إلى جنب لنفس السوبرماركت واليوم لتكملة القيمة (أحدهما بون أساسي والآخر بون تكميلي مثل مدون عليه "تكملة الفاتورة"): استخرج رقمي البونين مدمجين بفاصل " + " في (receiptNumber) (مثال: "64/6/241/250926 + 109/8/241/250926")، واجمع كافة أصناف الشركة الراعية المؤهلة من كلا البونين في (extractedProducts)، واحسب إجمالي مجموع قيمتهما المشترك في (targetCompanyTotal) (مثال: 751.00 + 55.00 = 806.00 ج.م)، وطبّق العرض ومضاعفات الجوائز على الإجمالي التراكمي.
         - [كشف الفواتير المحررة يدوياً]: إذا كانت الفاتورة نفسها مسودة أو محررة بالكامل في دفتر يدوي وبنودها وأسعارها مكتوبة باليد، عيّن isHandwritten = true و isThermalPosReceipt = false و isValid = false واكتب رسالة رفض واضحة: "عذراً، تم رفض الفاتورة لأنها محررة بخط اليد. العرض يشترط بون كاشير مطبوع إلكترونياً من ماكينة السوبرماركت."
         - [كشف الشطب والتلاعب في الأرقام]: إذا وجد شطب أو تلاعب وتعديل يدوي في أرقام وأسعار الأصناف المطبوعة لتغيير قيمتها، عيّن isTampered = true و isValid = false.
         - [كشف تصوير الشاشات]: إذا كانت الصورة ملتقطة لشاشة هاتف أو حاسوب، عيّن isScreenCapture = true و isValid = false.
@@ -1266,6 +1278,14 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           );
         }
 
+        // Auto-heal targetCompanyTotal if sum of extracted target products exceeds it (AIR-58)
+        final double sumOfExtractedTarget = result.extractedProducts
+            .where((p) => p.isTargetCompany)
+            .fold<double>(0.0, (sum, p) => sum + (p.price * p.quantity));
+        if (sumOfExtractedTarget > result.targetCompanyTotal) {
+          result = result.copyWith(targetCompanyTotal: sumOfExtractedTarget);
+        }
+
         // Calculate / enforce chances & rewards earned based on quantity and spend multipliers
         int calculatedChances = result.chancesEarned;
         if (result.isValid) {
@@ -1305,7 +1325,7 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                     }
                   }
                   if (matches || (triggerTokens.isEmpty && p.isTargetCompany)) {
-                    totalMatchedQty += p.quantity > 0 ? p.quantity : 1;
+                    totalMatchedQty += PromotionalRuleMatcher.getEffectiveProductQuantity(p);
                   }
                 }
                 if (totalMatchedQty > 0) {
@@ -1325,7 +1345,7 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                     .toList();
                 final totalTargetQty = targetItems.fold<int>(
                   0,
-                  (sum, p) => sum + (p.quantity > 0 ? p.quantity : 1),
+                  (sum, p) => sum + PromotionalRuleMatcher.getEffectiveProductQuantity(p),
                 );
                 if (totalTargetQty > 1) {
                   quantityMultiplier = totalTargetQty;
@@ -1341,7 +1361,7 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                   .toList();
               final totalTargetQty = targetItems.fold<int>(
                 0,
-                (sum, p) => sum + (p.quantity > 0 ? p.quantity : 1),
+                (sum, p) => sum + PromotionalRuleMatcher.getEffectiveProductQuantity(p),
               );
               if (totalTargetQty > 1) {
                 quantityMultiplier = totalTargetQty;
@@ -1669,6 +1689,46 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                 ? 'تم التحقق من الفاتورة ومطابقة الفرع بنجاح.'
                 : result.message,
           );
+        }
+
+        // Promotional rules deterministic reconciliation in Dart
+        if (promotionalRules.isNotEmpty && result.extractedProducts.isNotEmpty) {
+          final dartMatches = PromotionalRuleMatcher.matchAllWithMultipliers(
+            result: result,
+            promotionalRules: promotionalRules,
+            allowCampaignMultipliers: allowMultipleChances,
+          );
+          if (dartMatches.isNotEmpty) {
+            final cleanedUnfulfilled = result.unfulfilledConditions.where((c) {
+              final lower = c.toLowerCase();
+              final isPromoRuleComplaint = lower.contains('شرط عرض') ||
+                  lower.contains('الكمية المشتراة') ||
+                  lower.contains('غير مستوفى') ||
+                  lower.contains('قطعة فقط') ||
+                  lower.contains('قطعتين') ||
+                  lower.contains('شراء 2') ||
+                  lower.contains('غير مشمول');
+              return !isPromoRuleComplaint;
+            }).toList();
+
+            final isStillFailed = cleanedUnfulfilled.isNotEmpty ||
+                (minimumSpend > 0 && result.targetCompanyTotal < minimumSpend) ||
+                !result.isBranchMatched;
+
+            final firstMatch = dartMatches.first;
+            result = result.copyWith(
+              isValid: !isStillFailed,
+              unfulfilledConditions: cleanedUnfulfilled,
+              matchedRuleId: firstMatch.rule.id,
+              matchedRuleTitle: firstMatch.rule.ruleTitle,
+              matchedRewardValue: dartMatches.map((m) => m.formattedPrizeSummary).join(' + '),
+              matchedRewardAmount: dartMatches.fold<double>(0.0, (sum, m) => sum + m.totalRewardAmount),
+              matchedRewardType: firstMatch.rule.rewardType,
+              message: !isStillFailed
+                  ? 'تم التحقق من الفاتورة ومطابقة العرض الترويجي بنجاح (${firstMatch.rule.ruleTitle}).'
+                  : result.message,
+            );
+          }
         }
 
         // Branch matching fallback validation
@@ -2712,6 +2772,7 @@ class PromotionalRuleMatcher {
 
   /// Verified promo twin bundle barcodes that represent a 2-piece combo pack (Shampoo + Conditioner or Dual Sprays)
   static const Set<String> _knownTwinBundleBarcodes = {
+    '6221155611154', // صانسيلك شامبو نعومة الحرير 350 مل + بلسم (حزمة ترويجية مزدوجة 2 قطعة)
     '6221155612182', // تريزيمي شامبو + بلسم 400 مل جوز الهند والصبار (حزمة ترويجية مزدوجة 2 قطعة)
     '6221155612199', // تريزيمي شامبو + بلسم 400 مل بوتنكس زبدة الشيا والكركديه (حزمة ترويجية مزدوجة 2 قطعة)
     '6221155612168', // تريزيمي شامبو + بلسم 400 مل كيراتين سموث (حزمة ترويجية مزدوجة 2 قطعة)
@@ -2726,7 +2787,7 @@ class PromotionalRuleMatcher {
     final nameLower = _normalize(p.name);
     final cleanBarcode = p.barcode.trim();
 
-    // 1. Verified Promo Twin Bundle Barcodes (Tresemme 400ml Promo Boxes, Axe/Rexona Promo Shrinks)
+    // 1. Verified Promo Twin Bundle Barcodes (Tresemme 400ml Promo Boxes, Sunsilk Twin Bundles, Axe/Rexona Promo Shrinks)
     if (cleanBarcode.isNotEmpty &&
         _knownTwinBundleBarcodes.contains(cleanBarcode)) {
       return qty * 2;
@@ -2738,7 +2799,7 @@ class PromotionalRuleMatcher {
     ).hasMatch(nameLower);
 
     // 3. Hair care twin combo (Shampoo + Conditioner / شامبو + بلسم)
-    // E.g. "تريزيمى شامبو + بلسم 400 ملى" is physically 2 bottles (Shampoo + Conditioner @ 50% discount)
+    // E.g. "تريزيمى شامبو + بلسم 400 ملى" or "صانسيلك شامبو نعومه الحرير 350 مل + بلسم" is physically 2 bottles (Shampoo + Conditioner @ combo price)
     final bool isShampooAndConditionerCombo =
         (nameLower.contains('شامبو') || nameLower.contains('shampoo')) &&
         (nameLower.contains('بلسم') || nameLower.contains('conditioner'));
@@ -2755,7 +2816,19 @@ class PromotionalRuleMatcher {
             p.price >= 240.0 ||
             (p.price >= 220.0 && p.discountAmount >= 30.0));
 
-    // 5. Price heuristic for deodorant bodyspray twin bundles (Axe / Rexona)
+    // 5. Price heuristic for Sunsilk twin bundles (350ml combo packs e.g. 184 EGP in Gomla Market)
+    final bool isSunsilkHairCare =
+        nameLower.contains('صانسيلك') ||
+        nameLower.contains('صنسلك') ||
+        nameLower.contains('sunsilk');
+    final bool hasSunsilkBundlePrice =
+        isSunsilkHairCare &&
+        (isShampooAndConditionerCombo ||
+            grossPrice >= 170.0 ||
+            p.price >= 170.0 ||
+            (p.price >= 160.0 && p.discountAmount >= 20.0));
+
+    // 6. Price heuristic for deodorant bodyspray twin bundles (Axe / Rexona)
     // In retail, a single 150ml can is ~140-150 EGP. A twin bundle is 240+ EGP (e.g. 275 EGP in Fathalla, 335 EGP gross in Gomla Market).
     final bool isSpray =
         nameLower.contains('اسبراي') ||
@@ -2770,6 +2843,7 @@ class PromotionalRuleMatcher {
     if (hasBundleName ||
         hasSprayBundlePrice ||
         hasTresemmeBundlePrice ||
+        hasSunsilkBundlePrice ||
         isShampooAndConditionerCombo) {
       return qty * 2;
     }
@@ -2951,7 +3025,10 @@ class PromotionalRuleMatcher {
         return true;
       }
       if (_knownTwinBundleBarcodes.contains(cleanBarcode) &&
-          (_normalize(triggerProduct).contains('تريزيم') ||
+          (_normalize(triggerProduct).contains('صنسيلك') ||
+              _normalize(triggerProduct).contains('صانسيلك') ||
+              _normalize(triggerProduct).contains('sunsilk') ||
+              _normalize(triggerProduct).contains('تريزيم') ||
               _normalize(triggerProduct).contains('tresemme'))) {
         return true;
       }
@@ -3191,7 +3268,10 @@ class PromotionalRuleMatcher {
       final cleanBarcode = product.barcode.trim();
       if (triggerProduct.contains(cleanBarcode)) return true;
       if (_knownTwinBundleBarcodes.contains(cleanBarcode) &&
-          (triggerNorm.contains('تريزيم') ||
+          (triggerNorm.contains('صنسيلك') ||
+              triggerNorm.contains('صانسيلك') ||
+              triggerNorm.contains('sunsilk') ||
+              triggerNorm.contains('تريزيم') ||
               triggerNorm.contains('tresemme'))) {
         return true;
       }

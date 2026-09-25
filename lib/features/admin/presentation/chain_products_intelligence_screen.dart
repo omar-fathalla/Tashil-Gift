@@ -25,13 +25,18 @@ class ChainProductsIntelligenceScreen extends ConsumerStatefulWidget {
 class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsIntelligenceScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
-  String _viewFilterMode = 'SHARED_ONLY'; // 'THREATS_ONLY', 'FATHALLA_WINNING', 'SHARED_ONLY', 'ALL_ARCHIVED'
+  // Default to THREATS_ONLY per user audio instructions (Priority 1: Competitors Cheaper)
+  String _viewFilterMode = 'THREATS_ONLY'; // 'THREATS_ONLY', 'COMPETITOR_PROMO_NOT_AT_FATHALLA', 'ALL_COMPETITOR_PROMOS', 'THREATS_WITH_PROMO', 'ALL_ARCHIVED'
   String _selectedChain = 'ALL'; // 'ALL' or specific chain name
   String _selectedBrand = 'ALL';
   bool _promotionsOnly = false;
   bool _fluctuationsOnly = false;
+  bool _selectedChainPromoOnly = false; // Filter to selected chain's promotions only
   String _sortBy = 'LATEST'; // 'LATEST', 'THREAT_DIFF', 'PRICE_ASC', 'PRICE_DESC', 'VARIANCE'
   bool _isMatrixView = true; // Default view is the Table Matrix
+  bool _isHeadToHeadMode = false; // Toggle between Omni Radar & Head-to-Head Comparison
+  String _headToHeadChain1 = 'أسواق فتح الله';
+  String _headToHeadChain2 = 'جملة ماركت';
   bool _isHealingData = false;
   double _healingProgress = 0.0;
   int _healingCurrent = 0;
@@ -47,8 +52,13 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
   int _cachedTotalPromos = 0;
   int _cachedTotalFluctuations = 0;
   int _cachedThreats = 0;
-  int _cachedFathallaWinning = 0;
-  int _cachedSharedSkus = 0;
+  int _cachedCompetitorPromosNotAtFathalla = 0;
+  int _cachedAllCompetitorPromos = 0;
+  int _cachedThreatsWithPromo = 0;
+  int _cachedH2hChain2Cheaper = 0;
+  int _cachedH2hChain1Cheaper = 0;
+  int _cachedH2hChain2Promos = 0;
+  int _cachedH2hChain2PromoNotChain1 = 0;
 
   Future<void> _startHealingProcess({required bool incrementalOnly}) async {
     setState(() {
@@ -145,7 +155,7 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
           ),
         ),
         data: (allProducts) {
-          final currentCacheKey = '${allProducts.length}_${_viewFilterMode}_${_searchQuery}_${_selectedChain}_${_selectedBrand}_${_promotionsOnly}_${_fluctuationsOnly}_$_sortBy';
+          final currentCacheKey = '${allProducts.length}_${_viewFilterMode}_${_searchQuery}_${_selectedChain}_${_selectedBrand}_${_promotionsOnly}_${_fluctuationsOnly}_${_selectedChainPromoOnly}_${_isHeadToHeadMode}_${_headToHeadChain1}_${_headToHeadChain2}_$_sortBy';
 
           if (_lastFilterCacheKey != currentCacheKey) {
             _lastFilterCacheKey = currentCacheKey;
@@ -156,8 +166,15 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
             int totalPromotionsCount = 0;
             int totalFluctuationsCount = 0;
             int threatsCount = 0;
-            int fathallaWinningCount = 0;
-            int sharedSkusCount = 0;
+            int competitorPromosNotAtFathallaCount = 0;
+            int allCompetitorPromosCount = 0;
+            int threatsWithPromoCount = 0;
+
+            // Head-to-Head metrics
+            int h2hChain2Cheaper = 0;
+            int h2hChain1Cheaper = 0;
+            int h2hChain2Promos = 0;
+            int h2hChain2PromoNotChain1 = 0;
 
             for (final item in allProducts) {
               chainsSet.addAll(item.latestPricesByChain.keys);
@@ -165,8 +182,25 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
               if (item.isCurrentlyOnPromotion) totalPromotionsCount++;
               if (item.hasPriceFluctuation) totalFluctuationsCount++;
               if (item.isUnderpricedByCompetitors) threatsCount++;
-              if (item.isFathallaCheapest && item.isMultiChain) fathallaWinningCount++;
-              if (item.isMultiChain) sharedSkusCount++;
+              if (item.isCompetitorPromoNotAtFathalla) competitorPromosNotAtFathallaCount++;
+              if (item.isAnyCompetitorOnPromotion) allCompetitorPromosCount++;
+              if (item.isThreatWithPromo) threatsWithPromoCount++;
+
+              // Head-to-Head direct comparison stats
+              final p1 = item.latestPricesByChain[_headToHeadChain1];
+              final p2 = item.latestPricesByChain[_headToHeadChain2];
+              if (p1 != null && p2 != null) {
+                if (p2 < (p1 - 0.05)) h2hChain2Cheaper++;
+                if (p1 < (p2 - 0.05)) h2hChain1Cheaper++;
+              }
+              final isChain2Promo = item.isChainOnPromotion(_headToHeadChain2);
+              if (isChain2Promo) {
+                h2hChain2Promos++;
+                final isChain1Promo = item.isChainOnPromotion(_headToHeadChain1);
+                if (p1 == null || !isChain1Promo) {
+                  h2hChain2PromoNotChain1++;
+                }
+              }
             }
 
             final distinctChains = chainsSet.toList()..sort();
@@ -176,17 +210,42 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
             }
             final distinctBrands = brandsSet.toList()..sort();
 
-            // Filter products based on Fathalla Defense & View Mode
+            // Filter products based on selected mode & criteria
             final filteredProducts = allProducts.where((p) {
-              // 1. View Filter Mode (Default: SHARED_ONLY to hide single-chain clutter)
-              if (_viewFilterMode == 'THREATS_ONLY') {
-                if (!p.isUnderpricedByCompetitors) return false;
-              } else if (_viewFilterMode == 'FATHALLA_WINNING') {
-                if (!p.isFathallaCheapest || !p.isMultiChain) return false;
-              } else if (_viewFilterMode == 'SHARED_ONLY') {
-                if (!p.isMultiChain) return false;
-              } else if (_viewFilterMode == 'ALL_ARCHIVED') {
-                // Show complete database archive
+              // 1. Head-to-Head Scope Constraint
+              if (_isHeadToHeadMode) {
+                final hasChain1 = p.latestPricesByChain.containsKey(_headToHeadChain1);
+                final hasChain2 = p.latestPricesByChain.containsKey(_headToHeadChain2);
+                if (!hasChain1 && !hasChain2) return false;
+
+                final p1 = p.latestPricesByChain[_headToHeadChain1];
+                final p2 = p.latestPricesByChain[_headToHeadChain2];
+
+                if (_viewFilterMode == 'THREATS_ONLY') {
+                  if (p1 == null || p2 == null || p2 >= (p1 - 0.05)) return false;
+                } else if (_viewFilterMode == 'COMPETITOR_PROMO_NOT_AT_FATHALLA') {
+                  final isChain2Promo = p.isChainOnPromotion(_headToHeadChain2);
+                  final isChain1Promo = p.isChainOnPromotion(_headToHeadChain1);
+                  if (!isChain2Promo || (p1 != null && isChain1Promo)) return false;
+                } else if (_viewFilterMode == 'ALL_COMPETITOR_PROMOS') {
+                  if (!p.isChainOnPromotion(_headToHeadChain2)) return false;
+                } else if (_viewFilterMode == 'THREATS_WITH_PROMO') {
+                  final isChain2Promo = p.isChainOnPromotion(_headToHeadChain2);
+                  if (!isChain2Promo || p1 == null || p2 == null || p2 >= (p1 - 0.05)) return false;
+                }
+              } else {
+                // Omni-Chain Radar Filter Mode
+                if (_viewFilterMode == 'THREATS_ONLY') {
+                  if (!p.isUnderpricedByCompetitors) return false;
+                } else if (_viewFilterMode == 'COMPETITOR_PROMO_NOT_AT_FATHALLA') {
+                  if (!p.isCompetitorPromoNotAtFathalla) return false;
+                } else if (_viewFilterMode == 'ALL_COMPETITOR_PROMOS') {
+                  if (!p.isAnyCompetitorOnPromotion) return false;
+                } else if (_viewFilterMode == 'THREATS_WITH_PROMO') {
+                  if (!p.isThreatWithPromo) return false;
+                } else if (_viewFilterMode == 'ALL_ARCHIVED') {
+                  // Show complete archive
+                }
               }
 
               // 2. Search Query
@@ -198,22 +257,27 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                 if (!matchesName && !matchesBarcode && !matchesBrand) return false;
               }
 
-              // 3. Chain Filter
-              if (_selectedChain != 'ALL') {
+              // 3. Chain Filter (Omni Mode)
+              if (!_isHeadToHeadMode && _selectedChain != 'ALL') {
                 if (!p.latestPricesByChain.containsKey(_selectedChain)) return false;
               }
 
-              // 4. Brand Filter
+              // 4. Single-Chain Promotion Filter (Audio 3 requirement)
+              if (!_isHeadToHeadMode && _selectedChainPromoOnly && _selectedChain != 'ALL') {
+                if (!p.isChainOnPromotion(_selectedChain)) return false;
+              }
+
+              // 5. Brand Filter
               if (_selectedBrand != 'ALL') {
                 if (p.brand != _selectedBrand) return false;
               }
 
-              // 5. Promotions Only
+              // 6. Global Promotions Only
               if (_promotionsOnly && !p.isCurrentlyOnPromotion) {
                 return false;
               }
 
-              // 6. Fluctuations Only
+              // 7. Fluctuations Only
               if (_fluctuationsOnly && !p.hasPriceFluctuation) {
                 return false;
               }
@@ -240,8 +304,13 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
             _cachedTotalPromos = totalPromotionsCount;
             _cachedTotalFluctuations = totalFluctuationsCount;
             _cachedThreats = threatsCount;
-            _cachedFathallaWinning = fathallaWinningCount;
-            _cachedSharedSkus = sharedSkusCount;
+            _cachedCompetitorPromosNotAtFathalla = competitorPromosNotAtFathallaCount;
+            _cachedAllCompetitorPromos = allCompetitorPromosCount;
+            _cachedThreatsWithPromo = threatsWithPromoCount;
+            _cachedH2hChain2Cheaper = h2hChain2Cheaper;
+            _cachedH2hChain1Cheaper = h2hChain1Cheaper;
+            _cachedH2hChain2Promos = h2hChain2Promos;
+            _cachedH2hChain2PromoNotChain1 = h2hChain2PromoNotChain1;
           }
 
           final distinctChains = _cachedDistinctChains;
@@ -250,8 +319,13 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
           final totalPromotionsCount = _cachedTotalPromos;
           final totalFluctuationsCount = _cachedTotalFluctuations;
           final threatsCount = _cachedThreats;
-          final fathallaWinningCount = _cachedFathallaWinning;
-          final sharedSkusCount = _cachedSharedSkus;
+          final competitorPromosNotAtFathallaCount = _cachedCompetitorPromosNotAtFathalla;
+          final allCompetitorPromosCount = _cachedAllCompetitorPromos;
+          final threatsWithPromoCount = _cachedThreatsWithPromo;
+          final h2hChain2Cheaper = _cachedH2hChain2Cheaper;
+          final h2hChain1Cheaper = _cachedH2hChain1Cheaper;
+          final h2hChain2Promos = _cachedH2hChain2Promos;
+          final h2hChain2PromoNotChain1 = _cachedH2hChain2PromoNotChain1;
 
           return CustomScrollView(
             slivers: [
@@ -421,28 +495,140 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                       ],
                       const SizedBox(height: 16),
 
-                      // Executive Fathalla Defense KPI Cards Row
+                      // Comparison Mode Switcher (Omni Radar vs Head-to-Head Direct Comparison)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: cs.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                        ),
+                        child: Wrap(
+                          alignment: WrapAlignment.spaceBetween,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 12,
+                          runSpacing: 8,
+                          children: [
+                            SegmentedButton<bool>(
+                              segments: [
+                                ButtonSegment<bool>(
+                                  value: false,
+                                  icon: const Icon(Icons.radar_rounded, size: 16),
+                                  label: Text(
+                                    strings.omniRadarModeLabel,
+                                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
+                                  ),
+                                ),
+                                ButtonSegment<bool>(
+                                  value: true,
+                                  icon: const Icon(Icons.compare_arrows_rounded, size: 16),
+                                  label: Text(
+                                    strings.headToHeadModeLabel,
+                                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
+                                  ),
+                                ),
+                              ],
+                              selected: {_isHeadToHeadMode},
+                              onSelectionChanged: (val) {
+                                setState(() {
+                                  _isHeadToHeadMode = val.first;
+                                  _viewFilterMode = 'THREATS_ONLY';
+                                });
+                              },
+                            ),
+
+                            // Head-to-Head Chain Selectors Toolbar
+                            if (_isHeadToHeadMode)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: cs.surface,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: cs.primary.withValues(alpha: 0.3)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(isAr ? 'الأساس:' : 'Anchor:', style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: cs.primary)),
+                                    const SizedBox(width: 4),
+                                    DropdownButtonHideUnderline(
+                                      child: DropdownButton<String>(
+                                        value: _headToHeadChain1,
+                                        isDense: true,
+                                        style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSurface),
+                                        items: distinctChains.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                                        onChanged: (val) {
+                                          if (val != null && val != _headToHeadChain2) {
+                                            setState(() => _headToHeadChain1 = val);
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    IconButton(
+                                      icon: const Icon(Icons.swap_horiz_rounded, size: 18),
+                                      tooltip: isAr ? 'تبديل السلسلتين' : 'Swap Chains',
+                                      visualDensity: VisualDensity.compact,
+                                      onPressed: () {
+                                        setState(() {
+                                          final temp = _headToHeadChain1;
+                                          _headToHeadChain1 = _headToHeadChain2;
+                                          _headToHeadChain2 = temp;
+                                        });
+                                      },
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(isAr ? 'المنافس:' : 'Vs:', style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red.shade800)),
+                                    const SizedBox(width: 4),
+                                    DropdownButtonHideUnderline(
+                                      child: DropdownButton<String>(
+                                        value: _headToHeadChain2,
+                                        isDense: true,
+                                        style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSurface),
+                                        items: distinctChains.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                                        onChanged: (val) {
+                                          if (val != null && val != _headToHeadChain1) {
+                                            setState(() => _headToHeadChain2 = val);
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Executive Focused KPI Cards Row (Priorities 1 & 2 per audio instruction)
                       _buildKpiRow(
                         context: context,
                         cs: cs,
                         strings: strings,
                         threatsCount: threatsCount,
-                        fathallaWinningCount: fathallaWinningCount,
-                        sharedSkusCount: sharedSkusCount,
-                        promotedItemsCount: totalPromotionsCount,
+                        competitorPromosNotAtFathallaCount: competitorPromosNotAtFathallaCount,
+                        allCompetitorPromosCount: allCompetitorPromosCount,
+                        threatsWithPromoCount: threatsWithPromoCount,
+                        h2hChain2Cheaper: h2hChain2Cheaper,
+                        h2hChain1Cheaper: h2hChain1Cheaper,
+                        h2hChain2Promos: h2hChain2Promos,
+                        h2hChain2PromoNotChain1: h2hChain2PromoNotChain1,
                         isMobile: isMobile,
                       ),
                       const SizedBox(height: 16),
 
-                      // Fathalla Defense & Presence Segment Filter Bar
+                      // Focused Segment Filter Bar (Unwanted Fathalla-winning & shared SKUs removed per audio instruction)
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           children: [
                             // 1. Threat Radar Mode (🚨 كسر الأسعار - المنافس أرخص)
                             _buildDefenseModeChip(
-                              label: strings.filterSegmentThreatsOnly,
-                              count: threatsCount,
+                              label: _isHeadToHeadMode
+                                  ? (isAr ? '$_headToHeadChain2 أرخص' : '$_headToHeadChain2 Cheaper')
+                                  : strings.filterSegmentThreatsOnly,
+                              count: _isHeadToHeadMode ? h2hChain2Cheaper : threatsCount,
                               icon: Icons.warning_amber_rounded,
                               activeColor: Colors.red.shade700,
                               activeBgColor: Colors.red.shade50,
@@ -452,36 +638,53 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                             ),
                             const SizedBox(width: 8),
 
-                            // 2. Fathalla Winning Mode (🏆 تفوق فتح الله - الأرخص)
+                            // 2. Competitor Promo Not At Fathalla Mode (💡 عروض غير متوفرة بفتح الله - فرص استيراد وإضافة)
                             _buildDefenseModeChip(
-                              label: strings.filterSegmentFathallaWinning,
-                              count: fathallaWinningCount,
-                              icon: Icons.stars_rounded,
-                              activeColor: Colors.green.shade800,
-                              activeBgColor: Colors.green.shade50,
-                              isSelected: _viewFilterMode == 'FATHALLA_WINNING',
-                              onSelected: () => setState(() => _viewFilterMode = 'FATHALLA_WINNING'),
+                              label: _isHeadToHeadMode
+                                  ? (isAr ? 'عروض $_headToHeadChain2 غير المتوفرة بـ $_headToHeadChain1' : '$_headToHeadChain2 Promos Not in $_headToHeadChain1')
+                                  : (isAr ? 'عروض غير متوفرة بفتح الله 💡' : 'Promos Missing from Fathalla 💡'),
+                              count: _isHeadToHeadMode ? h2hChain2PromoNotChain1 : competitorPromosNotAtFathallaCount,
+                              icon: Icons.lightbulb_rounded,
+                              activeColor: Colors.purple.shade700,
+                              activeBgColor: Colors.purple.shade50,
+                              isSelected: _viewFilterMode == 'COMPETITOR_PROMO_NOT_AT_FATHALLA',
+                              onSelected: () => setState(() => _viewFilterMode = 'COMPETITOR_PROMO_NOT_AT_FATHALLA'),
                               cs: cs,
                             ),
                             const SizedBox(width: 8),
 
-                            // 3. Shared SKUs Mode (📊 الأصناف المشتركة - 2+ chains) [DEFAULT]
+                            // 3. All Competitor Promos (🏷️ كافة عروض المنافسين)
                             _buildDefenseModeChip(
-                              label: strings.filterSegmentSharedOnly,
-                              count: sharedSkusCount,
-                              icon: Icons.compare_arrows_rounded,
-                              activeColor: cs.primary,
-                              activeBgColor: cs.primaryContainer.withValues(alpha: 0.3),
-                              isSelected: _viewFilterMode == 'SHARED_ONLY',
-                              onSelected: () => setState(() => _viewFilterMode = 'SHARED_ONLY'),
+                              label: _isHeadToHeadMode
+                                  ? (isAr ? 'كافة عروض $_headToHeadChain2' : 'All $_headToHeadChain2 Promos')
+                                  : (isAr ? 'كافة عروض المنافسين 🏷️' : 'All Competitor Promos 🏷️'),
+                              count: _isHeadToHeadMode ? h2hChain2Promos : allCompetitorPromosCount,
+                              icon: Icons.local_offer_rounded,
+                              activeColor: Colors.teal.shade700,
+                              activeBgColor: Colors.teal.shade50,
+                              isSelected: _viewFilterMode == 'ALL_COMPETITOR_PROMOS',
+                              onSelected: () => setState(() => _viewFilterMode = 'ALL_COMPETITOR_PROMOS'),
                               cs: cs,
                             ),
                             const SizedBox(width: 8),
 
-                            // 4. All Database Archive Mode (🗄️ الأرشيف الشامل)
+                            // 4. Threats with Promo (⚡ عروض كسر الأسعار)
+                            _buildDefenseModeChip(
+                              label: isAr ? 'عروض كسر الأسعار ⚡' : 'Threats with Promo ⚡',
+                              count: threatsWithPromoCount,
+                              icon: Icons.flash_on_rounded,
+                              activeColor: Colors.amber.shade800,
+                              activeBgColor: Colors.amber.shade50,
+                              isSelected: _viewFilterMode == 'THREATS_WITH_PROMO',
+                              onSelected: () => setState(() => _viewFilterMode = 'THREATS_WITH_PROMO'),
+                              cs: cs,
+                            ),
+                            const SizedBox(width: 8),
+
+                            // 5. All Database Archive Mode (🗄️ الأرشيف الشامل)
                             _buildDefenseModeChip(
                               label: strings.filterSegmentAllArchive,
-                              count: allProducts.length,
+                              count: filteredProducts.length,
                               icon: Icons.inventory_2_outlined,
                               activeColor: cs.secondary,
                               activeBgColor: cs.secondaryContainer.withValues(alpha: 0.3),
@@ -494,32 +697,59 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                       ),
                       const SizedBox(height: 12),
 
-                      // Chain Tabs Switcher
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            _buildChainTabChip(
-                              label: strings.allChainsTab,
-                              count: allProducts.length,
-                              isSelected: _selectedChain == 'ALL',
-                              onSelected: () => setState(() => _selectedChain = 'ALL'),
-                              cs: cs,
-                            ),
-                            ...distinctChains.map((chain) {
-                              final count = allProducts.where((p) => p.latestPricesByChain.containsKey(chain)).length;
-                              return _buildChainTabChip(
-                                label: chain,
-                                count: count,
-                                isSelected: _selectedChain == chain,
-                                onSelected: () => setState(() => _selectedChain = chain),
+                      // Chain Tabs Switcher & Single-Chain Promo Filter (Omni Mode)
+                      if (!_isHeadToHeadMode) ...[
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              _buildChainTabChip(
+                                label: strings.allChainsTab,
+                                count: allProducts.length,
+                                isSelected: _selectedChain == 'ALL',
+                                onSelected: () => setState(() {
+                                  _selectedChain = 'ALL';
+                                  _selectedChainPromoOnly = false;
+                                }),
                                 cs: cs,
-                              );
-                            }),
-                          ],
+                              ),
+                              ...distinctChains.map((chain) {
+                                final count = allProducts.where((p) => p.latestPricesByChain.containsKey(chain)).length;
+                                return _buildChainTabChip(
+                                  label: chain,
+                                  count: count,
+                                  isSelected: _selectedChain == chain,
+                                  onSelected: () => setState(() => _selectedChain = chain),
+                                  cs: cs,
+                                );
+                              }),
+                              if (_selectedChain != 'ALL') ...[
+                                const SizedBox(width: 8),
+                                FilterChip(
+                                  avatar: Icon(
+                                    Icons.local_offer_rounded,
+                                    size: 14,
+                                    color: _selectedChainPromoOnly ? Colors.white : Colors.purple.shade700,
+                                  ),
+                                  label: Text(
+                                    isAr ? 'عروض $_selectedChain فقط 🏷️' : '$_selectedChain Promos Only 🏷️',
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 11.5,
+                                      fontWeight: _selectedChainPromoOnly ? FontWeight.w800 : FontWeight.bold,
+                                      color: _selectedChainPromoOnly ? Colors.white : Colors.purple.shade900,
+                                    ),
+                                  ),
+                                  selected: _selectedChainPromoOnly,
+                                  selectedColor: Colors.purple.shade700,
+                                  backgroundColor: Colors.purple.shade50,
+                                  onSelected: (val) => setState(() => _selectedChainPromoOnly = val),
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
+                        const SizedBox(height: 16),
+                      ],
 
                       // Search, Filters & View Mode Bar
                       Container(
@@ -736,7 +966,10 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                                 ),
                                 // Filter Promotions Chip
                                 FilterChip(
-                                  label: Text(strings.filterByPromotionsOnly, style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: _promotionsOnly ? FontWeight.w700 : FontWeight.normal)),
+                                  label: Text(
+                                    '${strings.filterByPromotionsOnly} ($totalPromotionsCount)',
+                                    style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: _promotionsOnly ? FontWeight.w700 : FontWeight.normal),
+                                  ),
                                   selected: _promotionsOnly,
                                   onSelected: (val) => setState(() => _promotionsOnly = val),
                                   avatar: Icon(Icons.local_offer_rounded, size: 14, color: _promotionsOnly ? cs.onPrimary : cs.primary),
@@ -780,9 +1013,22 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                             threatItems: filteredProducts,
                             isMobile: isMobile,
                           ),
+                        if (_viewFilterMode == 'COMPETITOR_PROMO_NOT_AT_FATHALLA' && filteredProducts.isNotEmpty)
+                          _buildPromoOpportunitiesBanner(
+                            context: context,
+                            cs: cs,
+                            isAr: isAr,
+                            items: filteredProducts,
+                            isMobile: isMobile,
+                          ),
                         ChainProductsMatrixTable(
                           products: filteredProducts,
-                          distinctChains: _selectedChain == 'ALL' ? distinctChains : [_selectedChain],
+                          distinctChains: _isHeadToHeadMode
+                              ? [_headToHeadChain1, _headToHeadChain2]
+                              : (_selectedChain == 'ALL' ? distinctChains : [_selectedChain]),
+                          isHeadToHead: _isHeadToHeadMode,
+                          anchorChain: _isHeadToHeadMode ? _headToHeadChain1 : 'أسواق فتح الله',
+                          comparisonChain: _isHeadToHeadMode ? _headToHeadChain2 : null,
                         ),
                       ],
                     ),
@@ -956,6 +1202,76 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
     );
   }
 
+  Widget _buildPromoOpportunitiesBanner({
+    required BuildContext context,
+    required ColorScheme cs,
+    required bool isAr,
+    required List<ChainProductItem> items,
+    required bool isMobile,
+  }) {
+    if (items.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.purple.shade900.withValues(alpha: 0.9),
+            Colors.purple.shade800,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.purple.shade900.withValues(alpha: 0.25),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.lightbulb_rounded, color: Colors.amberAccent, size: 20),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isAr
+                      ? '💡 فرص استيراد وتوريد جديدة (عروض نشطة بالمنافسين غير مسجلة بفتح الله)'
+                      : '💡 Expansion Opportunities: Competitor Promos Missing from Fathalla',
+                  style: GoogleFonts.cairo(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13.5,
+                  ),
+                ),
+                Text(
+                  isAr
+                      ? 'تم رصد ${items.length} صنف عليه تخفيضات وعروض عند المنافسين بينما لم يتم رصد سعر بيع مسجل بفتح الله. أضف هذه الأصناف لتوسيع سلة منتجاتك.'
+                      : 'Identified ${items.length} promotional items at competitors not currently sold at anchor.',
+                  style: GoogleFonts.cairo(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDefenseModeChip({
     required String label,
     required int count,
@@ -1065,57 +1381,113 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
     required ColorScheme cs,
     required AppStrings strings,
     required int threatsCount,
-    required int fathallaWinningCount,
-    required int sharedSkusCount,
-    required int promotedItemsCount,
+    required int competitorPromosNotAtFathallaCount,
+    required int allCompetitorPromosCount,
+    required int threatsWithPromoCount,
+    required int h2hChain2Cheaper,
+    required int h2hChain1Cheaper,
+    required int h2hChain2Promos,
+    required int h2hChain2PromoNotChain1,
     required bool isMobile,
   }) {
-    final cards = [
-      _buildKpiCard(
-        title: strings.metricPriceThreats,
-        value: '$threatsCount',
-        subtitle: ref.isArabic ? 'أصناف أرخص من فتح الله' : 'Cheaper than Fathalla',
-        icon: Icons.warning_amber_rounded,
-        color: Colors.red.shade700,
-        bgColor: Colors.red.shade50,
-        isSelected: _viewFilterMode == 'THREATS_ONLY',
-        onTap: () => setState(() => _viewFilterMode = 'THREATS_ONLY'),
-        cs: cs,
-      ),
-      _buildKpiCard(
-        title: strings.metricFathallaWinning,
-        value: '$fathallaWinningCount',
-        subtitle: ref.isArabic ? 'أنت الأرخص في السوق' : 'Fathalla Best Price',
-        icon: Icons.stars_rounded,
-        color: Colors.green.shade800,
-        bgColor: Colors.green.shade50,
-        isSelected: _viewFilterMode == 'FATHALLA_WINNING',
-        onTap: () => setState(() => _viewFilterMode = 'FATHALLA_WINNING'),
-        cs: cs,
-      ),
-      _buildKpiCard(
-        title: strings.metricSharedSkus,
-        value: '$sharedSkusCount',
-        subtitle: ref.isArabic ? 'سلسلتين فأكثر' : '2+ Stores Compared',
-        icon: Icons.compare_arrows_rounded,
-        color: cs.primary,
-        bgColor: cs.primaryContainer.withValues(alpha: 0.35),
-        isSelected: _viewFilterMode == 'SHARED_ONLY',
-        onTap: () => setState(() => _viewFilterMode = 'SHARED_ONLY'),
-        cs: cs,
-      ),
-      _buildKpiCard(
-        title: strings.metricPromotedItems,
-        value: '$promotedItemsCount',
-        subtitle: ref.isArabic ? 'عروض ترويجية نشطة' : 'Active Discounts',
-        icon: Icons.local_offer_rounded,
-        color: cs.tertiary,
-        bgColor: cs.tertiaryContainer.withValues(alpha: 0.35),
-        isSelected: _promotionsOnly,
-        onTap: () => setState(() => _promotionsOnly = !_promotionsOnly),
-        cs: cs,
-      ),
-    ];
+    final isAr = ref.isArabic;
+    final List<Widget> cards;
+
+    if (_isHeadToHeadMode) {
+      cards = [
+        _buildKpiCard(
+          title: isAr ? '$_headToHeadChain2 أرخص' : '$_headToHeadChain2 Cheaper',
+          value: '$h2hChain2Cheaper',
+          subtitle: isAr ? 'كسر سعر ضد $_headToHeadChain1 🚨' : 'Cheaper than $_headToHeadChain1',
+          icon: Icons.warning_amber_rounded,
+          color: Colors.red.shade700,
+          bgColor: Colors.red.shade50,
+          isSelected: _viewFilterMode == 'THREATS_ONLY',
+          onTap: () => setState(() => _viewFilterMode = 'THREATS_ONLY'),
+          cs: cs,
+        ),
+        _buildKpiCard(
+          title: isAr ? 'عروض غير متوفرة بـ $_headToHeadChain1' : 'Promos not in $_headToHeadChain1',
+          value: '$h2hChain2PromoNotChain1',
+          subtitle: isAr ? 'فرص استيراد وتوريد جديدة 💡' : 'Opportunity SKUs',
+          icon: Icons.lightbulb_rounded,
+          color: Colors.purple.shade700,
+          bgColor: Colors.purple.shade50,
+          isSelected: _viewFilterMode == 'COMPETITOR_PROMO_NOT_AT_FATHALLA',
+          onTap: () => setState(() => _viewFilterMode = 'COMPETITOR_PROMO_NOT_AT_FATHALLA'),
+          cs: cs,
+        ),
+        _buildKpiCard(
+          title: isAr ? 'كافة عروض $_headToHeadChain2' : 'All $_headToHeadChain2 Promos',
+          value: '$h2hChain2Promos',
+          subtitle: isAr ? 'خصومات نشطة بالسلسلة 🏷️' : 'Active Promotions',
+          icon: Icons.local_offer_rounded,
+          color: Colors.teal.shade700,
+          bgColor: Colors.teal.shade50,
+          isSelected: _viewFilterMode == 'ALL_COMPETITOR_PROMOS',
+          onTap: () => setState(() => _viewFilterMode = 'ALL_COMPETITOR_PROMOS'),
+          cs: cs,
+        ),
+        _buildKpiCard(
+          title: isAr ? '$_headToHeadChain1 أرخص' : '$_headToHeadChain1 Cheaper',
+          value: '$h2hChain1Cheaper',
+          subtitle: isAr ? 'تفوق سعري لصالح $_headToHeadChain1 🌟' : '$_headToHeadChain1 Advantage',
+          icon: Icons.stars_rounded,
+          color: Colors.green.shade800,
+          bgColor: Colors.green.shade50,
+          isSelected: _viewFilterMode == 'ALL_ARCHIVED',
+          onTap: () => setState(() => _viewFilterMode = 'ALL_ARCHIVED'),
+          cs: cs,
+        ),
+      ];
+    } else {
+      cards = [
+        _buildKpiCard(
+          title: strings.metricPriceThreats,
+          value: '$threatsCount',
+          subtitle: isAr ? 'المنافسين أرخص من فتح الله 🚨' : 'Cheaper than Fathalla',
+          icon: Icons.warning_amber_rounded,
+          color: Colors.red.shade700,
+          bgColor: Colors.red.shade50,
+          isSelected: _viewFilterMode == 'THREATS_ONLY',
+          onTap: () => setState(() => _viewFilterMode = 'THREATS_ONLY'),
+          cs: cs,
+        ),
+        _buildKpiCard(
+          title: strings.metricCompetitorPromosNotAtFathalla,
+          value: '$competitorPromosNotAtFathallaCount',
+          subtitle: strings.metricCompetitorPromosNotAtFathallaSubtitle,
+          icon: Icons.lightbulb_rounded,
+          color: Colors.purple.shade700,
+          bgColor: Colors.purple.shade50,
+          isSelected: _viewFilterMode == 'COMPETITOR_PROMO_NOT_AT_FATHALLA',
+          onTap: () => setState(() => _viewFilterMode = 'COMPETITOR_PROMO_NOT_AT_FATHALLA'),
+          cs: cs,
+        ),
+        _buildKpiCard(
+          title: strings.metricAllCompetitorPromotions,
+          value: '$allCompetitorPromosCount',
+          subtitle: isAr ? 'عروض نشطة بالمنافسين 🏷️' : 'Active Competitor Promos',
+          icon: Icons.local_offer_rounded,
+          color: Colors.teal.shade700,
+          bgColor: Colors.teal.shade50,
+          isSelected: _viewFilterMode == 'ALL_COMPETITOR_PROMOS',
+          onTap: () => setState(() => _viewFilterMode = 'ALL_COMPETITOR_PROMOS'),
+          cs: cs,
+        ),
+        _buildKpiCard(
+          title: strings.metricThreatsWithPromo,
+          value: '$threatsWithPromoCount',
+          subtitle: isAr ? 'عروض ترويجية كسرت سعرنا ⚡' : 'Promos Undercutting Us',
+          icon: Icons.flash_on_rounded,
+          color: Colors.amber.shade800,
+          bgColor: Colors.amber.shade50,
+          isSelected: _viewFilterMode == 'THREATS_WITH_PROMO',
+          onTap: () => setState(() => _viewFilterMode = 'THREATS_WITH_PROMO'),
+          cs: cs,
+        ),
+      ];
+    }
 
     if (isMobile) {
       return SizedBox(
@@ -1124,7 +1496,7 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
           scrollDirection: Axis.horizontal,
           itemCount: cards.length,
           separatorBuilder: (context, index) => const SizedBox(width: 8),
-          itemBuilder: (ctx, idx) => SizedBox(width: 175, child: cards[idx]),
+          itemBuilder: (ctx, idx) => SizedBox(width: 185, child: cards[idx]),
         ),
       );
     }
@@ -1240,7 +1612,9 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
 
     try {
       final excel = xl.Excel.createExcel();
-      final sheetName = isAr ? 'مصفوفة الأسعار والمنافسين' : 'Price Matrix Intelligence';
+      final sheetName = _isHeadToHeadMode
+          ? (isAr ? 'مقارنة $_headToHeadChain1 ضد $_headToHeadChain2' : 'Head-to-Head Comparison')
+          : (isAr ? 'مصفوفة الأسعار والمنافسين' : 'Price Matrix Intelligence');
       final defaultSheet = excel.getDefaultSheet();
       if (defaultSheet != null) {
         excel.rename(defaultSheet, sheetName);
@@ -1249,24 +1623,43 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
       final sheet = excel[sheetName];
       sheet.isRTL = isAr;
 
-      // Headers
-      final headers = [
-        isAr ? 'الباركود' : 'Barcode',
-        isAr ? 'اسم المنتج' : 'Product Name',
-        isAr ? 'العلامة التجارية' : 'Brand',
-        isAr ? 'التصنيف' : 'Category',
-        ...chains.map((c) => isAr ? 'سعر $c ($currency)' : 'Price in $c ($currency)'),
-        isAr ? 'السلسلة الأرخص' : 'Cheapest Chain',
-        isAr ? 'أقل سعر ($currency)' : 'Min Price ($currency)',
-        isAr ? 'السلسلة الأغلى' : 'Highest Chain',
-        isAr ? 'أعلى سعر ($currency)' : 'Max Price ($currency)',
-        isAr ? 'فارق السعر %' : 'Price Gap %',
-        isAr ? 'موقف فتح الله التنافسي' : 'Fathalla Defense Status',
-        isAr ? 'المنافس الأرخص' : 'Cheapest Competitor',
-        isAr ? 'فارق السعر عن فتح الله ($currency)' : 'Competitor Price Diff ($currency)',
-        isAr ? 'حالة العرض / الخصم' : 'Promotion Active',
-        isAr ? 'إجمالي الرصد بالفواتير' : 'Total Invoice Scans',
-      ];
+      final List<String> headers;
+      if (_isHeadToHeadMode) {
+        headers = [
+          isAr ? 'الباركود' : 'Barcode',
+          isAr ? 'اسم المنتج' : 'Product Name',
+          isAr ? 'العلامة التجارية' : 'Brand',
+          isAr ? 'التصنيف' : 'Category',
+          isAr ? 'سعر $_headToHeadChain1 ($currency)' : 'Price in $_headToHeadChain1 ($currency)',
+          isAr ? 'سعر $_headToHeadChain2 ($currency)' : 'Price in $_headToHeadChain2 ($currency)',
+          isAr ? 'السلسلة الأرخص' : 'Cheapest Chain',
+          isAr ? 'فارق السعر ($currency)' : 'Price Difference ($currency)',
+          isAr ? 'نسبة الفارق %' : 'Difference %',
+          isAr ? 'عرض نشط بـ $_headToHeadChain1' : '$_headToHeadChain1 Promo',
+          isAr ? 'عرض نشط بـ $_headToHeadChain2' : '$_headToHeadChain2 Promo',
+          isAr ? 'فرصة توريد (عرض بـ $_headToHeadChain2 غير متوفر بـ $_headToHeadChain1)' : 'Expansion Opportunity',
+          isAr ? 'إجمالي الرصد بالفواتير' : 'Total Scans',
+        ];
+      } else {
+        headers = [
+          isAr ? 'الباركود' : 'Barcode',
+          isAr ? 'اسم المنتج' : 'Product Name',
+          isAr ? 'العلامة التجارية' : 'Brand',
+          isAr ? 'التصنيف' : 'Category',
+          ...chains.map((c) => isAr ? 'سعر $c ($currency)' : 'Price in $c ($currency)'),
+          isAr ? 'السلسلة الأرخص' : 'Cheapest Chain',
+          isAr ? 'أقل سعر ($currency)' : 'Min Price ($currency)',
+          isAr ? 'السلسلة الأغلى' : 'Highest Chain',
+          isAr ? 'أعلى سعر ($currency)' : 'Max Price ($currency)',
+          isAr ? 'فارق السعر %' : 'Price Gap %',
+          isAr ? 'موقف فتح الله التنافسي' : 'Fathalla Defense Status',
+          isAr ? 'المنافس الأرخص' : 'Cheapest Competitor',
+          isAr ? 'فارق السعر عن فتح الله ($currency)' : 'Competitor Price Diff ($currency)',
+          isAr ? 'حالة العرض / الخصم' : 'Promotion Active',
+          isAr ? 'عرض منافس غير متوفر بفتح الله (فرصة توريد 💡)' : 'Competitor Promo Not in Anchor',
+          isAr ? 'إجمالي الرصد بالفواتير' : 'Total Invoice Scans',
+        ];
+      }
 
       for (var col = 0; col < headers.length; col++) {
         final cell = sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: 0));
@@ -1274,7 +1667,7 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
         cell.cellStyle = xl.CellStyle(
           bold: true,
           horizontalAlign: xl.HorizontalAlign.Center,
-          backgroundColorHex: xl.ExcelColor.fromHexString('#006C50'),
+          backgroundColorHex: xl.ExcelColor.fromHexString(_isHeadToHeadMode ? '#1565C0' : '#006C50'),
           fontColorHex: xl.ExcelColor.fromHexString('#FFFFFF'),
         );
       }
@@ -1287,32 +1680,85 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
         sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(item.brand);
         sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(item.category);
 
-        for (final c in chains) {
-          final p = item.latestPricesByChain[c];
-          if (p != null) {
-            sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.DoubleCellValue(p);
+        if (_isHeadToHeadMode) {
+          final p1 = item.latestPricesByChain[_headToHeadChain1];
+          final p2 = item.latestPricesByChain[_headToHeadChain2];
+
+          sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = p1 != null ? xl.DoubleCellValue(p1) : xl.TextCellValue('-');
+          sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = p2 != null ? xl.DoubleCellValue(p2) : xl.TextCellValue('-');
+
+          final String cheapest;
+          final double diff;
+          final double pct;
+          if (p1 != null && p2 != null) {
+            if (p2 < (p1 - 0.05)) {
+              cheapest = _headToHeadChain2;
+              diff = p1 - p2;
+              pct = (diff / p1) * 100;
+            } else if (p1 < (p2 - 0.05)) {
+              cheapest = _headToHeadChain1;
+              diff = p2 - p1;
+              pct = (diff / p2) * 100;
+            } else {
+              cheapest = isAr ? 'متطابق' : 'Equal';
+              diff = 0.0;
+              pct = 0.0;
+            }
+          } else if (p1 != null) {
+            cheapest = _headToHeadChain1;
+            diff = 0.0;
+            pct = 0.0;
+          } else if (p2 != null) {
+            cheapest = _headToHeadChain2;
+            diff = 0.0;
+            pct = 0.0;
           } else {
-            sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue('-');
+            cheapest = '-';
+            diff = 0.0;
+            pct = 0.0;
           }
+
+          sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(cheapest);
+          sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.DoubleCellValue(diff);
+          sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.DoubleCellValue(double.tryParse(pct.toStringAsFixed(1)) ?? 0.0);
+
+          final isP1Promo = item.isChainOnPromotion(_headToHeadChain1);
+          final isP2Promo = item.isChainOnPromotion(_headToHeadChain2);
+          sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(isP1Promo ? (isAr ? 'نعم' : 'Yes') : (isAr ? 'لا' : 'No'));
+          sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(isP2Promo ? (isAr ? 'نعم' : 'Yes') : (isAr ? 'لا' : 'No'));
+
+          final isOpp = isP2Promo && (p1 == null || !isP1Promo);
+          sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(isOpp ? (isAr ? 'فرصة توريد 💡' : 'Opportunity') : '-');
+          sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.IntCellValue(item.totalScansCount);
+        } else {
+          for (final c in chains) {
+            final p = item.latestPricesByChain[c];
+            if (p != null) {
+              sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.DoubleCellValue(p);
+            } else {
+              sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue('-');
+            }
+          }
+
+          sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(item.cheapestChain);
+          sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.DoubleCellValue(item.minPrice);
+          sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(item.mostExpensiveChain);
+          sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.DoubleCellValue(item.maxPrice);
+          sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.DoubleCellValue(double.tryParse(item.priceVariancePercent.toStringAsFixed(1)) ?? 0.0);
+
+          final defenseStatus = item.isUnderpricedByCompetitors
+              ? (isAr ? '🚨 خطر: ${item.cheapestCompetitorName} أرخص' : 'THREAT: ${item.cheapestCompetitorName} cheaper')
+              : (item.isFathallaCheapest
+                  ? (isAr ? '🏆 تفوق: فتح الله الأرخص بالسوق' : 'BEST: Fathalla Cheapest')
+                  : (isAr ? 'متطابق / عادي' : 'NORMAL'));
+
+          sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(defenseStatus);
+          sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(item.cheapestCompetitorName.isNotEmpty ? item.cheapestCompetitorName : '-');
+          sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.DoubleCellValue(item.competitorUnderpricedDiff);
+          sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(item.isCurrentlyOnPromotion ? (isAr ? 'نعم' : 'Yes') : (isAr ? 'لا' : 'No'));
+          sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(item.isCompetitorPromoNotAtFathalla ? (isAr ? 'نعم - فرصة توريد 💡' : 'Yes - Opportunity 💡') : '-');
+          sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.IntCellValue(item.totalScansCount);
         }
-
-        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(item.cheapestChain);
-        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.DoubleCellValue(item.minPrice);
-        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(item.mostExpensiveChain);
-        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.DoubleCellValue(item.maxPrice);
-        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.DoubleCellValue(double.tryParse(item.priceVariancePercent.toStringAsFixed(1)) ?? 0.0);
-
-        final defenseStatus = item.isUnderpricedByCompetitors
-            ? (isAr ? '🚨 خطر: ${item.cheapestCompetitorName} أرخص' : 'THREAT: ${item.cheapestCompetitorName} cheaper')
-            : (item.isFathallaCheapest
-                ? (isAr ? '🏆 تفوق: فتح الله الأرخص بالسوق' : 'BEST: Fathalla Cheapest')
-                : (isAr ? 'متطابق / عادي' : 'NORMAL'));
-
-        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(defenseStatus);
-        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(item.cheapestCompetitorName.isNotEmpty ? item.cheapestCompetitorName : '-');
-        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.DoubleCellValue(item.competitorUnderpricedDiff);
-        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.TextCellValue(item.isCurrentlyOnPromotion ? (isAr ? 'نعم' : 'Yes') : (isAr ? 'لا' : 'No'));
-        sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.IntCellValue(item.totalScansCount);
 
         rowIndex++;
       }
@@ -1320,7 +1766,9 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
       final fileBytes = excel.save();
       if (fileBytes != null) {
         final timestamp = DateTime.now().millisecondsSinceEpoch;
-        final fileName = 'price_intelligence_matrix_$timestamp.xlsx';
+        final fileName = _isHeadToHeadMode
+            ? 'head_to_head_${_headToHeadChain1}_vs_${_headToHeadChain2}_$timestamp.xlsx'
+            : 'price_intelligence_matrix_$timestamp.xlsx';
         downloadFileBytes(
           bytes: fileBytes,
           fileName: fileName,
@@ -1367,31 +1815,78 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
     // Add UTF-8 BOM for Arabic text compatibility in Excel
     buffer.write('\uFEFF');
 
-    // Headers
-    buffer.write('Barcode,Product Name,Brand,Category,');
-    for (final c in chains) {
-      buffer.write('Price in $c ($currency),');
-    }
-    buffer.writeln('Cheapest Store,Min Price,Highest Store,Max Price,Price Gap %,Fathalla Defense Status,Cheapest Competitor,Price Underpriced Diff,Is Promoted,Total Scans');
+    if (_isHeadToHeadMode) {
+      buffer.writeln('Barcode,Product Name,Brand,Category,Price in $_headToHeadChain1 ($currency),Price in $_headToHeadChain2 ($currency),Cheapest Chain,Price Difference ($currency),Difference %,Promo in $_headToHeadChain1,Promo in $_headToHeadChain2,Opportunity SKU,Total Scans');
+      for (final item in items) {
+        final p1 = item.latestPricesByChain[_headToHeadChain1];
+        final p2 = item.latestPricesByChain[_headToHeadChain2];
+        final String cheapest;
+        final double diff;
+        final double pct;
+        if (p1 != null && p2 != null) {
+          if (p2 < (p1 - 0.05)) {
+            cheapest = _headToHeadChain2;
+            diff = p1 - p2;
+            pct = (diff / p1) * 100;
+          } else if (p1 < (p2 - 0.05)) {
+            cheapest = _headToHeadChain1;
+            diff = p2 - p1;
+            pct = (diff / p2) * 100;
+          } else {
+            cheapest = 'EQUAL';
+            diff = 0.0;
+            pct = 0.0;
+          }
+        } else if (p1 != null) {
+          cheapest = _headToHeadChain1;
+          diff = 0.0;
+          pct = 0.0;
+        } else if (p2 != null) {
+          cheapest = _headToHeadChain2;
+          diff = 0.0;
+          pct = 0.0;
+        } else {
+          cheapest = '-';
+          diff = 0.0;
+          pct = 0.0;
+        }
 
-    for (final item in items) {
-      buffer.write('"${item.barcode}","${item.name}","${item.brand}","${item.category}",');
-      for (final c in chains) {
-        final p = item.latestPricesByChain[c];
-        buffer.write('${p != null ? p.toStringAsFixed(2) : ""},');
+        final isP1Promo = item.isChainOnPromotion(_headToHeadChain1);
+        final isP2Promo = item.isChainOnPromotion(_headToHeadChain2);
+        final isOpp = isP2Promo && (p1 == null || !isP1Promo);
+
+        buffer.writeln(
+          '"${item.barcode}","${item.name}","${item.brand}","${item.category}",${p1 != null ? p1.toStringAsFixed(2) : ""},${p2 != null ? p2.toStringAsFixed(2) : ""},"$cheapest",${diff.toStringAsFixed(2)},${pct.toStringAsFixed(1)},${isP1Promo ? "YES" : "NO"},${isP2Promo ? "YES" : "NO"},${isOpp ? "YES" : "NO"},${item.totalScansCount}',
+        );
       }
-      final defenseStatus = item.isUnderpricedByCompetitors
-          ? 'THREAT (${item.cheapestCompetitorName} cheaper)'
-          : (item.isFathallaCheapest ? 'FATHALLA BEST PRICE' : 'NORMAL');
+    } else {
+      buffer.write('Barcode,Product Name,Brand,Category,');
+      for (final c in chains) {
+        buffer.write('Price in $c ($currency),');
+      }
+      buffer.writeln('Cheapest Store,Min Price,Highest Store,Max Price,Price Gap %,Fathalla Defense Status,Cheapest Competitor,Price Underpriced Diff,Is Promoted,Opportunity Missing From Fathalla,Total Scans');
 
-      buffer.writeln(
-        '"${item.cheapestChain}",${item.minPrice.toStringAsFixed(2)},"${item.mostExpensiveChain}",${item.maxPrice.toStringAsFixed(2)},${item.priceVariancePercent.toStringAsFixed(1)},"$defenseStatus","${item.cheapestCompetitorName}",${item.competitorUnderpricedDiff.toStringAsFixed(2)},${item.isCurrentlyOnPromotion ? "YES" : "NO"},${item.totalScansCount}',
-      );
+      for (final item in items) {
+        buffer.write('"${item.barcode}","${item.name}","${item.brand}","${item.category}",');
+        for (final c in chains) {
+          final p = item.latestPricesByChain[c];
+          buffer.write('${p != null ? p.toStringAsFixed(2) : ""},');
+        }
+        final defenseStatus = item.isUnderpricedByCompetitors
+            ? 'THREAT (${item.cheapestCompetitorName} cheaper)'
+            : (item.isFathallaCheapest ? 'FATHALLA BEST PRICE' : 'NORMAL');
+
+        buffer.writeln(
+          '"${item.cheapestChain}",${item.minPrice.toStringAsFixed(2)},"${item.mostExpensiveChain}",${item.maxPrice.toStringAsFixed(2)},${item.priceVariancePercent.toStringAsFixed(1)},"$defenseStatus","${item.cheapestCompetitorName}",${item.competitorUnderpricedDiff.toStringAsFixed(2)},${item.isCurrentlyOnPromotion ? "YES" : "NO"},${item.isCompetitorPromoNotAtFathalla ? "YES" : "NO"},${item.totalScansCount}',
+        );
+      }
     }
 
     final bytes = utf8.encode(buffer.toString());
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final fileName = 'price_intelligence_$timestamp.csv';
+    final fileName = _isHeadToHeadMode
+        ? 'head_to_head_${_headToHeadChain1}_vs_${_headToHeadChain2}_$timestamp.csv'
+        : 'price_intelligence_$timestamp.csv';
 
     downloadFileBytes(
       bytes: bytes,
