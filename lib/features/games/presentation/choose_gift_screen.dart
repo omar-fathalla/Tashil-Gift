@@ -64,7 +64,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
     }
     _loadEventPrizeImages();
     _remainingChances = widget.totalChances > 0 ? widget.totalChances : 1;
-    _items = widget.prizes.isNotEmpty
+    final rawPrizes = widget.prizes.isNotEmpty
         ? widget.prizes
         : [
             'ساعة ذكية فاخرة ⌚',
@@ -74,6 +74,8 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
             'خلاط كهربائي سريع ⚡',
             'طقم أواني فاخر 🍳',
           ];
+    final seen = <String>{};
+    _items = rawPrizes.where((p) => p.trim().isNotEmpty && seen.add(p.trim())).toList();
 
     _pulseController = AnimationController(
       vsync: this,
@@ -209,7 +211,11 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
 
         if (widget.eventId.isNotEmpty) {
           final giftsService = ref.read(companyGiftsServiceProvider);
-          await giftsService.decrementCampaignPrize(widget.eventId, selectedPrize);
+          await giftsService.decrementCampaignPrize(
+            widget.eventId,
+            selectedPrize,
+            branchId: widget.branchId,
+          );
         }
       }
 

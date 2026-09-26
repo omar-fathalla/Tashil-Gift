@@ -1271,10 +1271,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       // Route customer to prize game based on event settings or total purchase value
       final currentEvent = _activeEvent ?? widget.event;
       final currentEventId = currentEvent?.id ?? '';
-      final prizeNames = currentEvent?.allocatedPrizes
-          .where((p) => p.remainingQuantity > 0)
-          .map((p) => p.name)
-          .toList() ?? <String>[];
+      final prizeNames = currentEvent?.availablePrizeNames ?? <String>[];
 
       // Composite promotional bundle from matched rules evaluated earlier
       final compositeBundle = CompositePromotionalBundle.fromMatchedRules(
@@ -1408,13 +1405,20 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         );
         _resetFormForNextCustomer();
       } else if (gameType == 'chooseGift') {
+        final candidateGifts = compositeBundle.combinedLinkedGifts.isNotEmpty
+            ? compositeBundle.combinedLinkedGifts
+                .map((g) => g.giftName.trim())
+                .where((n) => n.isNotEmpty)
+                .toSet()
+                .toList()
+            : prizeNames;
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => ChooseGiftScreen(
               transactionId: transactionRef.id,
               eventId: currentEventId,
               companySlug: currentEvent?.companySlug ?? '',
-              prizes: prizeNames,
+              prizes: candidateGifts.isNotEmpty ? candidateGifts : prizeNames,
               totalChances: totalChances,
               branchId: resolvedBranchId,
             ),
@@ -1422,24 +1426,38 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         );
         _resetFormForNextCustomer();
       } else if (gameType == 'scratch' || gameType == 'scratchCard' || (gameType.isEmpty && totalValue >= 500)) {
+        final candidateGifts = compositeBundle.combinedLinkedGifts.isNotEmpty
+            ? compositeBundle.combinedLinkedGifts
+                .map((g) => g.giftName.trim())
+                .where((n) => n.isNotEmpty)
+                .toSet()
+                .toList()
+            : prizeNames;
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => ScratchCardScreen(
               transactionId: transactionRef.id,
               eventId: currentEventId,
-              prizes: prizeNames,
+              prizes: candidateGifts.isNotEmpty ? candidateGifts : prizeNames,
               totalChances: totalChances,
             ),
           ),
         );
         _resetFormForNextCustomer();
       } else {
+        final candidateGifts = compositeBundle.combinedLinkedGifts.isNotEmpty
+            ? compositeBundle.combinedLinkedGifts
+                .map((g) => g.giftName.trim())
+                .where((n) => n.isNotEmpty)
+                .toSet()
+                .toList()
+            : prizeNames;
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => SpinTheWheelScreen(
               transactionId: transactionRef.id,
               eventId: currentEventId,
-              prizes: prizeNames,
+              prizes: candidateGifts.isNotEmpty ? candidateGifts : prizeNames,
               totalChances: totalChances,
             ),
           ),

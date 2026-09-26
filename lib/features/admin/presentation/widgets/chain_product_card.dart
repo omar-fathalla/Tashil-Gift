@@ -114,21 +114,21 @@ class ChainProductCard extends ConsumerWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                       decoration: BoxDecoration(
-                        color: Colors.red.shade50,
+                        color: cs.errorContainer,
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.red.shade300, width: 0.8),
+                        border: Border.all(color: cs.error.withValues(alpha: 0.3), width: 0.8),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.warning_amber_rounded, size: 12, color: Colors.red),
+                          Icon(Icons.warning_amber_rounded, size: 12, color: cs.error),
                           const SizedBox(width: 3),
                           Text(
-                            isAr ? 'المنافس أرخص 🚨' : 'Threat 🚨',
+                            isAr ? 'المنافس أرخص' : 'Threat',
                             style: GoogleFonts.cairo(
                               fontSize: 9.5,
                               fontWeight: FontWeight.w800,
-                              color: Colors.red.shade900,
+                              color: cs.onErrorContainer,
                             ),
                           ),
                         ],
@@ -138,21 +138,21 @@ class ChainProductCard extends ConsumerWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                       decoration: BoxDecoration(
-                        color: Colors.green.shade50,
+                        color: cs.primaryContainer,
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.green.shade300, width: 0.8),
+                        border: Border.all(color: cs.primary.withValues(alpha: 0.3), width: 0.8),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.stars_rounded, size: 12, color: Colors.amber),
+                          Icon(Icons.verified_rounded, size: 12, color: cs.primary),
                           const SizedBox(width: 3),
                           Text(
-                            isAr ? 'أنت الأرخص 🏆' : 'Best Price 🏆',
+                            isAr ? 'أنت الأرخص' : 'Best Price',
                             style: GoogleFonts.cairo(
                               fontSize: 9.5,
                               fontWeight: FontWeight.w800,
-                              color: Colors.green.shade900,
+                              color: cs.onPrimaryContainer,
                             ),
                           ),
                         ],
@@ -290,14 +290,14 @@ class ChainProductCard extends ConsumerWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                           decoration: BoxDecoration(
-                            color: Colors.green.shade100,
+                            color: cs.primaryContainer,
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
                             product.priceHistory.first.calculatedDiscountPercent > 0
                                 ? 'خصم ${product.priceHistory.first.calculatedDiscountPercent.toStringAsFixed(0)}%'
                                 : 'وفر ${product.priceHistory.first.discountAmount.toStringAsFixed(0)}',
-                            style: GoogleFonts.cairo(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.green.shade900),
+                            style: GoogleFonts.cairo(fontSize: 9, fontWeight: FontWeight.bold, color: cs.onPrimaryContainer),
                           ),
                         ),
                       ],

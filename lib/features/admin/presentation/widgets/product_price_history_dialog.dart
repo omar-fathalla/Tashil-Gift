@@ -153,19 +153,19 @@ class _ProductPriceHistoryDialogState extends ConsumerState<ProductPriceHistoryD
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.red.shade50,
+                    color: cs.errorContainer,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.red.shade300, width: 1.2),
+                    border: Border.all(color: cs.error.withValues(alpha: 0.3), width: 1.2),
                   ),
                   child: Row(
                     children: [
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.red.shade100,
+                          color: cs.error,
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 22),
+                        child: Icon(Icons.warning_amber_rounded, color: cs.onError, size: 22),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -173,11 +173,11 @@ class _ProductPriceHistoryDialogState extends ConsumerState<ProductPriceHistoryD
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              isAr ? '🚨 إنذار كسر سعر لمنافس (سعر أرخص من أسواق فتح الله)' : '🚨 Competitor Price Threat Detected',
+                              isAr ? 'إنذار كسر سعر لمنافس (سعر أرخص من أسواق فتح الله)' : 'Competitor Price Threat Detected',
                               style: GoogleFonts.cairo(
                                 fontSize: 13,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.red.shade900,
+                                color: cs.onErrorContainer,
                               ),
                             ),
                             Text(
@@ -186,7 +186,7 @@ class _ProductPriceHistoryDialogState extends ConsumerState<ProductPriceHistoryD
                                   : '«${product.cheapestCompetitorName}» is selling at ${product.minPrice.toStringAsFixed(2)} $currency (Cheaper than Fathalla by ${product.competitorUnderpricedDiff.toStringAsFixed(1)} $currency, -${product.competitorUnderpricedPercent.toStringAsFixed(0)}%)',
                               style: GoogleFonts.cairo(
                                 fontSize: 11.5,
-                                color: Colors.red.shade800,
+                                color: cs.onErrorContainer.withValues(alpha: 0.85),
                               ),
                             ),
                           ],
@@ -202,19 +202,19 @@ class _ProductPriceHistoryDialogState extends ConsumerState<ProductPriceHistoryD
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.green.shade50,
+                    color: cs.primaryContainer,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.green.shade300, width: 1.2),
+                    border: Border.all(color: cs.primary.withValues(alpha: 0.3), width: 1.2),
                   ),
                   child: Row(
                     children: [
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.green.shade100,
+                          color: cs.primary,
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.stars_rounded, color: Colors.amber, size: 22),
+                        child: Icon(Icons.verified_rounded, color: cs.onPrimary, size: 22),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -222,11 +222,11 @@ class _ProductPriceHistoryDialogState extends ConsumerState<ProductPriceHistoryD
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              isAr ? '🏆 أسواق فتح الله هي الأرخص في السوق لهذا الصنف!' : '🏆 Fathalla Markets has the Best Price in Market!',
+                              isAr ? 'أسواق فتح الله هي الأرخص في السوق لهذا الصنف!' : 'Fathalla Markets has the Best Price in Market!',
                               style: GoogleFonts.cairo(
                                 fontSize: 13,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.green.shade900,
+                                color: cs.onPrimaryContainer,
                               ),
                             ),
                             Text(
@@ -235,7 +235,7 @@ class _ProductPriceHistoryDialogState extends ConsumerState<ProductPriceHistoryD
                                   : 'Fathalla price (${(product.fathallaPrice ?? 0.0).toStringAsFixed(2)} $currency) outperforms all competitor chains.',
                               style: GoogleFonts.cairo(
                                 fontSize: 11.5,
-                                color: Colors.green.shade800,
+                                color: cs.onPrimaryContainer.withValues(alpha: 0.85),
                               ),
                             ),
                           ],

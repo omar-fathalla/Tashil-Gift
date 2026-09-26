@@ -2396,19 +2396,19 @@ class AppStrings {
     hi: 'रीयल-टाइम प्रतियोगी मूल्य ट्रैकिंग, खतरा अलर्ट और फथल्ला मार्केट्स के खिलाफ लाइव तुलना',
   );
   String get fathallaBaselineTag => _t(
-    ar: 'المرجع الأساسي: أسواق فتح الله 🏛️',
-    en: 'Baseline Chain: Fathalla Markets 🏛️',
-    hi: 'आधारभूत श्रृंखला: फथल्ला मार्केट्स 🏛️',
+    ar: 'المرجع الأساسي: أسواق فتح الله',
+    en: 'Baseline Chain: Fathalla Markets',
+    hi: 'आधारभूत श्रृंखला: फथल्ला मार्केट्स',
   );
   String get metricPriceThreats => _t(
-    ar: 'تنبيهات كسر الأسعار (المنافس أرخص 🚨)',
-    en: 'Price Threat Alerts (Competitor Cheaper 🚨)',
-    hi: 'मूल्य खतरा अलर्ट (प्रतियोगी सस्ता 🚨)',
+    ar: 'تنبيهات كسر الأسعار (المنافس أرخص)',
+    en: 'Price Threat Alerts (Competitor Cheaper)',
+    hi: 'मूल्य खतरा अलर्ट (प्रतियोगी सस्ता)',
   );
   String get metricCompetitorPromosNotAtFathalla => _t(
-    ar: 'عروض غير متوفرة بفتح الله (فرص 💡)',
-    en: 'Competitor Promos not at Fathalla 💡',
-    hi: 'प्रतियोगी ऑफर जो फथल्ला में नहीं हैं 💡',
+    ar: 'عروض غير متوفرة بفتح الله (فرص جديدة)',
+    en: 'Competitor Promos not at Fathalla (Opportunities)',
+    hi: 'प्रतियोगी ऑफर जो फथल्ला में नहीं हैं',
   );
   String get metricCompetitorPromosNotAtFathallaSubtitle => _t(
     ar: 'فرص إضافة وتوفير أصناف جديدة',
@@ -2416,24 +2416,24 @@ class AppStrings {
     hi: 'नए उत्पाद सोर्सिंग अवसर',
   );
   String get metricAllCompetitorPromotions => _t(
-    ar: 'كافة عروض وخصومات المنافسين 🏷️',
-    en: 'All Competitor Active Promos 🏷️',
-    hi: 'सभी प्रतियोगी सक्रिय ऑफर 🏷️',
+    ar: 'كافة عروض وخصومات المنافسين',
+    en: 'All Competitor Active Promos',
+    hi: 'सभी प्रतियोगी सक्रिय ऑफर',
   );
   String get metricThreatsWithPromo => _t(
-    ar: 'كسر أسعار بعروض ترويجية ⚡',
-    en: 'Threats with Promo Discount ⚡',
-    hi: 'प्रमोशन के साथ मूल्य खतरे ⚡',
+    ar: 'كسر أسعار مقترن بعروض ترويجية',
+    en: 'Threats with Promo Discount',
+    hi: 'प्रमोशन के साथ मूल्य खतरे',
   );
   String get headToHeadModeLabel => _t(
-    ar: 'مقارنة مباشرة بين سلسلتين (Head-to-Head ⚔️)',
-    en: 'Head-to-Head Chain Comparison ⚔️',
-    hi: 'आमने-सामने श्रृंखला तुलना ⚔️',
+    ar: 'مقارنة مباشرة بين سلسلتين',
+    en: 'Head-to-Head Chain Comparison',
+    hi: 'आमने-सामने श्रृंखला तुलना',
   );
   String get omniRadarModeLabel => _t(
-    ar: 'رادار مراقبة السوق الشامل 🌐',
-    en: 'Omni-Chain Market Radar 🌐',
-    hi: 'सर्वव्यापी बाजार रडार 🌐',
+    ar: 'رادار مراقبة السوق الشامل',
+    en: 'Omni-Chain Market Radar',
+    hi: 'सर्वव्यापी बाजार रडार',
   );
   String get chain1SelectorLabel => _t(
     ar: 'السلسلة الأولى (المرجع)',
@@ -2461,9 +2461,9 @@ class AppStrings {
     hi: 'सभी संग्रहीत उत्पाद',
   );
   String get filterSegmentThreatsOnly => _t(
-    ar: 'الأصناف الأرخص عند المنافسين 🚨',
-    en: 'Cheaper at Competitors 🚨',
-    hi: 'प्रतियोगियों पर सस्ता 🚨',
+    ar: 'الأصناف الأرخص عند المنافسين',
+    en: 'Cheaper at Competitors',
+    hi: 'प्रतियोगियों पर सस्ता',
   );
   String get filterSegmentFathallaWinning => _t(
     ar: 'أصناف تفوق فتح الله 🏆',
@@ -2476,14 +2476,14 @@ class AppStrings {
     hi: 'साझा उत्पाद (2+ श्रृंखलाएं) 📊',
   );
   String get filterSegmentAllArchive => _t(
-    ar: 'جميع الأصناف بالأرشيف (بحث شامل) 🗄️',
-    en: 'All Archived SKUs (Full Search) 🗄️',
-    hi: 'संग्रह में सभी उत्पाद (पूर्ण खोज) 🗄️',
+    ar: 'جميع الأصناف بالأرشيف',
+    en: 'All Archived SKUs (Full Search)',
+    hi: 'संग्रह में सभी उत्पाद (पूर्ण खोज)',
   );
   String get fathallaMarketPositionLabel => _t(
-    ar: 'موقف فتح الله التنافسي 🎯',
-    en: 'Fathalla Market Position 🎯',
-    hi: 'फथल्ला बाजार स्थिति 🎯',
+    ar: 'موقف فتح الله التنافسي',
+    en: 'Fathalla Market Position',
+    hi: 'फथल्ला बाजार स्थिति',
   );
   String get competitorCheaperWarningBadge => _t(
     ar: 'المنافس أرخص منك',
@@ -2506,9 +2506,9 @@ class AppStrings {
     hi: 'फथल्ला में नहीं 🏷️',
   );
   String get proofOfReceiptLabel => _t(
-    ar: 'معاينة البون والإثبات 🧾',
-    en: 'Proof of Receipt 🧾',
-    hi: 'रसीद का प्रमाण 🧾',
+    ar: 'معاينة البون والإثبات',
+    en: 'Proof of Receipt',
+    hi: 'रसीद का प्रमाण',
   );
   String get allChainsTab => _t(
     ar: 'جميع السلاسل (مقارنة شاملة)',

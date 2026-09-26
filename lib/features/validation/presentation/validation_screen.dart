@@ -925,13 +925,20 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           });
         }
       } else if (gameType == 'chooseGift') {
+        final candidateGifts = compositeBundle.combinedLinkedGifts.isNotEmpty
+            ? compositeBundle.combinedLinkedGifts
+                .map((g) => g.giftName.trim())
+                .where((n) => n.isNotEmpty)
+                .toSet()
+                .toList()
+            : prizeNames;
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => ChooseGiftScreen(
               transactionId: transactionRef.id,
               eventId: activeEvent.id,
               companySlug: activeEvent.companySlug,
-              prizes: prizeNames,
+              prizes: candidateGifts.isNotEmpty ? candidateGifts : prizeNames,
               totalChances: totalChances,
               branchId: resolvedBranchId,
             ),
@@ -944,12 +951,19 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           });
         }
       } else if (gameType == 'scratch') {
+        final candidateGifts = compositeBundle.combinedLinkedGifts.isNotEmpty
+            ? compositeBundle.combinedLinkedGifts
+                .map((g) => g.giftName.trim())
+                .where((n) => n.isNotEmpty)
+                .toSet()
+                .toList()
+            : prizeNames;
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => ScratchCardScreen(
               transactionId: transactionRef.id,
               eventId: activeEvent.id,
-              prizes: prizeNames,
+              prizes: candidateGifts.isNotEmpty ? candidateGifts : prizeNames,
               totalChances: totalChances,
             ),
           ),
@@ -962,12 +976,19 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         }
       } else {
         // Default: wheel
+        final candidateGifts = compositeBundle.combinedLinkedGifts.isNotEmpty
+            ? compositeBundle.combinedLinkedGifts
+                .map((g) => g.giftName.trim())
+                .where((n) => n.isNotEmpty)
+                .toSet()
+                .toList()
+            : prizeNames;
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => SpinTheWheelScreen(
               transactionId: transactionRef.id,
               eventId: activeEvent.id,
-              prizes: prizeNames,
+              prizes: candidateGifts.isNotEmpty ? candidateGifts : prizeNames,
               totalChances: totalChances,
             ),
           ),

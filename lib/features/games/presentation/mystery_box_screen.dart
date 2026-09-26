@@ -62,7 +62,7 @@ class _MysteryBoxScreenState extends ConsumerState<MysteryBoxScreen>
     super.initState();
     _loadPrizeImages();
     _remainingChances = widget.totalChances > 0 ? widget.totalChances : 1;
-    _items = widget.prizes.isNotEmpty
+    final rawList = widget.prizes.isNotEmpty
         ? widget.prizes
         : [
             'ساعة ذكية فاخرة',
@@ -72,6 +72,8 @@ class _MysteryBoxScreenState extends ConsumerState<MysteryBoxScreen>
             'خلاط كهربائي عالي القوة',
             'طقم حافظات حرارية',
           ];
+    final seen = <String>{};
+    _items = rawList.where((p) => p.trim().isNotEmpty && seen.add(p.trim())).toList();
 
     _pulseController = AnimationController(
       vsync: this,

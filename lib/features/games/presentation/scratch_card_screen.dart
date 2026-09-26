@@ -51,9 +51,11 @@ class _ScratchCardScreenState extends ConsumerState<ScratchCardScreen> {
     super.initState();
     _loadPrizeImages();
     _remainingChances = widget.totalChances > 0 ? widget.totalChances : 1;
-    _items = widget.prizes.isNotEmpty
+    final rawList = widget.prizes.isNotEmpty
         ? widget.prizes
         : ['قسيمة شراء 200 ج.م', 'طقم أواني فاخر', 'ماكينة قهوة', 'خلاط كهربائي', 'شاشة ذكية'];
+    final seen = <String>{};
+    _items = rawList.where((p) => p.trim().isNotEmpty && seen.add(p.trim())).toList();
     _prize = _items[Random().nextInt(_items.length)];
   }
 

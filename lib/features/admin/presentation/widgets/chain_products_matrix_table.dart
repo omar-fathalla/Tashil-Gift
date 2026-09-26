@@ -92,20 +92,21 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
   }
 
   void _copyBarcode(String barcode, BuildContext context, bool isAr) {
+    final cs = Theme.of(context).colorScheme;
     Clipboard.setData(ClipboardData(text: barcode));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 16),
+            Icon(Icons.check_circle_rounded, color: cs.onInverseSurface, size: 16),
             const SizedBox(width: 8),
             Text(
               isAr ? 'تم نسخ الباركود: $barcode' : 'Barcode copied: $barcode',
-              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
+              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: cs.onInverseSurface),
             ),
           ],
         ),
-        backgroundColor: Colors.teal.shade700,
+        backgroundColor: cs.inverseSurface,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -780,10 +781,10 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
               decoration: BoxDecoration(
-                color: isDefaultAnchor ? Colors.indigo.shade50 : cs.primaryContainer.withValues(alpha: 0.4),
+                color: cs.primaryContainer.withValues(alpha: 0.45),
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
-                  color: isDefaultAnchor ? Colors.indigo.shade300 : cs.primary.withValues(alpha: 0.5),
+                  color: cs.primary.withValues(alpha: 0.4),
                   width: 1,
                 ),
               ),
@@ -793,7 +794,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                   Icon(
                     isDefaultAnchor ? Icons.account_balance_rounded : Icons.storefront_rounded,
                     size: 12,
-                    color: isDefaultAnchor ? Colors.indigo : cs.primary,
+                    color: cs.primary,
                   ),
                   const SizedBox(width: 4),
                   Flexible(
@@ -804,7 +805,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                       style: GoogleFonts.cairo(
                         fontWeight: FontWeight.w800,
                         fontSize: 10.5,
-                        color: isDefaultAnchor ? Colors.indigo.shade900 : cs.onPrimaryContainer,
+                        color: cs.onPrimaryContainer,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -875,15 +876,15 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0.5),
                         decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
+                          color: cs.secondaryContainer,
                           borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: Colors.blue.shade200, width: 0.5),
+                          border: Border.all(color: cs.secondary.withValues(alpha: 0.3), width: 0.5),
                         ),
                         child: Text(
                           isAr ? 'ربط' : 'Linked',
                           style: GoogleFonts.cairo(
                             fontSize: 8.5,
-                            color: Colors.blue.shade800,
+                            color: cs.onSecondaryContainer,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -899,15 +900,15 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0.5),
                         decoration: BoxDecoration(
-                          color: Colors.purple.shade50,
+                          color: cs.tertiaryContainer,
                           borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: Colors.purple.shade200, width: 0.5),
+                          border: Border.all(color: cs.tertiary.withValues(alpha: 0.3), width: 0.5),
                         ),
                         child: Text(
                           '${item.chainAliases.length} ${isAr ? "سلاسل" : "chains"}',
                           style: GoogleFonts.cairo(
                             fontSize: 8.5,
-                            color: Colors.purple.shade800,
+                            color: cs.onTertiaryContainer,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -991,17 +992,17 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
             '${isAr ? 'سعر البيع المعتمد' : 'Net Price'}: $netUnitPrice $currency\n'
             '${isOnPromo ? '${isAr ? 'السعر الأصلي قبل الخصم' : 'Regular'}: $regularPrice $currency (-${discountPct.toStringAsFixed(0)}%)\n' : ''}'
             '${isAr ? 'تاريخ الفاتورة' : 'Receipt Date'}: ${date.isNotEmpty ? date : '—'}\n'
-            '${isAr ? 'انقر لمعاينة البون والإثبات 🧾' : 'Click to view receipt proof 🧾'}',
+            '${isAr ? 'انقر لمعاينة البون والإثبات' : 'Click to view receipt proof'}',
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
           onTap: () => showProductPriceHistoryDialog(context: context, product: item, ref: ref),
           child: Container(
             padding: EdgeInsets.symmetric(horizontal: _isDenseMode ? 6 : 8, vertical: _isDenseMode ? 3 : 5),
             decoration: BoxDecoration(
-              color: isDefaultAnchor ? Colors.indigo.shade50.withValues(alpha: 0.8) : cs.primaryContainer.withValues(alpha: 0.5),
+              color: cs.primaryContainer.withValues(alpha: 0.55),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: isDefaultAnchor ? Colors.indigo.shade200 : cs.primary.withValues(alpha: 0.4),
+                color: cs.primary.withValues(alpha: 0.35),
                 width: 0.9,
               ),
             ),
@@ -1015,7 +1016,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                     style: GoogleFonts.cairo(
                       fontWeight: FontWeight.w900,
                       fontSize: _isDenseMode ? 11.5 : 12.5,
-                      color: isDefaultAnchor ? Colors.indigo.shade900 : cs.onPrimaryContainer,
+                      color: cs.onPrimaryContainer,
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
@@ -1035,7 +1036,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 2.5, vertical: 0.5),
                         decoration: BoxDecoration(
-                          color: Colors.green.shade100,
+                          color: cs.primaryContainer,
                           borderRadius: BorderRadius.circular(3),
                         ),
                         child: Text(
@@ -1043,7 +1044,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                           style: GoogleFonts.cairo(
                             fontSize: 7.5,
                             fontWeight: FontWeight.bold,
-                            color: Colors.green.shade900,
+                            color: cs.onPrimaryContainer,
                           ),
                         ),
                       ),
@@ -1230,16 +1231,16 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
     Border? border;
 
     if (isCheapestInMarket) {
-      bgColor = Colors.green.shade50;
-      textColor = Colors.green.shade900;
-      border = Border.all(color: Colors.green.shade300, width: 1);
+      bgColor = cs.primaryContainer.withValues(alpha: 0.45);
+      textColor = cs.onPrimaryContainer;
+      border = Border.all(color: cs.primary.withValues(alpha: 0.4), width: 1);
     } else if (isCheaperThanBaseline) {
-      bgColor = Colors.amber.shade50;
-      textColor = Colors.amber.shade900;
-      border = Border.all(color: Colors.amber.shade300, width: 0.8);
+      bgColor = cs.errorContainer;
+      textColor = cs.onErrorContainer;
+      border = Border.all(color: cs.error.withValues(alpha: 0.35), width: 1);
     } else if (hasMultiple && (netUnitPrice - maxPrice).abs() < 0.05 && maxPrice > minPrice) {
-      bgColor = Colors.red.shade50.withValues(alpha: 0.5);
-      textColor = Colors.red.shade900;
+      bgColor = cs.surfaceContainerHighest.withValues(alpha: 0.5);
+      textColor = cs.onSurfaceVariant;
     }
 
     final double priceDiffBelowBaseline = hasBaselinePrice ? (baselinePrice - netUnitPrice) : 0.0;
@@ -1254,7 +1255,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
             '${isCheaperThanBaseline ? '${isAr ? 'أرخص من $baselineChain بـ' : 'Cheaper than $baselineChain by'}: ${priceDiffBelowBaseline.toStringAsFixed(1)} $currency\n' : ''}'
             '${isOnPromo ? '${isAr ? 'السعر قبل الخصم' : 'Regular'}: $regularPrice $currency (-${discountPct.toStringAsFixed(0)}%)\n' : ''}'
             '${isAr ? 'تاريخ الفاتورة' : 'Receipt Date'}: ${date.isNotEmpty ? date : '—'}\n'
-            '${isAr ? 'انقر لمعاينة البون والإثبات 🧾' : 'Click to view receipt proof 🧾'}',
+            '${isAr ? 'انقر لمعاينة البون والإثبات' : 'Click to view receipt proof'}',
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
           onTap: () => showProductPriceHistoryDialog(context: context, product: item, ref: ref),
@@ -1280,10 +1281,10 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                     ),
                   ),
 
-                  // Best in Market Star Badge
+                  // Best in Market Verified Badge
                   if (isCheapestInMarket) ...[
                     const SizedBox(width: 3),
-                    const Icon(Icons.star_rounded, size: 13, color: Colors.amber),
+                    Icon(Icons.verified_rounded, size: 12, color: cs.primary),
                   ],
 
                   // Strikethrough & Promo Badge
@@ -1303,7 +1304,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 2.5, vertical: 0.5),
                         decoration: BoxDecoration(
-                          color: Colors.green.shade100,
+                          color: cs.primaryContainer,
                           borderRadius: BorderRadius.circular(3),
                         ),
                         child: Text(
@@ -1311,7 +1312,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                           style: GoogleFonts.cairo(
                             fontSize: 7.5,
                             fontWeight: FontWeight.bold,
-                            color: Colors.green.shade900,
+                            color: cs.onPrimaryContainer,
                           ),
                         ),
                       ),
@@ -1352,14 +1353,14 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: Colors.red.shade50,
+                color: cs.errorContainer,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.shade300, width: 1),
+                border: Border.all(color: cs.error.withValues(alpha: 0.3), width: 1),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.trending_down_rounded, size: 13, color: Colors.red),
+                  Icon(Icons.trending_down_rounded, size: 13, color: cs.error),
                   const SizedBox(width: 4),
                   Flexible(
                     child: Text(
@@ -1369,7 +1370,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                       style: GoogleFonts.cairo(
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
-                        color: Colors.red.shade900,
+                        color: cs.onErrorContainer,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -1389,14 +1390,14 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: Colors.green.shade50,
+                color: cs.primaryContainer,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green.shade300, width: 1),
+                border: Border.all(color: cs.primary.withValues(alpha: 0.3), width: 1),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.stars_rounded, size: 14, color: Colors.amber),
+                  Icon(Icons.verified_rounded, size: 14, color: cs.primary),
                   const SizedBox(width: 4),
                   Flexible(
                     child: Text(
@@ -1406,7 +1407,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                       style: GoogleFonts.cairo(
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
-                        color: Colors.green.shade900,
+                        color: cs.onPrimaryContainer,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -1452,27 +1453,27 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
         alignment: Alignment.center,
         child: Tooltip(
           message: isAr
-              ? 'عرض ترويجي نشط لدى ($compPromoChains) وغير متوفر بفتح الله — فرصة توريد وإضافة 💡'
+              ? 'عرض ترويجي نشط لدى ($compPromoChains) وغير متوفر بفتح الله — فرصة توريد وإضافة'
               : 'Active promo at ($compPromoChains) missing from Fathalla — expansion opportunity',
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: Colors.purple.shade50,
+              color: cs.tertiaryContainer,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.purple.shade300, width: 1),
+              border: Border.all(color: cs.tertiary.withValues(alpha: 0.3), width: 1),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.lightbulb_rounded, size: 13, color: Colors.purple),
+                Icon(Icons.lightbulb_outline_rounded, size: 13, color: cs.tertiary),
                 const SizedBox(width: 4),
                 Flexible(
                   child: Text(
-                    isAr ? 'عرض غير متوفر بفتح الله 💡' : 'Promo not in Fathalla 💡',
+                    isAr ? 'عرض غير متوفر بفتح الله' : 'Promo not in Fathalla',
                     style: GoogleFonts.cairo(
                       fontSize: 10,
                       fontWeight: FontWeight.w800,
-                      color: Colors.purple.shade900,
+                      color: cs.onTertiaryContainer,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1501,14 +1502,14 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: Colors.red.shade50,
+              color: cs.errorContainer,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.red.shade300, width: 1),
+              border: Border.all(color: cs.error.withValues(alpha: 0.3), width: 1),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.warning_amber_rounded, size: 13, color: Colors.red),
+                Icon(Icons.warning_amber_rounded, size: 13, color: cs.error),
                 const SizedBox(width: 4),
                 Flexible(
                   child: Text(
@@ -1518,7 +1519,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                     style: GoogleFonts.cairo(
                       fontSize: 10,
                       fontWeight: FontWeight.w800,
-                      color: Colors.red.shade900,
+                      color: cs.onErrorContainer,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1537,21 +1538,21 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
-            color: Colors.green.shade50,
+            color: cs.primaryContainer,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.green.shade300, width: 1),
+            border: Border.all(color: cs.primary.withValues(alpha: 0.3), width: 1),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.stars_rounded, size: 14, color: Colors.amber),
+              Icon(Icons.verified_rounded, size: 14, color: cs.primary),
               const SizedBox(width: 4),
               Text(
-                isAr ? '$baselineChain الأرخص في السوق 🌟' : '$baselineChain Best Price 🌟',
+                isAr ? '$baselineChain الأرخص في السوق' : '$baselineChain Best Price',
                 style: GoogleFonts.cairo(
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
-                  color: Colors.green.shade900,
+                  color: cs.onPrimaryContainer,
                 ),
               ),
             ],
@@ -1652,7 +1653,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
           ? Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: Colors.green.shade100,
+                color: cs.primaryContainer,
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
@@ -1660,7 +1661,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                 style: GoogleFonts.cairo(
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
-                  color: Colors.green.shade900,
+                  color: cs.onPrimaryContainer,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
@@ -1680,7 +1681,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
       width: colWidth,
       alignment: Alignment.center,
       child: Tooltip(
-        message: isAr ? 'معاينة البون والإثبات التاريخي 🧾' : 'Proof of Receipt & History 🧾',
+        message: isAr ? 'معاينة البون والإثبات التاريخي' : 'Proof of Receipt & History',
         child: IconButton(
           visualDensity: VisualDensity.compact,
           padding: EdgeInsets.zero,

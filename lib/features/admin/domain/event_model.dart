@@ -604,26 +604,38 @@ class EventModel {
     return allocatedPrizes.where((p) => p.remainingQuantity > 0).toList();
   }
 
-  /// Returns prize names for display in games (only available ones).
+  /// Returns prize names for display in games (only available ones, deduplicated).
   List<String> get availablePrizeNames {
     if (availablePrizes.isNotEmpty) {
-      return availablePrizes.map((p) {
+      final seen = <String>{};
+      final List<String> distinct = [];
+      for (final p in availablePrizes) {
+        String name = p.name.trim();
         if (p.isVoucher && p.unitValue > 0) {
           final val = p.unitValue == p.unitValue.roundToDouble() ? p.unitValue.toInt() : p.unitValue;
-          if (!p.name.contains('$val')) {
-            return '${p.name} ($val ج.م)';
+          if (!name.contains('$val')) {
+            name = '$name ($val ج.م)';
           }
         }
-        return p.name;
-      }).toList();
+        if (name.isNotEmpty && seen.add(name)) {
+          distinct.add(name);
+        }
+      }
+      if (distinct.isNotEmpty) return distinct;
     }
     if (allocatedPrizes.isNotEmpty) {
-      return allocatedPrizes.map((p) => p.name).toList();
+      return allocatedPrizes
+          .map((p) => p.name.trim())
+          .where((n) => n.isNotEmpty)
+          .toSet()
+          .toList();
     }
     if (promotionalRules.isNotEmpty) {
       return promotionalRules
           .map((r) => r.rewardValue.isNotEmpty ? r.rewardValue : r.linkedGiftsSummary)
-          .where((n) => n.isNotEmpty)
+          .where((n) => n.trim().isNotEmpty)
+          .map((n) => n.trim())
+          .toSet()
           .toList();
     }
     return [];

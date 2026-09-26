@@ -58,9 +58,11 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
     super.initState();
     _loadPrizeImages();
     _remainingChances = widget.totalChances > 0 ? widget.totalChances : 1;
-    _items = widget.prizes.isNotEmpty
+    final rawList = widget.prizes.isNotEmpty
         ? widget.prizes
         : ['قسيمة شراء 100 ج.م', 'خلاط كهربائي', 'شاشة ذكية', 'طقم حافظات طعام', 'ساعة يد فاخرة', 'كوب حراري'];
+    final seen = <String>{};
+    _items = rawList.where((p) => p.trim().isNotEmpty && seen.add(p.trim())).toList();
 
     _pulseController = AnimationController(
       vsync: this,

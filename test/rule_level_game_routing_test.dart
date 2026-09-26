@@ -186,5 +186,37 @@ void main() {
       expect(bundleReceipt2.resolvedGameType, equals('scratch'),
           reason: 'بونة هاينز الثانية (462 ج.م) يجب أن توجه تلقائياً إلى كارت خربش واكسب');
     });
+
+    test('EventModel.availablePrizeNames deduplicates prizes across multi-branch allocations', () {
+      final event = EventModel(
+        id: 'cadbury_event',
+        eventName: 'ماراثون جوائز كادبوري',
+        targetCompany: 'كادبوري',
+        minimumSpend: 250.0,
+        retailChainId: 'fathalla',
+        retailChainName: 'أسواق فتح الله',
+        allocatedPrizes: [
+          // Global allocations
+          AllocatedPrize(giftId: 'g1', name: 'فواتشر 100 جنيه', allocatedQuantity: 100, remainingQuantity: 1000, giftType: 'voucher', unitValue: 100),
+          AllocatedPrize(giftId: 'g2', name: 'لانش بوكس كادبوري', allocatedQuantity: 100, remainingQuantity: 1000),
+          // Branch 1 allocations (same gift names)
+          AllocatedPrize(giftId: 'g1', name: 'فواتشر 100 جنيه', branchName: 'فرع سموحة', allocatedQuantity: 100, remainingQuantity: 1000, giftType: 'voucher', unitValue: 100),
+          AllocatedPrize(giftId: 'g2', name: 'لانش بوكس كادبوري', branchName: 'فرع سموحة', allocatedQuantity: 100, remainingQuantity: 1000),
+          // Branch 2 allocations (same gift names)
+          AllocatedPrize(giftId: 'g1', name: 'فواتشر 100 جنيه', branchName: 'فرع المحلة', allocatedQuantity: 100, remainingQuantity: 1000, giftType: 'voucher', unitValue: 100),
+          AllocatedPrize(giftId: 'g2', name: 'لانش بوكس كادبوري', branchName: 'فرع المحلة', allocatedQuantity: 100, remainingQuantity: 1000),
+          // Out of stock item (should be excluded)
+          AllocatedPrize(giftId: 'g3', name: 'هدية منتهية', allocatedQuantity: 10, remainingQuantity: 0),
+        ],
+      );
+
+      final prizeNames = event.availablePrizeNames;
+      // Must contain only the 2 distinct available prizes, without any duplicates
+      expect(prizeNames.length, equals(2));
+      expect(prizeNames, contains('فواتشر 100 جنيه'));
+      expect(prizeNames, contains('لانش بوكس كادبوري'));
+      expect(prizeNames, isNot(contains('هدية منتهية')));
+    });
   });
 }
+

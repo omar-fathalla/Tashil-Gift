@@ -83,17 +83,17 @@ void main() {
       final en = AppStrings('en');
       final hi = AppStrings('hi');
 
-      expect(ar.addNextReceiptPartBtn, contains('إضافة جزء تالٍ للفاتورة'));
+      expect(ar.addNextReceiptPartBtn, contains('إضافة جزء أو بون مكمل'));
       expect(en.addNextReceiptPartBtn, contains('Add Next Part'));
-      expect(hi.addNextReceiptPartBtn, contains('लंबी रसीद के लिए अगला भाग जोड़ें'));
+      expect(hi.addNextReceiptPartBtn, contains('अगला भाग / पूरक रसीद जोड़ें'));
 
       expect(ar.clearAllPartsBtn, equals('مسح الكل'));
       expect(en.clearAllPartsBtn, equals('Clear All'));
       expect(hi.clearAllPartsBtn, equals('सभी साफ़ करें'));
 
-      expect(ar.longReceiptTip, contains('إذا كانت الفاتورة طويلة'));
+      expect(ar.longReceiptTip, contains('للفواتير الطويلة'));
       expect(en.longReceiptTip, contains('For long receipts'));
-      expect(hi.longReceiptTip, contains('लंबी रसीदों के लिए'));
+      expect(hi.longReceiptTip, contains('लंबी रसीदों'));
     });
 
     test('Multi-part receipt storage and metadata structuring logic', () {
