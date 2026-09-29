@@ -3862,12 +3862,15 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               if (!isExistingInMaster) continue;
               final alreadyInPrizes = prizes.any((p) => p.giftId == linked.giftId || p.name == linked.giftName);
               if (!alreadyInPrizes) {
-                prizes.add(resolveAllocatedPrize(
-                  giftKey: linked.giftId,
-                  quantity: 100,
-                  branchId: '',
-                  branchName: '',
-                ));
+                // Only create general pool prize if campaign applies to all branches
+                if (_isAllBranches || _selectedBranchIds.isEmpty) {
+                  prizes.add(resolveAllocatedPrize(
+                    giftKey: linked.giftId,
+                    quantity: 0,
+                    branchId: '',
+                    branchName: '',
+                  ));
+                }
               }
             }
             if (rule.linkedGiftId != null && rule.linkedGiftId!.isNotEmpty) {
@@ -3876,12 +3879,14 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               if (!isExistingInMaster) continue;
               final alreadyInPrizes = prizes.any((p) => p.giftId == rule.linkedGiftId || p.name == rule.linkedGiftName);
               if (!alreadyInPrizes) {
-                prizes.add(resolveAllocatedPrize(
-                  giftKey: rule.linkedGiftId!,
-                  quantity: 100,
-                  branchId: '',
-                  branchName: '',
-                ));
+                if (_isAllBranches || _selectedBranchIds.isEmpty) {
+                  prizes.add(resolveAllocatedPrize(
+                    giftKey: rule.linkedGiftId!,
+                    quantity: 0,
+                    branchId: '',
+                    branchName: '',
+                  ));
+                }
               }
             }
           }

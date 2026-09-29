@@ -667,27 +667,50 @@ class CompanyGiftsService {
           }
         }
 
-        // If there is an unbranched general pool prize for this gift, ensure its remaining quantity reflects the active stock
-        for (int i = 0; i < prizes.length; i++) {
-          final p = prizes[i];
-          if (p.branchName.trim().isEmpty) {
-            final pGiftIdNorm = p.giftId.trim().toLowerCase();
-            final pNameNorm = p.name.trim().toLowerCase();
-            if (pGiftIdNorm == targetGiftKeyNorm ||
-                pNameNorm == targetGiftKeyNorm ||
-                pGiftIdNorm == gift.id.toLowerCase() ||
-                pNameNorm == gift.giftName.trim().toLowerCase()) {
-              final totalBranchRemaining = prizes
-                  .where((bp) =>
-                      bp.branchName.trim().isNotEmpty &&
-                      (bp.giftId.trim().toLowerCase() == targetGiftKeyNorm ||
-                          bp.name.trim().toLowerCase() == pNameNorm ||
-                          bp.giftId.trim().toLowerCase() == gift.id.toLowerCase() ||
-                          bp.name.trim().toLowerCase() == gift.giftName.trim().toLowerCase()))
-                  .fold<int>(0, (acc, bp) => acc + bp.remainingQuantity);
-              if (totalBranchRemaining > 0 && p.remainingQuantity < totalBranchRemaining) {
-                prizes[i] = p.copyWith(remainingQuantity: totalBranchRemaining);
-                eventModified = true;
+        // If active branch-specific allocations exist for this gift, clean up unbranched ghost prizes
+        // to prevent phantom quotas and total discrepancies.
+        final hasActiveBranchAllocations = prizes.any((bp) =>
+            (bp.branchName.trim().isNotEmpty || bp.branchId.trim().isNotEmpty) &&
+            (bp.giftId.trim().toLowerCase() == targetGiftKeyNorm ||
+                bp.name.trim().toLowerCase() == targetGiftKeyNorm ||
+                bp.giftId.trim().toLowerCase() == gift.id.toLowerCase() ||
+                bp.name.trim().toLowerCase() == gift.giftName.trim().toLowerCase()));
+
+        if (hasActiveBranchAllocations) {
+          final beforeLen = prizes.length;
+          prizes.removeWhere((p) =>
+              p.branchName.trim().isEmpty &&
+              p.branchId.trim().isEmpty &&
+              (p.giftId.trim().toLowerCase() == targetGiftKeyNorm ||
+                  p.name.trim().toLowerCase() == targetGiftKeyNorm ||
+                  p.giftId.trim().toLowerCase() == gift.id.toLowerCase() ||
+                  p.name.trim().toLowerCase() == gift.giftName.trim().toLowerCase()));
+          if (prizes.length != beforeLen) {
+            eventModified = true;
+          }
+        } else {
+          // If no branch-specific allocations exist, maintain general pool remaining
+          for (int i = 0; i < prizes.length; i++) {
+            final p = prizes[i];
+            if (p.branchName.trim().isEmpty && p.branchId.trim().isEmpty) {
+              final pGiftIdNorm = p.giftId.trim().toLowerCase();
+              final pNameNorm = p.name.trim().toLowerCase();
+              if (pGiftIdNorm == targetGiftKeyNorm ||
+                  pNameNorm == targetGiftKeyNorm ||
+                  pGiftIdNorm == gift.id.toLowerCase() ||
+                  pNameNorm == gift.giftName.trim().toLowerCase()) {
+                final totalBranchRemaining = prizes
+                    .where((bp) =>
+                        bp.branchName.trim().isNotEmpty &&
+                        (bp.giftId.trim().toLowerCase() == targetGiftKeyNorm ||
+                            bp.name.trim().toLowerCase() == pNameNorm ||
+                            bp.giftId.trim().toLowerCase() == gift.id.toLowerCase() ||
+                            bp.name.trim().toLowerCase() == gift.giftName.trim().toLowerCase()))
+                    .fold<int>(0, (acc, bp) => acc + bp.remainingQuantity);
+                if (totalBranchRemaining > 0 && p.remainingQuantity < totalBranchRemaining) {
+                  prizes[i] = p.copyWith(remainingQuantity: totalBranchRemaining);
+                  eventModified = true;
+                }
               }
             }
           }

@@ -311,6 +311,9 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
 
     // 2. Aggregate allocations, claims, remaining, and branch allocations from events
     for (final event in filteredEvents) {
+      final hasBranchAllocations = event.allocatedPrizes.any((p) =>
+          p.branchName.trim().isNotEmpty || p.branchId.trim().isNotEmpty);
+
       for (final prize in event.allocatedPrizes) {
         final matchingMasterGift = _findMatchingMasterGift(prize, masterGifts);
         if (masterGifts.isNotEmpty && matchingMasterGift == null) {
@@ -325,6 +328,12 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
             (matchingMasterGift != null && _isVoucherText(matchingMasterGift.giftName));
 
         if (!isVoucher) continue;
+
+        // If the campaign has branch-specific allocations, skip ghost/unassigned allocations
+        // that have no branchName or branchId so they don't artificially inflate total cards
+        if (hasBranchAllocations && prize.branchName.trim().isEmpty && prize.branchId.trim().isEmpty) {
+          continue;
+        }
 
         final rawVal = (matchingMasterGift?.giftType == 'voucher' ? matchingMasterGift?.unitValue : null) ??
             (prize.giftType == 'voucher' ? prize.unitValue : 0.0);
