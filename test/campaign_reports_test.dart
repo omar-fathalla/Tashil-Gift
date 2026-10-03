@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:al_mraay/core/localization/app_strings.dart';
 import 'package:al_mraay/features/admin/domain/event_model.dart';
 
 void main() {
@@ -170,6 +171,100 @@ void main() {
       expect(branchCounts.length, 1);
       expect(branchCounts['فرع عجمي ستار (الإسكندرية)'], 3);
       expect(branchRevenues['فرع عجمي ستار (الإسكندرية)'], 55743.0 + 295.0 + 120.0);
+    });
+
+    test('Excel button label is strictly "Excel" in English across all locales without verbose prefixes', () {
+      final arStrings = AppStrings('ar');
+      final enStrings = AppStrings('en');
+      final hiStrings = AppStrings('hi');
+
+      expect(arStrings.excelBtn, 'Excel');
+      expect(arStrings.excelBtn.contains('تصدير'), isFalse);
+      expect(arStrings.excelBtn.contains('تقرير'), isFalse);
+
+      expect(enStrings.excelBtn, 'Excel');
+      expect(enStrings.excelBtn.contains('Export'), isFalse);
+
+      expect(hiStrings.excelBtn, 'Excel');
+    });
+
+    test('Day date filter correctly partitions receipts by date', () {
+      DateTime? extractDate(String rawDate) {
+        if (RegExp(r'^\d{4}[-/]\d{1,2}[-/]\d{1,2}').hasMatch(rawDate)) {
+          final parts = rawDate.replaceAll('/', '-').split('-');
+          return DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+        }
+        if (RegExp(r'^\d{1,2}[-/]\d{1,2}[-/]\d{4}').hasMatch(rawDate)) {
+          final sep = rawDate.contains('/') ? '/' : '-';
+          final parts = rawDate.split(sep);
+          return DateTime(int.parse(parts[2]), int.parse(parts[1]), int.parse(parts[0]));
+        }
+        return null;
+      }
+
+      final mockInvoices = [
+        {'id': 'inv-1', 'receipt_date': '2026-08-25', 'total': 150.0},
+        {'id': 'inv-2', 'receipt_date': '2026-08-26', 'total': 250.0},
+        {'id': 'inv-3', 'receipt_date': '26/08/2026', 'total': 350.0},
+        {'id': 'inv-4', 'receipt_date': '2026-08-27', 'total': 450.0},
+      ];
+
+      final targetDay = DateTime(2026, 8, 26);
+
+      // Filtering for targetDay
+      final dayFiltered = mockInvoices.where((inv) {
+        final d = extractDate(inv['receipt_date'] as String);
+        return d != null && d.year == targetDay.year && d.month == targetDay.month && d.day == targetDay.day;
+      }).toList();
+
+      expect(dayFiltered.length, 2);
+      expect(dayFiltered.map((i) => i['id']), containsAll(['inv-2', 'inv-3']));
+      final dayTotal = dayFiltered.fold<double>(0.0, (sum, i) => sum + (i['total'] as double));
+      expect(dayTotal, 600.0);
+
+      // All days total
+      final allDaysTotal = mockInvoices.fold<double>(0.0, (sum, i) => sum + (i['total'] as double));
+      expect(allDaysTotal, 1200.0);
+    });
+
+    test('Analytics title and quick-toggle labels match trilingual design specs', () {
+      final ar = AppStrings('ar');
+      final en = AppStrings('en');
+      final hi = AppStrings('hi');
+
+      // Title must be 'منظومة التقارير والتحليلات' without 'الشاملة'
+      expect(ar.analyticsTitle, 'منظومة التقارير والتحليلات');
+      expect(ar.analyticsTitle.contains('الشاملة'), isFalse);
+      expect(en.analyticsTitle, 'Reports & Analytics');
+
+      // Quick toggle labels: Total ('الإجمالي') and Days ('أيام')
+      expect(ar.totalLabel, 'الإجمالي');
+      expect(en.totalLabel, 'Total');
+      expect(hi.totalLabel, 'कुल');
+
+      expect(ar.daysLabel, 'أيام');
+      expect(en.daysLabel, 'Days');
+      expect(hi.daysLabel, 'दिन');
+
+      // Export CSV label
+      expect(ar.csvBtn, 'CSV');
+      expect(en.csvBtn, 'CSV');
+      expect(hi.csvBtn, 'CSV');
+
+      // Select Day label
+      expect(ar.selectDay, 'اختر اليوم');
+      expect(en.selectDay, 'Select Day');
+      expect(hi.selectDay, 'दिन चुनें');
+    });
+
+    test('CSV export payload contains UTF-8 BOM for Arabic compatibility in Excel', () {
+      final buffer = StringBuffer();
+      buffer.writeln('اسم الصنف,إجمالي المبيعات,الكمية المباعة');
+      buffer.writeln('شامبو تريسمي 400 مل,1250.00,10');
+
+      final contentWithBom = '\uFEFF${buffer.toString()}';
+      expect(contentWithBom.startsWith('\uFEFF'), isTrue);
+      expect(contentWithBom, contains('شامبو تريسمي 400 مل'));
     });
   });
 }

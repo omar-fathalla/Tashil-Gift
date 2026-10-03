@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../localization/app_strings.dart';
 import '../localization/locale_provider.dart';
 import '../theme/app_theme.dart';
+import 'm3_action_menu.dart';
 import '../../features/admin/domain/event_model.dart';
 
 /// Portal Type enumeration to tailor the suspended message & visual theme
@@ -256,40 +257,40 @@ class _CampaignSuspendedScreenState extends ConsumerState<CampaignSuspendedScree
           ),
           actions: [
             // Language selector button
-            PopupMenuButton<String>(
-              icon: Icon(Icons.language_rounded, color: colorScheme.onSurfaceVariant, size: 20),
+            M3ActionMenu(
               tooltip: isAr ? 'تغيير لغة العرض' : 'Change Language',
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              onSelected: (langCode) {
-                ref.read(localeProvider.notifier).state = Locale(langCode);
-              },
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: 'ar',
-                  child: Row(
-                    children: [
-                      const Text('🇪🇬 ', style: TextStyle(fontSize: 16)),
-                      Text('العربية (Arabic)', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
-                    ],
-                  ),
+              anchorIcon: Icon(Icons.language_rounded, color: colorScheme.onSurfaceVariant, size: 20),
+              children: [
+                M3ActionMenu.header(
+                  context: context,
+                  title: isAr ? 'اللغة / Language' : 'Select Language',
                 ),
-                PopupMenuItem(
-                  value: 'en',
-                  child: Row(
-                    children: [
-                      const Text('🇬🇧 ', style: TextStyle(fontSize: 16)),
-                      Text('English', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
-                    ],
-                  ),
+                M3ActionMenu.item(
+                  context: context,
+                  label: 'العربية (Arabic)',
+                  leading: const Text('🇪🇬 ', style: TextStyle(fontSize: 16)),
+                  isSelected: ref.watch(localeProvider).languageCode == 'ar',
+                  onPressed: () {
+                    ref.read(localeProvider.notifier).state = const Locale('ar');
+                  },
                 ),
-                PopupMenuItem(
-                  value: 'hi',
-                  child: Row(
-                    children: [
-                      const Text('🇮🇳 ', style: TextStyle(fontSize: 16)),
-                      Text('हिन्दी (Hindi)', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
-                    ],
-                  ),
+                M3ActionMenu.item(
+                  context: context,
+                  label: 'English',
+                  leading: const Text('🇬🇧 ', style: TextStyle(fontSize: 16)),
+                  isSelected: ref.watch(localeProvider).languageCode == 'en',
+                  onPressed: () {
+                    ref.read(localeProvider.notifier).state = const Locale('en');
+                  },
+                ),
+                M3ActionMenu.item(
+                  context: context,
+                  label: 'हिन्दी (Hindi)',
+                  leading: const Text('🇮🇳 ', style: TextStyle(fontSize: 16)),
+                  isSelected: ref.watch(localeProvider).languageCode == 'hi',
+                  onPressed: () {
+                    ref.read(localeProvider.notifier).state = const Locale('hi');
+                  },
                 ),
               ],
             ),

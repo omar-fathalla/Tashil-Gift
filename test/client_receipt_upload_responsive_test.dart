@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:al_mraay/features/client_portal/presentation/client_receipt_upload_screen.dart';
 import 'package:al_mraay/features/admin/domain/event_model.dart';
+import 'package:al_mraay/core/widgets/m3_adaptive_scaffold.dart';
+import 'package:al_mraay/core/localization/locale_provider.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -24,6 +26,9 @@ void main() {
 
   Widget createTestWidget({required Size screenSize, Locale locale = const Locale('ar')}) {
     return ProviderScope(
+      overrides: [
+        localeProvider.overrideWith((ref) => locale),
+      ],
       child: Consumer(
         builder: (context, ref, child) {
           return MaterialApp(
@@ -148,6 +153,50 @@ void main() {
       await tester.tap(find.byIcon(Icons.clear_rounded).first);
       await tester.pumpAndSettle();
       expect(find.text('Omar Fathalla'), findsNothing);
+    });
+
+    testWidgets('Renders M3SupportingPaneLayout with dual-pane layout on Desktop (1200x800)', (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(createTestWidget(screenSize: const Size(1200, 800)));
+      await tester.pumpAndSettle();
+
+      // Verify M3SupportingPaneLayout is present
+      expect(find.byType(M3SupportingPaneLayout), findsOneWidget);
+
+      // Verify supporting pane content: Campaign Guide & Quick actions
+      expect(find.text('دليل وقواعد الحملة'), findsOneWidget);
+      expect(find.text('مرجع سريع للبروموتر والمبيعات'), findsOneWidget);
+      expect(find.text('الشروط'), findsOneWidget);
+      expect(find.text('الهدايا'), findsOneWidget);
+      expect(find.text('الفواتير'), findsOneWidget);
+
+      // Verify Minimum Spend in supporting pane
+      expect(find.text('الحد الأدنى للشراء:'), findsOneWidget);
+    });
+
+    testWidgets('Renders M3SupportingPaneLayout in English LTR without overflow on Desktop (1200x800)', (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        createTestWidget(
+          screenSize: const Size(1200, 800),
+          locale: const Locale('en'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify English supporting pane headers
+      expect(find.text('Campaign Guide'), findsOneWidget);
+      expect(find.text('Promoter Quick Reference'), findsOneWidget);
+      expect(find.text('Rules'), findsOneWidget);
+      expect(find.text('Prizes'), findsOneWidget);
+      expect(find.text('Invoices'), findsOneWidget);
+      expect(find.text('Minimum Spend:'), findsOneWidget);
     });
   });
 }

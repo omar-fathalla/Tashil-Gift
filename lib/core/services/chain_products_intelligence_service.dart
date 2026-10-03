@@ -664,21 +664,48 @@ class ChainProductsIntelligenceService {
   static String normalizeName(String s) {
     var str = s.toLowerCase().trim();
     str = str.replaceAll(RegExp(r'[أإآ]'), 'ا');
-    str = str.replaceAll('ى', 'ي');
-    str = str.replaceAll('ة', 'ه');
+    str = str.replaceAll(RegExp(r'[ىيیئ]'), 'ي');
+    str = str.replaceAll(RegExp(r'[ةه]'), 'ه');
     str = str.replaceAll(RegExp(r'[^\w\s\u0600-\u06FF]'), ' ');
     return str.replaceAll(RegExp(r'\s+'), ' ');
   }
 
   static String inferBrand(String name) {
     final norm = normalizeName(name);
-    if (norm.contains('اكس') || norm.contains('axe')) return 'Axe';
+    final rawLower = name.toLowerCase();
+    final tokens = norm.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
+
+    // Fine brands
+    if (tokens.contains('فاين') || RegExp(r'\bfine\b').hasMatch(rawLower)) return 'Fine';
+    if (tokens.contains('ايزي') || tokens.contains('ايزى') || tokens.contains('سويت') || RegExp(r'\beasy\b').hasMatch(rawLower)) return 'Easy';
+    if (tokens.contains('سندريلا') || RegExp(r'\bcinderella\b').hasMatch(rawLower)) return 'Cinderella';
+
+    // Standalone Axe deodorant (not wax, not XL size)
+    final isAxe = () {
+      if (RegExp(r'\baxe\b').hasMatch(rawLower)) return true;
+      for (int i = 0; i < tokens.length; i++) {
+        final t = tokens[i];
+        if (t == 'اكس' || t == 'أكس') {
+          if (i + 1 < tokens.length && (tokens[i + 1] == 'لارج' || tokens[i + 1] == 'large')) {
+            continue;
+          }
+          return true;
+        }
+      }
+      return false;
+    }();
+    if (isAxe) return 'Axe';
+
+    // Standalone Lux soap (not deluxe)
+    if (!tokens.contains('ديلوكس') && !rawLower.contains('deluxe')) {
+      if (tokens.contains('لوكس') || RegExp(r'\blux\b').hasMatch(rawLower)) return 'Lux';
+    }
+
     if (norm.contains('ريكسونا') || norm.contains('rexona')) return 'Rexona';
     if (norm.contains('دوف') || norm.contains('dove')) return 'Dove';
     if (norm.contains('كلير') || norm.contains('clear')) return 'Clear';
     if (norm.contains('تريزيمي') || norm.contains('tresemme') || norm.contains('tresemm')) return 'TRESemmé';
     if (norm.contains('صن سيلك') || norm.contains('صانسيلك') || norm.contains('sunsilk')) return 'Sunsilk';
-    if (norm.contains('لوكس') || norm.contains('lux')) return 'Lux';
     if (norm.contains('لايف بوي') || norm.contains('lifebuoy')) return 'Lifebuoy';
     if (norm.contains('سيجنال') || norm.contains('signal') || norm.contains('كلوس اب') || norm.contains('closeup')) return 'Signal';
     if (norm.contains('كاماي') || norm.contains('camay')) return 'Camay';

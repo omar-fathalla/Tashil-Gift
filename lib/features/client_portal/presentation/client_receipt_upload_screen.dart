@@ -24,6 +24,7 @@ import '../../../core/constants/country_currency_config.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../core/widgets/m3_progress_indicators.dart';
+import '../../../core/widgets/m3_adaptive_scaffold.dart';
 import '../../../core/animations/m3_motion.dart';
 import '../../admin/domain/event_model.dart';
 import '../../admin/domain/retail_chain_model.dart';
@@ -653,6 +654,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         multiplierBasis: isMultiScan ? 'both' : _activeEvent!.multiplierBasis,
         maxChancesPerReceipt: isMultiScan ? 0 : _activeEvent!.maxChancesPerReceipt,
         promotionalRules: combinedPromotionalRules,
+        allowComplementaryReceipts: _activeEvent?.allowComplementaryReceipts ?? false,
       );
 
       final previewImgUrl = 'data:$mimeType;base64,${base64Encode(bytes)}';
@@ -1619,7 +1621,10 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       body: Column(
         children: [
           Expanded(
-            child: SingleChildScrollView(
+            child: M3SupportingPaneLayout(
+              supportingPaneWidth: 380.0,
+              showDivider: true,
+              body: SingleChildScrollView(
               padding: EdgeInsets.only(
                 left: isMobile ? 12 : (isTablet ? 20 : 28),
                 right: isMobile ? 12 : (isTablet ? 20 : 28),
@@ -2517,8 +2522,305 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                 ),
               ),
             ),
+            supportingPane: _buildPromoterSupportingPane(
+                context: context,
+                event: event,
+                strings: strings,
+                isAr: isAr,
+                colorScheme: colorScheme,
+              ),
+            ),
           ),
           if (!isMobile) const SwitchPointFooter(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPromoterSupportingPane({
+    required BuildContext context,
+    required EventModel event,
+    required AppStrings strings,
+    required bool isAr,
+    required ColorScheme colorScheme,
+  }) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 1. Supporting Pane Header Card
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.info_outline_rounded, color: colorScheme.primary, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isAr ? 'دليل وقواعد الحملة' : 'Campaign Guide',
+                            style: GoogleFonts.cairo(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          Text(
+                            isAr ? 'مرجع سريع للبروموتر والمبيعات' : 'Promoter Quick Reference',
+                            style: GoogleFonts.cairo(
+                              fontSize: 11,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                // Quick Dialog Launchers
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => CampaignBriefDialog.show(context, event),
+                        icon: const Icon(Icons.campaign_rounded, size: 16),
+                        label: Text(
+                          isAr ? 'الشروط' : 'Rules',
+                          style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => CampaignGiftBalanceDialog.show(context, event),
+                        icon: const Icon(Icons.card_giftcard_rounded, size: 16),
+                        label: Text(
+                          isAr ? 'الهدايا' : 'Prizes',
+                          style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => PromoterInvoicesDialog.show(context, event),
+                        icon: const Icon(Icons.receipt_long_rounded, size: 16),
+                        label: Text(
+                          isAr ? 'الفواتير' : 'Invoices',
+                          style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // 2. Minimum Spend & Campaign Identity Card
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.monetization_on_outlined, size: 18, color: Colors.teal.shade700),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        isAr ? 'الحد الأدنى للشراء:' : 'Minimum Spend:',
+                        style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.teal.shade200),
+                      ),
+                      child: Text(
+                        event.minimumSpend > 0 ? '${event.minimumSpend} ج.م' : (isAr ? 'بدون حد أدنى' : 'No Minimum'),
+                        style: GoogleFonts.cairo(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal.shade800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (event.branchNames.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Icon(Icons.storefront_rounded, size: 18, color: colorScheme.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          isAr ? 'عدد الفروع المعتمدة:' : 'Active Branches:',
+                          style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${event.branchNames.length} ${isAr ? 'فرع' : 'branches'}',
+                        style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // 3. Promotional Rules Summary (if any)
+          if (event.promotionalRules.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerLowest,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.rule_rounded, size: 18, color: colorScheme.secondary),
+                      const SizedBox(width: 8),
+                      Text(
+                        isAr ? 'عروض وقواعد الاستحقاق (${event.promotionalRules.length})' : 'Promotional Rules (${event.promotionalRules.length})',
+                        style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  ...event.promotionalRules.take(4).map((rule) {
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHigh.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            rule.ruleTitle,
+                            style: GoogleFonts.cairo(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '🎁 ${isAr ? 'الهدية المستحقة:' : 'Reward:'} ${rule.rewardValue.isNotEmpty ? rule.rewardValue : (rule.linkedGifts.isNotEmpty ? rule.linkedGifts.map((g) => "${g.quantity}x ${g.giftName}").join(", ") : (rule.linkedGiftName ?? ''))}',
+                            style: GoogleFonts.cairo(
+                              fontSize: 11,
+                              color: Colors.teal.shade700,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // 4. Photography Guidelines for Faster AI Processing
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.amber.shade50.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.amber.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.tips_and_updates_rounded, size: 18, color: Colors.amber.shade800),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        isAr ? 'إرشادات التصوير السريع:' : 'Quick Scanning Tips:',
+                        style: GoogleFonts.cairo(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.amber.shade900,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  isAr
+                      ? '• ضع الفاتورة مفرودة في إضاءة واضحة.\n• تأكد من ظهور اسم السلسلة، التاريخ، وأسطر المنتجات.\n• في الفواتير الطويلة، التقط حتى 4 أجزاء متتابعة.'
+                      : '• Lay receipt flat with good lighting.\n• Ensure store name, date, and product lines are legible.\n• For long receipts, capture up to 4 consecutive parts.',
+                  style: GoogleFonts.cairo(
+                    fontSize: 11.5,
+                    height: 1.5,
+                    color: Colors.brown.shade800,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

@@ -11,9 +11,7 @@
                 "chrome",
                 "--web-port",
                 "8080"
-            ],
-            "debugSdkLibraries": false,
-            "debugExternalPackageLibraries": false
+            ]
         },
         {
             "name": "Tashil Gift (Web Server - Port 8080)",
@@ -25,17 +23,13 @@
                 "web-server",
                 "--web-port",
                 "8080"
-            ],
-            "debugSdkLibraries": false,
-            "debugExternalPackageLibraries": false
+            ]
         },
         {
             "name": "Tashil Gift (Auto Device)",
             "request": "launch",
             "type": "dart",
-            "program": "lib/main.dart",
-            "debugSdkLibraries": false,
-            "debugExternalPackageLibraries": false
+            "program": "lib/main.dart"
         }
     ]
 }

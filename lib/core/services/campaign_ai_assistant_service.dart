@@ -244,6 +244,208 @@ $rawIdeaText
     }
   }
 
+  /// Known Umbrella Sub-Brands taxonomy for FMCG holding companies (AIR-59)
+  static final Map<String, List<String>> knownCompanySubBrands = {
+    'ادكو': [
+      'ديفا (Diva)',
+      'ديفاتول (Divatol)',
+      'فيبا (Feba)',
+      'ماكسيل ماجيك (Maxel Magic)',
+      'فلفيتا (Velveta)',
+      'كلوريل (Clorel)',
+      'سبيد (Speed)',
+      'سيد منظف (Speed / Sayed)',
+      'جلاسي (Glassy)',
+      'رابيدو (Rapido)',
+      'ليدر (Leader)',
+      'سوبر ماكس (Super Max)',
+    ],
+    'adco': [
+      'ديفا (Diva)',
+      'ديفاتول (Divatol)',
+      'فيبا (Feba)',
+      'ماكسيل ماجيك (Maxel Magic)',
+      'فلفيتا (Velveta)',
+      'كلوريل (Clorel)',
+      'سبيد (Speed)',
+      'سيد منظف (Speed / Sayed)',
+      'جلاسي (Glassy)',
+      'رابيدو (Rapido)',
+      'ليدر (Leader)',
+      'سوبر ماكس (Super Max)',
+    ],
+    'يونيليفر': [
+      'سيجنال (Signal)',
+      'كلوس اب (Closeup)',
+      'ريكسونا (Rexona)',
+      'أكس (Axe)',
+      'دوف (Dove)',
+      'لوكس (Lux)',
+      'صانسيلك (Sunsilk)',
+      'كلير (Clear)',
+      'تريزيمي (Tresemme)',
+      'لايف بوي (Lifebuoy)',
+      'كنور (Knorr)',
+      'ليبتون (Lipton)',
+    ],
+    'unilever': [
+      'سيجنال (Signal)',
+      'كلوس اب (Closeup)',
+      'ريكسونا (Rexona)',
+      'أكس (Axe)',
+      'دوف (Dove)',
+      'لوكس (Lux)',
+      'صانسيلك (Sunsilk)',
+      'كلير (Clear)',
+      'تريزيمي (Tresemme)',
+      'لايف بوي (Lifebuoy)',
+      'كنور (Knorr)',
+      'ليبتون (Lipton)',
+    ],
+    'إيديتا': [
+      'مولتو (Molto)',
+      'هوهوز (Hohos)',
+      'توينكيز (Twinkies)',
+      'توداي (Todo)',
+      'فريسكا (Freska)',
+      'بيك رولز (Bake Rolz)',
+      'بيك ستيكس (Bake Stix)',
+      'ميميكس (Mimix)',
+      'أونيرو (Oniro)',
+    ],
+    'edita': [
+      'مولتو (Molto)',
+      'هوهوز (Hohos)',
+      'توينكيز (Twinkies)',
+      'توداي (Todo)',
+      'فريسكا (Freska)',
+      'بيك رولز (Bake Rolz)',
+      'بيك ستيكس (Bake Stix)',
+      'ميميكس (Mimix)',
+      'أونيرو (Oniro)',
+    ],
+    'بروكتر': [
+      'أريال (Ariel)',
+      'تايد (Tide)',
+      'بونكس (Bonux)',
+      'داوني (Downy)',
+      'فيري (Fairy)',
+      'بامبرز (Pampers)',
+      'بانتين (Pantene)',
+      'هيد آند شولدرز (Head & Shoulders)',
+      'أولويز (Always)',
+      'جيليت (Gillette)',
+      'أورال بي (Oral-B)',
+    ],
+    'p&g': [
+      'أريال (Ariel)',
+      'تايد (Tide)',
+      'بونكس (Bonux)',
+      'داوني (Downy)',
+      'فيري (Fairy)',
+      'بامبرز (Pampers)',
+      'بانتين (Pantene)',
+      'هيد آند شولدرز (Head & Shoulders)',
+      'أولويز (Always)',
+      'جيليت (Gillette)',
+      'أورال بي (Oral-B)',
+    ],
+    'صافولا': [
+      'عافية (Afia)',
+      'حلوة (Helwa)',
+      'هنادي (Hanadi)',
+      'سلايت (Slite)',
+      'الملكة (El Maleka)',
+      'المطبخ (El Matbakh)',
+      'مكرونتو (Macaronto)',
+    ],
+    'savola': [
+      'عافية (Afia)',
+      'حلوة (Helwa)',
+      'هنادي (Hanadi)',
+      'سلايت (Slite)',
+      'الملكة (El Maleka)',
+      'المطبخ (El Matbakh)',
+      'مكرونتو (Macaronto)',
+    ],
+    'فاين': [
+      'فاين (Fine)',
+      'فلافي (Fluffy)',
+      'بيبي فاين (Baby Fine)',
+      'فاين كير (Fine Care)',
+    ],
+    'fine': [
+      'فاين (Fine)',
+      'فلافي (Fluffy)',
+      'بيبي فاين (Baby Fine)',
+      'فاين كير (Fine Care)',
+    ],
+    'المراعي': [
+      'المراعي (Almarai)',
+      'بيتي (Beyti)',
+      'تروبيكانا (Tropicana)',
+    ],
+    'almarai': [
+      'المراعي (Almarai)',
+      'بيتي (Beyti)',
+      'تروبيكانا (Tropicana)',
+    ],
+    'دومتي': [
+      'دومتي (Domty)',
+      'دومتي بلس (Domty Plus)',
+      'دومتي ساندوتش (Domty Sandwich)',
+    ],
+    'domty': [
+      'دومتي (Domty)',
+      'دومتي بلس (Domty Plus)',
+      'دومتي ساندوتش (Domty Sandwich)',
+    ],
+    'هاينز': [
+      'هاينز (Heinz)',
+      'كرافت (Kraft)',
+      'مايونيز هاينز',
+      'كاتشب هاينز',
+    ],
+    'heinz': [
+      'هاينز (Heinz)',
+      'كرافت (Kraft)',
+      'مايونيز هاينز',
+      'كاتشب هاينز',
+    ],
+  };
+
+  /// Resolves all distinct umbrella sub-brands for a given holding company (AIR-59)
+  static List<String> resolveCompanySubBrands(String targetCompany, {List<String> productNames = const []}) {
+    final Set<String> brands = {};
+
+    // 1. Check known dictionary
+    final cleanCompany = targetCompany.trim().toLowerCase();
+    for (final entry in knownCompanySubBrands.entries) {
+      if (cleanCompany.contains(entry.key) || entry.key.contains(cleanCompany)) {
+        brands.addAll(entry.value);
+        break;
+      }
+    }
+
+    // 2. Dynamically extract leading brand tokens from product names
+    for (final name in productNames) {
+      final clean = name.trim();
+      if (clean.isEmpty) continue;
+      final tokens = clean.split(RegExp(r'\s+'));
+      if (tokens.isNotEmpty) {
+        final firstWord = tokens[0].trim();
+        // Ignore generic packing words
+        if (!['عرض', 'كيس', 'علبة', 'باكيت', 'كرتونة', 'زجاجة', 'برطمان', 'عبوة', 'قطعة', 'منتج', 'منتجات'].contains(firstWord)) {
+          if (firstWord.length >= 3 && !brands.any((b) => b.contains(firstWord))) {
+            brands.add(firstWord);
+          }
+        }
+      }
+    }
+
+    return brands.toList();
+  }
+
   /// Generates a bulletproof, formatted AI system prompt from existing promotional rules, spend, and conditions.
   static String generateFormattedSystemPrompt({
     required String targetCompany,
@@ -264,6 +466,15 @@ $rawIdeaText
     buffer.writeln('2. رقم الفاتورة (Receipt Number أو Transaction ID) وتاريخ الشراء.');
     buffer.writeln('3. أصناف وكميات منتجات "$targetCompany" بدقة.');
     buffer.writeln();
+
+    final resolvedSubBrands = resolveCompanySubBrands(targetCompany, productNames: requiredProducts);
+    if (resolvedSubBrands.isNotEmpty) {
+      buffer.writeln('🏷️ العلامات والأسماء التجارية المعتمدة للشركة بالفاتورة (Sub-Brands Taxonomy - AIR-59):');
+      buffer.writeln('- نظراً لأن أنظمة الكاشير (POS) في السوبرماركت تطبع أسماء الماركات والعلامات الفرعية فقط ولا تطبع اسم الشركة القابضة، فإن منتجات وعلامات شركة "$targetCompany" في هذا العرض تشمل صراحةً العلامات التجارية والماركات الآتية:');
+      buffer.writeln('  [${resolvedSubBrands.join("، ")}].');
+      buffer.writeln('- ⚠️ تنبيه إلزامي للذكاء الاصطناعي: أي صنف بالفاتورة يتبع أياً من هذه العلامات المعتمدة (مثال: صابون أو سائل أو شامبو أو مسحوق أو مناديل يحمل اسماً من القائمة أعلاه) هو صنف تابع لشركة "$targetCompany" بنسبة 100% ويجب اعتماده وإدراجه في (extractedProducts) مع (isTargetCompany = true) وحساب قيمته في (targetCompanyTotal) وتطبيق العرض الترويجي عليه.');
+      buffer.writeln();
+    }
 
     if (retailChainName.trim().isNotEmpty) {
       final chainList = retailChainName

@@ -240,7 +240,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                 ),
               ],
             ),
-            backgroundColor: const Color(0xFF006C50),
+            backgroundColor: colorScheme.primary,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             duration: const Duration(seconds: 3),
@@ -395,7 +395,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                   ),
                 ],
               ),
-              backgroundColor: const Color(0xFF006C50),
+              backgroundColor: Theme.of(context).colorScheme.primary,
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
@@ -449,7 +449,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
           style: GoogleFonts.cairo(
             fontSize: 11,
             fontWeight: FontWeight.bold,
-            color: Colors.grey.shade700,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
       ],
@@ -492,10 +492,10 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFD97706).withValues(alpha: 0.15),
+                      color: colorScheme.tertiary.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    child: const Icon(Icons.published_with_changes_rounded, color: Color(0xFFD97706), size: 24),
+                    child: Icon(Icons.published_with_changes_rounded, color: colorScheme.tertiary, size: 24),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -539,12 +539,12 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                           _buildSettlementStat(
                             label: isAr ? 'المنصرف المعتمد' : 'Claimed',
                             value: '$totalClaimed',
-                            color: const Color(0xFFD97706),
+                            color: colorScheme.tertiary,
                           ),
                           _buildSettlementStat(
                             label: isAr ? 'المرتجع للمستودع' : 'Returned',
                             value: '$totalRemaining',
-                            color: const Color(0xFF006C50),
+                            color: colorScheme.primary,
                           ),
                         ],
                       ),
@@ -579,7 +579,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                         labelStyle: GoogleFonts.cairo(fontSize: 11),
                         hintText: '0',
                         helperText: isAr ? 'ضع (0) للتصفير الكامل والبدء من الصفر لإدخال بيانات جديدة' : 'Set (0) for fresh zeroed start to enter new data',
-                        helperStyle: GoogleFonts.cairo(fontSize: 10, color: const Color(0xFF006C50), fontWeight: FontWeight.w600),
+                        helperStyle: GoogleFonts.cairo(fontSize: 10, color: colorScheme.primary, fontWeight: FontWeight.w600),
                         filled: true,
                         fillColor: colorScheme.surface,
                         prefixIcon: const Icon(Icons.add_shopping_cart_rounded, size: 20),
@@ -595,13 +595,13 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                       runSpacing: 6,
                       children: [
                         ActionChip(
-                          avatar: const Icon(Icons.refresh_rounded, size: 14, color: Colors.teal),
+                          avatar: Icon(Icons.refresh_rounded, size: 14, color: colorScheme.primary),
                           label: Text(
                             isAr ? '0 (تصفير كامل للبدء من جديد)' : '0 (Zero & fresh start)',
-                            style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.teal.shade900),
+                            style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: colorScheme.primary),
                           ),
-                          backgroundColor: Colors.teal.shade50,
-                          side: BorderSide(color: Colors.teal.shade200),
+                          backgroundColor: colorScheme.primary.withValues(alpha: 0.08),
+                          side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.2)),
                           onPressed: () => setDialogState(() => newQuotaController.text = '0'),
                         ),
                         ActionChip(
@@ -624,21 +624,21 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.amber.shade50,
+                        color: colorScheme.tertiaryContainer.withValues(alpha: 0.35),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.amber.shade200),
+                        border: Border.all(color: colorScheme.tertiary.withValues(alpha: 0.3)),
                       ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.info_outline_rounded, size: 18, color: Colors.amber.shade900),
+                          Icon(Icons.info_outline_rounded, size: 18, color: colorScheme.tertiary),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               isAr
                                   ? 'سيتم ترحيل وحفظ أرقام هذا الأسبوع كأرشيف تاريخي دائم، وتصفير البواقي، وتغذية الفروع بالرصيد الجديد لتبدأ فوراً بنسبة سحب 0% مع حفظ كافة الفواتير السابقة.'
                                   : 'This wave will be permanently archived. Remaining stock will be settled as returned, and new quota applied at 0% depletion rate while preserving all invoices.',
-                              style: GoogleFonts.cairo(fontSize: 11, color: Colors.amber.shade900, height: 1.3),
+                              style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant, height: 1.3),
                             ),
                           ),
                         ],
@@ -675,8 +675,8 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                     style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
                   ),
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF006C50),
-                    foregroundColor: Colors.white,
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.onPrimary,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
@@ -753,7 +753,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                 ),
               ],
             ),
-            backgroundColor: const Color(0xFF006C50),
+            backgroundColor: Theme.of(context).colorScheme.primary,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             duration: const Duration(seconds: 4),
@@ -830,7 +830,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
           isAr ? 'تم تطبيق كمية ($qty) على كافة الفروع المحددة للصنف' : 'Applied ($qty) to all branches for selected gift',
           style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: const Color(0xFF006C50),
+        backgroundColor: Theme.of(context).colorScheme.primary,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
       ),
@@ -1284,24 +1284,45 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 1. Header Banner & Save Action
-          _buildHeaderCard(
-            context: context,
+          // 1. Header Title
+          _buildHeaderTitle(colorScheme, strings, isAr),
+          const SizedBox(height: 16),
+
+          // 2. 4 Executive KPI Cards (First section at the top! 2x2 on mobile & tablet, 4 on desktop)
+          _buildKpiGrid(
             colorScheme: colorScheme,
             strings: strings,
             isAr: isAr,
-            isHi: isHi,
-            events: events,
-            allEvents: allEvents,
-            masterGifts: effectiveGifts,
-            branches: allBranches,
             coveredBranchesCount: allBranches.length,
             totalAllocated: totalAllocatedStock,
             totalClaimed: totalClaimedStock,
             totalRemaining: totalRemainingStock,
-            settlements: settlements,
+            isSettlementSelected: _selectedSettlement != null,
           ),
+          const SizedBox(height: 14),
 
+          // 3. Action Buttons Group ("حفظ", "إكسل", "تسوية الويك إند" on one row)
+          _buildActionButtonsGroup(
+            context: context,
+            colorScheme: colorScheme,
+            strings: strings,
+            isAr: isAr,
+            events: events,
+            masterGifts: effectiveGifts,
+            branches: allBranches,
+            totalAllocated: totalAllocatedStock,
+            totalClaimed: totalClaimedStock,
+            totalRemaining: totalRemainingStock,
+          ),
+          const SizedBox(height: 12),
+
+          // 4. Wave & Campaign Selector Dropdown Card
+          _buildWaveAndCampaignSelectorCard(
+            colorScheme: colorScheme,
+            isAr: isAr,
+            settlements: settlements,
+            allEvents: allEvents,
+          ),
           const SizedBox(height: 16),
 
           // Archive Information Banner (when reviewing past settlement)
@@ -1314,9 +1335,9 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                   margin: const EdgeInsets.only(bottom: 16),
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
+                    color: colorScheme.tertiaryContainer.withValues(alpha: 0.35),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.amber.shade300, width: 1.2),
+                    border: Border.all(color: colorScheme.tertiary.withValues(alpha: 0.3), width: 1.2),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1326,10 +1347,10 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: Colors.amber.shade100,
+                              color: colorScheme.tertiaryContainer,
                               shape: BoxShape.circle,
                             ),
-                            child: Icon(Icons.history_edu_rounded, color: Colors.amber.shade900, size: 22),
+                            child: Icon(Icons.history_edu_rounded, color: colorScheme.tertiary, size: 22),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -1340,13 +1361,13 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                                   isAr
                                       ? '📜 أرشيف تسوية معتمد: ${_selectedSettlement!.cycleTitle}'
                                       : '📜 Archived Settlement: ${_selectedSettlement!.cycleTitle}',
-                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13.5, color: Colors.amber.shade900),
+                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13.5, color: colorScheme.onTertiaryContainer),
                                 ),
                                 Text(
                                   isAr
                                       ? 'تاريخ الاعتماد: ${_formatDateShort(_selectedSettlement!.settledAt)} • المعتمد بواسطة: ${_selectedSettlement!.settledBy}'
                                       : 'Settled At: ${_formatDateShort(_selectedSettlement!.settledAt)} • By: ${_selectedSettlement!.settledBy}',
-                                  style: GoogleFonts.cairo(fontSize: 11, color: Colors.amber.shade900),
+                                  style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onTertiaryContainer.withValues(alpha: 0.85)),
                                 ),
                               ],
                             ),
@@ -1396,13 +1417,8 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
           LayoutBuilder(
             builder: (context, constraints) {
               final isNarrow = constraints.maxWidth < 650;
-              final searchField = Container(
+              final searchField = SizedBox(
                 height: 44,
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
-                ),
                 child: TextField(
                   controller: _searchController,
                   style: GoogleFonts.cairo(fontSize: 13.5),
@@ -1416,16 +1432,30 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                             onPressed: () => _searchController.clear(),
                           )
                         : null,
-                    border: InputBorder.none,
+                    filled: true,
+                    fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
                     isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: colorScheme.primary, width: 2),
+                    ),
                   ),
                 ),
               );
 
               final segmentBtn = M3ConnectedButtonGroup<int>(
-                height: 40,
+                height: 44,
                 borderRadius: 12,
+                isExpanded: true,
                 selectedValue: _viewMode,
                 onSelected: (val) {
                   setState(() {
@@ -1459,9 +1489,9 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
 
               return Row(
                 children: [
-                  Expanded(child: searchField),
+                  Expanded(flex: 3, child: searchField),
                   const SizedBox(width: 14),
-                  segmentBtn,
+                  Expanded(flex: 2, child: segmentBtn),
                 ],
               );
             },
@@ -1481,7 +1511,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
               ),
               child: Column(
                 children: [
-                  Icon(Icons.inventory_2_outlined, size: 48, color: colorScheme.outlineVariant),
+                  Icon(Icons.inventory_2_rounded, size: 48, color: colorScheme.outlineVariant),
                   const SizedBox(height: 12),
                   Text(
                     isAr
@@ -1536,8 +1566,8 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                 style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 15),
               ),
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF006C50),
-                foregroundColor: Colors.white,
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 elevation: 4,
@@ -1549,525 +1579,539 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
     );
   }
 
-  Widget _buildHeaderCard({
-    required BuildContext context,
+  Widget _buildHeaderTitle(ColorScheme colorScheme, AppStrings strings, bool isAr) {
+    return Row(
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: colorScheme.primaryContainer,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: colorScheme.primary.withValues(alpha: 0.2)),
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.primary.withValues(alpha: 0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Center(
+            child: Icon(Icons.account_balance_wallet_rounded, color: colorScheme.primary, size: 22),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                strings.branchBalancesNavTitle,
+                style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 18, color: colorScheme.onSurface),
+              ),
+              Text(
+                strings.branchBalancesNavSubtitle,
+                style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildKpiGrid({
     required ColorScheme colorScheme,
     required AppStrings strings,
     required bool isAr,
-    required bool isHi,
-    required List<EventModel> events,
-    required List<EventModel> allEvents,
-    required List<CompanyGiftModel> masterGifts,
-    required List<String> branches,
     required int coveredBranchesCount,
     required int totalAllocated,
     required int totalClaimed,
     required int totalRemaining,
-    List<CampaignStockSettlementModel> settlements = const [],
+    required bool isSettlementSelected,
   }) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isCompact = constraints.maxWidth < 760;
+        final double width = constraints.maxWidth;
+        final bool isDesktop = width >= 840;
+        final bool isMobile = width < 600;
 
-        final exportExcelBtn = OutlinedButton.icon(
-          onPressed: _isExporting
-              ? null
-              : () => _exportExcelReport(
-                    events: events,
-                    masterGifts: masterGifts,
-                    branches: branches,
-                    strings: strings,
-                    isAr: isAr,
+        // 2x2 grid on mobile & tablet, 4 in a row on desktop
+        final int crossAxisCount = isDesktop ? 4 : 2;
+        final double childAspectRatio = isDesktop ? 1.85 : (isMobile ? 1.30 : 1.75);
+
+        final cards = [
+          _buildExecutiveKpiCard(
+            title: strings.coveredOutletsCount,
+            value: '$coveredBranchesCount',
+            unit: isAr ? 'فرع' : 'Branches',
+            subtitle: isAr ? 'الفروع المعتمدة في الحملة' : 'Verified campaign branches',
+            badgeText: isAr ? 'فروع نشطة' : 'Branches',
+            icon: Icons.storefront_rounded,
+            color: colorScheme.primary,
+            colorScheme: colorScheme,
+            tooltip: isAr ? 'إجمالي الفروع والمنافذ المعتمدة لتوزيع الهدايا' : 'Covered promotional branches',
+            isMobile: !isDesktop,
+          ),
+          _buildExecutiveKpiCard(
+            title: strings.totalAllocatedGifts,
+            value: '$totalAllocated',
+            unit: isAr ? 'قطعة' : 'Pcs',
+            subtitle: isSettlementSelected
+                ? (isAr ? 'الحصة المخصصة بهذه الدورة' : 'Allocated quota this cycle')
+                : (isAr ? 'إجمالي الحصة الموزعة للفروع' : 'Total branch allocated quota'),
+            badgeText: isSettlementSelected ? (isAr ? 'حصة مؤرشفة' : 'Archived') : (isAr ? 'حصة مخصصة' : 'Allocated'),
+            icon: Icons.inventory_2_rounded,
+            color: colorScheme.secondary,
+            colorScheme: colorScheme,
+            tooltip: isAr ? 'إجمالي عدد القطع والهدايا المخصصة لكافة الفروع' : 'Total allocated gift units',
+            isMobile: !isDesktop,
+          ),
+          _buildExecutiveKpiCard(
+            title: strings.awardedGiftsCount,
+            value: '$totalClaimed',
+            unit: isAr ? 'قطعة' : 'Pcs',
+            subtitle: isSettlementSelected
+                ? (isAr ? 'المنصرف المسجل بالتسوية' : 'Settled claims')
+                : (isAr ? 'الهدايا المسلمة للمستهلكين' : 'Delivered promotional gifts'),
+            badgeText: isAr ? 'هدايا مصروفة' : 'Claimed',
+            icon: Icons.card_giftcard_rounded,
+            color: colorScheme.tertiary,
+            colorScheme: colorScheme,
+            tooltip: isAr ? 'إجمالي عدد الهدايا والجوائز المصروفة فعلياً للعملاء' : 'Total gifts disbursed to winners',
+            isMobile: !isDesktop,
+          ),
+          _buildExecutiveKpiCard(
+            title: isSettlementSelected ? (isAr ? 'المرتجع للمستودع' : 'Returned Stock') : strings.remainingStockBalance,
+            value: '$totalRemaining',
+            unit: isAr ? 'قطعة' : 'Pcs',
+            subtitle: isSettlementSelected
+                ? (isAr ? 'الرصيد المرتجع عند إغلاق الدورة' : 'Returned at cycle close')
+                : (isAr ? 'الرصيد المتبقي بمخزون الفروع' : 'Remaining stock at branches'),
+            badgeText: isSettlementSelected ? (isAr ? 'مرتجع للمستودع' : 'Returned') : (isAr ? 'مخزون متبقي' : 'In Stock'),
+            icon: isSettlementSelected ? Icons.assignment_return_rounded : Icons.savings_rounded,
+            color: colorScheme.primary.withValues(alpha: 0.85),
+            colorScheme: colorScheme,
+            tooltip: isSettlementSelected
+                ? (isAr ? 'إجمالي الرصيد الذي تم إغلاقه وإرجاعه لمستودع الشركة' : 'Stock returned to warehouse')
+                : (isAr ? 'رصيد الهدايا المتبقي بالمنافذ والمتاح للصرف' : 'Remaining stock balance'),
+            isMobile: !isDesktop,
+          ),
+        ];
+
+        return GridView.count(
+          crossAxisCount: crossAxisCount,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: childAspectRatio,
+          children: cards,
+        );
+      },
+    );
+  }
+
+  Widget _buildActionButtonsGroup({
+    required BuildContext context,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+    required List<EventModel> events,
+    required List<CompanyGiftModel> masterGifts,
+    required List<String> branches,
+    required int totalAllocated,
+    required int totalClaimed,
+    required int totalRemaining,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: IntrinsicHeight(
+          child: Row(
+            children: [
+              // 1. "حفظ" (Save)
+              Expanded(
+                child: Material(
+                  color: colorScheme.primary,
+                  child: InkWell(
+                    onTap: _isSaving
+                        ? null
+                        : () => _saveAllBalances(
+                              events: events,
+                              masterGifts: masterGifts,
+                              branches: branches,
+                            ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (_isSaving)
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          else
+                            const Icon(Icons.save_rounded, size: 18, color: Colors.white),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              _isSaving ? (isAr ? 'جاري...' : 'Saving...') : (isAr ? 'حفظ' : 'Save'),
+                              style: GoogleFonts.cairo(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: Colors.white,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-          icon: _isExporting
-              ? const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.table_view_rounded, size: 16),
-          label: Text(
-            isAr ? 'تصدير Excel' : 'Export Excel',
-            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
-          ),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xFF006C50),
-            side: const BorderSide(color: Color(0xFF006C50), width: 1.2),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-
-        final saveAllBtn = FilledButton.icon(
-          onPressed: _isSaving
-              ? null
-              : () => _saveAllBalances(
-                    events: events,
-                    masterGifts: masterGifts,
-                    branches: branches,
-                  ),
-          icon: _isSaving
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                )
-              : const Icon(Icons.save_rounded, size: 16),
-          label: Text(
-            _isSaving ? (isAr ? 'جاري الحفظ...' : 'Saving...') : (isAr ? 'حفظ وتثبيت الأرصدة' : strings.saveAllBalancesBtn),
-            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
-          ),
-          style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF006C50),
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            elevation: 2,
-          ),
-        );
-
-        final settleWeekendBtn = FilledButton.icon(
-          onPressed: _isSettling || events.isEmpty
-              ? null
-              : () => _showWeekendSettlementDialog(
-                    context: context,
-                    event: events.first,
-                    masterGifts: masterGifts,
-                    branches: branches,
-                    totalAllocated: totalAllocated,
-                    totalClaimed: totalClaimed,
-                    totalRemaining: totalRemaining,
-                    isAr: isAr,
-                  ),
-          icon: _isSettling
-              ? const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                )
-              : const Icon(Icons.published_with_changes_rounded, size: 16),
-          label: Text(
-            isAr ? 'تسوية الويك إند وبدء دفعة جديدة' : 'Settle Wave & Start New',
-            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
-          ),
-          style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFFD97706),
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            elevation: 2,
-          ),
-        );
-
-        final backToLiveBtn = FilledButton.icon(
-          onPressed: () => setState(() => _selectedSettlement = null),
-          icon: const Icon(Icons.arrow_back_rounded, size: 16),
-          label: Text(
-            isAr ? 'العودة للدورة الحالية النشطة' : 'Back to Active Quota',
-            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
-          ),
-          style: FilledButton.styleFrom(
-            backgroundColor: colorScheme.primary,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-
-        final headerTitleWidget = Row(
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF0284C7), Color(0xFF006C50)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
                 ),
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF0284C7).withValues(alpha: 0.25),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
               ),
-              child: const Center(
-                child: Icon(Icons.account_balance_wallet_rounded, color: Colors.white, size: 20),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    strings.branchBalancesNavTitle,
-                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 18, color: colorScheme.onSurface),
-                  ),
-                  Text(
-                    strings.branchBalancesNavSubtitle,
-                    style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        );
+              VerticalDivider(width: 1, thickness: 1, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
 
-        return Container(
-          width: double.infinity,
-          padding: EdgeInsets.all(isCompact ? 14 : 20),
-          decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-            boxShadow: [
-              BoxShadow(
-                color: colorScheme.shadow.withValues(alpha: 0.04),
-                blurRadius: 16,
-                offset: const Offset(0, 4),
+              // 2. "إكسل" (Excel)
+              Expanded(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: _isExporting
+                        ? null
+                        : () => _exportExcelReport(
+                              events: events,
+                              masterGifts: masterGifts,
+                              branches: branches,
+                              strings: strings,
+                              isAr: isAr,
+                            ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (_isExporting)
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary),
+                            )
+                          else
+                            Icon(Icons.table_chart_rounded, size: 18, color: colorScheme.primary),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              isAr ? 'إكسل' : 'Excel',
+                              style: GoogleFonts.cairo(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: colorScheme.onSurface,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              VerticalDivider(width: 1, thickness: 1, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+
+              // 3. "تسوية الويك إند" (or "العودة للنشطة" if settlement selected)
+              Expanded(
+                child: Material(
+                  color: _selectedSettlement != null
+                      ? colorScheme.secondaryContainer.withValues(alpha: 0.4)
+                      : colorScheme.tertiaryContainer.withValues(alpha: 0.4),
+                  child: InkWell(
+                    onTap: _selectedSettlement != null
+                        ? () => setState(() => _selectedSettlement = null)
+                        : (_isSettling || events.isEmpty
+                            ? null
+                            : () => _showWeekendSettlementDialog(
+                                  context: context,
+                                  event: events.first,
+                                  masterGifts: masterGifts,
+                                  branches: branches,
+                                  totalAllocated: totalAllocated,
+                                  totalClaimed: totalClaimed,
+                                  totalRemaining: totalRemaining,
+                                  isAr: isAr,
+                                )),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (_isSettling)
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.tertiary),
+                            )
+                          else
+                            Icon(
+                              _selectedSettlement != null ? Icons.arrow_back_rounded : Icons.published_with_changes_rounded,
+                              size: 18,
+                              color: _selectedSettlement != null ? colorScheme.secondary : colorScheme.tertiary,
+                            ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              _selectedSettlement != null
+                                  ? (isAr ? 'العودة للنشطة' : 'Active Wave')
+                                  : (isAr ? 'تسوية الويك إند' : 'Settle Wave'),
+                              style: GoogleFonts.cairo(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12.5,
+                                color: _selectedSettlement != null ? colorScheme.secondary : colorScheme.onTertiaryContainer,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (isCompact) ...[
-                headerTitleWidget,
-                const SizedBox(height: 14),
-                if (_selectedSettlement == null) ...[
-                  Row(
-                    children: [
-                      Expanded(child: saveAllBtn),
-                      const SizedBox(width: 8),
-                      Expanded(child: exportExcelBtn),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(width: double.infinity, child: settleWeekendBtn),
-                ] else ...[
-                  Row(
-                    children: [
-                      Expanded(child: backToLiveBtn),
-                      const SizedBox(width: 8),
-                      Expanded(child: exportExcelBtn),
-                    ],
-                  ),
-                ],
-              ] else ...[
-                Row(
-                  children: [
-                    Expanded(child: headerTitleWidget),
-                    exportExcelBtn,
-                    const SizedBox(width: 8),
-                    if (_selectedSettlement == null) ...[
-                      saveAllBtn,
-                      const SizedBox(width: 8),
-                      settleWeekendBtn,
-                    ] else ...[
-                      backToLiveBtn,
-                    ],
-                  ],
-                ),
-              ],
+        ),
+      ),
+    );
+  }
 
-              // Wave / Settlement Archive Dropdown Selector
-              const SizedBox(height: 14),
+  Widget _buildWaveAndCampaignSelectorCard({
+    required ColorScheme colorScheme,
+    required bool isAr,
+    required List<CampaignStockSettlementModel> settlements,
+    required List<EventModel> allEvents,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Wave / Settlement Dropdown
+          Row(
+            children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: _selectedSettlement != null
-                      ? Colors.amber.shade50
-                      : colorScheme.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: _selectedSettlement != null
-                        ? Colors.amber.shade300
-                        : colorScheme.outlineVariant.withValues(alpha: 0.5),
-                  ),
+                  color: colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Row(
-                  children: [
-                    Icon(
-                      _selectedSettlement != null ? Icons.history_edu_rounded : Icons.radar_rounded,
-                      size: 20,
-                      color: _selectedSettlement != null ? Colors.amber.shade900 : const Color(0xFF006C50),
+                child: Icon(
+                  _selectedSettlement != null ? Icons.history_edu_rounded : Icons.radar_rounded,
+                  size: 18,
+                  color: colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                isAr ? 'الدورة / التسوية:' : 'Wave / Settlement:',
+                style: GoogleFonts.cairo(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String?>(
+                    value: _selectedSettlement?.id,
+                    isExpanded: true,
+                    icon: Icon(Icons.arrow_drop_down_rounded, color: colorScheme.primary),
+                    hint: Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            isAr ? '📌 الدورة الحالية النشطة' : '📌 Current Active Wave',
+                            style: GoogleFonts.cairo(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.primary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      isAr ? 'الدورة / التسوية:' : 'Wave / Cycle:',
-                      style: GoogleFonts.cairo(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.bold,
-                        color: _selectedSettlement != null ? Colors.amber.shade900 : colorScheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String?>(
-                          value: _selectedSettlement?.id,
-                          isExpanded: true,
-                          hint: Row(
-                            children: [
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF006C50),
-                                  shape: BoxShape.circle,
-                                ),
+                    items: [
+                      DropdownMenuItem<String?>(
+                        value: null,
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: colorScheme.primary,
+                                shape: BoxShape.circle,
                               ),
-                              const SizedBox(width: 6),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                isAr ? '📌 الدورة الحالية النشطة' : '📌 Current Active Wave',
+                                style: GoogleFonts.cairo(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: colorScheme.primary,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      ...settlements.map((s) {
+                        return DropdownMenuItem<String?>(
+                          value: s.id,
+                          child: Row(
+                            children: [
+                              Icon(Icons.archive_rounded, size: 16, color: colorScheme.tertiary),
+                              const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  isAr
-                                      ? '📌 الدورة الحالية النشطة'
-                                      : '📌 Current Active Wave',
+                                  '${s.cycleTitle} (${_formatDateShort(s.settledAt)} • منصرف: ${s.totalClaimed} • مرتجع: ${s.totalReturned})',
                                   style: GoogleFonts.cairo(
                                     fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: const Color(0xFF006C50),
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.onSurface,
                                   ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
                           ),
-                          items: [
-                            DropdownMenuItem<String?>(
-                              value: null,
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFF006C50),
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: Text(
-                                      isAr
-                                          ? '📌 الدورة الحالية النشطة'
-                                          : '📌 Current Active Wave',
-                                      style: GoogleFonts.cairo(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: const Color(0xFF006C50),
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            ...settlements.map((s) {
-                              return DropdownMenuItem<String?>(
-                                value: s.id,
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.archive_outlined, size: 16, color: Color(0xFFD97706)),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        '${s.cycleTitle} (${_formatDateShort(s.settledAt)} • منصرف: ${s.totalClaimed} • مرتجع: ${s.totalReturned})',
-                                        style: GoogleFonts.cairo(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: colorScheme.onSurface,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }),
-                          ],
-                          onChanged: (val) {
-                            setState(() {
-                              if (val == null) {
-                                _selectedSettlement = null;
-                              } else {
-                                _selectedSettlement = settlements.firstWhere(
-                                  (s) => s.id == val,
-                                  orElse: () => settlements.first,
-                                );
-                              }
-                            });
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Campaign Filter Dropdown (when multiple campaigns exist)
-              if (allEvents.length > 1) ...[
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.campaign_rounded, size: 18, color: colorScheme.primary),
-                      const SizedBox(width: 8),
-                      Text(
-                        isAr ? 'الحملة / الفعالية:' : 'Campaign:',
-                        style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String?>(
-                            value: _selectedEventId != null && allEvents.any((e) => e.id == _selectedEventId)
-                                ? _selectedEventId
-                                : null,
-                            isExpanded: true,
-                            hint: Text(
-                              isAr ? 'كافة الفعاليات (إجمالي عام)' : 'All Campaigns (Combined)',
-                              style: GoogleFonts.cairo(fontSize: 11.5, color: colorScheme.onSurfaceVariant),
-                            ),
-                            items: [
-                              DropdownMenuItem<String?>(
-                                value: null,
-                                child: Text(
-                                  isAr ? 'كافة الفعاليات (إجمالي عام)' : 'All Campaigns (Combined)',
-                                  style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                              ...allEvents.map(
-                                (e) => DropdownMenuItem<String?>(
-                                  value: e.id,
-                                  child: Text(
-                                    e.eventName,
-                                    style: GoogleFonts.cairo(fontSize: 11.5),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ),
-                            ],
-                            onChanged: (val) {
-                              setState(() {
-                                _selectedEventId = val;
-                              });
-                            },
-                          ),
-                        ),
-                      ),
+                        );
+                      }),
                     ],
+                    onChanged: (val) {
+                      setState(() {
+                        if (val == null) {
+                          _selectedSettlement = null;
+                        } else {
+                          _selectedSettlement = settlements.firstWhere(
+                            (s) => s.id == val,
+                            orElse: () => settlements.first,
+                          );
+                        }
+                      });
+                    },
                   ),
                 ),
-              ],
-
-              const SizedBox(height: 14),
-
-              // 4 Executive Hero KPI Cards: 1 column on Mobile, 2 on Tablet, 4 on Desktop
-              LayoutBuilder(
-                builder: (context, kpiConstraints) {
-                  final double width = kpiConstraints.maxWidth;
-                  final bool isMobile = width < 600;
-
-                  int crossAxisCount = 4;
-                  double childAspectRatio = 1.65;
-                  if (width < 600) {
-                    crossAxisCount = 1;
-                    childAspectRatio = 2.35;
-                  } else if (width < 960) {
-                    crossAxisCount = 2;
-                    childAspectRatio = 1.85;
-                  } else if (width < 1200) {
-                    crossAxisCount = 2;
-                    childAspectRatio = 2.1;
-                  }
-
-                  final cards = [
-                    _buildExecutiveKpiCard(
-                      title: strings.coveredOutletsCount,
-                      value: '$coveredBranchesCount',
-                      unit: isAr ? 'فرع' : 'Branches',
-                      subtitle: isAr ? 'الفروع المعتمدة في الحملة' : 'Verified campaign branches',
-                      badgeText: isAr ? 'فروع نشطة' : 'Branches',
-                      icon: Icons.storefront_rounded,
-                      color: const Color(0xFF0284C7),
-                      colorScheme: colorScheme,
-                      tooltip: isAr ? 'إجمالي الفروع والمنافذ المعتمدة لتوزيع الهدايا' : 'Covered promotional branches',
-                      isMobile: isMobile,
-                    ),
-                    _buildExecutiveKpiCard(
-                      title: strings.totalAllocatedGifts,
-                      value: '$totalAllocated',
-                      unit: isAr ? 'قطعة' : 'Pcs',
-                      subtitle: _selectedSettlement != null
-                          ? (isAr ? 'الحصة المخصصة بهذه الدورة' : 'Allocated quota this cycle')
-                          : (isAr ? 'إجمالي الحصة الموزعة للفروع' : 'Total branch allocated quota'),
-                      badgeText: _selectedSettlement != null ? (isAr ? 'حصة مؤرشفة' : 'Archived') : (isAr ? 'حصة مخصصة' : 'Allocated'),
-                      icon: Icons.inventory_2_rounded,
-                      color: const Color(0xFF006C50),
-                      colorScheme: colorScheme,
-                      tooltip: isAr ? 'إجمالي عدد القطع والهدايا المخصصة لكافة الفروع' : 'Total allocated gift units',
-                      isMobile: isMobile,
-                    ),
-                    _buildExecutiveKpiCard(
-                      title: strings.awardedGiftsCount,
-                      value: '$totalClaimed',
-                      unit: isAr ? 'قطعة' : 'Pcs',
-                      subtitle: _selectedSettlement != null
-                          ? (isAr ? 'المنصرف المسجل بالتسوية' : 'Settled claims')
-                          : (isAr ? 'الهدايا المسلمة للمستهلكين' : 'Delivered promotional gifts'),
-                      badgeText: isAr ? 'هدايا مصروفة' : 'Claimed',
-                      icon: Icons.card_giftcard_rounded,
-                      color: const Color(0xFFD97706),
-                      colorScheme: colorScheme,
-                      tooltip: isAr ? 'إجمالي عدد الهدايا والجوائز المصروفة فعلياً للعملاء' : 'Total gifts disbursed to winners',
-                      isMobile: isMobile,
-                    ),
-                    _buildExecutiveKpiCard(
-                      title: _selectedSettlement != null ? (isAr ? 'المرتجع للمستودع' : 'Returned Stock') : strings.remainingStockBalance,
-                      value: '$totalRemaining',
-                      unit: isAr ? 'قطعة' : 'Pcs',
-                      subtitle: _selectedSettlement != null
-                          ? (isAr ? 'الرصيد المرتجع عند إغلاق الدورة' : 'Returned at cycle close')
-                          : (isAr ? 'الرصيد المتبقي بمخزون الفروع' : 'Remaining stock at branches'),
-                      badgeText: _selectedSettlement != null ? (isAr ? 'مرتجع للمستودع' : 'Returned') : (isAr ? 'مخزون متبقي' : 'In Stock'),
-                      icon: _selectedSettlement != null ? Icons.assignment_return_rounded : Icons.savings_rounded,
-                      color: _selectedSettlement != null ? const Color(0xFF006C50) : const Color(0xFF7C3AED),
-                      colorScheme: colorScheme,
-                      tooltip: _selectedSettlement != null
-                          ? (isAr ? 'إجمالي الرصيد الذي تم إغلاقه وإرجاعه لمستودع الشركة' : 'Stock returned to warehouse')
-                          : (isAr ? 'رصيد الهدايا المتبقي بالمنافذ والمتاح للصرف' : 'Remaining stock balance'),
-                      isMobile: isMobile,
-                    ),
-                  ];
-
-                  return GridView.count(
-                    crossAxisCount: crossAxisCount,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    mainAxisSpacing: isMobile ? 12 : 14,
-                    crossAxisSpacing: isMobile ? 12 : 14,
-                    childAspectRatio: childAspectRatio,
-                    children: cards,
-                  );
-                },
               ),
             ],
           ),
-        );
-      },
+
+          // Campaign Selector Dropdown (when multiple campaigns exist)
+          if (allEvents.length > 1) ...[
+            Divider(height: 16, thickness: 1, color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: colorScheme.secondaryContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.campaign_rounded, size: 18, color: colorScheme.secondary),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  isAr ? 'الحملة / الفعالية:' : 'Campaign:',
+                  style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String?>(
+                      value: _selectedEventId != null && allEvents.any((e) => e.id == _selectedEventId)
+                          ? _selectedEventId
+                          : null,
+                      isExpanded: true,
+                      icon: Icon(Icons.arrow_drop_down_rounded, color: colorScheme.secondary),
+                      hint: Text(
+                        isAr ? 'كافة الفعاليات (إجمالي عام)' : 'All Campaigns (Combined)',
+                        style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                      ),
+                      items: [
+                        DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text(
+                            isAr ? 'كافة الفعاليات (إجمالي عام)' : 'All Campaigns (Combined)',
+                            style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        ...allEvents.map(
+                          (e) => DropdownMenuItem<String?>(
+                            value: e.id,
+                            child: Text(
+                              e.eventName,
+                              style: GoogleFonts.cairo(fontSize: 12),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                      ],
+                      onChanged: (val) {
+                        setState(() {
+                          _selectedEventId = val;
+                        });
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -2115,21 +2159,24 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                   ),
                   child: Icon(icon, size: 18, color: color),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    badgeText,
-                    style: GoogleFonts.cairo(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: color,
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    child: Text(
+                      badgeText,
+                      style: GoogleFonts.cairo(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
               ],
@@ -2211,7 +2258,8 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
           isExpanded: true,
           decoration: InputDecoration(
             labelText: isAr ? 'اختر الصنف / الهدية' : 'Select Gift / Voucher',
-            labelStyle: GoogleFonts.cairo(fontSize: 11),
+            labelStyle: GoogleFonts.cairo(fontSize: 11.5, color: colorScheme.onSurfaceVariant),
+            prefixIcon: Icon(Icons.category_rounded, size: 18, color: colorScheme.primary),
             isDense: true,
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             filled: true,
@@ -2224,6 +2272,10 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.7)),
             ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: colorScheme.primary, width: 2),
+            ),
           ),
           items: masterGifts.map((g) {
             final key = g.id.isNotEmpty ? g.id : g.giftName;
@@ -2235,7 +2287,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                   Icon(
                     g.isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
                     size: 16,
-                    color: g.isVoucher ? const Color(0xFFD97706) : const Color(0xFF006C50),
+                    color: g.isVoucher ? colorScheme.tertiary : colorScheme.secondary,
                   ),
                   const SizedBox(width: 8),
                   Flexible(
@@ -2256,101 +2308,169 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
           },
         );
 
-        final qtyField = TextField(
-          controller: _bulkQtyController,
-          keyboardType: TextInputType.number,
-          inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
-          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
-          decoration: InputDecoration(
-            hintText: isAr ? 'الكمية (50)' : 'Qty (50)',
-            hintStyle: GoogleFonts.cairo(fontSize: 11.5, color: colorScheme.onSurfaceVariant),
-            isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            filled: true,
-            fillColor: colorScheme.surface,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: colorScheme.outlineVariant),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.7)),
-            ),
-          ),
-        );
-
-        final applyBtn = FilledButton.icon(
-          onPressed: () => _applyBulkDistribution(branches, events, masterGifts),
-          icon: const Icon(Icons.bolt_rounded, size: 16),
-          label: Text(
-            strings.applyToAllBranchesBtn,
-            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
-          ),
-          style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF006C50),
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-
-        final zeroBtn = OutlinedButton.icon(
-          onPressed: () {
-            final effectiveGiftKey = _selectedBulkGiftKey ??
-                (masterGifts.isNotEmpty
-                    ? (masterGifts.first.id.isNotEmpty ? masterGifts.first.id : masterGifts.first.giftName)
-                    : null);
-            if (effectiveGiftKey != null) {
-              setState(() {
-                for (final event in events) {
-                  for (final branchName in branches) {
-                    final cellKey = '${event.id}_${branchName}_$effectiveGiftKey';
-                    _getOrCreateController(cellKey, 0).text = '0';
-                  }
-                }
-              });
-            }
-          },
-          icon: const Icon(Icons.refresh_rounded, size: 16, color: Colors.red),
-          label: Text(
-            isAr ? 'تصفير الصنف' : 'Zero Item',
-            style: GoogleFonts.cairo(color: Colors.red[800], fontWeight: FontWeight.bold, fontSize: 12),
-          ),
-          style: OutlinedButton.styleFrom(
-            side: BorderSide(color: Colors.red.withValues(alpha: 0.4), width: 1.2),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-
-        final zeroAllBtn = OutlinedButton.icon(
-          onPressed: () {
-            setState(() {
-              for (final entry in _controllers.entries) {
-                entry.value.text = '0';
-              }
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  isAr ? 'تم تصفير كافة أرصدة الفروع (0) بنجاح - يمكنك إدخال الكميات الجديدة وحفظها' : 'All branch quotas reset to 0',
-                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
-                ),
-                backgroundColor: Colors.red[800],
-                behavior: SnackBarBehavior.floating,
-                duration: const Duration(seconds: 3),
+        // 1. Quantity Input Field (Standalone M3 Outline Input)
+        final qtyField = SizedBox(
+          height: 44,
+          child: TextField(
+            controller: _bulkQtyController,
+            keyboardType: TextInputType.number,
+            inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
+            textAlign: TextAlign.center,
+            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13.5, color: colorScheme.onSurface),
+            decoration: InputDecoration(
+              hintText: isAr ? 'الكمية (50)' : 'Qty (50)',
+              hintStyle: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
+              prefixIcon: Icon(Icons.numbers_rounded, size: 18, color: colorScheme.primary),
+              filled: true,
+              fillColor: colorScheme.surface,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              isDense: true,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.8)),
               ),
-            );
-          },
-          icon: const Icon(Icons.delete_sweep_rounded, size: 16, color: Colors.red),
-          label: Text(
-            isAr ? 'تصفير كل الأرصدة (0)' : 'Zero All Quotas',
-            style: GoogleFonts.cairo(color: Colors.red[800], fontWeight: FontWeight.bold, fontSize: 12),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.8)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: colorScheme.primary, width: 2),
+              ),
+            ),
           ),
-          style: OutlinedButton.styleFrom(
-            side: BorderSide(color: Colors.red.withValues(alpha: 0.4), width: 1.2),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        );
+
+        // 2. Apply Unified to All Branches Button (Standalone M3 Filled Button)
+        final applyButton = SizedBox(
+          height: 44,
+          child: FilledButton.icon(
+            onPressed: () => _applyBulkDistribution(branches, events, masterGifts),
+            icon: const Icon(Icons.bolt_rounded, size: 18),
+            label: Text(
+              isAr ? 'تطبيق موحد على كافة الفروع' : 'Apply to All Branches',
+              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12.5),
+              overflow: TextOverflow.ellipsis,
+            ),
+            style: FilledButton.styleFrom(
+              backgroundColor: colorScheme.primary,
+              foregroundColor: colorScheme.onPrimary,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              elevation: 1,
+            ),
+          ),
+        );
+
+        // 3. Zeroing Button Group: Solid M3 Error Container Tones (Not Washed Out!)
+        final zeroingButtonGroup = Container(
+          height: 44,
+          decoration: BoxDecoration(
+            color: colorScheme.errorContainer.withValues(alpha: 0.45),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: colorScheme.error.withValues(alpha: 0.6), width: 1.2),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(11),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Material(
+                    color: colorScheme.errorContainer.withValues(alpha: 0.3),
+                    child: InkWell(
+                      onTap: () {
+                        final effectiveGiftKey = _selectedBulkGiftKey ??
+                            (masterGifts.isNotEmpty
+                                ? (masterGifts.first.id.isNotEmpty ? masterGifts.first.id : masterGifts.first.giftName)
+                                : null);
+                        if (effectiveGiftKey != null) {
+                          setState(() {
+                            for (final event in events) {
+                              for (final branchName in branches) {
+                                final cellKey = '${event.id}_${branchName}_$effectiveGiftKey';
+                                _getOrCreateController(cellKey, 0).text = '0';
+                              }
+                            }
+                          });
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.refresh_rounded, size: 16, color: colorScheme.error),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                isAr ? 'تصفير الصنف' : 'Zero Item',
+                                style: GoogleFonts.cairo(
+                                  color: colorScheme.error,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                VerticalDivider(
+                  width: 1,
+                  thickness: 1.2,
+                  color: colorScheme.error.withValues(alpha: 0.6),
+                ),
+                Expanded(
+                  child: Material(
+                    color: colorScheme.errorContainer.withValues(alpha: 0.7),
+                    child: InkWell(
+                      onTap: () {
+                        setState(() {
+                          for (final entry in _controllers.entries) {
+                            entry.value.text = '0';
+                          }
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              isAr ? 'تم تصفير كافة أرصدة الفروع (0) بنجاح - يمكنك إدخال الكميات الجديدة وحفظها' : 'All branch quotas reset to 0',
+                              style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                            ),
+                            backgroundColor: colorScheme.error,
+                            behavior: SnackBarBehavior.floating,
+                            duration: const Duration(seconds: 3),
+                          ),
+                        );
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.delete_sweep_rounded, size: 16, color: colorScheme.error),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                isAr ? 'تصفير كل الأرصدة (0)' : 'Zero All Quotas (0)',
+                                style: GoogleFonts.cairo(
+                                  color: colorScheme.error,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         );
 
@@ -2389,18 +2509,12 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                 Row(
                   children: [
                     SizedBox(width: 110, child: qtyField),
-                    const SizedBox(width: 8),
-                    Expanded(child: applyBtn),
+                    const SizedBox(width: 10),
+                    Expanded(child: applyButton),
                   ],
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(child: zeroBtn),
-                    const SizedBox(width: 8),
-                    Expanded(child: zeroAllBtn),
-                  ],
-                ),
+                const SizedBox(height: 10),
+                zeroingButtonGroup,
               ],
             ),
           );
@@ -2414,10 +2528,8 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
             borderRadius: BorderRadius.circular(18),
             border: Border.all(color: colorScheme.primary.withValues(alpha: 0.25)),
           ),
-          child: Wrap(
-            spacing: 12,
-            runSpacing: 10,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisSize: MainAxisSize.min,
@@ -2433,15 +2545,22 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                   const SizedBox(width: 10),
                   Text(
                     strings.bulkDistributeTitle,
-                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: colorScheme.onSurface),
+                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13.5, color: colorScheme.onSurface),
                   ),
                 ],
               ),
-              SizedBox(width: 230, child: giftSelector),
-              SizedBox(width: 110, child: qtyField),
-              applyBtn,
-              zeroBtn,
-              zeroAllBtn,
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(flex: 3, child: giftSelector),
+                  const SizedBox(width: 10),
+                  SizedBox(width: 115, child: qtyField),
+                  const SizedBox(width: 10),
+                  Expanded(flex: 3, child: applyButton),
+                  const SizedBox(width: 12),
+                  Expanded(flex: 3, child: zeroingButtonGroup),
+                ],
+              ),
             ],
           ),
         );
@@ -2453,47 +2572,35 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
     required IconData icon,
     required Color iconColor,
     required String title,
-    String? subtitle,
     required ColorScheme colorScheme,
+    AlignmentGeometry alignment = Alignment.center,
   }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-      child: Column(
+    final isStart = alignment == AlignmentDirectional.centerStart;
+    return Container(
+      height: 48,
+      alignment: isStart ? AlignmentDirectional.centerStart : Alignment.center,
+      padding: isStart
+          ? const EdgeInsetsDirectional.only(start: 14, end: 8)
+          : const EdgeInsets.symmetric(horizontal: 6),
+      child: Row(
         mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: isStart ? MainAxisAlignment.start : MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 16, color: iconColor),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  title,
-                  style: GoogleFonts.cairo(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12.5,
-                    color: colorScheme.onSurface,
-                  ),
-                  textAlign: TextAlign.center,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          if (subtitle != null && subtitle.isNotEmpty) ...[
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
+          Icon(icon, size: 16, color: iconColor),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              title,
               style: GoogleFonts.cairo(
-                fontSize: 10,
-                color: colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.bold,
+                fontSize: 12.5,
+                color: colorScheme.onSurface,
               ),
-              textAlign: TextAlign.center,
+              textAlign: isStart ? TextAlign.start : TextAlign.center,
+              overflow: TextOverflow.ellipsis,
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -2523,12 +2630,12 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
         final availableWidth = constraints.maxWidth;
 
         // Minimum comfortable column widths
-        const branchColMinWidth = 220.0;
-        final giftColMinWidth = masterGifts.isEmpty ? 150.0 : 160.0;
-        const totalColMinWidth = 120.0;
-        const claimedColMinWidth = 120.0;
-        const remainingColMinWidth = 120.0;
-        const depletionColMinWidth = 140.0;
+        const branchColMinWidth = 200.0;
+        final giftColMinWidth = masterGifts.isEmpty ? 145.0 : 150.0;
+        const totalColMinWidth = 90.0;
+        const claimedColMinWidth = 90.0;
+        const remainingColMinWidth = 90.0;
+        const depletionColMinWidth = 95.0;
 
         final baseTotalWidth = branchColMinWidth +
             (masterGifts.length * giftColMinWidth) +
@@ -2590,39 +2697,37 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                             iconColor: colorScheme.primary,
                             title: isAr ? 'الفرع / المنفذ' : 'Branch / Outlet',
                             colorScheme: colorScheme,
+                            alignment: AlignmentDirectional.centerStart,
                           ),
                           for (final gift in masterGifts)
                             _buildHeaderCell(
-                              icon: gift.isVoucher ? Icons.confirmation_number_outlined : Icons.card_giftcard_rounded,
-                              iconColor: gift.isVoucher ? const Color(0xFFD97706) : const Color(0xFF006C50),
+                              icon: gift.isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
+                              iconColor: gift.isVoucher ? colorScheme.tertiary : colorScheme.secondary,
                               title: gift.giftName,
-                              subtitle: gift.isVoucher
-                                  ? (isAr ? 'فئة ${gift.unitValue.toInt()} ج.م (مخصص • صرف • باقي)' : '${gift.unitValue.toInt()} EGP')
-                                  : (isAr ? '(مخصص • صرف • باقي)' : '(alloc • out • rem)'),
                               colorScheme: colorScheme,
                             ),
                           _buildHeaderCell(
-                            icon: Icons.inventory_2_outlined,
+                            icon: Icons.inventory_2_rounded,
+                            iconColor: colorScheme.secondary,
+                            title: isAr ? 'الإجمالي' : 'Total',
+                            colorScheme: colorScheme,
+                          ),
+                          _buildHeaderCell(
+                            icon: Icons.card_giftcard_rounded,
+                            iconColor: colorScheme.tertiary,
+                            title: isAr ? 'المنصرف' : 'Claimed',
+                            colorScheme: colorScheme,
+                          ),
+                          _buildHeaderCell(
+                            icon: Icons.savings_rounded,
                             iconColor: colorScheme.primary,
-                            title: isAr ? 'إجمالي المخصص' : 'Total Quota',
-                            colorScheme: colorScheme,
-                          ),
-                          _buildHeaderCell(
-                            icon: Icons.shopping_bag_outlined,
-                            iconColor: const Color(0xFFD97706),
-                            title: isAr ? 'المنصرف للعملاء' : 'Claimed',
-                            colorScheme: colorScheme,
-                          ),
-                          _buildHeaderCell(
-                            icon: Icons.savings_outlined,
-                            iconColor: const Color(0xFF006C50),
                             title: isAr ? 'المتبقي' : 'Remaining',
                             colorScheme: colorScheme,
                           ),
                           _buildHeaderCell(
-                            icon: Icons.analytics_outlined,
-                            iconColor: const Color(0xFF0284C7),
-                            title: isAr ? 'نسبة السحب' : 'Depletion %',
+                            icon: Icons.pie_chart_rounded,
+                            iconColor: colorScheme.primary,
+                            title: isAr ? 'النسبة' : 'Share',
                             colorScheme: colorScheme,
                           ),
                         ],
@@ -2668,9 +2773,9 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
     int branchClaimedSum = 0;
 
     final cells = <Widget>[
-      // 1. Branch Name Cell
+      // 1. Branch Name Cell (aligned to start with store icon)
       Padding(
-        padding: EdgeInsets.only(left: 14, right: 14, top: 14, bottom: isLast ? 22 : 14),
+        padding: EdgeInsetsDirectional.only(start: 14, end: 14, top: 14, bottom: isLast ? 22 : 14),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2720,9 +2825,9 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                   width: 92,
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
+                    color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.amber.shade200),
+                    border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                   ),
                   child: Center(
                     child: Text(
@@ -2730,7 +2835,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                       style: GoogleFonts.cairo(
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
-                        color: Colors.amber.shade900,
+                        color: colorScheme.onSurface,
                       ),
                     ),
                   ),
@@ -2750,7 +2855,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                         '${isAr ? 'صرف:' : 'out:'} $claimed',
                         style: GoogleFonts.cairo(
                           fontSize: 10,
-                          color: const Color(0xFFD97706),
+                          color: colorScheme.tertiary,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -2767,7 +2872,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                         '${isAr ? 'مرتجع:' : 'ret:'} $returned',
                         style: GoogleFonts.cairo(
                           fontSize: 10,
-                          color: const Color(0xFF006C50),
+                          color: colorScheme.primary,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -2852,7 +2957,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                         '${isAr ? 'صرف:' : 'out:'} $claimed',
                         style: GoogleFonts.cairo(
                           fontSize: 10,
-                          color: const Color(0xFFD97706),
+                          color: colorScheme.tertiary,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -2869,7 +2974,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                         '${isAr ? 'باقي:' : 'rem:'} $remaining',
                         style: GoogleFonts.cairo(
                           fontSize: 10,
-                          color: remaining > 0 ? const Color(0xFF006C50) : Colors.red[700],
+                          color: remaining > 0 ? colorScheme.primary : colorScheme.error,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -2896,12 +3001,12 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: colorScheme.primaryContainer.withValues(alpha: 0.5),
+              color: colorScheme.secondaryContainer.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               '$branchAllocatedSum',
-              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: colorScheme.primary),
+              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: colorScheme.onSecondaryContainer),
             ),
           ),
         ),
@@ -2913,12 +3018,12 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFFD97706).withValues(alpha: 0.12),
+              color: colorScheme.tertiaryContainer.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               '$branchClaimedSum',
-              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: const Color(0xFFB45309), fontSize: 13),
+              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: colorScheme.onTertiaryContainer, fontSize: 13),
             ),
           ),
         ),
@@ -2930,12 +3035,12 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFF006C50).withValues(alpha: 0.12),
+              color: colorScheme.primaryContainer.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               '$branchRemainingSum',
-              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: const Color(0xFF006C50), fontSize: 13),
+              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: colorScheme.primary, fontSize: 13),
             ),
           ),
         ),
@@ -2954,9 +3059,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                   value: depletionRate,
                   minHeight: 6,
                   backgroundColor: colorScheme.surfaceContainerHighest,
-                  color: depletionRate >= 0.9
-                      ? Colors.red[700]
-                      : (depletionRate >= 0.7 ? Colors.orange[700] : const Color(0xFF006C50)),
+                  color: depletionRate >= 0.9 ? colorScheme.error : colorScheme.primary,
                 ),
               ),
             ),
@@ -2964,8 +3067,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: (depletionRate >= 0.9 ? Colors.red : (depletionRate >= 0.7 ? Colors.orange : const Color(0xFF006C50)))
-                    .withValues(alpha: 0.12),
+                color: (depletionRate >= 0.9 ? colorScheme.error : colorScheme.primary).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
@@ -2973,9 +3075,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                 style: GoogleFonts.cairo(
                   fontWeight: FontWeight.bold,
                   fontSize: 11,
-                  color: depletionRate >= 0.9
-                      ? Colors.red[800]
-                      : (depletionRate >= 0.7 ? Colors.orange[900] : const Color(0xFF006C50)),
+                  color: depletionRate >= 0.9 ? colorScheme.error : colorScheme.primary,
                 ),
               ),
             ),
@@ -3110,10 +3210,10 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                   backgroundColor: colorScheme.surfaceContainerHighest,
                   valueColor: AlwaysStoppedAnimation<Color>(
                     depletionRate >= 0.9
-                        ? Colors.red[700]!
+                        ? colorScheme.error
                         : depletionRate >= 0.7
-                            ? Colors.orange[700]!
-                            : const Color(0xFF006C50),
+                            ? colorScheme.tertiary
+                            : colorScheme.primary,
                   ),
                 ),
               ),
@@ -3157,13 +3257,13 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.amber.shade50,
+                            color: colorScheme.tertiaryContainer.withValues(alpha: 0.35),
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.amber.shade200),
+                            border: Border.all(color: colorScheme.tertiary.withValues(alpha: 0.3)),
                           ),
                           child: Text(
                             '${isAr ? 'مخصص:' : 'Alloc:'} $alloc  •  ${isAr ? 'صرف:' : 'Out:'} $claimed  •  ${isAr ? 'مرتجع:' : 'Ret:'} $returned',
-                            style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+                            style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: colorScheme.onTertiaryContainer),
                           ),
                         ),
                       ],
@@ -3207,15 +3307,15 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                       if (claimed > 0) ...[
                         Text(
                           '${isAr ? 'منصرف:' : 'claimed:'} $claimed',
-                          style: GoogleFonts.cairo(fontSize: 11, color: Colors.orange[800], fontWeight: FontWeight.bold),
+                          style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.tertiary, fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(width: 8),
                       ],
                       // Quick Decrement Chips (-50, -10)
                       ActionChip(
-                        label: Text('-50', style: GoogleFonts.cairo(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.red[800])),
-                        backgroundColor: Colors.red.withValues(alpha: 0.08),
-                        side: BorderSide(color: Colors.red.withValues(alpha: 0.2)),
+                        label: Text('-50', style: GoogleFonts.cairo(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorScheme.error)),
+                        backgroundColor: colorScheme.error.withValues(alpha: 0.08),
+                        side: BorderSide(color: colorScheme.error.withValues(alpha: 0.2)),
                         padding: EdgeInsets.zero,
                         onPressed: () {
                           final cur = controller.text.trim().toIntOrNull() ?? 0;
@@ -3243,9 +3343,9 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                       ),
                       const SizedBox(width: 4),
                       ActionChip(
-                        label: Text('-10', style: GoogleFonts.cairo(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.red[800])),
-                        backgroundColor: Colors.red.withValues(alpha: 0.08),
-                        side: BorderSide(color: Colors.red.withValues(alpha: 0.2)),
+                        label: Text('-10', style: GoogleFonts.cairo(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorScheme.error)),
+                        backgroundColor: colorScheme.error.withValues(alpha: 0.08),
+                        side: BorderSide(color: colorScheme.error.withValues(alpha: 0.2)),
                         padding: EdgeInsets.zero,
                         onPressed: () {
                           final cur = controller.text.trim().toIntOrNull() ?? 0;
@@ -3305,9 +3405,9 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                       const SizedBox(width: 6),
                       // Quick Increment Chips (+10, +50)
                       ActionChip(
-                        label: Text('+10', style: GoogleFonts.cairo(fontSize: 10.5, fontWeight: FontWeight.bold, color: const Color(0xFF006C50))),
-                        backgroundColor: const Color(0xFF006C50).withValues(alpha: 0.08),
-                        side: BorderSide(color: const Color(0xFF006C50).withValues(alpha: 0.2)),
+                        label: Text('+10', style: GoogleFonts.cairo(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorScheme.primary)),
+                        backgroundColor: colorScheme.primary.withValues(alpha: 0.08),
+                        side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.2)),
                         padding: EdgeInsets.zero,
                         onPressed: () {
                           final cur = controller.text.trim().toIntOrNull() ?? 0;
@@ -3318,9 +3418,9 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                       ),
                       const SizedBox(width: 4),
                       ActionChip(
-                        label: Text('+50', style: GoogleFonts.cairo(fontSize: 10.5, fontWeight: FontWeight.bold, color: const Color(0xFF006C50))),
-                        backgroundColor: const Color(0xFF006C50).withValues(alpha: 0.08),
-                        side: BorderSide(color: const Color(0xFF006C50).withValues(alpha: 0.2)),
+                        label: Text('+50', style: GoogleFonts.cairo(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorScheme.primary)),
+                        backgroundColor: colorScheme.primary.withValues(alpha: 0.08),
+                        side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.2)),
                         padding: EdgeInsets.zero,
                         onPressed: () {
                           final cur = controller.text.trim().toIntOrNull() ?? 0;

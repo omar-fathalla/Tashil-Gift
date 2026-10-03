@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:al_mraay/core/localization/app_strings.dart';
+import 'package:al_mraay/core/services/ai_receipt_service.dart';
 import 'package:al_mraay/features/admin/domain/ai_directive_model.dart';
 import 'package:al_mraay/features/admin/domain/ai_directives_seed_data.dart';
 
@@ -83,9 +84,9 @@ void main() {
       final en = AppStrings('en');
       final hi = AppStrings('hi');
 
-      expect(ar.addNextReceiptPartBtn, contains('إضافة جزء أو بون مكمل'));
-      expect(en.addNextReceiptPartBtn, contains('Add Next Part'));
-      expect(hi.addNextReceiptPartBtn, contains('अगला भाग / पूरक रसीद जोड़ें'));
+      expect(ar.addNextReceiptPartBtn, contains('إضافة جزء (فاتورة طويلة)'));
+      expect(en.addNextReceiptPartBtn, contains('Add Part (Long Receipt)'));
+      expect(hi.addNextReceiptPartBtn, contains('भाग जोड़ें (लंबी रसीद)'));
 
       expect(ar.clearAllPartsBtn, equals('مسح الكل'));
       expect(en.clearAllPartsBtn, equals('Clear All'));
@@ -135,6 +136,64 @@ void main() {
       expect(clampIndex(1, imageUrls.length), 1);
       expect(clampIndex(2, imageUrls.length), 2);
       expect(clampIndex(5, imageUrls.length), 2);
+    });
+
+    test('AIR-61 directive is registered and enforces single-receipt integrity', () {
+      final directives = AiDirectivesSeedData.initialDirectives;
+      final air61 = directives.firstWhere(
+        (d) => d.id == 'AIR-61',
+        orElse: () => throw StateError('AIR-61 directive not found in seed data'),
+      );
+
+      expect(air61.id, 'AIR-61');
+      expect(air61.code, 'SINGLE_RECEIPT_INTEGRITY_AND_STRICT_MULTI_RECEIPT_MERGING_REJECTION_INVARIANT');
+      expect(air61.orderIndex, 61);
+      expect(air61.category, AiDirectiveCategory.fraudSecurity);
+      expect(air61.titleAr, contains('نزاهة واستقلالية الفاتورة الواحدة'));
+      expect(air61.tags, contains('single-receipt-integrity'));
+      expect(air61.tags, contains('anti-fraud'));
+      expect(air61.tags, contains('cross-seam-deduplication'));
+
+      final map = air61.toMap();
+      expect(map['id'], 'AIR-61');
+      expect(map['code'], air61.code);
+      expect(map['order_index'], 61);
+
+      final restored = AiDirectiveModel.fromMap(map, 'AIR-61');
+      expect(restored.id, 'AIR-61');
+      expect(restored.titleAr, air61.titleAr);
+    });
+
+    test('Cross-seam line deduplication eliminates duplicate item on consecutive camera cut', () {
+      final itemsWithOverlap = [
+        ExtractedProductItem(
+          name: 'تريزيمي شامبو 400 مل',
+          price: 135.0,
+          quantity: 1,
+          isTargetCompany: true,
+          barcode: '622115500001',
+        ),
+        // Overlap seam duplicate at the boundary of Part 1 and Part 2
+        ExtractedProductItem(
+          name: 'تريزيمي شامبو 400 مل',
+          price: 135.0,
+          quantity: 1,
+          isTargetCompany: true,
+          barcode: '622115500001',
+        ),
+        ExtractedProductItem(
+          name: 'كلير بلسم 180 مل',
+          price: 65.0,
+          quantity: 1,
+          isTargetCompany: true,
+          barcode: '622115500002',
+        ),
+      ];
+
+      final deduplicated = AiReceiptService.deduplicateCrossSeamProducts(itemsWithOverlap);
+      expect(deduplicated.length, equals(2));
+      expect(deduplicated.first.name, contains('تريزيمي شامبو'));
+      expect(deduplicated.last.name, contains('كلير بلسم'));
     });
   });
 }

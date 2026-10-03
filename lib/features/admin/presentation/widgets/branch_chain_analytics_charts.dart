@@ -3,6 +3,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/constants/country_currency_config.dart';
 import '../../../../core/widgets/m3_progress_indicators.dart';
+import '../../../../core/widgets/m3_list_tile.dart';
 
 /// Data Model for Branch / Chain Analytics Visualization Item
 class BranchChartItem {
@@ -678,7 +679,10 @@ class BranchChainLeaderboardList extends StatelessWidget {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: items.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 10),
+      separatorBuilder: (context, index) => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 4),
+        child: M3InsetDivider(indent: 52),
+      ),
       itemBuilder: (context, index) {
         final item = items[index];
         final rank = index + 1;

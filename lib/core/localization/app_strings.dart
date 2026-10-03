@@ -61,6 +61,17 @@ class AppStrings {
   String get requiredField => _t(ar: 'هذا الحقل مطلوب', en: 'This field is required', hi: 'यह फ़ील्ड आवश्यक है');
   String get exportExcelCsv => _t(ar: 'تصدير تقرير Excel', en: 'Export Excel Report', hi: 'Excel रिपोर्ट निर्यात करें');
   String get exportExcelBtn => _t(ar: 'تصدير إلى Excel', en: 'Export to Excel', hi: 'Excel में निर्यात करें');
+  String get excelBtn => _t(ar: 'Excel', en: 'Excel', hi: 'Excel');
+  String get csvBtn => _t(ar: 'CSV', en: 'CSV', hi: 'CSV');
+  String get selectDay => _t(ar: 'اختر اليوم', en: 'Select Day', hi: 'दिन चुनें');
+  String get totalLabel => _t(ar: 'الإجمالي', en: 'Total', hi: 'कुल');
+  String get daysLabel => _t(ar: 'أيام', en: 'Days', hi: 'दिन');
+  String get filterByDay => _t(ar: 'فلترة باليوم', en: 'Filter by Day', hi: 'दिन अनुसार फ़िल्टर');
+  String get allDays => _t(ar: 'كافة الأيام', en: 'All Days', hi: 'सभी दिन');
+  String get allDaysTotal => _t(ar: 'كافة الأيام (إجمالي الحملة)', en: 'All Days (Campaign Total)', hi: 'सभी दिन (कुल अभियान)');
+  String get previousDay => _t(ar: 'اليوم السابق', en: 'Previous Day', hi: 'पिछला दिन');
+  String get nextDay => _t(ar: 'اليوم التالي', en: 'Next Day', hi: 'अगला दिन');
+  String get pickCustomDate => _t(ar: 'تحديد يوم مخصص', en: 'Pick Specific Date', hi: 'विशिष्ट तिथि चुनें');
   String operationFailed(String details) => _t(
     ar: 'فشلت العملية: $details',
     en: 'Operation failed: $details',
@@ -68,24 +79,34 @@ class AppStrings {
   );
 
   // ---------------------------------------------------------------------------
-  // 2. Navigation & Sidebar
+  // 2. Navigation & Sidebar (M3 Concise Standard)
   // ---------------------------------------------------------------------------
-  String get navEventsManagement => _t(ar: 'الحملات والإدارة', en: 'Campaigns & Events', hi: 'अभियान और प्रबंधन');
-  String get navAnalytics => _t(ar: 'التقارير والتحليلات', en: 'Reports & Analytics', hi: 'रिपोर्ट और विश्लेषण');
-  String get navCompanyCatalog => _t(ar: 'تكويد الشركات والمنتجات', en: 'Company & Product Catalog', hi: 'कंपनी और उत्पाद सूची');
-  String get navRetailChains => _t(ar: 'السلاسل والمنافذ', en: 'Retail Chains & Outlets', hi: 'रिटेल चेन और स्टोर');
-  String get navProductsIntelligence => _t(ar: 'المنتجات والأسعار', en: 'Products & Prices', hi: 'उत्पाद और मूल्य');
-  String get navInvoicesAudit => _t(ar: 'سجل الفواتير والتدقيق', en: 'Invoices Audit & Logs', hi: 'रसीद ऑडिट और लॉग');
+  String get navEventsManagement => _t(ar: 'الحملات', en: 'Campaigns', hi: 'अभियान');
+  String get navAnalytics => _t(ar: 'التقارير', en: 'Reports', hi: 'रिपोर्ट');
+  String get navCompanyCatalog => _t(ar: 'التكويد', en: 'Catalog', hi: 'सूची');
+  String get navRetailChains => _t(ar: 'السلاسل', en: 'Chains', hi: 'चेन');
+  String get navProductsIntelligence => _t(ar: 'المنتجات', en: 'Products', hi: 'उत्पाद');
+  String get navInvoicesAudit => _t(ar: 'الفواتير', en: 'Invoices', hi: 'रसीदें');
   String get navCreateCampaign => _t(ar: 'إنشاء حملة جديدة', en: 'Create New Campaign', hi: 'नया अभियान बनाएं');
   String get createCampaignTitle => _t(ar: 'إنشاء حملة ترويجية جديدة', en: 'Create New Promotional Campaign', hi: 'नया प्रचार अभियान बनाएं');
-  String get navCompanyGifts => _t(ar: 'كتالوج هدايا الشركات', en: 'Company Gifts Catalog', hi: 'कंपनी उपहार सूची');
-  String get navGameTypes => _t(ar: 'أنواع الألعاب', en: 'Game Types', hi: 'खेल के प्रकार');
-  String get navAiSpeedBenchmark => _t(ar: 'اختبار سرعة الـ AI (KPI)', en: 'AI Latency & Speed KPI', hi: 'एआई स्पीड टेस्ट');
-  String get navAiBrainRules => _t(ar: 'الذكاء الاصطناعي', en: 'Artificial Intelligence', hi: 'आर्टिफिशियल इंटेलिजेंस');
-  String get navAiProductDiscovery => _t(ar: 'تحديث الأصناف', en: 'Update Products Catalog', hi: 'उत्पाद अद्यतन');
+  String get navCompanyGifts => _t(ar: 'الهدايا', en: 'Gifts', hi: 'उपहार');
+  String get navGameTypes => _t(ar: 'الألعاب', en: 'Games', hi: 'खेल');
+  String get navAiSpeedBenchmark => _t(ar: 'AI KPI', en: 'AI KPI', hi: 'एआई केपीआई');
+  String get navAiBrainRules => _t(ar: 'AI', en: 'AI', hi: 'एआई');
+  String get navAiProductDiscovery => _t(ar: 'الأصناف', en: 'Products', hi: 'उत्पाद');
+  String get navWhatsAppMarketing => _t(ar: 'واتساب', en: 'WhatsApp', hi: 'व्हाट्सएप');
   String get previewClientApp => _t(ar: 'معاينة تطبيق العميل / البروموتر', en: 'Preview Client / Promoter App', hi: 'ग्राहक ऐप का पूर्वावलोकन');
-  String get collapseMenu => _t(ar: 'طي القائمة (أيقونات فقط)', en: 'Collapse Menu (Icons Only)', hi: 'मेनू संक्षिप्त करें');
-  String get expandMenu => _t(ar: 'توسيع القائمة (أيقونات ونص)', en: 'Expand Menu (Icons & Text)', hi: 'मेनू विस्तृत करें');
+  String get collapseMenu => _t(ar: 'إخفاء العناوين', en: 'Hide Labels', hi: 'लेबल छुपाएं');
+  String get expandMenu => _t(ar: 'إظهار العناوين', en: 'Show Labels', hi: 'लेबल दिखाएं');
+
+  // Partner / Company Portal Navigation (M3 Concise Standard)
+  String get partnerNavAnalytics => _t(ar: 'المؤشرات والتحاليل', en: 'Analytics', hi: 'एनालिटिक्स');
+  String get partnerNavComparison => _t(ar: 'مقارنة التحاليل', en: 'Comparisons', hi: 'تुलना');
+  String get partnerNavInvoices => _t(ar: 'الفواتير', en: 'Invoices', hi: 'रसीदें');
+  String get partnerNavSales => _t(ar: 'المبيعات', en: 'Sales', hi: 'बिक्री');
+  String get partnerNavBalances => _t(ar: 'الأرصدة', en: 'Balances', hi: 'बैलेंस');
+  String get partnerNavVouchers => _t(ar: 'Voucher', en: 'Voucher', hi: 'Voucher');
+  String get partnerNavPromoter => _t(ar: 'Promoter', en: 'Promoter', hi: 'Promoter');
 
   // ---------------------------------------------------------------------------
   // 3. Header & Theme & Country
@@ -149,7 +170,7 @@ class AppStrings {
   // ---------------------------------------------------------------------------
   // 5. Agent 2: Reports & Analytics (التقارير والتحليلات)
   // ---------------------------------------------------------------------------
-  String get analyticsTitle => _t(ar: 'منظومة التقارير والتحليلات الشاملة', en: 'Comprehensive Reports & Analytics', hi: 'व्यापक रिपोर्ट और विश्लेषण प्रणाली');
+  String get analyticsTitle => _t(ar: 'منظومة التقارير والتحليلات', en: 'Reports & Analytics', hi: 'रिपोर्ट और विश्लेषण प्रणाली');
   String get tabOverviewMetrics => _t(ar: 'نظرة عامة والمؤشرات', en: 'Overview & Key Metrics', hi: 'अवलोकन और मुख्य मेट्रिक्स');
   String get tabInvoicesBreakdown => _t(ar: 'تفاصيل الفواتير والعمليات', en: 'Invoices & Transactions Log', hi: 'रसीदें और लेनदेन विवरण');
   String get metricTotalScans => _t(ar: 'إجمالي عمليات المسح', en: 'Total Scans', hi: 'कुल स्कैन');
@@ -545,7 +566,7 @@ class AppStrings {
   String get avgAiSpeed => _t(ar: 'متوسط سرعة الفحص (AI)', en: 'Avg AI Verification Speed', hi: 'औसत एआई सत्यापन गति');
   String get viewReceiptProducts => _t(ar: 'عرض الأصناف والباركود', en: 'View Items & Barcodes', hi: 'उत्पाद और बारकोड देखें');
   String get viewOriginalPhoto => _t(ar: 'معاينة صورة الفاتورة', en: 'View Receipt Photo', hi: 'रसीद फोटो देखें');
-  String get exportCsvBtn => _t(ar: 'تصدير البيانات (CSV)', en: 'Export Data (CSV)', hi: 'डेटा निर्यात करें (CSV)');
+  String get exportCsvBtn => _t(ar: 'CSV', en: 'CSV', hi: 'CSV');
   String get productNameCol => _t(ar: 'اسم المنتج', en: 'Product Name', hi: 'उत्पाद का नाम');
   String get barcodeCol => _t(ar: 'الباركود', en: 'Barcode', hi: 'बारकोड');
   String get quantityCol => _t(ar: 'الكمية', en: 'Qty', hi: 'मात्रा');
@@ -1247,14 +1268,14 @@ class AppStrings {
     hi: 'रसीद संसाधित करते समय एक त्रुटि हुई',
   );
   String get addNextReceiptPartBtn => _t(
-    ar: 'إضافة جزء أو بون مكمل',
-    en: 'Add Next Part / Complementary Receipt',
-    hi: 'अगला भाग / पूरक रसीद जोड़ें',
+    ar: 'إضافة جزء (فاتورة طويلة)',
+    en: 'Add Part (Long Receipt)',
+    hi: 'भाग जोड़ें (लंबी रसीद)',
   );
   String get longReceiptTip => _t(
-    ar: 'للفواتير الطويلة أو عند وجود بون تكميلي لنفس العميل لتكملة القيمة، أضف صور البونات المتتابعة لدمج الحسابين بدقة 100%.',
-    en: 'For long receipts or complementary receipts to complete promo spend, add consecutive receipt photos to merge both totals accurately.',
-    hi: 'लंबी रसीदों या अतिरिक्त पूरक रसीद के लिए, दोनों योगों को सटीक रूप से जोड़ने के लिए लगातार तस्वीरें जोड़ें।',
+    ar: 'للفواتير الطويلة التي لا تتسع لكادر واحد، التقط صور أجزاء نفس الفاتورة من الأعلى للأسفل لدمج البنود بدقة 100%.',
+    en: 'For long receipts exceeding a single camera frame, capture consecutive parts of the same receipt top-to-bottom for 100% accurate stitching.',
+    hi: 'एक फ्रेम में न आने वाली लंबी रसीदों के लिए, 100% सटीक मिलान के लिए एक ही रसीद के लगातार भागों को ऊपर से नीचे तक कैप्चर करें।',
   );
   String partIndexLabel(int index) => _t(
     ar: 'جزء $index',
@@ -2959,6 +2980,80 @@ class AppStrings {
   String get directiveDetailsTitle => _t(ar: 'تفاصيل البند المعياري الذكي', en: 'Directive Specifications', hi: 'निर्देश विवरण');
   String get directiveSavedSuccess => _t(ar: 'تم حفظ وتوثيق البند بنجاح في عقل الذكاء الاصطناعي', en: 'Directive successfully recorded in AI Brain', hi: 'निर्देश सफलतापूर्वक एआई में दर्ज किया गया');
   String get directiveDeletedSuccess => _t(ar: 'تم حذف البند بنجاح', en: 'Directive deleted successfully', hi: 'निर्देश सफलतापूर्वक हटा दिया गया');
+  String get aiBrainCatalogTab => _t(
+    ar: 'سجل القواعد المعتمدة (AIR Catalog)',
+    en: 'Approved Directives Catalog',
+    hi: 'स्वीकृत निर्देश सूची',
+  );
+  String get aiBrainStudioTab => _t(
+    ar: 'استوديو الشات والتدريب التفاعلي (AI Co-Pilot)',
+    en: 'Interactive AI Co-Pilot Studio',
+    hi: 'इंटरएक्टिव एआई को-पायलट स्टूडियो',
+  );
+  String get askAiBrainAboutReceipt => _t(
+    ar: 'تشخيص البون في عقل الذكاء الاصطناعي',
+    en: 'Diagnose in AI Brain',
+    hi: 'एआई ब्रेन से रसीद का विश्लेषण करें',
+  );
+  String get aiBrainQuickDiagnoseTooltip => _t(
+    ar: 'فتح استوديو الذكاء الاصطناعي التفاعلي لفحص وتشخيص سبب رفض البون وتدريب الذكاء فوراً',
+    en: 'Open AI Co-Pilot Studio to diagnose rejection reasons and teach the AI',
+    hi: 'रसीद अस्वीकृति के कारणों का विश्लेषण करने के लिए एआई स्टूडियो खोलें',
+  );
+  String get voiceRecordTooltip => _t(
+    ar: 'التحدث بالصوت / تسجيل ملاحظة صوتية (Voice Note)',
+    en: 'Voice Note / Speak to AI Co-Pilot',
+    hi: 'वॉयस नोट / एआई को-पायलट से बात करें',
+  );
+  String get recordingVoiceNow => _t(
+    ar: 'جاري تسجيل الصوت... تحدث بوضوح',
+    en: 'Recording voice... Speak clearly',
+    hi: 'ऑडियो रिकॉर्ड हो रहा है... स्पष्ट बोलें',
+  );
+  String get cancelRecording => _t(ar: 'إلغاء التسجيل', en: 'Cancel Recording', hi: 'रिकॉर्डिंग रद्द करें');
+  String get sendVoiceNote => _t(ar: 'إرسال التسجيل الصوتي', en: 'Send Voice Note', hi: 'वॉयस नोट भेजें');
+  String get dictateToText => _t(ar: 'تحويل الصوت إلى نص', en: 'Transcribe to Text', hi: 'टेक्स्ट में बदलें');
+  String get transcribingAudio => _t(
+    ar: 'جاري الاستماع وتفريغ الصوت عبر Gemini 3.7 Flash...',
+    en: 'Transcribing and analyzing voice with Gemini 3.7 Flash...',
+    hi: 'मिथुन के साथ ऑडियो का विश्लेषण हो रहा है...',
+  );
+  String get voiceTranscriptionHeader => _t(
+    ar: '🎙️ تفريغ الصوت المنطوق (Voice Transcription):',
+    en: '🎙️ Spoken Voice Transcription:',
+    hi: '🎙️ वॉयस ट्रांसक्रिप्शन:',
+  );
+  String get voiceNoteLabel => _t(ar: 'رسالة صوتية', en: 'Voice Note', hi: 'वॉयस नोट');
+  String get micPermissionDenied => _t(
+    ar: 'تعذر الوصول للميكروفون، يرجى السماح بالوصول في إعدادات المتصفح أو الجهاز',
+    en: 'Microphone permission denied, please allow access in browser or device settings',
+    hi: 'माइक्रोफ़ोन एक्सेस अस्वीकृत, कृपया अनुमतियां जांचें',
+  );
+  String get recordingTooShort => _t(
+    ar: 'التسجيل الصوتي قصير جداً (أقل من ثانية)',
+    en: 'Recording is too short (under 1 second)',
+    hi: 'रिकॉर्डिंग बहुत छोटी है',
+  );
+  String get pasteImageSuccess => _t(
+    ar: 'تم لصق صورة البون من الحافظة (Clipboard) بنجاح 📋🖼️',
+    en: 'Receipt image pasted from clipboard! 📋🖼️',
+    hi: 'क्लिपबोर्ड से रसीद کی छवि सफलतापूर्वक चिपकाई गई! 📋🖼️',
+  );
+  String get stopAndKeepDraft => _t(
+    ar: 'إيقاف وحفظ التسجيل (كمرفق)',
+    en: 'Stop & Keep Voice Note (as attachment)',
+    hi: 'रिकॉर्डिंग रोकें और रखें (संलग्नक के रूप में)',
+  );
+  String get draftVoiceNoteLabel => _t(
+    ar: 'تسجيل صوتي مرفق (جاهز للإرسال)',
+    en: 'Attached Voice Note (Ready to send)',
+    hi: 'संलग्न वॉयस नोट (भेजने के लिए तैयार)',
+  );
+  String get removeDraftVoiceNote => _t(
+    ar: 'حذف التسجيل الصوتي المرفق',
+    en: 'Remove attached voice note',
+    hi: 'संलग्न वॉयस नोट हटाएं',
+  );
 
   // ---------------------------------------------------------------------------
   // 18. Spend Conditions, Combo Bundles & Catalog Selection
@@ -3236,14 +3331,14 @@ class AppStrings {
     hi: 'बिक्री, इनवॉइस, बेची गई इकाइयों और ग्राहकों का विस्तृत तुलनात्मक विश्लेषण',
   );
   String get headToHeadComparisonTab => _t(
-    ar: 'مقارنة مباشرة بين حملتين (A vs B)',
-    en: 'Head-to-Head Comparison (A vs B)',
-    hi: 'आमने-सामने तुलना (A vs B)',
+    ar: 'مقارنة حملتين',
+    en: 'Compare 2',
+    hi: 'दो अभियान',
   );
   String get allCampaignsPortfolioTab => _t(
-    ar: 'مصفوفة مقارنة جميع الحملات',
-    en: 'All Campaigns Portfolio Benchmark',
-    hi: 'सभी अभियानों का पोर्टफोलियो बेंचमार्क',
+    ar: 'المصفوفة',
+    en: 'Matrix',
+    hi: 'मैट्रिक्स',
   );
   String get selectCampaignA => _t(
     ar: 'الحملة الأولى (A)',
@@ -3311,9 +3406,9 @@ class AppStrings {
     hi: 'तुलनात्मक एक्सेल निर्यात करें',
   );
   String get exportComparisonCsv => _t(
-    ar: 'تصدير التقرير المقارن CSV',
-    en: 'Export Benchmark CSV',
-    hi: 'तुलनात्मक सीएसवी निर्यात करें',
+    ar: 'CSV',
+    en: 'CSV',
+    hi: 'CSV',
   );
   String get comparisonBarChartTitle => _t(
     ar: 'المقارنة البيانية المزدوجة لأداء الحملتين',
@@ -3341,9 +3436,9 @@ class AppStrings {
     hi: 'ग्राहक संख्या',
   );
   String get intraCampaignWeekendTab => _t(
-    ar: 'مقارنة فترات وويك إندات الحملة',
-    en: 'Intra-Campaign Weekend & Period Analytics',
-    hi: 'अभियान सप्ताहांत और अवधि विश्लेषण',
+    ar: 'مقارنة ويك إند',
+    en: 'Weekend Waves',
+    hi: 'सप्ताहांत तुलना',
   );
   String get selectTargetCampaignToAnalyze => _t(
     ar: 'اختر الحملة المراد تحليل فتراتها',
@@ -3351,14 +3446,14 @@ class AppStrings {
     hi: 'विश्लेषण के लिए अभियान चुनें',
   );
   String get periodComparisonModeAuto => _t(
-    ar: 'دورات الويك إند المكتشفة تلقائياً',
-    en: 'Auto-Detected Weekends',
-    hi: 'स्वतः खोजे गए सप्ताहांत',
+    ar: 'دورات الويك إند',
+    en: 'Weekend Cycles',
+    hi: 'सप्ताहांत चक्र',
   );
   String get periodComparisonModeCustom => _t(
-    ar: 'تحديد فترات زمنية مخصصة',
-    en: 'Custom Date Ranges',
-    hi: 'कस्टम तिथि सीमाएँ',
+    ar: 'تحديد فترة',
+    en: 'Custom Period',
+    hi: 'कस्टम अवधि',
   );
   String get weekendPeriodA => _t(
     ar: 'الويك إند / الفترة الأولى (A)',
@@ -3371,14 +3466,14 @@ class AppStrings {
     hi: 'तुलनात्मक सप्ताहांत / अवधि (B)',
   );
   String get allWeekendsProgressionView => _t(
-    ar: 'مسار وتطور جميع الويك إندات',
-    en: 'All Weekends Progression Matrix',
-    hi: 'सभी सप्ताहांतों की प्रगति',
+    ar: 'مسار الويك إند',
+    en: 'Weekend Progression',
+    hi: 'सप्ताहांत प्रगति',
   );
   String get weekendHeadToHeadView => _t(
-    ar: 'مقارنة مباشرة بين فترتين (A vs B)',
-    en: 'Head-to-Head Period Benchmark',
-    hi: 'अवधि बनाम अवधि तुलना',
+    ar: 'مقارنة بين فترتين',
+    en: 'Period vs Period',
+    hi: 'अवधि बनाम अवधि',
   );
   String get dailySalesVelocityLabel => _t(
     ar: 'كثافة المبيعات اليومية',
@@ -3424,6 +3519,46 @@ class AppStrings {
     ar: 'تطور ومسار أداء الحملة عبر الويك إندات المتعاقبة',
     en: 'Campaign Performance Progression across Sequential Weekends',
     hi: 'क्रमिक सप्ताहांतों में अभियान प्रदर्शन प्रगति',
+  );
+  String get visualPerformanceComparisonTitle => _t(
+    ar: 'التقرير والتحليل البياني الشامل للأداء',
+    en: 'Comprehensive Visual Performance Benchmark & Report',
+    hi: 'व्यापक दृश्य प्रदर्शन बेंचमार्क और रिपोर्ट',
+  );
+  String get visualPerformanceComparisonSubtitle => _t(
+    ar: 'أعمدة بيانية تفاعلية ونسب تفوق ومخططات شارت لكافة مؤشرات الأداء',
+    en: 'Interactive visual columns, proportional bars and growth charts across all KPIs',
+    hi: 'सभी संकेतकों पर दृश्य कॉलम, आनुपातिक बार और चार्ट',
+  );
+  String get visualViewModeBars => _t(
+    ar: 'أعمدة الحصص والتفوق',
+    en: 'Proportional Columns & Shares',
+    hi: 'आनुपातिक कॉलम और हिस्सेदारी',
+  );
+  String get visualViewModeChart => _t(
+    ar: 'مخطط الأعمدة المقارن',
+    en: 'Multi-Metric Grouped Columns',
+    hi: 'मल्टी-मीट्रिक समूहीकृत कॉलम',
+  );
+  String get visualViewModeCombined => _t(
+    ar: 'التقرير المتكامل',
+    en: 'Combined Report',
+    hi: 'संयुक्त रिपोर्ट',
+  );
+  String get leadingWinnerTag => _t(
+    ar: 'متفوقة بـ',
+    en: 'Leading by',
+    hi: 'से आगे',
+  );
+  String get performanceDifferenceDelta => _t(
+    ar: 'فارق الأداء',
+    en: 'Delta Difference',
+    hi: 'प्रदर्शन अंतर',
+  );
+  String get metricTiedPerformance => _t(
+    ar: 'أداء متكافئ متعادل',
+    en: 'Tied Performance',
+    hi: 'समान प्रदर्शन',
   );
 
   // ---------------------------------------------------------------------------
@@ -3472,7 +3607,34 @@ class AppStrings {
   String get aiAutoReplyLabel => _t(ar: 'المجيب الآلي الذكي (AI Auto-Reply Bot)', en: 'AI Auto-Reply Bot', hi: 'एआई ऑटो-रिप्लाई बॉट');
   String get aiAutoReplyDesc => _t(ar: 'الرد الفوري والذكي على ردود واستفسارات العملاء على الواتساب بذكاء Gemini 3.7 Flash.', en: 'Instant intelligent replies to incoming customer queries using Gemini 3.7 Flash.', hi: 'जेमिनी 3.7 फ्लैश के साथ स्वचालित उत्तर।');
 
-
+  // ---------------------------------------------------------------------------
+  // 26. Branch Invoices Distribution & Analytics (بيان إحصائي لتوزيع فواتير الفروع)
+  // ---------------------------------------------------------------------------
+  String get branchInvoicesChartTitle => _t(
+    ar: 'توزيع فواتير الفروع',
+    en: 'Branch Invoices Distribution',
+    hi: 'शाखा चालान वितरण',
+  );
+  String get branchInvoicesChartSubtitle => _t(
+    ar: 'رسم بياني يوضح عدد الفواتير ومبيعات العرض لكل فرع حسب الفترة المحددة',
+    en: 'Graphical distribution of invoice counts and sales per branch for the selected period',
+    hi: 'चयनित अवधि के लिए प्रति शाखा चालान संख्या और बिक्री का ग्राफिकल वितरण',
+  );
+  String get invoicesCountMetric => _t(ar: 'عدد الفواتير', en: 'Invoices Count', hi: 'चालान संख्या');
+  String get promoSalesMetric => _t(ar: 'مبيعات العرض', en: 'Promo Sales', hi: 'प्रचार बिक्री');
+  String get branchSharePercentage => _t(ar: 'نسبة الحصة', en: 'Share %', hi: 'हिस्सा %');
+  String get filterByThisBranchTooltip => _t(
+    ar: 'اضغط لحصر الفواتير على هذا الفرع فقط',
+    en: 'Click to filter invoices strictly for this branch',
+    hi: 'केवल इस शाखा के लिए चालान फ़िल्टर करने के लिए क्लिक करें',
+  );
+  String get showAllBranchesBtn => _t(ar: 'كافة الفروع', en: 'All Branches', hi: 'सभी शाखाएं');
+  String get noInvoicesForSelectedPeriod => _t(
+    ar: 'لا توجد فواتير مسجلة في الفروع للفترة الزمنية المحددة',
+    en: 'No invoices recorded across branches for the selected time period',
+    hi: 'चयनित समय अवधि के लिए शाखाओं में कोई चालान दर्ज नहीं है',
+  );
+  String get activeBranchIndicator => _t(ar: 'الفرع المحدد حالياً', en: 'Currently Selected Branch', hi: 'वर्तमान में चयनित शाखा');
 }
 
 

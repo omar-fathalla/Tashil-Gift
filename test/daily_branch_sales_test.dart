@@ -172,5 +172,75 @@ void main() {
       expect(canonicalBranches.contains('المنتزه (الإسكندرية)'), true);
       expect(canonicalBranches.contains('عمارات العبور - صلاح سالم (القاهرة)'), true);
     });
+
+    testWidgets('DailyBranchSalesScreen renders 2x2 KPI grid and 4-button group on mobile (390x844)', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: DailyBranchSalesScreen(
+                lockedCompanySlug: 'unilever',
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      expect(find.byType(DailyBranchSalesScreen), findsOneWidget);
+
+      // Verify the 4-button group labels are present
+      expect(find.text('اليوم'), findsOneWidget);
+      expect(find.text('الإجمالي'), findsOneWidget);
+      expect(find.text('إكسل'), findsOneWidget);
+      expect(find.byIcon(Icons.event_rounded), findsOneWidget);
+
+      // Verify 2x2 GridView is used for KPIs on mobile
+      final gridViewFinder = find.byType(GridView);
+      expect(gridViewFinder, findsOneWidget);
+      final gridView = tester.widget<GridView>(gridViewFinder);
+      final delegate = gridView.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+      expect(delegate.crossAxisCount, 2);
+    });
+
+    test('Clean branch name parsing and area/chain subtitle generation logic works correctly', () {
+      // Helper function matching the implementation
+      String cleanBranchName(String raw) {
+        final parenMatch = RegExp(r'\(([^)]+)\)').firstMatch(raw);
+        if (parenMatch != null) {
+          final candidate = raw.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim();
+          if (candidate.isNotEmpty) return candidate;
+        }
+        return raw.trim();
+      }
+
+      String extractArea(String raw) {
+        final parenMatch = RegExp(r'\(([^)]+)\)').firstMatch(raw);
+        return parenMatch?.group(1)?.trim() ?? '';
+      }
+
+      // Test cases
+      expect(cleanBranchName('فرع سموحة (الإسكندرية)'), equals('فرع سموحة'));
+      expect(extractArea('فرع سموحة (الإسكندرية)'), equals('الإسكندرية'));
+
+      expect(cleanBranchName('فرع طنطا اوت ليت (الغربية)'), equals('فرع طنطا اوت ليت'));
+      expect(extractArea('فرع طنطا اوت ليت (الغربية)'), equals('الغربية'));
+
+      expect(cleanBranchName('فرع عجمي ستار (الإسكندرية)'), equals('فرع عجمي ستار'));
+      expect(extractArea('فرع عجمي ستار (الإسكندرية)'), equals('الإسكندرية'));
+
+      expect(cleanBranchName('فرع فلمنج (الإسكندرية)'), equals('فرع فلمنج'));
+      expect(extractArea('فرع فلمنج (الإسكندرية)'), equals('الإسكندرية'));
+
+      expect(cleanBranchName('فرع دمنهور الاستاد (البحيرة)'), equals('فرع دمنهور الاستاد'));
+      expect(extractArea('فرع دمنهور الاستاد (البحيرة)'), equals('البحيرة'));
+
+      expect(cleanBranchName('فرع سموحة'), equals('فرع سموحة'));
+      expect(extractArea('فرع سموحة'), isEmpty);
+    });
   });
 }

@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:al_mraay/core/services/ai_receipt_service.dart';
 import 'package:al_mraay/core/localization/app_strings.dart';
+import 'package:al_mraay/core/utils/arabic_numbers_utils.dart';
+import 'package:al_mraay/features/admin/domain/event_model.dart';
 
 void main() {
   group('Invoices Log & Barcode Extraction Tests', () {
@@ -117,13 +119,50 @@ void main() {
       expect(en.totalPriceCol.isNotEmpty, true);
       expect(hi.totalPriceCol.isNotEmpty, true);
 
-      expect(ar.exportCsvBtn.isNotEmpty, true);
-      expect(en.exportCsvBtn.isNotEmpty, true);
-      expect(hi.exportCsvBtn.isNotEmpty, true);
+      expect(ar.exportCsvBtn, 'CSV');
+      expect(en.exportCsvBtn, 'CSV');
+      expect(hi.exportCsvBtn, 'CSV');
 
       expect(ar.searchReceiptPlaceholder.isNotEmpty, true);
       expect(en.searchReceiptPlaceholder.isNotEmpty, true);
       expect(hi.searchReceiptPlaceholder.isNotEmpty, true);
+    });
+
+    test('Campaign Active filtering logic filters ended/expired campaigns by default', () {
+      final now = DateTime.now();
+      final activeEvent = EventModel(
+        id: 'evt_active',
+        eventName: 'Active Event',
+        targetCompany: 'TestCompany',
+        minimumSpend: 100.0,
+        startDate: now.subtract(const Duration(days: 5)),
+        endDate: now.add(const Duration(days: 5)),
+        isActive: true,
+      );
+      final expiredEvent = EventModel(
+        id: 'evt_expired',
+        eventName: 'Expired Event',
+        targetCompany: 'TestCompany',
+        minimumSpend: 100.0,
+        startDate: now.subtract(const Duration(days: 20)),
+        endDate: now.subtract(const Duration(days: 5)),
+        isActive: true,
+      );
+      final inactiveEvent = EventModel(
+        id: 'evt_inactive',
+        eventName: 'Inactive Event',
+        targetCompany: 'TestCompany',
+        minimumSpend: 100.0,
+        startDate: now.subtract(const Duration(days: 5)),
+        endDate: now.add(const Duration(days: 5)),
+        isActive: false,
+      );
+
+      final allEvents = [activeEvent, expiredEvent, inactiveEvent];
+      final activeOnly = allEvents.where((e) => e.isActive && !e.isExpired).toList();
+
+      expect(activeOnly.length, 1);
+      expect(activeOnly.first.id, 'evt_active');
     });
 
     test('Base64 and HTTPS Receipt Image URLs validation', () {
@@ -137,5 +176,102 @@ void main() {
       final extracted = sampleBase64.contains(',') ? sampleBase64.split(',').last : sampleBase64;
       expect(extracted, '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP...');
     });
+
+    test('Receipt Number Search: Eastern Arabic digits normalization (٢٦٣ -> 263)', () {
+      const rawInput = '٢٦٣';
+      final cleanQuery = rawInput.toEnglishDigits().toLowerCase();
+      expect(cleanQuery, '263');
+
+      const receiptNumber = '263/2/243/021026';
+      expect(receiptNumber.contains(cleanQuery), true);
+    });
+
+    test('Receipt Number Search: Delimiter-insensitive matching (263-2 and 263 2 match 263/2/243/021026)', () {
+      const receiptNumber = '263/2/243/021026';
+      final cleanReceipt = receiptNumber.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+
+      // Query with dashes
+      const queryDash = '263-2';
+      final cleanQueryDash = queryDash.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+      expect(cleanReceipt.contains(cleanQueryDash), true);
+
+      // Query with spaces
+      const querySpace = '263 2';
+      final cleanQuerySpace = querySpace.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+      expect(cleanReceipt.contains(cleanQuerySpace), true);
+
+      // Query with slashes
+      const querySlash = '263/2';
+      final cleanQuerySlash = querySlash.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+      expect(cleanReceipt.contains(cleanQuerySlash), true);
+    });
+
+    test('Receipt Number Search: Segment token matching for Trans number (263)', () {
+      const receiptNumber = '263/2/243/021026';
+      final segments = receiptNumber.split(RegExp(r'[/\\-_ ]+'));
+
+      expect(segments[0], '263'); // Trans
+      expect(segments[1], '2');   // PoS
+      expect(segments[2], '243'); // Store
+      expect(segments[3], '021026'); // Date
+
+      expect(segments.contains('263'), true);
+      expect(segments.contains('2'), true);
+    });
+
+    test('Receipt Lookup Dialog: Auto-parsing full barcode into Trans and PoS', () {
+      const barcode = '263/2/243/021026';
+      final parts = barcode.split('/');
+      final trans = parts[0].trim();
+      final pos = parts.length > 1 ? parts[1].trim() : '';
+
+      expect(trans, '263');
+      expect(pos, '2');
+    });
+
+    test('Branch invoices count in dropdown is scoped strictly by active date filter', () {
+      final today = DateTime.now();
+      final yesterday = today.subtract(const Duration(days: 1));
+
+      final sampleInvoices = [
+        {
+          'id': 'inv1',
+          'campaignId': 'c1',
+          'canonical_branch': 'فرع سموحة',
+          'date': today,
+          'is_valid': true,
+        },
+        {
+          'id': 'inv2',
+          'campaignId': 'c1',
+          'canonical_branch': 'فرع سموحة',
+          'date': yesterday,
+          'is_valid': true,
+        },
+        {
+          'id': 'inv3',
+          'campaignId': 'c1',
+          'canonical_branch': 'فرع جاردينيا',
+          'date': today,
+          'is_valid': true,
+        },
+      ];
+
+      // Simulate date filtering for today
+      bool isToday(DateTime? d) {
+        if (d == null) return false;
+        return d.year == today.year && d.month == today.month && d.day == today.day;
+      }
+
+      final todayInvoices = sampleInvoices.where((inv) => isToday(inv['date'] as DateTime?)).toList();
+      expect(todayInvoices.length, 2);
+
+      final smouhaToday = todayInvoices.where((inv) => inv['canonical_branch'] == 'فرع سموحة').length;
+      final gardeniaToday = todayInvoices.where((inv) => inv['canonical_branch'] == 'فرع جاردينيا').length;
+
+      expect(smouhaToday, 1); // 1 today, even though total all-time is 2
+      expect(gardeniaToday, 1);
+    });
   });
 }
+

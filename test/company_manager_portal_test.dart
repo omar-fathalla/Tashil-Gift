@@ -11,6 +11,7 @@ import 'package:al_mraay/features/admin/presentation/campaign_reports_screen.dar
 import 'package:al_mraay/features/validation/presentation/invoices_log_screen.dart';
 import 'package:al_mraay/features/auth/presentation/auth_screen.dart';
 import 'package:al_mraay/core/utils/slug_utils.dart';
+import 'package:al_mraay/features/company_portal/presentation/branch_stock_balances_screen.dart';
 
 void main() {
   group('Dual Link Architecture & Company Manager Portal Tests', () {
@@ -97,7 +98,7 @@ void main() {
       expect(sidebarInEnglish.left, lessThanOrEqualTo(10));
     });
 
-    testWidgets('Toggling sidebar collapse and expand animates smoothly with zero overflow exceptions', (tester) async {
+    testWidgets('CompanyManagerPortalScreen renders M3 Navigation Rail with 80dp slim width and zero overflow exceptions', (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
@@ -116,42 +117,26 @@ void main() {
       await tester.pump();
       expect(tester.takeException(), isNull);
 
-      // Verify sidebar is initially expanded (275px)
-      var sidebarRect = tester.getRect(find.byType(AnimatedContainer).first);
-      expect(sidebarRect.width, equals(275.0));
+      // Verify sidebar is M3 Navigation Rail with 80dp fixed width
+      final sidebarRect = tester.getRect(find.byType(AnimatedContainer).first);
+      expect(sidebarRect.width, equals(80.0));
 
-      // Tap collapse button
-      final collapseBtn = find.byIcon(Icons.keyboard_double_arrow_right_rounded);
-      expect(collapseBtn, findsOneWidget);
-      await tester.tap(collapseBtn);
+      // Verify NavigationRail is rendered with all concise labels visible
+      expect(find.byType(NavigationRail), findsOneWidget);
+      expect(find.text('المؤشرات والتحاليل'), findsWidgets);
+      expect(find.text('مقارنة التحاليل'), findsWidgets);
+      expect(find.text('الأرصدة'), findsWidgets);
+      expect(find.text('Voucher'), findsWidgets);
+      expect(find.text('Promoter'), findsWidgets);
 
-      // Pump frames during animation
-      await tester.pump(const Duration(milliseconds: 50));
-      expect(tester.takeException(), isNull);
-      await tester.pump(const Duration(milliseconds: 100));
-      expect(tester.takeException(), isNull);
-      await tester.pumpAndSettle();
-
-      // Verify sidebar is now collapsed (76px)
-      sidebarRect = tester.getRect(find.byType(AnimatedContainer).first);
-      expect(sidebarRect.width, equals(76.0));
-      expect(tester.takeException(), isNull);
-
-      // Tap expand button
-      final expandBtn = find.byIcon(Icons.keyboard_double_arrow_left_rounded);
-      expect(expandBtn, findsOneWidget);
-      await tester.tap(expandBtn);
-
-      // Pump frames during expansion
-      await tester.pump(const Duration(milliseconds: 50));
-      expect(tester.takeException(), isNull);
-      await tester.pump(const Duration(milliseconds: 100));
-      expect(tester.takeException(), isNull);
-      await tester.pumpAndSettle();
-
-      // Verify sidebar is expanded again (275px)
-      sidebarRect = tester.getRect(find.byType(AnimatedContainer).first);
-      expect(sidebarRect.width, equals(275.0));
+      // Verify that navigation starts at the top and company logo is at the bottom
+      final firstDestRect = tester.getRect(find.text('المؤشرات والتحاليل').first);
+      final logoFinder = find.byIcon(Icons.business_rounded);
+      if (logoFinder.evaluate().isNotEmpty) {
+        final logoRect = tester.getRect(logoFinder.first);
+        expect(logoRect.top, greaterThan(firstDestRect.bottom));
+        expect(logoRect.bottom, greaterThan(800.0));
+      }
       expect(tester.takeException(), isNull);
     });
 
@@ -271,11 +256,15 @@ void main() {
       expect(find.byType(Drawer), findsOneWidget);
       expect(tester.takeException(), isNull);
 
-      // Scroll down in drawer to reveal Settings ExpansionTile if below fold
-      await tester.drag(find.byType(ListView), const Offset(0, -300));
-      await tester.pumpAndSettle();
+      // Verify pinned bottom section: 3 quick share icon buttons are present
+      expect(find.byIcon(Icons.qr_code_scanner_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.store_mall_directory_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.business_center_rounded), findsOneWidget);
 
-      // Verify Settings section is titled 'الإعدادات' (no English) and is collapsed by default
+      // Verify Tashil Gift version info is at the bottom
+      expect(find.textContaining('Build #'), findsOneWidget);
+
+      // Verify Settings section is titled 'الإعدادات' and is collapsed by default in pinned section
       expect(find.text('الإعدادات'), findsOneWidget);
       expect(find.text('الإعدادات والمظهر (Settings)'), findsNothing);
 
@@ -283,13 +272,11 @@ void main() {
       await tester.tap(find.text('الإعدادات'));
       await tester.pumpAndSettle();
 
-      // Scroll further down to see expanded content
-      await tester.drag(find.byType(ListView), const Offset(0, -200));
-      await tester.pumpAndSettle();
-
-      // Verify language and country settings are revealed upon expansion
+      // Verify language and country settings are revealed upon expansion with zero overflow as Dropdown menus
       expect(find.text('لغة الواجهة'), findsOneWidget);
       expect(find.text('الدولة والعملة المعتمدة'), findsOneWidget);
+      expect(find.descendant(of: find.byType(ExpansionTile), matching: find.byType(DropdownButton<String>)), findsNWidgets(2));
+      expect(find.byType(ChoiceChip), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
@@ -372,6 +359,35 @@ void main() {
         find.byType(CircularProgressIndicator),
         findsOneWidget,
       );
+    });
+
+    test('BranchStockBalancesScreen accepts lockedCompanySlug and initialEventId parameters for secure data scoping', () {
+      const balances = BranchStockBalancesScreen(
+        lockedCompanySlug: 'adco',
+        lockedCompanyName: 'أدكو',
+        initialEventId: 'event_adco_123',
+        isEmbedded: true,
+      );
+
+      expect(balances.lockedCompanySlug, equals('adco'));
+      expect(balances.lockedCompanyName, equals('أدكو'));
+      expect(balances.initialEventId, equals('event_adco_123'));
+      expect(balances.isEmbedded, isTrue);
+    });
+
+    test('BranchStockBalancesScreen action buttons and shortened headers are correctly supported', () {
+      final stringsAr = AppStrings.fromLocale('ar');
+      expect(stringsAr.branchBalancesNavTitle, equals('الأرصدة'));
+      expect(stringsAr.saveAllBalancesBtn, isNotEmpty);
+      expect(stringsAr.bulkDistributeTitle, contains('التوزيع الموحد'));
+      expect(stringsAr.applyToAllBranchesBtn, contains('تطبيق موحد'));
+      expect(stringsAr.matrixGridView, isNotEmpty);
+      expect(stringsAr.branchCardsView, isNotEmpty);
+
+      final stringsEn = AppStrings.fromLocale('en');
+      expect(stringsEn.branchBalancesNavTitle, equals('Branch Balances'));
+      expect(stringsEn.saveAllBalancesBtn, isNotEmpty);
+      expect(stringsEn.applyToAllBranchesBtn, isNotEmpty);
     });
   });
 }

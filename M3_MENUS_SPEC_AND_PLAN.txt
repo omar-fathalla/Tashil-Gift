@@ -1,0 +1,308 @@
+================================================================================
+وثيقة المواصفات الفنية: تطبيق معايير قوائم Material Design 3 (M3 Menus Architecture)
+المشروع المستهدف: Tashil Gift Dashboard (Flutter Web & Mobile)
+المرجعية الهندسية: Material Design 3 (M3) Official Specifications:
+  - Menus Overview      : https://m3.material.io/components/menus/overview
+  - Menus Specs         : https://m3.material.io/components/menus/specs
+  - Menus Guidelines    : https://m3.material.io/components/menus/guidelines
+  - Menus Accessibility : https://m3.material.io/components/menus/accessibility
+================================================================================
+
+1. الرؤية الهندسية وأهمية القوائم في الداشبورد (Architectural Vision)
+--------------------------------------------------------------------------------
+القوائم (Menus) هي عنصر التحكم التفاعلي المؤقت الأكثر حساسية في الداشبورد؛ تظهر عند
+طلب المستخدم لاتخاذ إجراء سريع (زر الخيارات الإضافية 3 نقاط ⋮، قوائم التصدير والطباعة،
+فلاتر الفروع والتواريخ، وقائمة الحساب وتغيير الشركة).
+
+الهدف من هذه الخطة:
+الارتقاء بجميع القوائم المنسدلة من أشكال PopupMenuButton التقليدية القديمة إلى
+منظومة M3 Menus الحديثة (MenuAnchor و MenuItemButton و SubmenuButton)، مما يضمن:
+1. استبدال الـ PopupMenuButton القديم بـ MenuAnchor المعتمد رسمياً في Flutter M3.
+2. أبعاد وحواف وانحناءات قياسية (Corner Radius 4dp - 8dp، Elevation Level 2).
+3. دعم كامل للقوائم المتفرعة المتداخلة (Cascading Submenus) بسلاسة.
+4. كثافة تكيفية: ارتفاع 48dp باللمس على الموبايل، و 36dp-40dp بالماوس على الديسكتوب.
+5. تنقل كامل بلوحة المفاتيح (Keyboard Navigation بالأسهم و Escape و Enter).
+6. انضباط اتجاهية الأسهم والفتح في العربية (RTL) مقارنة بالإنجليزية والهندية (LTR).
+
+
+================================================================================
+2. أنواع القوائم المعتمدة في M3 الداشبورد (Menu Types)
+================================================================================
+
+1. القوائم السياقية وقوائم الإجراءات الإضافية (Context / Overflow Menus):
+   - تفتح عند النقر على أيقونة الإجراءات الإضافية (مثل أزرار الخيارات في صفوف الفواتير).
+   - تعرض إجراءات مثل: عرض التفاصيل، طباعة، نسخ الرابط، إلغاء الفاتورة.
+
+2. القوائم المتفرعة المتتالية (Cascading / Submenus):
+   - تحتوي على عناصر تفتح قوائم فرعية بجانبها (مثل: زر "تصدير البيانات" يفتح قائمة
+     فرعية تحتوي على: Excel, PDF, CSV).
+
+3. القوائم المنسدلة المرتبطة بحقول إدخال (Exposed Dropdown Menus):
+   - ترتبط بحقل نصي مثل اختيار الفرع، تصنيف الحملة، أو تحديد تاريخ الفلترة.
+   - يتطابق عرض القائمة تلقائياً مع عرض حقل الإدخال المرتبط بها.
+
+
+================================================================================
+3. التشريح الهندسي والأبعاد الرسمية (M3 Menus Anatomy & Exact Specs)
+================================================================================
+
+التشريح الهيكلي لعنصر القائمة (Menu Item Anatomy):
+-------------------------------------------------
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ [Leading Icon]  ←12dp→  [ Item Label Text ]   ←16dp→  [ Trailing / Shortcut ]│
+│    (24dp)                                             Checkmark ✓             │
+│                                                       or Shortcut (Ctrl+P)    │
+│                                                       or Submenu Arrow (◂/▸)  │
+└──────────────────────────────────────────────────────────────────────────────┘
+←─ 12dp ─→                                                             ←─ 12dp ─→
+(Start Padding)                                                       (End Padding)
+
+المواصفات القياسية لحاوية القائمة (Container Specs):
+----------------------------------------------------
+- لون السطح: Theme.colorScheme.surfaceContainer (أو surfaceContainerLow).
+- الانحناء الزاوي (Corner Radius): 4dp إلى 8dp كحد أقصى (M3 Corner Small).
+- الظل والارتفاع (Elevation): Level 2 (ظل ناعم منتشر مع حدود دقيقة outlineVariant).
+- حدود العرض (Width Constraints):
+  * الحد الأدنى للعرض: 112dp.
+  * الحد الأقصى للعرض: 280dp (يتسع حتى 320dp في القوائم العريضة أو عرض الحقل نفسه).
+
+المواصفات القياسية لعناصر القائمة (Menu Items Specs):
+----------------------------------------------------
+- الارتفاع (Height):
+  * النمط القياسي (Mobile Touch): 48dp كحد أدنى.
+  * النمط المكثف (Desktop Mouse): 36dp إلى 40dp.
+- الحشو الداخلي (Internal Padding): 12dp أفقي (Start & End)، و 8dp رأسي.
+- الفجوة بين الأيقونة البادئة والنص: 12dp ثابتة.
+- الفجوة بين النص وعنصر النهاية (Trailing): 16dp.
+- الخطوط والتيبوغرافي: textTheme.labelLarge (14sp, w500).
+- الفواصل الأفقية (Dividers): سمك 1dp بلون outlineVariant، وتبتعد بمقدار 8dp رأسي.
+
+
+================================================================================
+4. قواعد السلوك والتنظيم الوظيفي (Guidelines, Groupings & Destruction)
+================================================================================
+
+1. التجميع الوظيفي (Logical Grouping):
+   - يجب تجميع العناصر ذات الطبيعة المتشابهة معاً، وفصلها بخط Divider رفيع (1dp).
+   - مثال: خيارات (التعديل، النسخ) في مجموعة، ثم فاصل، ثم خيارات (التصدير والطباعة).
+
+2. الإجراءات التدميرية والخطرة (Destructive Actions):
+   - الإجراءات الحساسة (مثل: حذف الحملة، إلغاء الجائزة، حظر الفرع) توضع دائماً
+     في **نهاية القائمة** مفصولة بخط Divider.
+   - تأخذ الأيقونة والنص لون الخطأ المعتمد: Theme.colorScheme.error.
+   - خلفية الـ Hover تأخذ شفافية خفيفة من لون Error (error.withValues(alpha: 0.08)).
+
+3. خيارات التحديد الفردي والمتعدد (Selection & Toggles):
+   - في القوائم التي تحتوي على فلاتر قابلة للتفعيل والتعطيل:
+     * تظهر علامة الصح (Checkmark Icon) في موضع الـ Trailing أو Leading.
+     * يتغير لون النص إلى Primary عند التفعيل.
+
+
+================================================================================
+5. إمكانية الوصول والتنقل بالكيبورد (Accessibility & Keyboard a11y)
+================================================================================
+
+1. التنقل الكامل عبر لوحة المفاتيح (Keyboard Navigation):
+   - سهم لأسفل (Down Arrow): الانتقال للعنصر التالي مع دوران حلقي (Looping).
+   - سهم لأعلى (Up Arrow): الانتقال للعنصر السابق.
+   - سهم لليمين (Right Arrow في LTR / Left Arrow في RTL): فتح القائمة الفرعية (Submenu).
+   - سهم لليسار (Left Arrow في LTR / Right Arrow في RTL): إغلاق القائمة الفرعية والرجوع.
+   - زر الإدخال (Enter / Space): تنفيذ إجراء العنصر المحدد وإغلاق القائمة.
+   - زر الهروب (Escape): إغلاق القائمة فوراً وإعادة الفوكس لزر التشغيل (Anchor).
+
+2. البحث المباشر بالكتابة (Typeahead Jump):
+   - عند فتح القائمة والضغط على حرف (مثلاً "خ" لخيارات أو "P" لـ Print)، ينتقل
+     مؤشر التحديد فوراً للعنصر المطابق.
+
+3. حماية مساحات اللمس (Touch Target Invariant):
+   - على شاشات الهواتف، كل عنصر في القائمة يحتفظ بمساحة لمس لا تقل عن 48x48dp.
+   - على الديسكتوب، مؤشر الماوس يكتسب مؤشر اليد (SystemMouseCursors.click).
+
+
+================================================================================
+6. التوافق التام مع الاتجاهية الثلاثية (Trilingual Directionality RTL/LTR)
+================================================================================
+
+1. انضباط أسهم القوائم الفرعية (Submenu Chevron Arrow):
+   - في اللغة العربية (RTL):
+     * سهم القائمة الفرعية يشير إلى **اليسار** (Icons.chevron_left) لأن القائمة
+       الفرعية ستفتح جهة اليسار.
+     * الأيقونة الرئيسية تقع على اليمين تماماً.
+   - في الإنجليزية والهندية (LTR):
+     * سهم القائمة الفرعية يشير إلى **اليمين** (Icons.chevron_right).
+
+2. الموضع والانبثاق التلقائي (Repositioning & Collision Avoidance):
+   - القائمة تنبثق بحيث لا تخرج أبداً عن حدود الشاشة (Viewport Containment).
+   - إذا كان الزر قرب حافة الشاشة اليسرى في RTL، تنعكس القائمة للداخل تلقائياً.
+
+
+================================================================================
+7. المكون البرمجي الموحد الجاهز للاستخدام (M3MenuAnchor Integration)
+================================================================================
+
+الملف المقترح إنشاؤه: `lib/core/widgets/m3_action_menu.dart`
+
+```dart
+import 'package:flutter/material.dart';
+import '../theme/m3_spacing_tokens.dart';
+
+/// المكون القياسي الموحد لفتح قوائم M3 باستخدام MenuAnchor
+class M3ActionMenu extends StatelessWidget {
+  final Widget? anchorIcon;
+  final String? tooltip;
+  final List<Widget> children;
+
+  const M3ActionMenu({
+    super.key,
+    this.anchorIcon,
+    this.tooltip,
+    required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDesktop = MediaQuery.sizeOf(context).width >= 840;
+
+    return MenuAnchor(
+      builder: (context, controller, child) {
+        return IconButton(
+          onPressed: () {
+            if (controller.isOpen) {
+              controller.close();
+            } else {
+              controller.open();
+            }
+          },
+          icon: anchorIcon ?? const Icon(Icons.more_vert_rounded),
+          tooltip: tooltip ?? 'خيارات إضافية',
+          style: IconButton.styleFrom(
+            minimumSize: const Size(48, 48), // Touch target invariant
+          ),
+        );
+      },
+      style: MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(colorScheme.surfaceContainer),
+        elevation: const WidgetStatePropertyAll(2),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(vertical: M3SpacingTokens.space1), // 4dp
+        ),
+      ),
+      menuChildren: children,
+    );
+  }
+
+  /// مساعد لبناء عنصر قائمة قياسي
+  static Widget item({
+    required BuildContext context,
+    required String label,
+    IconData? icon,
+    VoidCallback? onPressed,
+    String? shortcutText,
+    bool isDestructive = false,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDesktop = MediaQuery.sizeOf(context).width >= 840;
+    final foregroundColor = isDestructive ? colorScheme.error : colorScheme.onSurface;
+
+    return MenuItemButton(
+      onPressed: onPressed,
+      style: MenuItemButton.styleFrom(
+        minimumSize: Size(isDesktop ? 160 : 180, isDesktop ? 40 : 48),
+        padding: const EdgeInsetsDirectional.symmetric(
+          horizontal: M3SpacingTokens.space3, // 12dp
+        ),
+        foregroundColor: foregroundColor,
+      ),
+      leadingIcon: icon != null
+          ? Icon(icon, size: 20, color: foregroundColor)
+          : null,
+      trailingIcon: shortcutText != null
+          ? Text(
+              shortcutText,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+            )
+          : null,
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: foregroundColor,
+              fontWeight: FontWeight.w500,
+            ),
+      ),
+    );
+  }
+
+  /// مساعد لبناء فاصل أفقي
+  static Widget divider() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 4),
+      child: Divider(height: 1),
+    );
+  }
+}
+```
+
+
+================================================================================
+8. أمر التكليف الجاهز للإرسال للـ AI Agent (Prompt for the Agent)
+================================================================================
+
+يمكنك نسخ هذا الأمر كما هو وإرساله للأجنت:
+
+\"\"\"
+### مأمورية التطوير: ترقية وتوحيد القوائم وفقاً لمعايير Material Design 3 (M3 Menus)
+
+يرجى تنفيذ الترقية المعمارية الشاملة لكافة القوائم المنسدلة في مشروع Tashil Gift
+وفقاً لمواصفات M3 Menus الرسمية:
+
+1. الخطوة 1: بناء ويدجت القوائم المركزية (M3ActionMenu & MenuAnchor)
+   - أنشئ ملف `lib/core/widgets/m3_action_menu.dart` المرفق في وثيقة المواصفات.
+   - اعتمد على `MenuAnchor` الحديث من Flutter M3 بدلاً من الـ `PopupMenuButton` القديم.
+   - تأكد من تطبيق انحناء الحواف المعتمد (8dp) ولون السطح `surfaceContainer` وظل Level 2.
+
+2. الخطوة 2: تحديث شاشات الداشبورد الرئيسية
+   - شاشة سجل الفواتير (`InvoicesLogScreen`):
+     * استبدل قائمة الإجراءات في كل سطر فاتورة بـ `M3ActionMenu`.
+     * وفّر خيارات: (عرض التفاصيل، تحميل الصورة، إعادة فحص OCR، وإلغاء الفاتورة باللون الأحمر).
+   - لوحة تحكم الحملات (`CompanyManagerPortalScreen`):
+     * استبدل قوائم كروت الحملات بقوائم M3 منظمة ومرتبة بمجموعات وفواصل.
+   - شاشات التصدير والتقارير:
+     * وفّر قوائم فرعية متتالية (Cascading Submenus) لتصدير (Excel / PDF / Print).
+
+3. الخطوة 3: حوكمة الاتجاهية ولوحة المفاتيح (RTL & Keyboard a11y)
+   - تأكد من انعكاس أسهم القوائم الفرعية تلقائياً في اللغة العربية (تشير لليسار) وفي الإنجليزية (تشير لليمين).
+   - اضبط مساحات اللمس بحيث لا تقل عن 48x48dp على الهواتف، مع تفعيل كثافة 40dp على شاشات الديسكتوب.
+   - تحقق من عمل مفاتيح الأسهم (Arrow Keys) و Escape للتنقل السلس دون ماوس.
+
+4. الخطوة 4: التحقق والاختبار الصارم
+   - شغّل `flutter analyze` وتأكد من خلو المشروع تماماً من أي أخطاء أو تحذيرات (0 errors).
+   - تذكير إلزامي: ممنوع عمل git push أو firebase deploy بدون موافقة صريحة من المستخدم.
+\"\"\"
+
+
+================================================================================
+9. مصفوفة التحقق والقبول (Acceptance Criteria Matrix)
+================================================================================
+
+1. استبدال PopupMenuButton:
+   - جميع القوائم في الداشبورد تعتمد على MenuAnchor الحديث مع سلاسة مطلقة.
+
+2. الأبعاد والكثافة:
+   - ارتفاع العناصر على الديسكتوب 40dp، وعلى الهواتف 48dp مع مساحة لمس آمنة 48x48dp.
+
+3. القوائم المتفرعة (Submenus):
+   - فتح القوائم الفرعية يعمل بدون تداخل، مع انضباط اتجاه السهم حسب اللغة (RTL/LTR).
+
+4. الإجراءات التدميرية:
+   - خيارات الحذف والإلغاء تظهر بلون الخطأ المعتمد (Theme.colorScheme.error) في نهاية القائمة.
+
+5. التنقل بلوحة المفاتيح:
+   - إمكانية فتح القائمة والتنقل بين عناصرها بالأسهم وإغلاقها بـ Escape دون استخدام الماوس.
+================================================================================

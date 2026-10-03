@@ -1704,6 +1704,23 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     final customerName = (data['customerName'] ?? data['customer_name'] ?? '').toString().trim();
     final receiptDate = (data['receipt_date'] ?? '').toString().trim();
     final imageUrl = (data['image_url'] ?? '').toString().trim();
+    final List<String> allReceiptUrls = [];
+    if (data['image_urls'] is List && (data['image_urls'] as List).isNotEmpty) {
+      allReceiptUrls.addAll((data['image_urls'] as List).map((e) => e.toString()).where((e) => e.isNotEmpty));
+    }
+    if (allReceiptUrls.isEmpty && imageUrl.isNotEmpty) {
+      allReceiptUrls.add(imageUrl);
+    }
+    if (allReceiptUrls.length > 1) {
+      allReceiptUrls.sort((a, b) {
+        final aPart = RegExp(r'part(\d+)').firstMatch(a.toLowerCase())?.group(1);
+        final bPart = RegExp(r'part(\d+)').firstMatch(b.toLowerCase())?.group(1);
+        if (aPart != null && bPart != null) {
+          return int.parse(aPart).compareTo(int.parse(bPart));
+        }
+        return a.compareTo(b);
+      });
+    }
     final prizeWon = (data['prize_won'] ?? '').toString().trim();
     final gamePlayed = data['game_played'] == true;
     final dt = _parseDateTime(data['timestamp'], receiptDate);
@@ -2163,7 +2180,12 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   Align(
                     alignment: AlignmentDirectional.centerStart,
                     child: OutlinedButton.icon(
-                      onPressed: () => _showReceiptImageZoomDialog(context, imageUrl, receiptNumber),
+                      onPressed: () => _showReceiptImageZoomDialog(
+                        context,
+                        allReceiptUrls.isNotEmpty ? allReceiptUrls.first : imageUrl,
+                        receiptNumber,
+                        imageUrls: allReceiptUrls.length > 1 ? allReceiptUrls : null,
+                      ),
                       icon: const Icon(Icons.zoom_in_rounded, size: 16),
                       label: Text(strings.receiptZoomImage, style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold)),
                       style: OutlinedButton.styleFrom(
@@ -2839,17 +2861,59 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     final productsService = ref.read(companyProductsServiceProvider);
     final retailChainsService = ref.read(retailChainsServiceProvider);
 
-    final imageUrl = (inv['image_url'] ?? '').toString();
-    final storagePath = inv['storage_path']?.toString();
+    // Collect all image URLs & storage paths (supporting multi-part receipts)
+    final List<String> rawUrls = [];
+    if (inv['image_urls'] is List && (inv['image_urls'] as List).isNotEmpty) {
+      rawUrls.addAll((inv['image_urls'] as List).map((e) => e.toString()).where((e) => e.isNotEmpty));
+    }
+    if (rawUrls.isEmpty && (inv['image_url'] ?? '').toString().isNotEmpty) {
+      rawUrls.add(inv['image_url'].toString());
+    }
 
-    if (imageUrl.isEmpty && (storagePath == null || storagePath.isEmpty)) {
+    final List<String> rawPaths = [];
+    if (inv['storage_paths'] is List && (inv['storage_paths'] as List).isNotEmpty) {
+      rawPaths.addAll((inv['storage_paths'] as List).map((e) => e.toString()).where((e) => e.isNotEmpty));
+    }
+    if (rawPaths.isEmpty && (inv['storage_path'] ?? '').toString().isNotEmpty) {
+      rawPaths.add(inv['storage_path'].toString());
+    }
+
+    if (rawUrls.isEmpty && rawPaths.isEmpty) {
       throw Exception(isAr ? 'لا توجد صورة مسجلة لهذه الفاتورة لإعادة الفحص بالذكاء الاصطناعي.' : 'No receipt image found for full AI scan.');
     }
 
-    final Uint8List? imageBytes = await _downloadReceiptImageBytes(imageUrl, storagePath);
-    if (imageBytes == null || imageBytes.isEmpty) {
-      throw Exception(isAr ? 'تعذر تنزيل صورة الفاتورة من السيرفر.' : 'Failed to download receipt image.');
+    final int imageCount = rawUrls.length > rawPaths.length ? rawUrls.length : rawPaths.length;
+    final List<MapEntry<String, String?>> imageTargets = [];
+    for (int i = 0; i < imageCount; i++) {
+      final u = i < rawUrls.length ? rawUrls[i] : '';
+      final p = i < rawPaths.length ? rawPaths[i] : null;
+      imageTargets.add(MapEntry(u, p));
     }
+
+    // Sort naturally so part1 comes before part2
+    imageTargets.sort((a, b) {
+      final aKey = (a.value ?? a.key).toLowerCase();
+      final bKey = (b.value ?? b.key).toLowerCase();
+      final aPart = RegExp(r'part(\d+)').firstMatch(aKey)?.group(1);
+      final bPart = RegExp(r'part(\d+)').firstMatch(bKey)?.group(1);
+      if (aPart != null && bPart != null) {
+        return int.parse(aPart).compareTo(int.parse(bPart));
+      }
+      return aKey.compareTo(bKey);
+    });
+
+    final downloadedBytesList = (await Future.wait(
+      imageTargets.map((target) => _downloadReceiptImageBytes(target.key, target.value)),
+    )).whereType<Uint8List>().where((b) => b.isNotEmpty).toList();
+
+    if (downloadedBytesList.isEmpty) {
+      throw Exception(isAr ? 'تعذر تنزيل صور الفاتورة من السيرفر.' : 'Failed to download receipt image(s).');
+    }
+
+    final Uint8List imageBytes = downloadedBytesList.first;
+    final List<Uint8List> additionalImagesBytes = downloadedBytesList.length > 1
+        ? downloadedBytesList.sublist(1)
+        : const [];
 
     // Load knowledge context for retail chains & products
     List<String> registeredBarcodes = [];
@@ -2913,6 +2977,8 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     final result = await aiService.analyzeReceiptImage(
       imageBytes,
       'image/jpeg',
+      additionalImagesBytes: additionalImagesBytes,
+      additionalMimeTypes: List.filled(additionalImagesBytes.length, 'image/jpeg'),
       targetCompany: activeEvent.targetCompany,
       minimumSpend: 0.0,
       requiredProducts: combinedReqProds.toList(),
@@ -2924,11 +2990,12 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
       registeredBranches: chainBranches,
       startDate: null,
       endDate: null,
-      customPrompt: '',
+      customPrompt: activeEvent.customPrompt,
       allowMultipleChances: true,
       multiplierBasis: 'both',
       maxChancesPerReceipt: 0,
       promotionalRules: combinedPromotionalRules,
+      allowComplementaryReceipts: activeEvent.allowComplementaryReceipts,
     );
 
     // Multi-campaign evaluation
@@ -3539,10 +3606,11 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     );
   }
 
-  void _showReceiptImageZoomDialog(BuildContext context, String imageUrl, String receiptNumber) {
+  void _showReceiptImageZoomDialog(BuildContext context, String imageUrl, String receiptNumber, {List<String>? imageUrls}) {
     InteractiveReceiptViewerDialog.show(
       context,
       imageUrl: imageUrl,
+      imageUrls: imageUrls,
       receiptNumber: receiptNumber,
     );
   }

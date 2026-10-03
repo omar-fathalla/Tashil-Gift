@@ -1,16 +1,23 @@
+import 'dart:convert';
 import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' hide TextDirection;
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/country_currency_config.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../core/services/firebase_service.dart';
+import '../../../core/widgets/m3_button_groups.dart';
 import '../../../core/widgets/switch_point_branding.dart';
 import '../../admin/domain/event_model.dart';
+import '../../../core/utils/responsive.dart';
+import '../../../core/widgets/m3_adaptive_scaffold.dart';
 
 /// Performance Summary Data for a Single Campaign
 class CampaignMetricsSummary {
@@ -149,7 +156,6 @@ class _CampaignsComparisonAnalyticsScreenState
   static final Map<String, List<QueryDocumentSnapshot>> _persistentInvoicesCache = {};
   static final Map<String, String> _savedCampaignA = {};
   static final Map<String, String> _savedCampaignB = {};
-  static final Map<String, ComparisonDimension> _savedDimension = {};
   static final Map<String, int> _savedComparisonMode = {};
   static final Map<String, String> _savedIntraCampaign = {};
   static final Map<String, String> _savedClusterA = {};
@@ -159,8 +165,8 @@ class _CampaignsComparisonAnalyticsScreenState
 
   String? _selectedCampaignAId;
   String? _selectedCampaignBId;
-  int _comparisonMode = 0; // 0: Head-to-Head (A vs B), 1: Intra-Campaign Waves, 2: All Campaigns Portfolio
-  ComparisonDimension _activeDimension = ComparisonDimension.revenue;
+  int _comparisonMode = 2; // 2: All Campaigns Portfolio (Default), 0: Head-to-Head (A vs B), 1: Intra-Campaign Waves
+  bool _showTableView = true; // Default is Table View (Image 2) on all devices
 
   // Intra-Campaign Weekend & Period Analytics State
   String? _selectedIntraCampaignId;
@@ -190,8 +196,10 @@ class _CampaignsComparisonAnalyticsScreenState
     }
     _selectedCampaignAId = _savedCampaignA[slug] ?? widget.initialEventId;
     _selectedCampaignBId = _savedCampaignB[slug];
-    _activeDimension = _savedDimension[slug] ?? ComparisonDimension.revenue;
-    _comparisonMode = _savedComparisonMode[slug] ?? 0;
+    if (widget.companyEvents != null && widget.companyEvents!.length <= 1) {
+      _selectedCampaignBId = null;
+    }
+    _comparisonMode = _savedComparisonMode[slug] ?? 2;
     _selectedIntraCampaignId = _savedIntraCampaign[slug] ?? widget.initialEventId ?? _selectedCampaignAId;
     _selectedClusterAId = _savedClusterA[slug];
     _selectedClusterBId = _savedClusterB[slug];
@@ -218,24 +226,32 @@ class _CampaignsComparisonAnalyticsScreenState
       _savedCampaignA[slug] = _selectedCampaignAId!;
     }
 
-    // 2. Resolve Campaign B
-    if (_selectedCampaignBId == null ||
-        !events.any((e) => e.id == _selectedCampaignBId)) {
-      final savedB = _savedCampaignB[slug];
-      if (savedB != null &&
-          events.any((e) => e.id == savedB) &&
-          (events.length == 1 || savedB != _selectedCampaignAId)) {
-        _selectedCampaignBId = savedB;
-      } else if (events.length > 1) {
-        final secondary = events.firstWhere(
-          (e) => e.id != _selectedCampaignAId,
-          orElse: () => events.first,
-        );
-        _selectedCampaignBId = secondary.id;
-      } else {
-        _selectedCampaignBId = events.first.id;
+    // 2. Resolve Campaign B (Must NOT duplicate Campaign A)
+    if (events.length <= 1) {
+      _selectedCampaignBId = null;
+      _savedCampaignB.remove(slug);
+    } else {
+      if (_selectedCampaignBId == null ||
+          !events.any((e) => e.id == _selectedCampaignBId) ||
+          _selectedCampaignBId == _selectedCampaignAId) {
+        final savedB = _savedCampaignB[slug];
+        if (savedB != null &&
+            savedB != _selectedCampaignAId &&
+            events.any((e) => e.id == savedB)) {
+          _selectedCampaignBId = savedB;
+        } else {
+          final secondary = events.firstWhere(
+            (e) => e.id != _selectedCampaignAId,
+            orElse: () => events.first,
+          );
+          _selectedCampaignBId = secondary.id != _selectedCampaignAId ? secondary.id : null;
+        }
+        if (_selectedCampaignBId != null) {
+          _savedCampaignB[slug] = _selectedCampaignBId!;
+        } else {
+          _savedCampaignB.remove(slug);
+        }
       }
-      _savedCampaignB[slug] = _selectedCampaignBId!;
     }
 
     // 3. Resolve Intra Campaign
@@ -480,7 +496,31 @@ class _CampaignsComparisonAnalyticsScreenState
       firestore = null;
     }
 
+    final slug = widget.lockedCompanySlug;
+    final cachedEvents = _persistentEventsCache[slug] ?? widget.companyEvents;
+    final cachedMetrics = _persistentMetricsCache[slug];
+
     if (firestore == null) {
+      if (cachedEvents != null && cachedEvents.isNotEmpty) {
+        _initializeCampaignSelections(cachedEvents);
+        final metricsMap = cachedMetrics ??
+            _computeMetrics(
+              events: cachedEvents,
+              invoiceDocs: const [],
+            );
+        return _buildMainScaffold(
+          context: context,
+          colorScheme: colorScheme,
+          strings: strings,
+          isAr: isAr,
+          isHi: isHi,
+          activeCountry: activeCountry,
+          events: cachedEvents,
+          metricsMap: metricsMap,
+          effectiveDocs: const [],
+        );
+      }
+
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -493,11 +533,7 @@ class _CampaignsComparisonAnalyticsScreenState
     }
 
     final activeFirestore = firestore;
-    final slug = widget.lockedCompanySlug;
     _ensureStreams(activeFirestore);
-
-    final cachedEvents = _persistentEventsCache[slug] ?? widget.companyEvents;
-    final cachedMetrics = _persistentMetricsCache[slug];
 
     return StreamBuilder<QuerySnapshot>(
       stream: _eventsStream,
@@ -550,89 +586,124 @@ class _CampaignsComparisonAnalyticsScreenState
               );
             }
 
-            return Scaffold(
-              backgroundColor: Colors.transparent,
-              appBar: widget.isEmbedded
-                  ? null
-                  : SwitchPointHeader(
-                      subtitle: strings.campaignComparisonScreenTitle,
-                    ),
-              body: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1320),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // 1. Header Banner & Mode Selector
-                        _buildScreenHeader(
-                          context: context,
-                          colorScheme: colorScheme,
-                          strings: strings,
-                          isAr: isAr,
-                          eventsCount: events.length,
-                        ),
-                        const SizedBox(height: 18),
-
-                        if (events.length < 2 && _comparisonMode == 0) ...[
-                          _buildSingleCampaignNotice(
-                            colorScheme: colorScheme,
-                            strings: strings,
-                            isAr: isAr,
-                          ),
-                          const SizedBox(height: 18),
-                        ],
-
-                        // 2. Mode Content
-                        if (_comparisonMode == 0) ...[
-                          // Head-to-Head Comparison (A vs B)
-                          _buildHeadToHeadComparisonView(
-                            context: context,
-                            colorScheme: colorScheme,
-                            strings: strings,
-                            events: events,
-                            metricsMap: metricsMap,
-                            activeCountry: activeCountry,
-                            isAr: isAr,
-                            isHi: isHi,
-                          ),
-                        ] else if (_comparisonMode == 1) ...[
-                          // Intra-Campaign Weekend & Period Analytics
-                          _buildIntraCampaignWeekendView(
-                            context: context,
-                            colorScheme: colorScheme,
-                            strings: strings,
-                            events: events,
-                            invoiceDocs: effectiveDocs,
-                            activeCountry: activeCountry,
-                            isAr: isAr,
-                            isHi: isHi,
-                          ),
-                        ] else ...[
-                          // All Campaigns Portfolio Benchmark
-                          _buildAllCampaignsPortfolioView(
-                            context: context,
-                            colorScheme: colorScheme,
-                            strings: strings,
-                            events: events,
-                            metricsMap: metricsMap,
-                            activeCountry: activeCountry,
-                            isAr: isAr,
-                            isHi: isHi,
-                          ),
-                        ],
-
-                        const SizedBox(height: 32),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+            return _buildMainScaffold(
+              context: context,
+              colorScheme: colorScheme,
+              strings: strings,
+              isAr: isAr,
+              isHi: isHi,
+              activeCountry: activeCountry,
+              events: events,
+              metricsMap: metricsMap,
+              effectiveDocs: effectiveDocs,
             );
           },
         );
       },
+    );
+  }
+
+  Widget _buildMainScaffold({
+    required BuildContext context,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+    required bool isHi,
+    required CountryCurrency activeCountry,
+    required List<EventModel> events,
+    required Map<String, CampaignMetricsSummary> metricsMap,
+    required List<QueryDocumentSnapshot> effectiveDocs,
+  }) {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      appBar: widget.isEmbedded
+          ? null
+          : SwitchPointHeader(
+              subtitle: strings.campaignComparisonScreenTitle,
+            ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 1. Sticky Header Banner & Mode Selector (pinned at top for quick navigation across 3 comparison modes)
+          Padding(
+            padding: const EdgeInsets.only(top: 14, bottom: 8),
+            child: M3ContentBoundary(
+              maxWidth: 1360.0,
+              child: _buildScreenHeader(
+                context: context,
+                colorScheme: colorScheme,
+                strings: strings,
+                isAr: isAr,
+                eventsCount: events.length,
+              ),
+            ),
+          ),
+
+          // 2. Scrollable Body Content
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.only(top: 8, bottom: 28),
+              child: M3ContentBoundary(
+                maxWidth: 1360.0,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (events.length < 2 && _comparisonMode == 0) ...[
+                      _buildSingleCampaignNotice(
+                        colorScheme: colorScheme,
+                        strings: strings,
+                        isAr: isAr,
+                      ),
+                      const SizedBox(height: 18),
+                    ],
+
+                    // Mode Content
+                    if (_comparisonMode == 0) ...[
+                      // Head-to-Head Comparison (A vs B)
+                      _buildHeadToHeadComparisonView(
+                        context: context,
+                        colorScheme: colorScheme,
+                        strings: strings,
+                        events: events,
+                        metricsMap: metricsMap,
+                        activeCountry: activeCountry,
+                        isAr: isAr,
+                        isHi: isHi,
+                      ),
+                    ] else if (_comparisonMode == 1) ...[
+                      // Intra-Campaign Weekend & Period Analytics
+                      _buildIntraCampaignWeekendView(
+                        context: context,
+                        colorScheme: colorScheme,
+                        strings: strings,
+                        events: events,
+                        invoiceDocs: effectiveDocs,
+                        activeCountry: activeCountry,
+                        isAr: isAr,
+                        isHi: isHi,
+                      ),
+                    ] else ...[
+                      // All Campaigns Portfolio Benchmark
+                      _buildAllCampaignsPortfolioView(
+                        context: context,
+                        colorScheme: colorScheme,
+                        strings: strings,
+                        events: events,
+                        metricsMap: metricsMap,
+                        activeCountry: activeCountry,
+                        isAr: isAr,
+                        isHi: isHi,
+                      ),
+                    ],
+
+                    const SizedBox(height: 32),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -644,145 +715,173 @@ class _CampaignsComparisonAnalyticsScreenState
     required bool isAr,
     required int eventsCount,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.6),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 16,
-        runSpacing: 14,
-        children: [
-          // Title & Subtitle
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      const Color(0xFF6750A4),
-                      const Color(0xFF006C51),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF6750A4).withValues(alpha: 0.25),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.compare_arrows_rounded,
-                  color: Colors.white,
-                  size: 26,
-                ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 720;
+        final isMobile = constraints.maxWidth < 500;
+
+        return Container(
+          padding: EdgeInsets.all(isCompact ? 14 : 20),
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(isCompact ? 18 : 24),
+            border: Border.all(
+              color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
               ),
-              const SizedBox(width: 14),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        strings.campaignComparisonScreenTitle,
-                        style: GoogleFonts.cairo(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.onSurface,
+                  Container(
+                    width: isMobile ? 40 : 48,
+                    height: isMobile ? 40 : 48,
+                    decoration: BoxDecoration(
+                      color: colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(isMobile ? 12 : 16),
+                    ),
+                    child: Icon(
+                      Icons.compare_arrows_rounded,
+                      color: colorScheme.primary,
+                      size: isMobile ? 22 : 26,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: [
+                            Text(
+                              strings.campaignComparisonScreenTitle,
+                              style: GoogleFonts.cairo(
+                                fontSize: isMobile ? 15.5 : 18,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.onSurface,
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: colorScheme.primaryContainer,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                isAr ? '$eventsCount حملات' : '$eventsCount Campaigns',
+                                style: GoogleFonts.cairo(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: colorScheme.onPrimaryContainer,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          isAr ? '$eventsCount حملات' : '$eventsCount Campaigns',
+                        const SizedBox(height: 2),
+                        Text(
+                          strings.campaignComparisonScreenSubtitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.cairo(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: colorScheme.onPrimaryContainer,
+                            fontSize: 11.5,
+                            color: colorScheme.onSurfaceVariant,
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    strings.campaignComparisonScreenSubtitle,
-                    style: GoogleFonts.cairo(
-                      fontSize: 12,
-                      color: colorScheme.onSurfaceVariant,
+                      ],
                     ),
                   ),
+                  if (!isCompact) ...[
+                    const SizedBox(width: 16),
+                    M3ConnectedButtonGroup<int>(
+                      height: 44,
+                      borderRadius: 14,
+                      segments: [
+                        M3ButtonSegment<int>(
+                          value: 2,
+                          icon: Icons.leaderboard_rounded,
+                          label: strings.allCampaignsPortfolioTab,
+                          tooltip: strings.allCampaignsPortfolioTab,
+                        ),
+                        M3ButtonSegment<int>(
+                          value: 0,
+                          icon: Icons.compare_arrows_rounded,
+                          label: strings.headToHeadComparisonTab,
+                          tooltip: strings.headToHeadComparisonTab,
+                        ),
+                        M3ButtonSegment<int>(
+                          value: 1,
+                          icon: Icons.date_range_rounded,
+                          label: strings.intraCampaignWeekendTab,
+                          tooltip: strings.intraCampaignWeekendTab,
+                        ),
+                      ],
+                      selectedValue: _comparisonMode,
+                      onSelected: (newMode) {
+                        _savedComparisonMode[widget.lockedCompanySlug] = newMode;
+                        setState(() {
+                          _comparisonMode = newMode;
+                        });
+                      },
+                    ),
+                  ],
                 ],
               ),
+              if (isCompact) ...[
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: M3ConnectedButtonGroup<int>(
+                    height: 42,
+                    borderRadius: 12,
+                    isExpanded: true,
+                    segments: [
+                      M3ButtonSegment<int>(
+                        value: 2,
+                        icon: Icons.leaderboard_rounded,
+                        label: strings.allCampaignsPortfolioTab,
+                        tooltip: strings.allCampaignsPortfolioTab,
+                      ),
+                      M3ButtonSegment<int>(
+                        value: 0,
+                        icon: Icons.compare_arrows_rounded,
+                        label: strings.headToHeadComparisonTab,
+                        tooltip: strings.headToHeadComparisonTab,
+                      ),
+                      M3ButtonSegment<int>(
+                        value: 1,
+                        icon: Icons.date_range_rounded,
+                        label: strings.intraCampaignWeekendTab,
+                        tooltip: strings.intraCampaignWeekendTab,
+                      ),
+                    ],
+                    selectedValue: _comparisonMode,
+                    onSelected: (newMode) {
+                      _savedComparisonMode[widget.lockedCompanySlug] = newMode;
+                      setState(() {
+                        _comparisonMode = newMode;
+                      });
+                    },
+                  ),
+                ),
+              ],
             ],
           ),
-
-          // Mode Selector Segmented Button
-          SegmentedButton<int>(
-            segments: [
-              ButtonSegment<int>(
-                value: 0,
-                icon: const Icon(Icons.swap_horiz_rounded, size: 18),
-                label: Text(
-                  strings.headToHeadComparisonTab,
-                  style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
-                ),
-              ),
-              ButtonSegment<int>(
-                value: 1,
-                icon: const Icon(Icons.date_range_rounded, size: 18),
-                label: Text(
-                  strings.intraCampaignWeekendTab,
-                  style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
-                ),
-              ),
-              ButtonSegment<int>(
-                value: 2,
-                icon: const Icon(Icons.leaderboard_rounded, size: 18),
-                label: Text(
-                  strings.allCampaignsPortfolioTab,
-                  style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-            selected: {_comparisonMode},
-            onSelectionChanged: (Set<int> newSelection) {
-              final newMode = newSelection.first;
-              _savedComparisonMode[widget.lockedCompanySlug] = newMode;
-              setState(() {
-                _comparisonMode = newMode;
-              });
-            },
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -832,7 +931,9 @@ class _CampaignsComparisonAnalyticsScreenState
     required bool isHi,
   }) {
     final summaryA = metricsMap[_selectedCampaignAId];
-    final summaryB = metricsMap[_selectedCampaignBId];
+    final summaryB = (_selectedCampaignBId != null && _selectedCampaignBId != _selectedCampaignAId)
+        ? metricsMap[_selectedCampaignBId]
+        : null;
 
     final isSameCampaign = _selectedCampaignAId == _selectedCampaignBId && events.length > 1;
 
@@ -840,101 +941,178 @@ class _CampaignsComparisonAnalyticsScreenState
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // 1. Dual Campaign Selectors
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final isNarrow = constraints.maxWidth < 700;
-                  final dropA = _buildCampaignPicker(
-                    label: strings.selectCampaignA,
-                    badgeColor: const Color(0xFF6750A4),
-                    selectedId: _selectedCampaignAId,
-                    events: events,
-                    onChanged: (id) {
-                      if (id != null) {
-                        _savedCampaignA[widget.lockedCompanySlug] = id;
-                        setState(() => _selectedCampaignAId = id);
-                      }
-                    },
-                    colorScheme: colorScheme,
-                    isAr: isAr,
-                  );
-                  final dropB = _buildCampaignPicker(
-                    label: strings.selectCampaignB,
-                    badgeColor: const Color(0xFF006C51),
-                    selectedId: _selectedCampaignBId,
-                    events: events,
-                    onChanged: (id) {
-                      if (id != null) {
-                        _savedCampaignB[widget.lockedCompanySlug] = id;
-                        setState(() => _selectedCampaignBId = id);
-                      }
-                    },
-                    colorScheme: colorScheme,
-                    isAr: isAr,
-                  );
-
-                  if (isNarrow) {
-                    return Column(
-                      children: [
-                        dropA,
-                        const SizedBox(height: 12),
-                        Center(
-                          child: Icon(Icons.swap_vert_rounded,
-                              color: colorScheme.primary, size: 28),
-                        ),
-                        const SizedBox(height: 12),
-                        dropB,
-                      ],
-                    );
-                  }
-
-                  return Row(
-                    children: [
-                      Expanded(child: dropA),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: colorScheme.surfaceContainerHighest,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.compare_arrows_rounded, size: 22),
-                        ),
-                      ),
-                      Expanded(child: dropB),
-                    ],
-                  );
-                },
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isNarrow = constraints.maxWidth < 700;
+            return Container(
+              padding: EdgeInsets.all(isNarrow ? 10 : 18),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(isNarrow ? 16 : 20),
+                border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
               ),
-              if (isSameCampaign) ...[
-                const SizedBox(height: 12),
-                Text(
-                  strings.sameCampaignWarning,
-                  style: GoogleFonts.cairo(
-                    fontSize: 11.5,
-                    color: colorScheme.error,
-                    fontWeight: FontWeight.w600,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Builder(
+                    builder: (context) {
+                      final dropA = _buildCampaignPicker(
+                        label: strings.selectCampaignA,
+                        badgeColor: const Color(0xFF6750A4),
+                        selectedId: _selectedCampaignAId,
+                        events: events,
+                        isCompact: isNarrow,
+                        onChanged: (id) {
+                          if (id != null) {
+                            _savedCampaignA[widget.lockedCompanySlug] = id;
+                            setState(() {
+                              _selectedCampaignAId = id;
+                              if (_selectedCampaignBId == id) {
+                                final others = events.where((e) => e.id != id).toList();
+                                _selectedCampaignBId = others.isNotEmpty ? others.first.id : null;
+                                if (_selectedCampaignBId != null) {
+                                  _savedCampaignB[widget.lockedCompanySlug] = _selectedCampaignBId!;
+                                } else {
+                                  _savedCampaignB.remove(widget.lockedCompanySlug);
+                                }
+                              }
+                            });
+                          }
+                        },
+                        colorScheme: colorScheme,
+                        isAr: isAr,
+                      );
+
+                      final availableEventsForB = events.where((e) => e.id != _selectedCampaignAId).toList();
+                      final isBDisabled = events.length <= 1 || availableEventsForB.isEmpty;
+
+                      final dropB = _buildCampaignPicker(
+                        label: strings.selectCampaignB,
+                        badgeColor: const Color(0xFF006C51),
+                        selectedId: _selectedCampaignBId,
+                        events: availableEventsForB,
+                        isDisabled: isBDisabled,
+                        isCompact: isNarrow,
+                        onChanged: (id) {
+                          if (id != null) {
+                            _savedCampaignB[widget.lockedCompanySlug] = id;
+                            setState(() => _selectedCampaignBId = id);
+                          }
+                        },
+                        colorScheme: colorScheme,
+                        isAr: isAr,
+                      );
+
+                      final canSwap = events.length > 1 &&
+                          _selectedCampaignBId != null &&
+                          _selectedCampaignBId != _selectedCampaignAId;
+
+                      if (isNarrow) {
+                        return Column(
+                          children: [
+                            dropA,
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 3),
+                              child: Center(
+                                child: InkWell(
+                                  onTap: canSwap
+                                      ? () {
+                                          setState(() {
+                                            final temp = _selectedCampaignAId;
+                                            _selectedCampaignAId = _selectedCampaignBId;
+                                            _selectedCampaignBId = temp;
+                                            if (_selectedCampaignAId != null) {
+                                              _savedCampaignA[widget.lockedCompanySlug] = _selectedCampaignAId!;
+                                            }
+                                            if (_selectedCampaignBId != null) {
+                                              _savedCampaignB[widget.lockedCompanySlug] = _selectedCampaignBId!;
+                                            }
+                                          });
+                                        }
+                                      : null,
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(3),
+                                    decoration: BoxDecoration(
+                                      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      Icons.swap_vert_rounded,
+                                      color: canSwap ? colorScheme.primary : colorScheme.outline.withValues(alpha: 0.4),
+                                      size: 18,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            dropB,
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        children: [
+                          Expanded(child: dropA),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: InkWell(
+                              onTap: canSwap
+                                  ? () {
+                                      setState(() {
+                                        final temp = _selectedCampaignAId;
+                                        _selectedCampaignAId = _selectedCampaignBId;
+                                        _selectedCampaignBId = temp;
+                                        if (_selectedCampaignAId != null) {
+                                          _savedCampaignA[widget.lockedCompanySlug] = _selectedCampaignAId!;
+                                        }
+                                        if (_selectedCampaignBId != null) {
+                                          _savedCampaignB[widget.lockedCompanySlug] = _selectedCampaignBId!;
+                                        }
+                                      });
+                                    }
+                                  : null,
+                              borderRadius: BorderRadius.circular(20),
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.surfaceContainerHighest,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.compare_arrows_rounded,
+                                  size: 22,
+                                  color: canSwap ? colorScheme.primary : colorScheme.outline.withValues(alpha: 0.5),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(child: dropB),
+                        ],
+                      );
+                    },
                   ),
-                ),
-              ],
-            ],
-          ),
+                  if (isSameCampaign) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      strings.sameCampaignWarning,
+                      style: GoogleFonts.cairo(
+                        fontSize: 11.5,
+                        color: colorScheme.error,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
         ),
 
         const SizedBox(height: 20),
 
-        // 2. Animated Delta KPI Cards Grid
-        _buildKpiDeltaGrid(
+        // 2. Comprehensive Visual Performance Comparison Report (Multi-Metric Bar Chart)
+        _buildHeadToHeadVisualReport(
           summaryA: summaryA,
           summaryB: summaryB,
           colorScheme: colorScheme,
@@ -945,19 +1123,7 @@ class _CampaignsComparisonAnalyticsScreenState
 
         const SizedBox(height: 24),
 
-        // 3. Dual Grouped Bar Chart (fl_chart)
-        _buildDualGroupedBarChart(
-          summaryA: summaryA,
-          summaryB: summaryB,
-          colorScheme: colorScheme,
-          strings: strings,
-          activeCountry: activeCountry,
-          isAr: isAr,
-        ),
-
-        const SizedBox(height: 24),
-
-        // 4. Detailed Comparison Metrics Table
+        // 3. Detailed Comparison Metrics Table
         _buildComparisonTable(
           summaryA: summaryA,
           summaryB: summaryB,
@@ -970,7 +1136,7 @@ class _CampaignsComparisonAnalyticsScreenState
     );
   }
 
-  /// Campaign Picker Dropdown with distinct badge color
+  /// Campaign Picker Dropdown with distinct badge color, compact mobile styling and disabled support
   Widget _buildCampaignPicker({
     required String label,
     required Color badgeColor,
@@ -979,89 +1145,254 @@ class _CampaignsComparisonAnalyticsScreenState
     required ValueChanged<String?> onChanged,
     required ColorScheme colorScheme,
     required bool isAr,
+    bool isDisabled = false,
+    bool isCompact = false,
   }) {
+    final effectiveBadgeColor = isDisabled ? colorScheme.outline : badgeColor;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: badgeColor.withValues(alpha: 0.5), width: 1.5),
+      padding: EdgeInsets.symmetric(
+        horizontal: isCompact ? 10 : 14,
+        vertical: isCompact ? 5 : 10,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(color: badgeColor, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: GoogleFonts.cairo(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: badgeColor,
+      decoration: BoxDecoration(
+        color: isDisabled ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.3) : colorScheme.surface,
+        borderRadius: BorderRadius.circular(isCompact ? 12 : 16),
+        border: Border.all(
+          color: effectiveBadgeColor.withValues(alpha: isDisabled ? 0.35 : 0.6),
+          width: isCompact ? 1.2 : 1.5,
+        ),
+      ),
+      child: isCompact
+          ? Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(color: effectiveBadgeColor, shape: BoxShape.circle),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: selectedId,
-              isExpanded: true,
-              icon: Icon(Icons.arrow_drop_down_rounded, color: badgeColor),
-              items: events.map((event) {
-                return DropdownMenuItem<String>(
-                  value: event.id,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          event.eventName,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.cairo(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w600,
-                            color: colorScheme.onSurface,
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: GoogleFonts.cairo(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: effectiveBadgeColor,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: (isDisabled || events.isEmpty)
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.info_outline_rounded, size: 14, color: colorScheme.onSurfaceVariant),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                isAr ? 'لم يتم إنشاء حملة ثانية بعد' : 'No 2nd campaign',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.cairo(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      : DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: (selectedId != null && events.any((e) => e.id == selectedId)) ? selectedId : null,
+                            hint: Text(
+                              isAr ? 'اختر حملة للمقارنة' : 'Select campaign',
+                              style: GoogleFonts.cairo(
+                                fontSize: 11.5,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            isDense: true,
+                            isExpanded: true,
+                            icon: Icon(Icons.arrow_drop_down_rounded, color: colorScheme.primary, size: 20),
+                            items: events.map((event) {
+                              return DropdownMenuItem<String>(
+                                value: event.id,
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        event.eventName,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: colorScheme.onSurface,
+                                        ),
+                                      ),
+                                    ),
+                                    if (event.isActive) ...[
+                                      const SizedBox(width: 4),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color: Colors.green.withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(5),
+                                        ),
+                                        child: Text(
+                                          isAr ? 'نشطة' : 'Active',
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.green.shade700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: onChanged,
                           ),
                         ),
+                ),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(color: effectiveBadgeColor, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      label,
+                      style: GoogleFonts.cairo(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: effectiveBadgeColor,
                       ),
-                      if (event.isActive) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                if (isDisabled || events.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline_rounded, size: 16, color: colorScheme.onSurfaceVariant),
+                        const SizedBox(width: 8),
+                        Expanded(
                           child: Text(
-                            isAr ? 'نشطة' : 'Active',
+                            isAr
+                                ? 'لم يتم إنشاء حملة ثانية بعد للمقارنة'
+                                : 'No second campaign created yet for comparison',
                             style: GoogleFonts.cairo(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green.shade700,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ),
                       ],
-                    ],
+                    ),
+                  )
+                else
+                  DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: (selectedId != null && events.any((e) => e.id == selectedId)) ? selectedId : null,
+                      hint: Text(
+                        isAr ? 'اختر حملة للمقارنة' : 'Select a campaign to compare',
+                        style: GoogleFonts.cairo(
+                          fontSize: 12.5,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      isExpanded: true,
+                      icon: Icon(Icons.arrow_drop_down_rounded, color: colorScheme.primary),
+                      items: events.map((event) {
+                        return DropdownMenuItem<String>(
+                          value: event.id,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  event.eventName,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.onSurface,
+                                  ),
+                                ),
+                              ),
+                              if (event.isActive) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    isAr ? 'نشطة' : 'Active',
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.green.shade700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: onChanged,
+                    ),
                   ),
-                );
-              }).toList(),
-              onChanged: onChanged,
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 
-  /// Grid of KPI Delta comparison cards
-  Widget _buildKpiDeltaGrid({
+  // ---------------------------------------------------------------------------
+  // Visual Performance Comparison Report Suite (Charts, Columns & Shares)
+  // Replaces plain cards with rich visual columns, proportional bars & multi-metric charts
+  // ---------------------------------------------------------------------------
+
+  String _getShortMetricLabel(String title, bool isAr) {
+    if (title.contains('سرعة') || title.contains('كثافة') || title.toLowerCase().contains('velocity')) {
+      return isAr ? 'السرعة' : 'Velocity';
+    }
+    if (title.contains('مبيعات') || title.toLowerCase().contains('revenue')) {
+      return isAr ? 'المبيعات' : 'Sales';
+    }
+    if (title.contains('فواتير') || title.toLowerCase().contains('invoice')) {
+      return isAr ? 'الفواتير' : 'Invoices';
+    }
+    if (title.contains('منتجات') || title.toLowerCase().contains('product') || title.contains('قطع')) {
+      return isAr ? 'المنتجات' : 'Units';
+    }
+    if (title.contains('متسوق') || title.contains('عملاء') || title.toLowerCase().contains('shopper')) {
+      return isAr ? 'العملاء' : 'Shoppers';
+    }
+    if (title.contains('سلة') || title.toLowerCase().contains('basket')) {
+      return isAr ? 'السلة' : 'Basket';
+    }
+    if (title.contains('جوائز') || title.toLowerCase().contains('prize')) {
+      return isAr ? 'الجوائز' : 'Prizes';
+    }
+    return title;
+  }
+
+  Widget _buildHeadToHeadVisualReport({
     required CampaignMetricsSummary? summaryA,
     required CampaignMetricsSummary? summaryB,
     required ColorScheme colorScheme,
@@ -1070,163 +1401,230 @@ class _CampaignsComparisonAnalyticsScreenState
     required bool isAr,
   }) {
     final currency = activeCountry.currencySymbol;
+    final labelA = summaryA?.campaignTitle ?? (isAr ? 'الحملة (A)' : 'Campaign A');
+    final labelB = summaryB?.campaignTitle ?? (isAr ? 'الحملة (B)' : 'Campaign B');
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth > 1050
-            ? 4
-            : (constraints.maxWidth > 650 ? 2 : 1);
+    final daysA = (summaryA?.startDate != null && summaryA?.endDate != null)
+        ? math.max(1, summaryA!.endDate!.difference(summaryA.startDate!).inDays + 1)
+        : 1;
+    final daysB = (summaryB?.startDate != null && summaryB?.endDate != null)
+        ? math.max(1, summaryB!.endDate!.difference(summaryB.startDate!).inDays + 1)
+        : 1;
+    final velocityA = (summaryA?.totalRevenue ?? 0.0) / daysA;
+    final velocityB = (summaryB?.totalRevenue ?? 0.0) / daysB;
 
-        return GridView.count(
-          crossAxisCount: crossAxisCount,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 14,
-          crossAxisSpacing: 14,
-          childAspectRatio: crossAxisCount == 1 ? 2.4 : 1.65,
-          children: [
-            // 1. Total Sales Revenue
-            _buildDeltaCard(
-              title: strings.totalRevenueLabel,
-              icon: Icons.payments_rounded,
-              valA: summaryA?.totalRevenue ?? 0.0,
-              valB: summaryB?.totalRevenue ?? 0.0,
-              unit: currency,
-              isCurrency: true,
-              colorScheme: colorScheme,
-              strings: strings,
-              isAr: isAr,
-            ),
-            // 2. Invoices Count
-            _buildDeltaCard(
-              title: strings.totalInvoicesCountLabel,
-              icon: Icons.receipt_long_rounded,
-              valA: (summaryA?.totalInvoices ?? 0).toDouble(),
-              valB: (summaryB?.totalInvoices ?? 0).toDouble(),
-              unit: isAr ? 'فاتورة' : 'Invoices',
-              isCurrency: false,
-              colorScheme: colorScheme,
-              strings: strings,
-              isAr: isAr,
-            ),
-            // 3. Products Sold
-            _buildDeltaCard(
-              title: strings.totalProductsSoldLabel,
-              icon: Icons.shopping_basket_rounded,
-              valA: (summaryA?.totalProductsSold ?? 0).toDouble(),
-              valB: (summaryB?.totalProductsSold ?? 0).toDouble(),
-              unit: isAr ? 'قطعة' : 'Units',
-              isCurrency: false,
-              colorScheme: colorScheme,
-              strings: strings,
-              isAr: isAr,
-            ),
-            // 4. Unique Shoppers
-            _buildDeltaCard(
-              title: strings.uniqueShoppersLabel,
-              icon: Icons.people_alt_rounded,
-              valA: (summaryA?.uniqueShoppersCount ?? 0).toDouble(),
-              valB: (summaryB?.uniqueShoppersCount ?? 0).toDouble(),
-              unit: isAr ? 'متسوق' : 'Shoppers',
-              isCurrency: false,
-              colorScheme: colorScheme,
-              strings: strings,
-              isAr: isAr,
-            ),
-          ],
-        );
-      },
+    final metrics = [
+      _VisualMetricItem(
+        title: strings.totalRevenueLabel,
+        icon: Icons.payments_rounded,
+        valA: summaryA?.totalRevenue ?? 0.0,
+        valB: summaryB?.totalRevenue ?? 0.0,
+        unit: currency,
+        isCurrency: true,
+      ),
+      _VisualMetricItem(
+        title: strings.totalInvoicesCountLabel,
+        icon: Icons.receipt_long_rounded,
+        valA: (summaryA?.totalInvoices ?? 0).toDouble(),
+        valB: (summaryB?.totalInvoices ?? 0).toDouble(),
+        unit: isAr ? 'فاتورة' : 'Invoices',
+      ),
+      _VisualMetricItem(
+        title: strings.totalProductsSoldLabel,
+        icon: Icons.shopping_basket_rounded,
+        valA: (summaryA?.totalProductsSold ?? 0).toDouble(),
+        valB: (summaryB?.totalProductsSold ?? 0).toDouble(),
+        unit: isAr ? 'قطعة' : 'Units',
+      ),
+      _VisualMetricItem(
+        title: strings.uniqueShoppersLabel,
+        icon: Icons.people_alt_rounded,
+        valA: (summaryA?.uniqueShoppersCount ?? 0).toDouble(),
+        valB: (summaryB?.uniqueShoppersCount ?? 0).toDouble(),
+        unit: isAr ? 'متسوق' : 'Shoppers',
+      ),
+      _VisualMetricItem(
+        title: strings.dailySalesVelocityLabel,
+        icon: Icons.speed_rounded,
+        valA: velocityA,
+        valB: velocityB,
+        unit: '$currency/${isAr ? "يوم" : "day"}',
+        isCurrency: true,
+      ),
+      _VisualMetricItem(
+        title: strings.avgBasketSpendLabel,
+        icon: Icons.shopping_cart_checkout_rounded,
+        valA: summaryA?.avgBasketSpend ?? 0.0,
+        valB: summaryB?.avgBasketSpend ?? 0.0,
+        unit: currency,
+        isCurrency: true,
+      ),
+      _VisualMetricItem(
+        title: strings.disbursedPrizesValueLabel,
+        icon: Icons.card_giftcard_rounded,
+        valA: summaryA?.estimatedPrizesValue ?? 0.0,
+        valB: summaryB?.estimatedPrizesValue ?? 0.0,
+        unit: currency,
+        isCurrency: true,
+      ),
+    ];
+
+    return _buildUnifiedVisualComparisonReport(
+      labelA: labelA,
+      labelB: labelB,
+      metrics: metrics,
+      colorScheme: colorScheme,
+      strings: strings,
+      activeCountry: activeCountry,
+      isAr: isAr,
     );
   }
 
-  /// Single animated Delta KPI Card
-  Widget _buildDeltaCard({
-    required String title,
-    required IconData icon,
-    required double valA,
-    required double valB,
-    required String unit,
-    required bool isCurrency,
+  Widget _buildIntraPeriodVisualReport({
+    required CampaignPeriodMetrics metricsA,
+    required CampaignPeriodMetrics metricsB,
     required ColorScheme colorScheme,
     required AppStrings strings,
+    required CountryCurrency activeCountry,
     required bool isAr,
   }) {
-    final diff = valA - valB;
-    final double pct = valB > 0 ? ((diff / valB) * 100) : (valA > 0 ? 100.0 : 0.0);
-    final isPositive = diff > 0;
-    final isTied = diff == 0;
+    final currency = activeCountry.currencySymbol;
+    final labelA = metricsA.periodLabel;
+    final labelB = metricsB.periodLabel;
 
-    final Color deltaColor = isTied
-        ? colorScheme.onSurfaceVariant
-        : (isPositive ? const Color(0xFF006C51) : const Color(0xFFBA1A1A));
+    final metrics = [
+      _VisualMetricItem(
+        title: strings.totalRevenueLabel,
+        icon: Icons.payments_rounded,
+        valA: metricsA.totalRevenue,
+        valB: metricsB.totalRevenue,
+        unit: currency,
+        isCurrency: true,
+      ),
+      _VisualMetricItem(
+        title: strings.totalInvoicesCountLabel,
+        icon: Icons.receipt_long_rounded,
+        valA: metricsA.totalInvoices.toDouble(),
+        valB: metricsB.totalInvoices.toDouble(),
+        unit: isAr ? 'فاتورة' : 'Invoices',
+      ),
+      _VisualMetricItem(
+        title: strings.totalProductsSoldLabel,
+        icon: Icons.shopping_basket_rounded,
+        valA: metricsA.totalProductsSold.toDouble(),
+        valB: metricsB.totalProductsSold.toDouble(),
+        unit: isAr ? 'قطعة' : 'Units',
+      ),
+      _VisualMetricItem(
+        title: strings.uniqueShoppersLabel,
+        icon: Icons.people_alt_rounded,
+        valA: metricsA.uniqueShoppersCount.toDouble(),
+        valB: metricsB.uniqueShoppersCount.toDouble(),
+        unit: isAr ? 'متسوق' : 'Shoppers',
+      ),
+      _VisualMetricItem(
+        title: strings.dailySalesVelocityLabel,
+        icon: Icons.speed_rounded,
+        valA: metricsA.dailySalesVelocity,
+        valB: metricsB.dailySalesVelocity,
+        unit: '$currency/${isAr ? "يوم" : "day"}',
+        isCurrency: true,
+      ),
+      _VisualMetricItem(
+        title: strings.avgBasketSpendLabel,
+        icon: Icons.shopping_cart_checkout_rounded,
+        valA: metricsA.avgBasketSpend,
+        valB: metricsB.avgBasketSpend,
+        unit: currency,
+        isCurrency: true,
+      ),
+      _VisualMetricItem(
+        title: strings.disbursedPrizesValueLabel,
+        icon: Icons.card_giftcard_rounded,
+        valA: metricsA.estimatedPrizesValue,
+        valB: metricsB.estimatedPrizesValue,
+        unit: currency,
+        isCurrency: true,
+      ),
+    ];
 
-    final String sign = isPositive ? '+' : '';
-    final String pctText = '$sign${pct.toStringAsFixed(1)}%';
+    final shortenedA = _formatShortenedPeriodLegend(periodLabel: labelA, prefixLetter: 'A');
+    final shortenedB = _formatShortenedPeriodLegend(periodLabel: labelB, prefixLetter: 'B');
 
-    final formatter = NumberFormat.compact();
-    final displayA = isCurrency ? '${valA.toStringAsFixed(0)} $unit' : '${formatter.format(valA)} $unit';
-    final displayB = isCurrency ? '${valB.toStringAsFixed(0)} $unit' : '${formatter.format(valB)} $unit';
+    return _buildUnifiedVisualComparisonReport(
+      labelA: shortenedA,
+      labelB: shortenedB,
+      metrics: metrics,
+      colorScheme: colorScheme,
+      strings: strings,
+      activeCountry: activeCountry,
+      isAr: isAr,
+    );
+  }
 
+  Widget _buildUnifiedVisualComparisonReport({
+    required String labelA,
+    required String labelB,
+    required List<_VisualMetricItem> metrics,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required CountryCurrency activeCountry,
+    required bool isAr,
+  }) {
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
+      padding: const EdgeInsets.all(20),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Header: Icon + Title + Delta Badge
+          // 1. Header with title and subtitle
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Icon(icon, size: 18, color: colorScheme.primary),
-                  const SizedBox(width: 8),
-                  Text(
-                    title,
-                    style: GoogleFonts.cairo(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.onSurface,
-                    ),
-                  ),
-                ],
-              ),
-              // Delta pill
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
-                  color: deltaColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: deltaColor.withValues(alpha: 0.25)),
+                  color: colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Row(
+                child: Icon(
+                  Icons.auto_graph_rounded,
+                  color: colorScheme.primary,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      isTied
-                          ? Icons.drag_handle_rounded
-                          : (isPositive ? Icons.arrow_drop_up_rounded : Icons.arrow_drop_down_rounded),
-                      size: 16,
-                      color: deltaColor,
+                    Text(
+                      strings.visualPerformanceComparisonTitle,
+                      style: GoogleFonts.cairo(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onSurface,
+                      ),
                     ),
                     Text(
-                      pctText,
+                      strings.visualPerformanceComparisonSubtitle,
                       style: GoogleFonts.cairo(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: deltaColor,
+                        fontSize: 11.5,
+                        color: colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -1235,364 +1633,379 @@ class _CampaignsComparisonAnalyticsScreenState
             ],
           ),
 
-          // Values comparison: A vs B
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // Campaign A Value
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF6750A4),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        'A: $displayA',
-                        style: GoogleFonts.cairo(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF6750A4),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+          const SizedBox(height: 18),
 
-              // VS divider
-              Text(
-                'vs',
-                style: GoogleFonts.cairo(
-                  fontSize: 11,
-                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-
-              // Campaign B Value
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF006C51),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        'B: $displayB',
-                        style: GoogleFonts.cairo(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF006C51),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Dual Grouped Bar Chart (fl_chart)
-  Widget _buildDualGroupedBarChart({
-    required CampaignMetricsSummary? summaryA,
-    required CampaignMetricsSummary? summaryB,
-    required ColorScheme colorScheme,
-    required AppStrings strings,
-    required CountryCurrency activeCountry,
-    required bool isAr,
-  }) {
-    final titleA = summaryA?.campaignTitle ?? 'A';
-    final titleB = summaryB?.campaignTitle ?? 'B';
-
-    double valA = 0.0;
-    double valB = 0.0;
-    String unit = '';
-
-    switch (_activeDimension) {
-      case ComparisonDimension.revenue:
-        valA = summaryA?.totalRevenue ?? 0.0;
-        valB = summaryB?.totalRevenue ?? 0.0;
-        unit = activeCountry.currencySymbol;
-        break;
-      case ComparisonDimension.invoices:
-        valA = (summaryA?.totalInvoices ?? 0).toDouble();
-        valB = (summaryB?.totalInvoices ?? 0).toDouble();
-        unit = isAr ? 'فاتورة' : 'Inv';
-        break;
-      case ComparisonDimension.products:
-        valA = (summaryA?.totalProductsSold ?? 0).toDouble();
-        valB = (summaryB?.totalProductsSold ?? 0).toDouble();
-        unit = isAr ? 'قطعة' : 'Pcs';
-        break;
-      case ComparisonDimension.shoppers:
-        valA = (summaryA?.uniqueShoppersCount ?? 0).toDouble();
-        valB = (summaryB?.uniqueShoppersCount ?? 0).toDouble();
-        unit = isAr ? 'عميل' : 'Cust';
-        break;
-      case ComparisonDimension.velocity:
-        valA = summaryA?.totalRevenue ?? 0.0;
-        valB = summaryB?.totalRevenue ?? 0.0;
-        unit = activeCountry.currencySymbol;
-        break;
-      case ComparisonDimension.basketSpend:
-        valA = summaryA?.avgBasketSpend ?? 0.0;
-        valB = summaryB?.avgBasketSpend ?? 0.0;
-        unit = activeCountry.currencySymbol;
-        break;
-    }
-
-    final double maxVal = (valA > valB ? valA : valB);
-    final double maxY = maxVal > 0 ? (maxVal * 1.25) : 100.0;
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Chart Header: Title + Dimension Selector Tabs
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 12,
-            runSpacing: 10,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.bar_chart_rounded, color: colorScheme.primary, size: 22),
-                  const SizedBox(width: 8),
-                  Text(
-                    strings.comparisonBarChartTitle,
-                    style: GoogleFonts.cairo(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.onSurface,
-                    ),
-                  ),
-                ],
-              ),
-
-              // Dimension Selector
-              Wrap(
-                spacing: 6,
-                children: [
-                  _buildDimensionChip(
-                    dimension: ComparisonDimension.revenue,
-                    label: strings.comparisonDimensionRevenue,
-                    icon: Icons.payments_rounded,
-                    colorScheme: colorScheme,
-                  ),
-                  _buildDimensionChip(
-                    dimension: ComparisonDimension.invoices,
-                    label: strings.comparisonDimensionInvoices,
-                    icon: Icons.receipt_long_rounded,
-                    colorScheme: colorScheme,
-                  ),
-                  _buildDimensionChip(
-                    dimension: ComparisonDimension.products,
-                    label: strings.comparisonDimensionProducts,
-                    icon: Icons.shopping_basket_rounded,
-                    colorScheme: colorScheme,
-                  ),
-                  _buildDimensionChip(
-                    dimension: ComparisonDimension.shoppers,
-                    label: strings.comparisonDimensionShoppers,
-                    icon: Icons.people_alt_rounded,
-                    colorScheme: colorScheme,
-                  ),
-                ],
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 24),
-
-          // Legend
+          // 2. Legend Pills (A vs B)
           Wrap(
             alignment: WrapAlignment.center,
-            spacing: 24,
-            runSpacing: 10,
+            spacing: 16,
+            runSpacing: 8,
             children: [
               _buildLegendPill(
                 color: const Color(0xFF6750A4),
-                label: 'A: $titleA',
-                valText: '${valA.toStringAsFixed(0)} $unit',
+                label: 'A: $labelA',
+                valText: '',
               ),
               _buildLegendPill(
                 color: const Color(0xFF006C51),
-                label: 'B: $titleB',
-                valText: '${valB.toStringAsFixed(0)} $unit',
+                label: 'B: $labelB',
+                valText: '',
               ),
             ],
           ),
 
           const SizedBox(height: 20),
 
-          // fl_chart Grouped Bar Chart
-          SizedBox(
-            height: 260,
-            child: BarChart(
-              BarChartData(
-                maxY: maxY,
-                barTouchData: BarTouchData(
-                  touchTooltipData: BarTouchTooltipData(
-                    getTooltipColor: (_) => Colors.black87,
-                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                      final isA = rodIndex == 0;
-                      final name = isA ? titleA : titleB;
-                      final val = rod.toY;
-                      return BarTooltipItem(
-                        '$name\n',
-                        GoogleFonts.cairo(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                        children: [
-                          TextSpan(
-                            text: '${val.toStringAsFixed(0)} $unit',
-                            style: GoogleFonts.cairo(
-                              color: isA ? const Color(0xFFD0BCFF) : const Color(0xFF7DDFC3),
-                              fontWeight: FontWeight.w600,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ),
-                titlesData: FlTitlesData(
-                  show: true,
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 45,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          NumberFormat.compact().format(value),
-                          style: GoogleFonts.cairo(
-                            fontSize: 10,
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (value, meta) {
-                        final label = value == 0
-                            ? (isAr ? 'المؤشر المختار' : 'Active Metric')
-                            : '';
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(
-                            label,
-                            style: GoogleFonts.cairo(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  getDrawingHorizontalLine: (value) => FlLine(
-                    color: colorScheme.outlineVariant.withValues(alpha: 0.3),
-                    strokeWidth: 1,
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                barGroups: [
-                  BarChartGroupData(
-                    x: 0,
-                    barsSpace: 12,
-                    barRods: [
-                      // Rod A (Purple)
-                      BarChartRodData(
-                        toY: valA,
-                        color: const Color(0xFF6750A4),
-                        width: 32,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                      ),
-                      // Rod B (Teal)
-                      BarChartRodData(
-                        toY: valB,
-                        color: const Color(0xFF006C51),
-                        width: 32,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+          // 3. Multi-Metric Grouped Bar Chart
+          _buildMultiMetricGroupedBarChart(
+            metrics: metrics,
+            labelA: labelA,
+            labelB: labelB,
+            colorScheme: colorScheme,
+            strings: strings,
+            isAr: isAr,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDimensionChip({
-    required ComparisonDimension dimension,
-    required String label,
-    required IconData icon,
+  Widget _buildMultiMetricGroupedBarChart({
+    required List<_VisualMetricItem> metrics,
+    required String labelA,
+    required String labelB,
     required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
   }) {
-    final isSelected = _activeDimension == dimension;
-    return ChoiceChip(
-      selected: isSelected,
-      avatar: Icon(
-        icon,
-        size: 15,
-        color: isSelected ? colorScheme.onPrimary : colorScheme.primary,
+    final chartMetrics = metrics.where((m) => m.valA > 0 || m.valB > 0).toList();
+    final effectiveMetrics = chartMetrics.isEmpty ? metrics.take(5).toList() : chartMetrics;
+    final hasSecondCampaign = labelB != 'لا توجد حملة ثانية' && labelB != 'No 2nd Campaign';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
       ),
-      label: Text(
-        label,
-        style: GoogleFonts.cairo(
-          fontSize: 11.5,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.bar_chart_rounded, color: colorScheme.primary, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    isAr ? 'مخطط مقارنة المؤشرات الشامل' : 'Performance Benchmark Chart',
+                    style: GoogleFonts.cairo(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  isAr ? 'مقياس الأداء المقارن' : 'Benchmark Index',
+                  style: GoogleFonts.cairo(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: colorScheme.onPrimaryContainer,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final double chartWidth = math.max(constraints.maxWidth, effectiveMetrics.length * 85.0);
+
+              final bool isScrollable = chartWidth > constraints.maxWidth;
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (isScrollable)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.swipe_rounded, size: 14, color: colorScheme.primary),
+                          const SizedBox(width: 6),
+                          Text(
+                            isAr
+                                ? 'اسحب أفقياً للاطلاع على كامل المؤشرات'
+                                : 'Swipe horizontally to view all metrics',
+                            style: GoogleFonts.cairo(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: SizedBox(
+                      width: chartWidth,
+                      height: 290,
+                      child: BarChart(
+                        BarChartData(
+                          maxY: 125,
+                          barTouchData: BarTouchData(
+                            touchTooltipData: BarTouchTooltipData(
+                              getTooltipColor: (_) => colorScheme.surfaceContainerHighest,
+                              getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                                final item = effectiveMetrics[groupIndex];
+                                final isA = rodIndex == 0;
+                                final name = isA ? labelA : labelB;
+                                final rawVal = isA ? item.valA : item.valB;
+                                final share = isA ? item.shareA : item.shareB;
+                                final formattedVal = NumberFormat.compact().format(rawVal);
+
+                                final textVal = (isA || rawVal > 0)
+                                    ? '$name: $formattedVal ${item.unit} (${(share * 100).toStringAsFixed(1)}%)'
+                                    : '$name: 0 ${item.unit} (0.0%)';
+
+                                return BarTooltipItem(
+                                  '${item.title}\n',
+                                  GoogleFonts.cairo(
+                                    color: colorScheme.onSurface,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                  children: [
+                                    TextSpan(
+                                      text: textVal,
+                                      style: GoogleFonts.cairo(
+                                        color: isA ? const Color(0xFF6750A4) : const Color(0xFF006C51),
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 11.5,
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                          ),
+                          titlesData: FlTitlesData(
+                            show: true,
+                            topTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: 30,
+                                getTitlesWidget: (value, meta) {
+                                  final idx = value.toInt();
+                                  if (idx >= 0 && idx < effectiveMetrics.length) {
+                                    final item = effectiveMetrics[idx];
+                                    final formattedA = NumberFormat.compact().format(item.valA);
+                                    final formattedB = item.valB > 0
+                                        ? NumberFormat.compact().format(item.valB)
+                                        : '0';
+                                    final showB = hasSecondCampaign && item.valB > 0;
+
+                                    return FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Directionality(
+                                        textDirection: TextDirection.ltr,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF6750A4).withValues(alpha: 0.12),
+                                                borderRadius: BorderRadius.circular(5),
+                                                border: Border.all(
+                                                  color: const Color(0xFF6750A4).withValues(alpha: 0.4),
+                                                  width: 0.8,
+                                                ),
+                                              ),
+                                              child: Text(
+                                                formattedA,
+                                                style: GoogleFonts.cairo(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: const Color(0xFF6750A4),
+                                                ),
+                                              ),
+                                            ),
+                                            if (showB) ...[
+                                              const SizedBox(width: 4),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFF006C51).withValues(alpha: 0.12),
+                                                  borderRadius: BorderRadius.circular(5),
+                                                  border: Border.all(
+                                                    color: const Color(0xFF006C51).withValues(alpha: 0.4),
+                                                    width: 0.8,
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  formattedB,
+                                                  style: GoogleFonts.cairo(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: const Color(0xFF006C51),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  return const SizedBox.shrink();
+                                },
+                              ),
+                            ),
+                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 38,
+                            getTitlesWidget: (value, meta) {
+                              if (value % 25 == 0 && value <= 100) {
+                                return Text(
+                                  '${value.toInt()}%',
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 9.5,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                );
+                              }
+                              return const SizedBox.shrink();
+                            },
+                          ),
+                        ),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 36,
+                            getTitlesWidget: (value, meta) {
+                              final idx = value.toInt();
+                              if (idx >= 0 && idx < effectiveMetrics.length) {
+                                final item = effectiveMetrics[idx];
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Text(
+                                    _getShortMetricLabel(item.title, isAr),
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: colorScheme.onSurface,
+                                    ),
+                                  ),
+                                );
+                              }
+                              return const SizedBox.shrink();
+                            },
+                          ),
+                        ),
+                      ),
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        getDrawingHorizontalLine: (val) => FlLine(
+                          color: colorScheme.outlineVariant.withValues(alpha: 0.25),
+                          strokeWidth: 1,
+                        ),
+                      ),
+                      borderData: FlBorderData(show: false),
+                      barGroups: List.generate(effectiveMetrics.length, (idx) {
+                        final item = effectiveMetrics[idx];
+
+                        // Dynamic baseline score for Campaign A based on metric type and relative magnitude
+                        double baseScoreA;
+                        if (item.isCurrency) {
+                          if (item.title.contains('مبيعات') && !item.title.contains('سرعة')) {
+                            // Total macro sales
+                            baseScoreA = item.valA > 0 ? 95.0 : 0.0;
+                          } else if (item.title.contains('سرعة') || item.title.toLowerCase().contains('velocity')) {
+                            // Sales velocity
+                            baseScoreA = item.valA > 0 ? 64.0 : 0.0;
+                          } else if (item.title.contains('سلة') || item.title.toLowerCase().contains('basket')) {
+                            // Basket spend
+                            baseScoreA = item.valA > 0 ? 52.0 : 0.0;
+                          } else {
+                            // Other currency (prizes, etc.)
+                            baseScoreA = item.valA > 0 ? 35.0 : 0.0;
+                          }
+                        } else {
+                          // Counts / Volume metrics (Products, Invoices, Shoppers)
+                          final countItems = effectiveMetrics.where((m) => !m.isCurrency).toList();
+                          final maxCount = countItems.fold<double>(
+                            1.0,
+                            (prev, elem) => math.max(prev, math.max(elem.valA, elem.valB)),
+                          );
+                          if (item.valA > 0 && maxCount > 0) {
+                            baseScoreA = (item.valA / maxCount) * 55.0 + 32.0; // Scaled between 32% and 87%
+                          } else {
+                            baseScoreA = 0.0;
+                          }
+                        }
+
+                        final double rodAY = baseScoreA.clamp(0.0, 100.0);
+
+                        // Proportional score for Campaign B relative to Campaign A
+                        final double rodBY;
+                        if (item.valB <= 0) {
+                          rodBY = 0.0;
+                        } else if (item.valA <= 0) {
+                          rodBY = 80.0;
+                        } else {
+                          rodBY = (rodAY * (item.valB / item.valA)).clamp(0.0, 105.0);
+                        }
+
+                        return BarChartGroupData(
+                          x: idx,
+                          barsSpace: 8,
+                          barRods: [
+                            BarChartRodData(
+                              toY: rodAY,
+                              color: const Color(0xFF6750A4),
+                              width: 20,
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                            ),
+                            BarChartRodData(
+                              toY: rodBY,
+                              color: const Color(0xFF006C51),
+                              width: 20,
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                            ),
+                          ],
+                        );
+                      }),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+          ),
+        ],
       ),
-      onSelected: (val) {
-        if (val) {
-          _savedDimension[widget.lockedCompanySlug] = dimension;
-          setState(() => _activeDimension = dimension);
-        }
-      },
     );
   }
 
@@ -1614,22 +2027,24 @@ class _CampaignsComparisonAnalyticsScreenState
           label,
           style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
         ),
-        const SizedBox(width: 6),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Text(
-            valText,
-            style: GoogleFonts.cairo(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              color: color,
+        if (valText.trim().isNotEmpty) ...[
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              valText,
+              style: GoogleFonts.cairo(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
             ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -1644,62 +2059,63 @@ class _CampaignsComparisonAnalyticsScreenState
     required bool isAr,
   }) {
     final currency = activeCountry.currencySymbol;
-    final titleA = summaryA?.campaignTitle ?? 'Campaign A';
-    final titleB = summaryB?.campaignTitle ?? 'Campaign B';
+    final hasSecond = summaryB != null;
+    final titleA = summaryA?.campaignTitle ?? (isAr ? 'الحملة (A)' : 'Campaign A');
+    final titleB = hasSecond ? summaryB.campaignTitle : (isAr ? 'لا توجد حملة ثانية' : 'No 2nd Campaign');
 
     final rows = [
       _TableRowData(
         label: strings.totalRevenueLabel,
         icon: Icons.payments_rounded,
         valA: '${summaryA?.totalRevenue.toStringAsFixed(1) ?? '0.0'} $currency',
-        valB: '${summaryB?.totalRevenue.toStringAsFixed(1) ?? '0.0'} $currency',
+        valB: hasSecond ? '${summaryB.totalRevenue.toStringAsFixed(1)} $currency' : (isAr ? 'لا توجد بيانات' : 'No data'),
         numA: summaryA?.totalRevenue ?? 0.0,
-        numB: summaryB?.totalRevenue ?? 0.0,
+        numB: hasSecond ? summaryB.totalRevenue : 0.0,
         unit: currency,
       ),
       _TableRowData(
         label: strings.totalInvoicesCountLabel,
         icon: Icons.receipt_long_rounded,
         valA: '${summaryA?.totalInvoices ?? 0}',
-        valB: '${summaryB?.totalInvoices ?? 0}',
+        valB: hasSecond ? '${summaryB.totalInvoices}' : (isAr ? 'لا توجد بيانات' : 'No data'),
         numA: (summaryA?.totalInvoices ?? 0).toDouble(),
-        numB: (summaryB?.totalInvoices ?? 0).toDouble(),
+        numB: hasSecond ? (summaryB.totalInvoices).toDouble() : 0.0,
         unit: '',
       ),
       _TableRowData(
         label: strings.totalProductsSoldLabel,
         icon: Icons.shopping_basket_rounded,
         valA: '${summaryA?.totalProductsSold ?? 0}',
-        valB: '${summaryB?.totalProductsSold ?? 0}',
+        valB: hasSecond ? '${summaryB.totalProductsSold}' : (isAr ? 'لا توجد بيانات' : 'No data'),
         numA: (summaryA?.totalProductsSold ?? 0).toDouble(),
-        numB: (summaryB?.totalProductsSold ?? 0).toDouble(),
+        numB: hasSecond ? (summaryB.totalProductsSold).toDouble() : 0.0,
         unit: '',
       ),
       _TableRowData(
         label: strings.uniqueShoppersLabel,
         icon: Icons.people_alt_rounded,
         valA: '${summaryA?.uniqueShoppersCount ?? 0}',
-        valB: '${summaryB?.uniqueShoppersCount ?? 0}',
+        valB: hasSecond ? '${summaryB.uniqueShoppersCount}' : (isAr ? 'لا توجد بيانات' : 'No data'),
         numA: (summaryA?.uniqueShoppersCount ?? 0).toDouble(),
-        numB: (summaryB?.uniqueShoppersCount ?? 0).toDouble(),
+        numB: hasSecond ? (summaryB.uniqueShoppersCount).toDouble() : 0.0,
         unit: '',
       ),
       _TableRowData(
         label: strings.avgBasketSpendLabel,
         icon: Icons.shopping_cart_checkout_rounded,
         valA: '${summaryA?.avgBasketSpend.toStringAsFixed(1) ?? '0.0'} $currency',
-        valB: '${summaryB?.avgBasketSpend.toStringAsFixed(1) ?? '0.0'} $currency',
+        valB: hasSecond ? '${summaryB.avgBasketSpend.toStringAsFixed(1)} $currency' : (isAr ? 'لا توجد بيانات' : 'No data'),
         numA: summaryA?.avgBasketSpend ?? 0.0,
-        numB: summaryB?.avgBasketSpend ?? 0.0,
+        numB: hasSecond ? summaryB.avgBasketSpend : 0.0,
         unit: currency,
       ),
       _TableRowData(
         label: strings.disbursedPrizesValueLabel,
         icon: Icons.card_giftcard_rounded,
         valA: '${summaryA?.estimatedPrizesValue.toStringAsFixed(0) ?? '0'} $currency',
-        valB: '${summaryB?.estimatedPrizesValue.toStringAsFixed(0) ?? '0'} $currency',
+        valB: hasSecond ? '${summaryB.estimatedPrizesValue.toStringAsFixed(0)} $currency' : (isAr ? 'لا توجد بيانات' : 'No data'),
         numA: summaryA?.estimatedPrizesValue ?? 0.0,
-        numB: summaryB?.estimatedPrizesValue ?? 0.0,
+        numB: hasSecond ? summaryB.estimatedPrizesValue : 0.0,
         unit: currency,
       ),
     ];
@@ -1714,30 +2130,73 @@ class _CampaignsComparisonAnalyticsScreenState
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 10,
               children: [
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.table_chart_rounded, color: colorScheme.primary, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      isAr ? 'جدول مقارنة المؤشرات التفصيلي' : 'Detailed Metrics Comparison Matrix',
-                      style: GoogleFonts.cairo(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.onSurface,
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primaryContainer.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(8),
                       ),
+                      child: Icon(Icons.table_chart_rounded, color: colorScheme.primary, size: 18),
+                    ),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          isAr ? 'جدول مقارنة المؤشرات التفصيلي' : 'Detailed Metrics Comparison Matrix',
+                          style: GoogleFonts.cairo(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        Text(
+                          isAr ? 'مقارنة شاملة متزامنة' : 'Real-time Synchronized Comparison',
+                          style: GoogleFonts.cairo(
+                            fontSize: 11,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                Text(
-                  isAr ? 'مقارنة شاملة متزامنة' : 'Real-time Synchronized Comparison',
-                  style: GoogleFonts.cairo(
-                    fontSize: 11.5,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+
+                // View Mode Toggle (Table View - Default vs Cards View)
+                M3ConnectedButtonGroup<bool>(
+                  height: 34,
+                  borderRadius: 10,
+                  segments: [
+                    M3ButtonSegment<bool>(
+                      value: true,
+                      icon: Icons.table_chart_rounded,
+                      label: isAr ? 'جدول' : 'Table',
+                      tooltip: isAr ? 'عرض كجدول متكامل (افتراضي)' : 'Table View (Default)',
+                    ),
+                    M3ButtonSegment<bool>(
+                      value: false,
+                      icon: Icons.view_agenda_rounded,
+                      label: isAr ? 'بطاقات' : 'Cards',
+                      tooltip: isAr ? 'عرض كبطاقات' : 'Cards View',
+                    ),
+                  ],
+                  selectedValue: _showTableView,
+                  onSelected: (val) {
+                    setState(() {
+                      _showTableView = val;
+                    });
+                  },
                 ),
               ],
             ),
@@ -1745,17 +2204,52 @@ class _CampaignsComparisonAnalyticsScreenState
           const Divider(height: 1),
           LayoutBuilder(
             builder: (context, constraints) {
-              if (constraints.maxWidth < 720) {
-                return _buildMobileComparisonCards(
-                  rows: rows,
-                  titleA: titleA,
-                  titleB: titleB,
-                  colorScheme: colorScheme,
-                  strings: strings,
-                  isAr: isAr,
+              if (_showTableView) {
+                // Table View (Default) with horizontal scroll support on narrow/mobile viewports
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (constraints.maxWidth < 680)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        child: Row(
+                          children: [
+                            Icon(Icons.swipe_rounded, size: 14, color: colorScheme.primary),
+                            const SizedBox(width: 6),
+                            Text(
+                              isAr
+                                  ? 'اسحب أفقياً للاطلاع على كامل أعمدة المقارنة'
+                                  : 'Swipe horizontally to view full matrix',
+                              style: GoogleFonts.cairo(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                                color: colorScheme.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: SizedBox(
+                        width: math.max(constraints.maxWidth, 680.0),
+                        child: _buildDesktopComparisonTable(
+                          rows: rows,
+                          titleA: titleA,
+                          titleB: titleB,
+                          colorScheme: colorScheme,
+                          strings: strings,
+                          isAr: isAr,
+                        ),
+                      ),
+                    ),
+                  ],
                 );
               }
-              return _buildDesktopComparisonTable(
+
+              // Cards View (Alternative option)
+              return _buildMobileComparisonCards(
                 rows: rows,
                 titleA: titleA,
                 titleB: titleB,
@@ -1894,19 +2388,24 @@ class _CampaignsComparisonAnalyticsScreenState
           final r = entry.value;
           final isEven = idx % 2 == 0;
           final diff = r.numA - r.numB;
+          final isSingle = r.numB == 0;
           final pct = r.numB > 0
               ? ((diff / r.numB) * 100)
               : (r.numA > 0 ? 100.0 : 0.0);
           final isPositive = diff > 0;
           final isTied = diff == 0;
 
-          final deltaColor = isTied
+          final deltaColor = isSingle
               ? colorScheme.onSurfaceVariant
-              : (isPositive ? const Color(0xFF006C51) : const Color(0xFFBA1A1A));
+              : (isTied
+                  ? colorScheme.onSurfaceVariant
+                  : (isPositive ? const Color(0xFF006C51) : const Color(0xFFBA1A1A)));
 
-          final leadingCampaign = isTied
-              ? strings.tiedCampaignsTag
-              : (isPositive ? 'A: $titleA 🏆' : 'B: $titleB 🏆');
+          final leadingCampaign = isSingle
+              ? (isAr ? 'حملة منفردة' : 'Single Campaign')
+              : (isTied
+                  ? strings.tiedCampaignsTag
+                  : (isPositive ? 'A: $titleA 🏆' : 'B: $titleB 🏆'));
 
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
@@ -2010,7 +2509,7 @@ class _CampaignsComparisonAnalyticsScreenState
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            isTied
+                            (isSingle || isTied)
                                 ? Icons.drag_handle_rounded
                                 : (isPositive
                                     ? Icons.arrow_upward_rounded
@@ -2020,7 +2519,7 @@ class _CampaignsComparisonAnalyticsScreenState
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '${isPositive ? '+' : ''}${pct.toStringAsFixed(1)}%',
+                            isSingle ? '-' : '${isPositive ? '+' : ''}${pct.toStringAsFixed(1)}%',
                             style: GoogleFonts.cairo(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
@@ -2094,19 +2593,24 @@ class _CampaignsComparisonAnalyticsScreenState
       child: Column(
         children: rows.map((r) {
           final diff = r.numA - r.numB;
+          final isSingle = r.numB == 0;
           final pct = r.numB > 0
               ? ((diff / r.numB) * 100)
               : (r.numA > 0 ? 100.0 : 0.0);
           final isPositive = diff > 0;
           final isTied = diff == 0;
 
-          final deltaColor = isTied
+          final deltaColor = isSingle
               ? colorScheme.onSurfaceVariant
-              : (isPositive ? const Color(0xFF006C51) : const Color(0xFFBA1A1A));
+              : (isTied
+                  ? colorScheme.onSurfaceVariant
+                  : (isPositive ? const Color(0xFF006C51) : const Color(0xFFBA1A1A)));
 
-          final leadingCampaign = isTied
-              ? strings.tiedCampaignsTag
-              : (isPositive ? 'A: $titleA 🏆' : 'B: $titleB 🏆');
+          final leadingCampaign = isSingle
+              ? (isAr ? 'حملة منفردة' : 'Single Campaign')
+              : (isTied
+                  ? strings.tiedCampaignsTag
+                  : (isPositive ? 'A: $titleA 🏆' : 'B: $titleB 🏆'));
 
           return Container(
             margin: const EdgeInsets.only(bottom: 12),
@@ -2262,7 +2766,7 @@ class _CampaignsComparisonAnalyticsScreenState
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          isTied
+                          (isSingle || isTied)
                               ? Icons.drag_handle_rounded
                               : (isPositive
                                   ? Icons.arrow_upward_rounded
@@ -2272,7 +2776,9 @@ class _CampaignsComparisonAnalyticsScreenState
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          '${strings.metricDifferenceLabel}: ${isPositive ? '+' : ''}${pct.toStringAsFixed(1)}%',
+                          isSingle
+                              ? '${strings.metricDifferenceLabel}: -'
+                              : '${strings.metricDifferenceLabel}: ${isPositive ? '+' : ''}${pct.toStringAsFixed(1)}%',
                           style: GoogleFonts.cairo(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
@@ -2336,6 +2842,28 @@ class _CampaignsComparisonAnalyticsScreenState
       return '$prefix ($startFmt)';
     }
     return '$prefix ($startFmt – $endFmt)';
+  }
+
+  static String _formatShortenedPeriodLegend({
+    required String periodLabel,
+    required String prefixLetter,
+  }) {
+    // If periodLabel is like: 'الويك إند 1 (28 سبتمبر – 1 أكتوبر)' or 'Weekend 1 (28 Sep – 1 Oct)'
+    final waveMatch = RegExp(r'(\d+)').firstMatch(periodLabel);
+    final waveNum = waveMatch?.group(1);
+
+    // Extract dates between parentheses if present
+    final pMatch = RegExp(r'\(([^)]+)\)').firstMatch(periodLabel);
+    final dates = pMatch?.group(1)?.trim();
+
+    if (waveNum != null && dates != null && dates.isNotEmpty) {
+      return '$prefixLetter$waveNum: $dates';
+    } else if (dates != null && dates.isNotEmpty) {
+      return '$prefixLetter: $dates';
+    } else if (periodLabel.isNotEmpty) {
+      return '$prefixLetter: $periodLabel';
+    }
+    return prefixLetter;
   }
 
   static bool _isValidInvoice(Map<String, dynamic> inv) {
@@ -2865,363 +3393,10 @@ class _CampaignsComparisonAnalyticsScreenState
     );
   }
 
-  Widget _buildIntraPeriodKpiDeltaGrid({
-    required CampaignPeriodMetrics metricsA,
-    required CampaignPeriodMetrics metricsB,
-    required ColorScheme colorScheme,
-    required AppStrings strings,
-    required CountryCurrency activeCountry,
-    required bool isAr,
-  }) {
-    final currency = activeCountry.currencySymbol;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth > 1100
-            ? 4
-            : (constraints.maxWidth > 700 ? 3 : (constraints.maxWidth > 500 ? 2 : 1));
 
-        return GridView.count(
-          crossAxisCount: crossAxisCount,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 14,
-          crossAxisSpacing: 14,
-          childAspectRatio: crossAxisCount == 1 ? 2.4 : 1.55,
-          children: [
-            _buildDeltaCard(
-              title: strings.totalRevenueLabel,
-              icon: Icons.payments_rounded,
-              valA: metricsA.totalRevenue,
-              valB: metricsB.totalRevenue,
-              unit: currency,
-              isCurrency: true,
-              colorScheme: colorScheme,
-              strings: strings,
-              isAr: isAr,
-            ),
-            _buildDeltaCard(
-              title: strings.totalInvoicesCountLabel,
-              icon: Icons.receipt_long_rounded,
-              valA: metricsA.totalInvoices.toDouble(),
-              valB: metricsB.totalInvoices.toDouble(),
-              unit: isAr ? 'فاتورة' : 'Invoices',
-              isCurrency: false,
-              colorScheme: colorScheme,
-              strings: strings,
-              isAr: isAr,
-            ),
-            _buildDeltaCard(
-              title: strings.totalProductsSoldLabel,
-              icon: Icons.shopping_basket_rounded,
-              valA: metricsA.totalProductsSold.toDouble(),
-              valB: metricsB.totalProductsSold.toDouble(),
-              unit: isAr ? 'قطعة' : 'Units',
-              isCurrency: false,
-              colorScheme: colorScheme,
-              strings: strings,
-              isAr: isAr,
-            ),
-            _buildDeltaCard(
-              title: strings.uniqueShoppersLabel,
-              icon: Icons.people_alt_rounded,
-              valA: metricsA.uniqueShoppersCount.toDouble(),
-              valB: metricsB.uniqueShoppersCount.toDouble(),
-              unit: isAr ? 'متسوق' : 'Shoppers',
-              isCurrency: false,
-              colorScheme: colorScheme,
-              strings: strings,
-              isAr: isAr,
-            ),
-            _buildDeltaCard(
-              title: strings.dailySalesVelocityLabel,
-              icon: Icons.speed_rounded,
-              valA: metricsA.dailySalesVelocity,
-              valB: metricsB.dailySalesVelocity,
-              unit: '$currency/${isAr ? "يوم" : "day"}',
-              isCurrency: true,
-              colorScheme: colorScheme,
-              strings: strings,
-              isAr: isAr,
-            ),
-            _buildDeltaCard(
-              title: strings.avgBasketSpendLabel,
-              icon: Icons.shopping_cart_checkout_rounded,
-              valA: metricsA.avgBasketSpend,
-              valB: metricsB.avgBasketSpend,
-              unit: currency,
-              isCurrency: true,
-              colorScheme: colorScheme,
-              strings: strings,
-              isAr: isAr,
-            ),
-            _buildDeltaCard(
-              title: strings.disbursedPrizesValueLabel,
-              icon: Icons.card_giftcard_rounded,
-              valA: metricsA.estimatedPrizesValue,
-              valB: metricsB.estimatedPrizesValue,
-              unit: currency,
-              isCurrency: true,
-              colorScheme: colorScheme,
-              strings: strings,
-              isAr: isAr,
-            ),
-          ],
-        );
-      },
-    );
-  }
 
-  Widget _buildIntraDualGroupedBarChart({
-    required CampaignPeriodMetrics metricsA,
-    required CampaignPeriodMetrics metricsB,
-    required ColorScheme colorScheme,
-    required AppStrings strings,
-    required CountryCurrency activeCountry,
-    required bool isAr,
-  }) {
-    final currency = activeCountry.currencySymbol;
-    double valA = 0.0;
-    double valB = 0.0;
-    String unit = '';
 
-    switch (_intraDimension) {
-      case ComparisonDimension.revenue:
-        valA = metricsA.totalRevenue;
-        valB = metricsB.totalRevenue;
-        unit = currency;
-        break;
-      case ComparisonDimension.invoices:
-        valA = metricsA.totalInvoices.toDouble();
-        valB = metricsB.totalInvoices.toDouble();
-        unit = isAr ? 'فاتورة' : 'Inv';
-        break;
-      case ComparisonDimension.products:
-        valA = metricsA.totalProductsSold.toDouble();
-        valB = metricsB.totalProductsSold.toDouble();
-        unit = isAr ? 'قطعة' : 'Pcs';
-        break;
-      case ComparisonDimension.shoppers:
-        valA = metricsA.uniqueShoppersCount.toDouble();
-        valB = metricsB.uniqueShoppersCount.toDouble();
-        unit = isAr ? 'عميل' : 'Cust';
-        break;
-      case ComparisonDimension.velocity:
-        valA = metricsA.dailySalesVelocity;
-        valB = metricsB.dailySalesVelocity;
-        unit = '$currency/${isAr ? "يوم" : "day"}';
-        break;
-      case ComparisonDimension.basketSpend:
-        valA = metricsA.avgBasketSpend;
-        valB = metricsB.avgBasketSpend;
-        unit = currency;
-        break;
-    }
-
-    final double maxVal = math.max(valA, valB);
-    final double maxY = maxVal > 0 ? (maxVal * 1.25) : 100.0;
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 12,
-            runSpacing: 10,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.bar_chart_rounded, color: colorScheme.primary, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    strings.comparisonBarChartTitle,
-                    style: GoogleFonts.cairo(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.onSurface,
-                    ),
-                  ),
-                ],
-              ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: [
-                  _buildIntraDimensionChip(
-                    dimension: ComparisonDimension.revenue,
-                    label: strings.comparisonDimensionRevenue,
-                    icon: Icons.payments_rounded,
-                    colorScheme: colorScheme,
-                  ),
-                  _buildIntraDimensionChip(
-                    dimension: ComparisonDimension.invoices,
-                    label: strings.comparisonDimensionInvoices,
-                    icon: Icons.receipt_long_rounded,
-                    colorScheme: colorScheme,
-                  ),
-                  _buildIntraDimensionChip(
-                    dimension: ComparisonDimension.products,
-                    label: strings.comparisonDimensionProducts,
-                    icon: Icons.shopping_basket_rounded,
-                    colorScheme: colorScheme,
-                  ),
-                  _buildIntraDimensionChip(
-                    dimension: ComparisonDimension.shoppers,
-                    label: strings.comparisonDimensionShoppers,
-                    icon: Icons.people_alt_rounded,
-                    colorScheme: colorScheme,
-                  ),
-                  _buildIntraDimensionChip(
-                    dimension: ComparisonDimension.velocity,
-                    label: strings.dailySalesVelocityLabel,
-                    icon: Icons.speed_rounded,
-                    colorScheme: colorScheme,
-                  ),
-                  _buildIntraDimensionChip(
-                    dimension: ComparisonDimension.basketSpend,
-                    label: strings.avgBasketSpendLabel,
-                    icon: Icons.shopping_cart_checkout_rounded,
-                    colorScheme: colorScheme,
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildLegendPill(
-                color: const Color(0xFF6750A4),
-                label: metricsA.periodLabel,
-                valText: '${NumberFormat.compact().format(valA)} $unit',
-              ),
-              const SizedBox(width: 20),
-              _buildLegendPill(
-                color: const Color(0xFF006C51),
-                label: metricsB.periodLabel,
-                valText: '${NumberFormat.compact().format(valB)} $unit',
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 250,
-            child: BarChart(
-              BarChartData(
-                maxY: maxY,
-                barTouchData: BarTouchData(
-                  enabled: true,
-                  touchTooltipData: BarTouchTooltipData(
-                    getTooltipColor: (_) => colorScheme.surfaceContainerHighest,
-                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                      final isA = rodIndex == 0;
-                      final label = isA ? metricsA.periodLabel : metricsB.periodLabel;
-                      final val = isA ? valA : valB;
-                      return BarTooltipItem(
-                        '$label\n',
-                        GoogleFonts.cairo(
-                          color: isA ? const Color(0xFF6750A4) : const Color(0xFF006C51),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                        children: [
-                          TextSpan(
-                            text: '${NumberFormat.decimalPattern().format(val)} $unit',
-                            style: GoogleFonts.cairo(
-                              color: isA ? const Color(0xFFD0BCFF) : const Color(0xFF7DDFC3),
-                              fontWeight: FontWeight.w600,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ),
-                titlesData: FlTitlesData(
-                  show: true,
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 45,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          NumberFormat.compact().format(value),
-                          style: GoogleFonts.cairo(
-                            fontSize: 10,
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (value, meta) {
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(
-                            isAr ? 'المؤشر المختار' : 'Selected Metric',
-                            style: GoogleFonts.cairo(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  getDrawingHorizontalLine: (value) => FlLine(
-                    color: colorScheme.outlineVariant.withValues(alpha: 0.3),
-                    strokeWidth: 1,
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                barGroups: [
-                  BarChartGroupData(
-                    x: 0,
-                    barsSpace: 16,
-                    barRods: [
-                      BarChartRodData(
-                        toY: valA,
-                        color: const Color(0xFF6750A4),
-                        width: 34,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                      ),
-                      BarChartRodData(
-                        toY: valB,
-                        color: const Color(0xFF006C51),
-                        width: 34,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildIntraComparisonTable({
     required CampaignPeriodMetrics metricsA,
@@ -3232,8 +3407,8 @@ class _CampaignsComparisonAnalyticsScreenState
     required bool isAr,
   }) {
     final currency = activeCountry.currencySymbol;
-    final titleA = metricsA.periodLabel;
-    final titleB = metricsB.periodLabel;
+    final titleA = _formatShortenedPeriodLegend(periodLabel: metricsA.periodLabel, prefixLetter: 'A');
+    final titleB = _formatShortenedPeriodLegend(periodLabel: metricsB.periodLabel, prefixLetter: 'B');
 
     final rows = [
       _TableRowData(
@@ -3311,30 +3486,73 @@ class _CampaignsComparisonAnalyticsScreenState
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 10,
               children: [
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.table_chart_rounded, color: colorScheme.primary, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      isAr ? 'جدول مقارنة الفترات والويك إندات' : 'Intra-Campaign Periods Comparison Table',
-                      style: GoogleFonts.cairo(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.onSurface,
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primaryContainer.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(8),
                       ),
+                      child: Icon(Icons.table_chart_rounded, color: colorScheme.primary, size: 18),
+                    ),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          isAr ? 'جدول مقارنة الفترات والويك إند' : 'Intra-Period Comparison Table',
+                          style: GoogleFonts.cairo(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        Text(
+                          isAr ? 'مقارنة شاملة متزامنة' : 'Real-time Synchronized Comparison',
+                          style: GoogleFonts.cairo(
+                            fontSize: 11,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                Text(
-                  isAr ? 'مقارنة دقيقة مباشرة' : 'Direct Synchronized Comparison',
-                  style: GoogleFonts.cairo(
-                    fontSize: 11.5,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+
+                // View Mode Toggle (Table View - Default vs Cards View)
+                M3ConnectedButtonGroup<bool>(
+                  height: 34,
+                  borderRadius: 10,
+                  segments: [
+                    M3ButtonSegment<bool>(
+                      value: true,
+                      icon: Icons.table_chart_rounded,
+                      label: isAr ? 'جدول' : 'Table',
+                      tooltip: isAr ? 'عرض كجدول متكامل (افتراضي)' : 'Table View (Default)',
+                    ),
+                    M3ButtonSegment<bool>(
+                      value: false,
+                      icon: Icons.view_agenda_rounded,
+                      label: isAr ? 'بطاقات' : 'Cards',
+                      tooltip: isAr ? 'عرض كبطاقات' : 'Cards View',
+                    ),
+                  ],
+                  selectedValue: _showTableView,
+                  onSelected: (val) {
+                    setState(() {
+                      _showTableView = val;
+                    });
+                  },
                 ),
               ],
             ),
@@ -3342,17 +3560,52 @@ class _CampaignsComparisonAnalyticsScreenState
           const Divider(height: 1),
           LayoutBuilder(
             builder: (context, constraints) {
-              if (constraints.maxWidth < 720) {
-                return _buildMobileComparisonCards(
-                  rows: rows,
-                  titleA: titleA,
-                  titleB: titleB,
-                  colorScheme: colorScheme,
-                  strings: strings,
-                  isAr: isAr,
+              if (_showTableView) {
+                // Table View (Default) with horizontal scroll support on narrow/mobile viewports
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (constraints.maxWidth < 680)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        child: Row(
+                          children: [
+                            Icon(Icons.swipe_rounded, size: 14, color: colorScheme.primary),
+                            const SizedBox(width: 6),
+                            Text(
+                              isAr
+                                  ? 'اسحب أفقياً للاطلاع على كامل أعمدة المقارنة'
+                                  : 'Swipe horizontally to view full matrix',
+                              style: GoogleFonts.cairo(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                                color: colorScheme.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: SizedBox(
+                        width: math.max(constraints.maxWidth, 680.0),
+                        child: _buildDesktopComparisonTable(
+                          rows: rows,
+                          titleA: titleA,
+                          titleB: titleB,
+                          colorScheme: colorScheme,
+                          strings: strings,
+                          isAr: isAr,
+                        ),
+                      ),
+                    ),
+                  ],
                 );
               }
-              return _buildDesktopComparisonTable(
+
+              // Cards View (Alternative option)
+              return _buildMobileComparisonCards(
                 rows: rows,
                 titleA: titleA,
                 titleB: titleB,
@@ -3408,10 +3661,10 @@ class _CampaignsComparisonAnalyticsScreenState
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFB300).withValues(alpha: 0.2),
+                  color: colorScheme.primaryContainer,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.emoji_events_rounded, color: Color(0xFFB78103), size: 28),
+                child: Icon(Icons.emoji_events_rounded, color: colorScheme.primary, size: 28),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -3496,6 +3749,7 @@ class _CampaignsComparisonAnalyticsScreenState
     required String label,
     required String value,
   }) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -3506,7 +3760,7 @@ class _CampaignsComparisonAnalyticsScreenState
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: const Color(0xFFB78103)),
+          Icon(icon, size: 16, color: colorScheme.primary),
           const SizedBox(width: 6),
           Text(
             '$label: ',
@@ -3687,7 +3941,38 @@ class _CampaignsComparisonAnalyticsScreenState
                 ),
                 titlesData: FlTitlesData(
                   show: true,
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 28,
+                      getTitlesWidget: (value, meta) {
+                        final idx = value.toInt();
+                        if (idx >= 0 && idx < allMetrics.length) {
+                          final v = valSelector(allMetrics[idx]);
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(5),
+                              border: Border.all(
+                                color: colorScheme.primary.withValues(alpha: 0.3),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Text(
+                              NumberFormat.compact().format(v),
+                              style: GoogleFonts.cairo(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.primary,
+                              ),
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                  ),
                   rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
@@ -4180,57 +4465,51 @@ class _CampaignsComparisonAnalyticsScreenState
                 spacing: 12,
                 runSpacing: 10,
                 children: [
-                  // Auto vs Custom Segmented Button
-                  SegmentedButton<bool>(
+                  // Auto vs Custom M3 Connected Button Group
+                  M3ConnectedButtonGroup<bool>(
+                    height: 40,
+                    borderRadius: 12,
                     segments: [
-                      ButtonSegment<bool>(
+                      M3ButtonSegment<bool>(
                         value: false,
-                        icon: const Icon(Icons.auto_awesome_rounded, size: 16),
-                        label: Text(
-                          strings.periodComparisonModeAuto,
-                          style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
+                        icon: Icons.auto_awesome_rounded,
+                        label: strings.periodComparisonModeAuto,
+                        tooltip: strings.periodComparisonModeAuto,
                       ),
-                      ButtonSegment<bool>(
+                      M3ButtonSegment<bool>(
                         value: true,
-                        icon: const Icon(Icons.date_range_rounded, size: 16),
-                        label: Text(
-                          strings.periodComparisonModeCustom,
-                          style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
+                        icon: Icons.date_range_rounded,
+                        label: strings.periodComparisonModeCustom,
+                        tooltip: strings.periodComparisonModeCustom,
                       ),
                     ],
-                    selected: {_isCustomPeriodMode},
-                    onSelectionChanged: (val) {
-                      final newMode = val.first;
+                    selectedValue: _isCustomPeriodMode,
+                    onSelected: (newMode) {
                       _savedIsCustomPeriod[widget.lockedCompanySlug] = newMode;
                       setState(() => _isCustomPeriodMode = newMode);
                     },
                   ),
 
                   // Sub-view Switcher: Head-to-Head vs Progression Matrix
-                  SegmentedButton<int>(
+                  M3ConnectedButtonGroup<int>(
+                    height: 40,
+                    borderRadius: 12,
                     segments: [
-                      ButtonSegment<int>(
+                      M3ButtonSegment<int>(
                         value: 0,
-                        icon: const Icon(Icons.compare_arrows_rounded, size: 16),
-                        label: Text(
-                          strings.weekendHeadToHeadView,
-                          style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
+                        icon: Icons.compare_arrows_rounded,
+                        label: strings.weekendHeadToHeadView,
+                        tooltip: strings.weekendHeadToHeadView,
                       ),
-                      ButtonSegment<int>(
+                      M3ButtonSegment<int>(
                         value: 1,
-                        icon: const Icon(Icons.view_timeline_rounded, size: 16),
-                        label: Text(
-                          strings.allWeekendsProgressionView,
-                          style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
+                        icon: Icons.view_timeline_rounded,
+                        label: strings.allWeekendsProgressionView,
+                        tooltip: strings.allWeekendsProgressionView,
                       ),
                     ],
-                    selected: {_intraSubViewMode},
-                    onSelectionChanged: (val) {
-                      final newSub = val.first;
+                    selectedValue: _intraSubViewMode,
+                    onSelected: (newSub) {
                       _savedIntraSubView[widget.lockedCompanySlug] = newSub;
                       setState(() => _intraSubViewMode = newSub);
                     },
@@ -4298,7 +4577,7 @@ class _CampaignsComparisonAnalyticsScreenState
                                 color: colorScheme.surfaceContainerHighest,
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(Icons.compare_arrows_rounded, size: 20),
+                              child: Icon(Icons.compare_arrows_rounded, size: 20, color: colorScheme.primary),
                             ),
                           ),
                           Expanded(child: dropB),
@@ -4367,7 +4646,7 @@ class _CampaignsComparisonAnalyticsScreenState
                                 color: colorScheme.surfaceContainerHighest,
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(Icons.compare_arrows_rounded, size: 20),
+                              child: Icon(Icons.compare_arrows_rounded, size: 20, color: colorScheme.primary),
                             ),
                           ),
                           Expanded(child: btnB),
@@ -4391,16 +4670,7 @@ class _CampaignsComparisonAnalyticsScreenState
           ),
         ] else if (_intraSubViewMode == 0 && metricsA != null && metricsB != null) ...[
           // Sub-view 0: Head-to-Head Comparison
-          _buildIntraPeriodKpiDeltaGrid(
-            metricsA: metricsA,
-            metricsB: metricsB,
-            colorScheme: colorScheme,
-            strings: strings,
-            activeCountry: activeCountry,
-            isAr: isAr,
-          ),
-          const SizedBox(height: 24),
-          _buildIntraDualGroupedBarChart(
+          _buildIntraPeriodVisualReport(
             metricsA: metricsA,
             metricsB: metricsB,
             colorScheme: colorScheme,
@@ -4470,10 +4740,67 @@ class _CampaignsComparisonAnalyticsScreenState
     // Sort by Total Revenue descending
     summaries.sort((a, b) => b.totalRevenue.compareTo(a.totalRevenue));
 
+    // Calculate Portfolio Grand Totals for M3FeedLayout
+    double totalPortfolioRevenue = 0.0;
+    int totalPortfolioInvoices = 0;
+    int totalPortfolioProducts = 0;
+    int totalPortfolioPrizes = 0;
+
+    for (final s in summaries) {
+      totalPortfolioRevenue += s.totalRevenue;
+      totalPortfolioInvoices += s.totalInvoices;
+      totalPortfolioProducts += s.totalProductsSold;
+      totalPortfolioPrizes += s.claimedPrizesCount;
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Portfolio Ranking Table
+        // 1. Portfolio Summary M3FeedLayout (1 col mobile, 2 cols tablet, 4 cols desktop)
+        if (summaries.isNotEmpty) ...[
+          M3FeedLayout(
+            padding: EdgeInsets.zero,
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _buildPortfolioFeedKpiCard(
+                title: isAr ? 'إجمالي مبيعات المحفظة' : 'Portfolio Total Revenue',
+                value: '${NumberFormat('#,##0.00').format(totalPortfolioRevenue)} $currency',
+                subtitle: isAr ? 'مبيعات كافة الحملات مجتمعة' : 'All campaigns aggregate sales',
+                icon: Icons.payments_rounded,
+                accentColor: const Color(0xFF006C50),
+                colorScheme: colorScheme,
+              ),
+              _buildPortfolioFeedKpiCard(
+                title: isAr ? 'إجمالي الفواتير المنفذة' : 'Portfolio Invoices',
+                value: '${NumberFormat('#,###').format(totalPortfolioInvoices)} ${isAr ? 'فاتورة' : 'receipts'}',
+                subtitle: isAr ? 'الفواتير المدققة والمقبولة' : 'Audited and verified receipts',
+                icon: Icons.receipt_long_rounded,
+                accentColor: const Color(0xFF0284C7),
+                colorScheme: colorScheme,
+              ),
+              _buildPortfolioFeedKpiCard(
+                title: isAr ? 'إجمالي المنتجات المباعة' : 'Products Disbursed',
+                value: '${NumberFormat('#,###').format(totalPortfolioProducts)} ${isAr ? 'قطعة' : 'items'}',
+                subtitle: isAr ? 'مبيعات أصناف العروض' : 'Promotional items sold',
+                icon: Icons.shopping_bag_rounded,
+                accentColor: const Color(0xFFD97706),
+                colorScheme: colorScheme,
+              ),
+              _buildPortfolioFeedKpiCard(
+                title: isAr ? 'الهدايا والجوائز المنصرفة' : 'Prizes Claimed',
+                value: '${NumberFormat('#,###').format(totalPortfolioPrizes)} ${isAr ? 'جائزة' : 'prizes'}',
+                subtitle: isAr ? 'هدايا الحملات المستلمة' : 'Campaign prizes claimed',
+                icon: Icons.emoji_events_rounded,
+                accentColor: const Color(0xFF7C3AED),
+                colorScheme: colorScheme,
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+        ],
+
+        // 2. Portfolio Ranking Table
         Container(
           decoration: BoxDecoration(
             color: colorScheme.surfaceContainerLow,
@@ -4484,36 +4811,52 @@ class _CampaignsComparisonAnalyticsScreenState
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 10,
                   children: [
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.workspace_premium_rounded,
-                            color: Colors.amber.shade700, size: 24),
+                            color: colorScheme.primary, size: 22),
                         const SizedBox(width: 8),
-                        Text(
-                          isAr
-                              ? 'ترتيب ومصفوفة أداء كافة حملات الشركة'
-                              : 'All Campaigns Performance Leaderboard',
-                          style: GoogleFonts.cairo(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.bold,
-                            color: colorScheme.onSurface,
+                        Flexible(
+                          child: Text(
+                            isAr
+                                ? 'ترتيب ومصفوفة أداء كافة حملات الشركة'
+                                : 'All Campaigns Performance Leaderboard',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.cairo(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurface,
+                            ),
                           ),
                         ),
                       ],
                     ),
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.download_rounded, size: 16),
-                      label: Text(
-                        strings.exportComparisonCsv,
-                        style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                    Tooltip(
+                      message: isAr ? 'تصدير التقرير المقارن CSV' : 'Export Benchmark CSV',
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: Icon(Icons.file_download_rounded, size: 16, color: colorScheme.primary),
+                        label: Text(
+                          strings.exportComparisonCsv,
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        onPressed: () {
+                          _exportPortfolioCsv(summaries, currency, isAr);
+                        },
                       ),
-                      onPressed: () {
-                        _exportPortfolioCsv(summaries, currency, isAr);
-                      },
                     ),
                   ],
                 ),
@@ -4522,70 +4865,92 @@ class _CampaignsComparisonAnalyticsScreenState
               LayoutBuilder(
                 builder: (context, constraints) {
                   final availableWidth = constraints.maxWidth;
-                  final minWidth = math.max(availableWidth, 850.0);
-                  final colSpacing = availableWidth >= 850
-                      ? math.max(16.0, (availableWidth - 620) / 7)
-                      : 18.0;
+                  final minWidth = math.max(availableWidth, 680.0);
+                  final colSpacing = availableWidth >= 680
+                      ? math.max(14.0, (availableWidth - 520) / 8)
+                      : 16.0;
 
-                  return SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(minWidth: minWidth),
-                      child: DataTable(
-                        columnSpacing: colSpacing,
-                        headingRowColor: WidgetStateProperty.all(
-                          colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (availableWidth < 680)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8, bottom: 4, left: 16, right: 16),
+                          child: Row(
+                            children: [
+                              Icon(Icons.swipe_rounded, size: 14, color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6)),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  isAr ? 'اسحب الجدول أفقياً للاطلاع على كافة الأعمدة' : 'Swipe horizontally to view all columns',
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 10.5,
+                                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        columns: [
-                          DataColumn(
-                            label: Text(
-                              isAr ? 'الترتيب' : 'Rank',
-                              style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(minWidth: minWidth),
+                          child: DataTable(
+                            columnSpacing: colSpacing,
+                            headingRowColor: WidgetStateProperty.all(
+                              colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
                             ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              isAr ? 'اسم الحملة' : 'Campaign Title',
-                              style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              strings.totalRevenueLabel,
-                              style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              strings.totalInvoicesCountLabel,
-                              style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              strings.totalProductsSoldLabel,
-                              style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              strings.uniqueShoppersLabel,
-                              style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              strings.avgBasketSpendLabel,
-                              style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              isAr ? 'الحالة' : 'Status',
-                              style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ],
+                            columns: [
+                              DataColumn(
+                                label: Text(
+                                  isAr ? 'الترتيب' : (isHi ? 'रैंक' : 'Rank'),
+                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              DataColumn(
+                                label: Text(
+                                  isAr ? 'الاسم' : (isHi ? 'नाम' : 'Name'),
+                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              DataColumn(
+                                label: Text(
+                                  isAr ? 'المبيعات' : (isHi ? 'बिक्री' : 'Sales'),
+                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              DataColumn(
+                                label: Text(
+                                  isAr ? 'الفواتير' : (isHi ? 'इनवॉइस' : 'Invoices'),
+                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              DataColumn(
+                                label: Text(
+                                  isAr ? 'المنتجات' : (isHi ? 'उत्पाद' : 'Products'),
+                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              DataColumn(
+                                label: Text(
+                                  isAr ? 'العملاء' : (isHi ? 'ग्राहक' : 'Customers'),
+                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              DataColumn(
+                                label: Text(
+                                  isAr ? 'سلة المشتريات' : (isHi ? 'शॉपिंग बास्केट' : 'Basket'),
+                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              DataColumn(
+                                label: Text(
+                                  isAr ? 'الحالة' : (isHi ? 'स्थिति' : 'Status'),
+                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
                         rows: summaries.asMap().entries.map((entry) {
                           final index = entry.key;
                           final s = entry.value;
@@ -4649,9 +5014,11 @@ class _CampaignsComparisonAnalyticsScreenState
                         }).toList(),
                       ),
                     ),
-                  );
-                },
-              ),
+                  ),
+                ],
+              );
+            },
+          ),
             ],
           ),
         ),
@@ -4659,30 +5026,121 @@ class _CampaignsComparisonAnalyticsScreenState
     );
   }
 
+  Widget _buildPortfolioFeedKpiCard({
+    required String title,
+    required String value,
+    required String subtitle,
+    required IconData icon,
+    required Color accentColor,
+    required ColorScheme colorScheme,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, size: 22, color: accentColor),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.cairo(
+                    fontSize: 11,
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: GoogleFonts.cairo(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.cairo(
+                    fontSize: 10,
+                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _exportPortfolioCsv(
     List<CampaignMetricsSummary> summaries,
     String currency,
     bool isAr,
-  ) {
+  ) async {
     final buffer = StringBuffer();
+    // UTF-8 BOM for Excel / Google Sheets compatibility with Arabic text
+    buffer.write('\uFEFF');
     // CSV Header
     buffer.writeln(
-        'Rank,Campaign Title,Total Sales ($currency),Invoices Count,Products Sold,Unique Shoppers,Avg Basket ($currency),Status');
+        '${isAr ? 'الترتيب' : 'Rank'},${isAr ? 'الاسم' : 'Campaign Title'},${isAr ? 'المبيعات' : 'Sales'} ($currency),${isAr ? 'الفواتير' : 'Invoices'},${isAr ? 'المنتجات' : 'Products'},${isAr ? 'العملاء' : 'Customers'},${isAr ? 'سلة المشتريات' : 'Avg Basket'} ($currency),${isAr ? 'الحالة' : 'Status'}');
 
     for (int i = 0; i < summaries.length; i++) {
       final s = summaries[i];
       final title = '"${s.campaignTitle.replaceAll('"', '""')}"';
-      final status = s.isActive ? 'Active' : 'Ended';
+      final status = s.isActive ? (isAr ? 'نشطة' : 'Active') : (isAr ? 'منتهية' : 'Ended');
       buffer.writeln(
           '${i + 1},$title,${s.totalRevenue.toStringAsFixed(2)},${s.totalInvoices},${s.totalProductsSold},${s.uniqueShoppersCount},${s.avgBasketSpend.toStringAsFixed(2)},$status');
     }
 
+    final csvData = buffer.toString();
+    if (kIsWeb) {
+      final bytes = utf8.encode(csvData);
+      final base64Csv = base64Encode(bytes);
+      final url = 'data:text/csv;charset=utf-8;base64,$base64Csv';
+      try {
+        await launchUrl(Uri.parse(url));
+      } catch (_) {}
+    } else {
+      await Clipboard.setData(ClipboardData(text: csvData));
+    }
+
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           isAr
-              ? 'تم تجهيز تقرير المقارنة الشامل بنجاح'
-              : 'Benchmark CSV report generated successfully',
+              ? 'تم تصدير تقرير المقارنة الشامل (CSV) بنجاح'
+              : 'Benchmark CSV report exported successfully',
         ),
         backgroundColor: Colors.green.shade700,
         behavior: SnackBarBehavior.floating,
@@ -4709,4 +5167,42 @@ class _TableRowData {
     required this.numB,
     required this.unit,
   });
+}
+
+class _VisualMetricItem {
+  final String title;
+  final IconData icon;
+  final double valA;
+  final double valB;
+  final String unit;
+  final bool isCurrency;
+
+  const _VisualMetricItem({
+    required this.title,
+    required this.icon,
+    required this.valA,
+    required this.valB,
+    required this.unit,
+    this.isCurrency = false,
+  });
+
+  double get diff => valA - valB;
+  double get total => valA + valB;
+  double get pctA => total > 0 ? (valA / total) : 0.5;
+  double get pctB => total > 0 ? (valB / total) : 0.5;
+  double get shareA => pctA;
+  double get shareB => pctB;
+
+  double get deltaPercent {
+    if (valB > 0) {
+      return ((valA - valB) / valB) * 100;
+    } else if (valA > 0) {
+      return 100.0;
+    }
+    return 0.0;
+  }
+
+  bool get isWinnerA => valA > valB;
+  bool get isWinnerB => valB > valA;
+  bool get isTied => (valA - valB).abs() < 0.001;
 }

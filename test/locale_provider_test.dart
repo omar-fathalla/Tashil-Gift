@@ -48,37 +48,37 @@ void main() {
       final stringsHi = AppStrings('hi');
 
       // Navigation & Header
-      expect(stringsAr.navEventsManagement, equals('الحملات والإدارة'));
-      expect(stringsEn.navEventsManagement, equals('Campaigns & Events'));
-      expect(stringsHi.navEventsManagement, equals('अभियान और प्रबंधन'));
+      expect(stringsAr.navEventsManagement, equals('الحملات'));
+      expect(stringsEn.navEventsManagement, equals('Campaigns'));
+      expect(stringsHi.navEventsManagement, equals('अभियान'));
 
-      expect(stringsAr.navAnalytics, equals('التقارير والتحليلات'));
-      expect(stringsEn.navAnalytics, equals('Reports & Analytics'));
-      expect(stringsHi.navAnalytics, equals('रिपोर्ट और विश्लेषण'));
+      expect(stringsAr.navAnalytics, equals('التقارير'));
+      expect(stringsEn.navAnalytics, equals('Reports'));
+      expect(stringsHi.navAnalytics, equals('रिपोर्ट'));
 
-      expect(stringsAr.navCompanyCatalog, equals('تكويد الشركات والمنتجات'));
-      expect(stringsEn.navCompanyCatalog, equals('Company & Product Catalog'));
-      expect(stringsHi.navCompanyCatalog, equals('कंपनी और उत्पाद सूची'));
+      expect(stringsAr.navCompanyCatalog, equals('التكويد'));
+      expect(stringsEn.navCompanyCatalog, equals('Catalog'));
+      expect(stringsHi.navCompanyCatalog, equals('सूची'));
 
-      expect(stringsAr.navRetailChains, equals('السلاسل والمنافذ'));
-      expect(stringsEn.navRetailChains, equals('Retail Chains & Outlets'));
-      expect(stringsHi.navRetailChains, equals('रिटेल चेन और स्टोर'));
+      expect(stringsAr.navRetailChains, equals('السلاسل'));
+      expect(stringsEn.navRetailChains, equals('Chains'));
+      expect(stringsHi.navRetailChains, equals('चेन'));
 
-      expect(stringsAr.navInvoicesAudit, equals('سجل الفواتير والتدقيق'));
-      expect(stringsEn.navInvoicesAudit, equals('Invoices Audit & Logs'));
-      expect(stringsHi.navInvoicesAudit, equals('रसीद ऑडिट और लॉग'));
+      expect(stringsAr.navInvoicesAudit, equals('الفواتير'));
+      expect(stringsEn.navInvoicesAudit, equals('Invoices'));
+      expect(stringsHi.navInvoicesAudit, equals('रसीदें'));
 
       expect(stringsAr.navCreateCampaign, equals('إنشاء حملة جديدة'));
       expect(stringsEn.navCreateCampaign, equals('Create New Campaign'));
       expect(stringsHi.navCreateCampaign, equals('नया अभियान बनाएं'));
 
-      expect(stringsAr.navCompanyGifts, equals('كتالوج هدايا الشركات'));
-      expect(stringsEn.navCompanyGifts, equals('Company Gifts Catalog'));
-      expect(stringsHi.navCompanyGifts, equals('कंपनी उपहार सूची'));
+      expect(stringsAr.navCompanyGifts, equals('الهدايا'));
+      expect(stringsEn.navCompanyGifts, equals('Gifts'));
+      expect(stringsHi.navCompanyGifts, equals('उपहार'));
 
-      expect(stringsAr.navGameTypes, equals('أنواع الألعاب'));
-      expect(stringsEn.navGameTypes, equals('Game Types'));
-      expect(stringsHi.navGameTypes, equals('खेल के प्रकार'));
+      expect(stringsAr.navGameTypes, equals('الألعاب'));
+      expect(stringsEn.navGameTypes, equals('Games'));
+      expect(stringsHi.navGameTypes, equals('खेल'));
 
       // Common actions
       expect(stringsAr.save, equals('حفظ'));

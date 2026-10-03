@@ -1239,7 +1239,184 @@ class AiDirectivesSeedData {
           tags: ['complementary-receipts', 'side-by-side', 'cadbury', 'multi-receipt', 'fathalla-mahalla', 'voucher-multipliers', 'air-58'],
           lastUpdated: '2026-09-25',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-59',
+          code: 'PARENT_COMPANY_SUB_BRANDS_AUTO_EXPANSION_AND_INHERITANCE_STANDARD',
+          orderIndex: 59,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار تفكيك وتوريث العلامات التجارية الفرعية للشركات الأم وحوكمة مطابقة الماركات التابعة في بونات الكاشير (Parent Company Umbrella Sub-Brands De-anonymization & Inheritance Standard)',
+          titleEn: 'Parent Company Umbrella Sub-Brands De-anonymization & Inheritance Standard',
+          descriptionAr:
+              'معيار إلزامي يضمن التعرف التلقائي الكامل على كافة الماركات والعلامات التجارية الفرعية التابعة للشركات الأم (مثل: ديفا، فيبا، ماكسيل ماجيك، فلفيتا لشركة أدكو | ومولتو، هوهوز، توداي، فريسكا لشركة إيديتا | وصانسيلك، كلير، ريكسونا، أكس، سيجنال لشركة يونيليفر | وداوني، أريال، تايد، فيري لشركة بروكتر آند جامبل) عند فحص الفواتير، وحقنها صراحةً في تعليمات الذكاء الاصطناعي لمنع استبعادها بدعوى اختلاف اسم الماركة عن اسم الشركة الأم، نظراً لأن أنظمة كاشير السوبرماركت تطبع أسماء الماركات فقط دون اسم الشركة القابضة.',
+          descriptionEn:
+              'Mandatory architectural standard enforcing the automatic decomposition and injection of all sub-brands and umbrella trade names owned by parent holding companies (e.g. Diva, Feba, Maxel Magic, Velveta for ADCO | Molto, Hohos, Todo, Freska for Edita | Sunsilk, Clear, Rexona, Axe, Signal for Unilever | Downy, Ariel, Tide, Fairy for P&G) into AI auditor prompts. This prevents false rejections caused by strict brand isolation when POS receipts only print product sub-brand titles rather than parent company corporate names.',
+          logicAr:
+              '1. خريطة العلامات الفرعية الذكية (Sub-Brands Taxonomy): بناء خريطة معتمدة للشركات الكبرى تضم كافة ماركاتها الشائعة، مع استخراج تلقائي للبادئات المميزة من كتالوج الأصناف المختارة.\n2. التوريث الإلزامي في البرومبت (Prompt Brand De-anonymization): عند إنشاء أو تحديث أي حملة، يقوم النظام تلقائياً بحقن بند صريح: "العلامات والماركات التابعة لشركة [X] في هذا العرض تشمل صراحة: [ماركة 1، ماركة 2...]" وتنبيه الذكاء الاصطناعي بأن بونات الكاشير تطبع هذه الماركات دون اسم الشركة الأم وتُحتسب 100% لصالح الشركة.\n3. تنقية مسميات قواعد العروض الترويجية: منع تسرب أسماء منتجات غير متعلقة (مثل استبدال "منتجات أكس" بأسماء منتجات الشركة الحقيقية).\n4. الاعتماد الفوري لأسطر الماركات المعتمدة: أي سطر في الفاتورة يطابق إحدى العلامات التجارية الفرعية للشركة المؤهلة يُسجل بـ isTargetCompany = true ويُجمع تلقائياً في targetCompanyTotal.',
+          logicEn:
+              '1. Sub-Brands Taxonomy: maintains a canonical dictionary of parent company brands combined with dynamic token extraction from selected campaign products.\n2. Prompt Brand De-anonymization: automatically injects explicit sub-brand declarations into Gemini auditor prompts, instructing that POS receipts only print brand names and asserting 100% eligibility for the parent company.\n3. Rule Trigger Cleansing: eliminates mismatched copied rule headers ensuring trigger products accurately reflect active tenant brands.\n4. Automatic Qualified Line Item Extraction: any receipt line matching verified sub-brands is flagged with isTargetCompany = true and added to targetCompanyTotal.',
+          exampleInput:
+              'بون كاشير من أسواق فتح الله سموحة يحتوي على منتجات شركة أدكو: "ديفا هاند ووش 500جم" (79 ج) + "ديفا سائل الاستحمام" (315 ج) بإجمالي 394 ج.م، بينما اسم الشركة في الحملة مسجل كـ "ادكو" واسم الماركة على البون هو "ديفا" فقط.',
+          exampleOutput:
+              'التعرف الفوري على براند "ديفا" كعلامة تجارية معتمدة لشركة "ادكو"، واحتساب targetCompanyTotal = 394.0 ج.م، ومطابقة قاعدة الحد الأدنى (340 ج.م)، واعتماد الفاتورة (isValid = true) ومنح كوبون الـ 50 جنيه بنجاح.',
+          tags: ['sub-brands', 'umbrella-brands', 'adco-diva', 'feba', 'maxel-magic', 'edita-molto', 'unilever-sunsilk', 'pos-naming-discrepancy', 'air-59'],
+          lastUpdated: '2026-10-01',
+        ),
+        const AiDirectiveModel(
+          id: 'AIR-60',
+          code: 'AUTOMATED_AI_BRAND_CLUSTERING_AND_SUB_BRAND_CATALOG_INGESTION_STANDARD',
+          orderIndex: 60,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار التصنيف العنقودي التلقائي للعلامات والماركات الفرعية بالذكاء الاصطناعي عند استيراد الكتالوج (Automated AI Brand Clustering & Sub-Brand Catalog Ingestion Standard)',
+          titleEn: 'Automated AI Brand Clustering & Sub-Brand Catalog Ingestion Standard',
+          descriptionAr:
+              'معيار معماري متقدم يُحوّل ملفات الكتالوج المسطحة (المرفوعة عبر Excel أو CSV والمحتوية فقط على الباركود واسم الصنف) تلقائياً إلى مجموعات وعناقيد مهيكلة للعلامات التجارية التابعة للشركة (Brand Clusters) عبر نموذج الذكاء الاصطناعي والمحلل المعجمي. يتم تصنيف كل منتج لعلامته التجارية الفرعية وتوليد فلاتر وأزرار شرائح سريعة (Brand Chips) في شاشة إنشاء الحملات الترويجية، مما يتيح تخصيص العروض بنقرة واحدة ومنع الأخطاء البشرية كلياً.',
+          descriptionEn:
+              'Advanced architectural standard automatically clustering flat catalog uploads (Excel/CSV files containing only Barcode + Product Title) into structured parent-company Brand Clusters using Gemini AI and lexical parsers. Products are assigned their canonical sub-brand, populating instant interactive Brand Chips in campaign creation wizards for 1-click promo configuration and zero human naming errors.',
+          logicAr:
+              '1. التحليل العنقودي التلقائي عند الرفع (AI Clustering at Upload): عند استيراد أصناف الشركة من ملف Excel/CSV، يقوم الذكاء الاصطناعي بتحليل أسطر المنتجات واستنتاج الماركة التابعة (مثل: ديفا، فيبا، ماكسيل ماجيك، فلفيتا لشركة ادكو) وتصنيفها في حقل العلامة التجارية.\n2. تسجيل الماركات المعتمدة في ملف الشركة (Company Brands Auto-Population): تجميع العلامات التجارية الفريدة المستخرجة وتحديث وثيقة الشركة في Firestore بحقل brands لتكون مرجعاً دائماً للشركة.\n3. أزرار وشرائح الماركات في شاشة إنشاء الحملات (Campaign Wizard Brand Chips): عند اختيار الشركة لإنشاء حملة، تظهر فورياً أزرار لجميع علاماتها التجارية (مثل: [الكل (341)] [ديفا (48)] [فيبا (120)] [ماكسيل ماجيك (65)]) مع عدد الأصناف، وتتيح للمسؤول بنقرة واحدة اختيار جميع منتجات ماركة محددة.\n4. التوليد التلقائي لعنوان وقواعد العرض: كتابة مسميات العروض الترويجية باسم الماركة الحقيقية المحددة تلقائياً (مثلاً: "عرض منتجات ديفا" أو "عرض منتجات ادكو") ومنع أي مسميات منسوخة أو خاطئة.\n5. الربط الصارم مع محرك تدقيق الفواتير: تغذية مدقق الفواتير بقائمة الماركات المحددة رسمياً ليعتمد الفواتير الصادرة بها فورياً دون أي رفض خاطئ.',
+          logicEn:
+              '1. AI Clustering at Upload: during Excel/CSV ingestion, AI evaluates each item title to deduce its umbrella sub-brand and clusters them into distinct brand families.\n2. Company Brands Auto-Population: aggregates distinct extracted brands and persists them in the company profile as an authoritative catalog taxonomy.\n3. Campaign Wizard Brand Chips: displays interactive brand chips in the campaign creation wizard (e.g. [All (341)], [Diva (48)], [Feba (120)], [Maxel Magic (65)]), allowing 1-click selection of whole sub-brands.\n4. Automated Rule Title Generation: automatically prefixes promo rule titles with verified brand names, eliminating copied alien brand names.\n5. Receipt Audit Prompt Alignment: feeds the verified brand list into the receipt auditor prompt to guarantee zero-rejection on cashier printouts.',
+          exampleInput:
+              'رفع ملف إكسيل لشركة "ادكو" يحتوي على 341 صنفاً فقط بالاسم والباركود دون تصنيف، مثل: "ديفا هاند ووش 500 مل"، "فيبا ليمون 4 لتر"، "ماكسيل ماجيك أرضيات".',
+          exampleOutput:
+              'يقوم الـ AI آلياً بتفكيك الكتالوج إلى عناقيد: [ديفا (48 صنف)]، [فيبا (120 صنف)]، [ماكسيل ماجيك (65 صنف)]، [فلفيتا (50 صنف)]. وعند إنشاء الحملة يظهر تبويب لكل براند، ويختار المسؤول "عرض ديفا" بضغطة زر وتتولد القاعدة وتُقبل فواتير فتح الله سموحة فورياً دون أي خطأ.',
+          tags: ['brand-clustering', 'sub-brands', 'catalog-ingestion', 'excel-import', 'brand-chips', 'adco-diva', 'feba', 'campaign-wizard', 'air-60'],
+          lastUpdated: '2026-10-01',
+        ),
+        const AiDirectiveModel(
+          id: 'AIR-61',
+          code: 'SINGLE_RECEIPT_INTEGRITY_AND_STRICT_MULTI_RECEIPT_MERGING_REJECTION_INVARIANT',
+          orderIndex: 61,
+          category: AiDirectiveCategory.fraudSecurity,
+          titleAr: 'معيار نزاهة واستقلالية الفاتورة الواحدة وحظر دمج وتجميع بونات الشراء المنفصلة (Single-Receipt Integrity & Strict Multi-Receipt Merging Rejection Invariant)',
+          titleEn: 'Single-Receipt Integrity & Strict Multi-Receipt Merging Rejection Invariant',
+          descriptionAr:
+              'حوكمة أمنية صارمة تمنع دمج أو تجميع بونين أو أكثر منفصلين (سواء تم تصويرهما جنباً إلى جنب في كادر واحد أو تم رفعهما عبر أجزاء متتابعة) للوصول للحد الأدنى للإنفاق أو تجميع السلات الشرائية. يشترط النظام أن تكون كل مطالبة بجائزة مستندة حصراً إلى فاتورة كاشير واحدة مستقلة بذاتها برأس واحدة ورقم فاتورة واحد وتوقيت واحد وإجمالي واحد. ويُقتصر قبول الصور المتعددة حصراً على أجزاء الفاتورة الواحدة الطويلة جداً مع التحقق الصارم من تطابق هوية الفاتورة وتطبيق منع التكرار المتداخل (Cross-Seam Deduplication).',
+          descriptionEn:
+              'Strict anti-fraud governance prohibiting the merging or aggregation of two or more distinct receipts (whether captured side-by-side in one frame or uploaded as multi-part images) to artificially meet minimum spend thresholds or aggregate baskets. Every validated claim must strictly stem from a single independent POS receipt with a single header, unique receipt ID, unified timestamp, and single total. Multi-part capture is strictly restricted to sequential segments of a single long physical receipt with mandatory cross-seam line deduplication.',
+          logicAr:
+              '1. معيار الفاتورة الواحدة الحصري (Single-Receipt Invariant): يُلزم النظام بأن كل معاملة جائزة تمثل فاتورة شراء واحدة مستقلة برقم واحد وتاريخ ووقت واحد.\n2. حظر دمج البونات المنفصلة: رصد أي محاولة لدمج بونين بأرقام مختلفة أو توقيتات مختلفة (مثل "رقم 64 + رقم 109") يؤدي فوراً إلى الرفض الحتمي (isValid = false و chancesEarned = 0) مع تسجيل مخالفة صريحة في unfulfilledConditions.\n3. قصر الصور المتعددة على الفواتير الطويلة (Genuine Long Receipts Only): يُسمح برفع أجزاء متتابعة فقط إذا كانت لنفس الفاتورة الفيزيائية الواحدة الطويلة من الأعلى إلى الأسفل (نفس الترويسة ونفس رقم الفاتورة ونفس الفرع والماكينة والتوقيت).\n4. منع التكرار المتداخل بين فواصل الصور (Cross-Seam Line Deduplication): استبعاد الأسطر المكررة التي تظهر في فواصل التقاط الصور المتتابعة لضمان عدم مضاعفة الكميات أو المبالغ.\n5. البوابة البرمجية الصارمة في Dart: حظر أي ناتج للذكاء الاصطناعي يحتوي على علامة الجمع "+" في رقم الفاتورة أو دمج مشتريات متعددة ما لم تكن الحملة مفعلة لخيار allowComplementaryReceipts الاستثنائي.',
+          logicEn:
+              '1. Single-Receipt Invariant: enforces that every prize claim stems from one independent physical POS receipt with a single receipt ID and timestamp.\n2. Strict Rejection of Multi-Receipt Splicing: detecting multiple receipts with distinct IDs or times (e.g. "#64 + #109") immediately triggers rejection (isValid = false, chancesEarned = 0) with explicit fraud notice in unfulfilledConditions.\n3. Long Receipt Multi-Part Restriction: multi-part uploads are strictly restricted to sequential segments of one physical long receipt from Top to Bottom (identical header, receipt ID, POS, branch, and timestamp).\n4. Cross-Seam Line Deduplication: automatically deduplicates overlapping line items across frame boundaries to prevent double-counting pieces or amounts.\n5. Programmatic Dart Gatekeeper: enforces deterministic override rejecting any receipt number with "+" or spliced baskets unless allowComplementaryReceipts is explicitly enabled.',
+          exampleInput:
+              'تصوير بونين كاشير منفصلين من كارفور أو فتح الله بأرقام مختلفة (رقم 142 ورقم 185) ورفعهما معاً لمحاولة استيفاء حد الإنفاق الأدنى 400 ج.م.',
+          exampleOutput:
+              'رفض فوري للعملية (isValid = false) مع رسالة: "مخالفة معايير الأهلية: تم رصد محاولة دمج بونات شراء منفصلة ذات أرقام أو توقيتات مختلفة في معاملة واحدة. يشترط النظام استيفاء شروط العرض في فاتورة شراء واحدة مستقلة."',
+          tags: ['single-receipt-integrity', 'anti-fraud', 'multi-receipt-rejection', 'cross-seam-deduplication', 'long-receipt', 'air-61'],
+          lastUpdated: '2026-10-01',
+        ),
+        const AiDirectiveModel(
+          id: 'AIR-62',
+          code: 'MULTIMODAL_VOICE_INTERACTION_AND_AUDIO_DIRECTIVES_TEACHING_ENGINE',
+          orderIndex: 62,
+          category: AiDirectiveCategory.nlpMatching,
+          titleAr: 'معيار الحوكمة والتفاعل الصوتي متعدد الوسائط وتدريب الذكاء الاصطناعي بالصوت الطبيعي (Multimodal Voice Interaction & Audio Directives Teaching Engine)',
+          titleEn: 'Multimodal Voice Interaction & Audio Directives Teaching Engine',
+          descriptionAr:
+              'حوكمة تفاعلية متطورة تتيح لمسؤولي النظام ومديري الحملات التحدث بالصوت الطبيعي (Natural Spoken Voice) داخل استوديو الشات والتدريب التفاعلي لعقل الذكاء الاصطناعي (AI Brain Co-Pilot Studio) تماماً كما في أنظمة Gemini وAntigravity المتقدمة. يقوم النظام بتسجيل الصوت وحفظه وبثه مباشرة إلى نموذج Gemini 3.7 Flash عبر المعالجة متعددة الوسائط (Multimodal Audio Streaming)، حيث يقوم بتفريغ النص المنطوق حرفياً (Spoken Voice Transcription) بالعامية المصرية واللهجات الإقليمية ومصطلحات البيع بالتجزئة وسلاسل السوبرماركت، واستخلاص نية المستخدم لصياغة معايير حوكمة ذكية فورية (AIR Directives) أو تشخيص البونات المرفوضة دون الحاجة للكتابة اليدوية.',
+          descriptionEn:
+              'Advanced interactive multimodal voice governance allowing system administrators and campaign managers to speak via natural voice notes within the AI Brain Co-Pilot Studio, mirroring cutting-edge Gemini and Antigravity voice paradigms. The system records audio, streams it natively to Gemini 3.7 Flash via multimodal audio parts, performs verbatim speech transcription across Egyptian dialect and GCC FMCG terminology, and maps spoken intents into formal AI Brain Directives or real-time receipt diagnostics without manual typing.',
+          logicAr:
+              '1. التقاط الصوت عبر ميكروفون المتصفح/الجهاز (Cross-Platform Voice Capture): استخدام ترميز WAV/PCM عالي النقاء لضمان دقة الاستماع الصوتي وخلوه من التشويش.\n2. التضمين متعدد الوسائط (Multimodal Audio Part Injection): إرسال التسجيل الصوتي ككتلة بيانات صوتية نقية (audio/wav أو audio/webm) ضمن استدعاء Gemini 3.7 Flash في generateContent بجانب سياق البونات الفعلي.\n3. التفريغ الصوتي الحرفي فائق الدقة (Verbatim Transcription Invariant): إلزام النموذج بتفريغ الكلمات المنطوقة حرفياً باللغة المنطوقة (عامية مصرية، فصحى، إنجليزية، أسماء ماركات) في حقل transcription.\n4. استخلاص النية التوجيهية وتوليد المعيار (Spoken-to-Directive Synthesis): إذا تضمن التسجيل الصوتي رغبة في اعتماد قاعدة جديدة (مثل: "لو اشترى قطعتين تريزيميه ياخد قسيمة 50 جنيه") يتم آلياً استخراج بنية المعيار المعياري AIR وتجهيزه للاعتماد بنقرة واحدة.\n5. مشغل صوتي تفاعلي حي (Interactive Chat Audio Bubble): إتاحة الاستماع للتسجيل الصوتي داخل فقاعة الرسالة مع عداد زمني ورسم بياني لموجة الصوت وخيار التحويل المباشر لنص في حقل الإدخال (Speech-to-Text Dictation).',
+          logicEn:
+              '1. Cross-Platform Voice Capture: leverages high-fidelity WAV/PCM encoder for pristine audio recording across web, desktop, and mobile.\n2. Multimodal Audio Part Injection: streams raw audio bytes (audio/wav or audio/webm) directly into Gemini 3.7 Flash generateContent payload alongside receipt image data.\n3. Verbatim Transcription Invariant: mandates precise transcription of spoken speech in transcription field across colloquial Arabic and retail terminology.\n4. Spoken-to-Directive Synthesis: automatically translates verbal rule descriptions into formalized AIR Directives ready for 1-click cloud synchronization.\n5. Interactive Chat Audio Bubble: provides in-chat playback with waveform visualizers, elapsed duration, and live Speech-to-Text dictation into the prompt input field.',
+          exampleInput:
+              'تسجيل صوتي مدته 8 ثوانٍ يقول فيه المسؤول: "عاوزين نعمل قاعدة لو العميل اشترى عبوتين ديفا هاند ووش 500 مل من فتح الله ياخد قسيمة 25 جنيه حتى لو الكاشير كتبها ديفا سائل يدين".',
+          exampleOutput:
+              'يقوم عقل الذكاء الاصطناعي بتفريغ الصوت حرفياً: [تفريغ الصوت: "عاوزين نعمل قاعدة لو العميل اشترى عبوتين ديفا هاند ووش 500 مل من فتح الله ياخد قسيمة 25 جنيه حتى لو الكاشير كتبها ديفا سائل يدين"] ويصيغ معيار الحوكمة AIR-XX مع الشروط والأمثلة وزر "اعتماد سحابي فوراً".',
+          tags: ['voice-recording', 'audio-directives', 'gemini-multimodal-audio', 'speech-to-text', 'ai-copilot-voice', 'air-62'],
+          lastUpdated: '2026-10-01',
+        ),
+        const AiDirectiveModel(
+          id: 'AIR-68',
+          code: 'SINGLE_LARGE_BOTTLE_PRICE_ISOLATION_AND_TWIN_BUNDLE_DISAMBIGUATION_STANDARD',
+          orderIndex: 68,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار عزل أسعار العبوات الكبيرة الفردية وحوكمة عدم مضاعفة الحزم الترويجية (Single Large Bottle Price Isolation & Twin Bundle Disambiguation Standard)',
+          titleEn: 'Single Large Bottle Price Isolation & Twin Bundle Disambiguation Standard',
+          descriptionAr:
+              'معيار حوكمة إلزامي يمنع تفعيل قواعد الحزم المزدوجة (Twin Bundle Heuristics) بالخطأ على العبوات الفردية الكبيرة (بحجم 600 مل، 700 مل، 900 مل، 1 لتر). نظراً لأن العبوات الكبيرة (مثل شامبو تريزيمي 600 مل أو صانسيلك 700 مل) تباع في قطاع التجزئة بأسعار مرتفعة بطبيعتها (200 إلى 350 ج.م للعبوة الواحدة)، يضمن المعيار عدم احتسابها كـ (2 قطعة) بناءً على سعرها فقط ما لم يذكر في سطر الصنف صراحة أنه عرض مزدوج (شامبو + بلسم أو عرض 2ق أو باندل)، مما يمنع مضاعفة الهدايا والفرص بالخطأ للمشترين لعبوة واحدة كبيرة.',
+          descriptionEn:
+              'Mandatory governance standard preventing price-based twin bundle heuristics from falsely inflating single large bottles (600ml, 700ml, 900ml, 1L). Because large family-size bottles (e.g. Tresemme 600ml or Sunsilk 700ml) inherently retail at premium price points (200-350+ EGP per single unit), this standard guarantees they are never resolved as 2 physical pieces solely due to their high regular price unless the item line explicitly specifies a physical combo (Shampoo + Conditioner, 2-piece shrink, or bundle pack), preventing unwarranted prize duplication.',
+          logicAr:
+              '1. حارس العبوات الفردية الكبيرة (Single Large Bottle Guard): فحص أسماء أصناف العناية بالشعر ومطابقة دلالات الأحجام الكبيرة (600مل، 700مل، 900مل، 1 لتر، 600ml، 700ml، 900ml، 1L).\n2. أولوية الحزم الصريحة: إذا احتوى السطر على كلمات صريحة للحزم المزدوجة (مثل "شرنك"، "دبل"، "مزدوج"، "باندل"، "2 قطعة"، أو احتوى على "شامبو" و "بلسم" معاً)، يُعتمد كقطعتين (qty * 2).\n3. عزل فحص السعر التقديري: في حال خلو الصنف من دلالات الحزم الصريحة وكونه عبوة كبيرة (600مل فما فوق)، يُمنع منعاً باتاً تطبيق شرط السعر (240+ ج.م) لمضاعفة الكمية، وتُعامل العبوة كقطعة واحدة بالضبط (effectiveQty = 1).\n4. منع مضاعفة الجوائز الخاطئة: حماية قواعد العروض المشروطة بحجم 600 مل (مثل "اشترى 1 شامبو تريزيمي 600 مل واحصل على 1 تريزيمي 400 مل") من منح هديتين لعميل اشترى عبوة واحدة فقط.\n5. التوافق التام مع الذكاء الاصطناعي: حقن هذه الحوكمة في برومبت مدقق الفواتير لضمان فهم Gemini لطبيعة العبوات العائلية وعدم تخمين كميات مضاعفة بناءً على السعر.',
+          logicEn:
+              '1. Single Large Bottle Guard: inspects hair care product titles for large volume designations (600ml, 700ml, 900ml, 1L).\n2. Explicit Bundle Precedence: if an item explicitly contains combo keywords (shrink, bundle, twin, 2 pcs) or combines Shampoo + Conditioner in the title, it resolves to qty * 2.\n3. Price Heuristic Isolation: for large bottles without explicit combo tags, price thresholds (>= 240 EGP) are strictly bypassed, retaining exact single-unit quantity (effectiveQty = 1).\n4. Zero Prize Duplication Invariant: ensures 600ml trigger rules (e.g. buy 1 Tresemme 600ml -> get 1 Tresemme 400ml) disburse strictly 1 reward for 1 bottle purchased.\n5. AI Prompt Alignment: injects this invariant into receipt auditor system instructions, ensuring Gemini understands family-size pricing dynamics.',
+          exampleInput:
+              'بون كاشير من جملة ماركت المنصورة يحتوي على سطر واحد: "تريزيمى شامبو كيراتين وزيت الارجان 600مل" بكمية 1 وسعر 210 ج.م وخصم 45 ج.م (إجمالي السعر الأصلي 255 ج.م)، وعرض الحملة يشترط شراء 1 قطعة تريزيمي 600 مل للحصول على 1 قطعة تريزيمي 400 مل هدية.',
+          exampleOutput:
+              'احتساب الكمية الفعالة = 1 قطعة فقط (دون مضاعفة رغم أن السعر 255 ج.م >= 240 ج.م)، ومطابقة قاعدة تريزيمي بمضاعف 1 فقط (multiplier = 1)، واستحقاق العميل بالضبط 1 قطعة تريزيمي 400 ملل (Tresemme Cond Botanix Curl 400Ml × 1) دون أي مضاعفة زائدة.',
+          tags: ['single-large-bottle', 'tresemme-600ml', 'twin-bundle-guard', 'promotional-rules', 'unit-economics', 'gomla-market', 'air-68'],
+          lastUpdated: '2026-10-03',
+        ),
+        const AiDirectiveModel(
+          id: 'AIR-69',
+          code: 'BRAND_SEGREGATED_TWIN_BUNDLE_BARCODES_AND_SUNSILK_COMBO_RECOGNITION_STANDARD',
+          orderIndex: 69,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار العزل الصارم لباركودات الحزم المزدوجة بين العلامات التجارية وحوكمة عروض صانسيلك (Brand-Segregated Twin Bundle Barcodes & Sunsilk Combo Recognition Standard)',
+          titleEn: 'Brand-Segregated Twin Bundle Barcodes & Sunsilk Combo Recognition Standard',
+          descriptionAr:
+              'معيار حوكمة معماري يعالج معضلتين متزامنتين في تدقيق الفواتير: 1) العزل التام لباركودات الحزم المزدوجة المعتمدة (Twin Bundle Barcodes) بحيث يطابق باركود حزمة صانسيلك عروض صانسيلك فقط، ويطابق باركود تريزيمي عروض تريزيمي فقط، لمنع تسرب الباركودات بين الماركات ومنح هدايا تريزيمي على مشتريات صانسيلك. 2) التعرف الفوري على عبوات صانسيلك 350 مل المسعرة بـ 184 ج.م (أو 170+ ج.م في أسواق فتح الله وجملة ماركت) كحزمة مزدوجة مكونة من قطعتين (شامبو 350 مل + بلسم 350 مل) واعتماد استحقاق فوتشر الـ 50 ج.م مباشرة حتى لو اختصر كاشير المتجر السطر إلى "صنسيلك شامبو 350 م".',
+          descriptionEn:
+              'Mandatory architectural governance resolving two simultaneous retail audit challenges: 1) Strict segregation of verified twin-bundle barcodes by brand family, ensuring Sunsilk promo barcodes exclusively trigger Sunsilk rules and Tresemme barcodes exclusively trigger Tresemme rules, permanently eliminating cross-brand prize contamination. 2) Automatic recognition of Sunsilk 350ml bundles priced at 184 EGP (>= 170 EGP in Fathalla & Gomla Market) as a 2-piece physical combo pack (Shampoo 350ml + Conditioner 350ml), instantly qualifying for the 50 EGP voucher despite cashier text truncation.',
+          logicAr:
+              '1. عزل باركودات الحزم المزدوجة حسب الماركة: تقسيم باركودات الحزم إلى _knownSunsilkTwinBundleBarcodes و _knownTresemmeTwinBundleBarcodes، ومنع أي باركود من تجاوز حدود علامته التجارية.\n2. التعرف على التهجئة المتعددة لصانسيلك: دعم "صنسيلك" و "صانسيلك" و "صنسلك" في كافة محركات فحص الحزم والأسعار.\n3. كاشف حزم صانسيلك المسعرة بـ 184 ج.م: أي سطر صانسيلك 350 مل بسعر 170+ ج.م (مثل 184 ج.م في فتح الله المحلة) هو حزمة مزدوجة (شامبو + بلسم) ويُعامل كقطعتين (effectiveQty = 2).\n4. استحقاق فوتشر الـ 50 ج.م: تحقيق شرط الـ 2 قطعة لقاعدة صانسيلك ومنح فوتشر 50 ج.م ومنع رسالة الرفض الخاطئة (تم رصد 1 قطعة والمطلوب 2).\n5. الحماية من تسرب الهدايا: منع منح هدايا تريزيمي نهائياً لأي فاتورة تقتصر مشترياتها على صانسيلك.',
+          logicEn:
+              '1. Brand-Specific Barcode Segregation: partitions twin barcodes into brand-isolated sets, preventing cross-brand contamination.\n2. Multi-Variant Sunsilk Normalization: recognizes all phonetic spellings ("صنسيلك", "صانسيلك", "صنسلك", "sunsilk") across all pricing heuristics.\n3. Sunsilk 184 EGP Bundle Detector: classifies Sunsilk 350ml priced >= 170 EGP as a 2-piece combo pack (effectiveQty = 2).\n4. 50 EGP Voucher Entitlement: satisfies the 2-piece minimum quantity for Sunsilk, disbursing the 50 EGP voucher and eliminating spurious 1-piece rejections.\n5. Zero Cross-Brand Leakage: strictly prevents Tresemme prizes from being awarded on Sunsilk purchases.',
+          exampleInput:
+              'فاتورة من أسواق فتح الله المحلة (127/4/241/011026) تحتوي على سطر واحد: "صنسيلك شامبو 350 م" بكمية 1 وسعر 184.00 ج.م مع تدوين البروموتر: "تم استلام فوتشر 50".',
+          exampleOutput:
+              'التعرف على السعر 184 ج.م كحزمة مزدوجة لصانسيلك (2 قطعة فيزيائية)، ومطابقة قاعدة صانسيلك (اشترى 2 قطعة واحصل على فوتشر 50 ج.م)، واعتماد الفاتورة فورياً ومنح فوتشر 50 ج.م، ومنع أي خلط مع تريزيمي.',
+          tags: ['sunsilk-twin-bundle', 'sunsilk-184-egp', 'barcode-segregation', 'fathalla-mahalla', 'cross-brand-isolation', 'air-69'],
+          lastUpdated: '2026-10-03',
+        ),
+        const AiDirectiveModel(
+          id: 'AIR-70',
+          code: 'POS_MUTILATED_SUB_BRAND_AND_SPEND_MULTIPLIER_TOLERANCE_GOVERNANCE',
+          orderIndex: 70,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار حوكمة تعويض تفاوت الخصومات وحروف الكاشير المبتورة في احتساب مضاعفات الإنفاق (POS Mutilated Sub-Brand & Spend Multiplier Tolerance Governance)',
+          titleEn: 'POS Mutilated Sub-Brand & Spend Multiplier Tolerance Governance Standard',
+          descriptionAr:
+              'معيار حوكمة يعالج معضلتين متزامنتين في فحص فواتير عروض الإنفاق التراكمي (Spend-Based Multiplier Campaigns): 1) معالجة إسقاط وتشويه حروف العلامات التجارية الفرعية بطابعات الكاشير (مثل طباعة علامة "سبيد (Speed)" لمنظفات الأرضيات كـ "سيد منظف ارضيات" بحذف حرف الباء) وربطها فورياً بالعلامة الأم التابعة لشركة أدكو (ADCO) واعتمادها كصنف أصيل في سلة الإنفاق. 2) تعويض سماحية خصومات الكاشير (Discount Tolerance) في احتساب مضاعفات الهدايا (count = (totalEligibleSpend + discountTolerance) ~/ divisor)، بحيث إذا اشترى العميل بمبالغ تتجاوز مضاعفات الحد الأدنى بالأسعار الأساسية وقبل الخصومات أو كان صافي مشترياته قريباً من عتبة الكارت الثاني ضمن سماحية العرض، يحصل العميل على حقه العادل في كارتين (2 كوبون مشتريات) بدلاً من تقليص استحقاقه لكارت واحد بسبب القسمة الصحيحة الصماء أو سقوط سطر صنف مبتور الحروف.',
+          descriptionEn:
+              'Mandatory governance standard resolving two simultaneous FMCG receipt audit hurdles in spend-based multiplier campaigns: 1) Automatic resolution of cashier-truncated brand strings (such as ADCO Speed floor cleaner printed as "سيد منظف ارضيات" dropping the letter "B") into canonical holding company sub-brands, guaranteeing 100% item retention in the eligible spend basket. 2) Injecting discount tolerance into spend multiplier divisions (count = (totalEligibleSpend + discountTolerance) ~/ divisor), ensuring customers whose purchases qualify for multiple vouchers under regular prices or fall within campaign tolerance receive their full entitlement of 2 cards rather than being restricted to 1 card by naive integer division or dropped POS lines.',
+          logicAr:
+              '1. تطبيع حروف العلامات المبتورة (POS Truncation Normalizer): تحويل "سيد منظف" و "سيد ارضيات" و "سيد باودر" تلقائياً إلى العلامة المعتمدة "سبيد" لشركة أدكو.\n2. توريث منتجات الشركة الشاملة (Umbrella Spend Fallback): في قواعد الإنفاق المالي العامة (by_spend)، تتأهل كافة الأصناف التي تحمل علامة الشركة (isTargetCompany = true) تلقائياً حتى لو خلا مسمى القاعدة من تفصيل أسماء الماركات الفرعية.\n3. تطبيق سماحية الخصم على المضاعفات: احتساب عدد الكروت الفعالة بناءً على (totalEligibleSpend + discountTolerance) ~/ divisor لمنع ضياع الكارت الثاني بسبب فوارق جنيهات معدودة ناتجة عن خصومات الكاشير الترويجية.\n4. استحقاق الكارتين لفواتير طنطا: احتساب كامل الأصناف الـ 8 لفاتورة طنطا أوتليت (263/2/243/021026) بإجمالي صافي 714 ج.م (وإجمالي أصلي 838 ج.م) واستحقاق كارتين (2 فوتشر 50 ج.م بقيمة 100 ج.م)، وكذلك فاتورة (213/5/243/021026) بإجمالي 802 ج.م وكارتين.\n5. التوافق في عقل الذكاء الاصطناعي: تزويد Gemini بتوجيهات صريحة لاستخراج ماركات أدكو (ديفا، فيبا، كلوريل، فلفيتا، ماكسيل ماجيك، سبيد) دون تفويت أي سطر.',
+          logicEn:
+              '1. POS Dropped-Character Normalization: converts "سيد منظف", "سيد ارضيات", "سيد باودر" to ADCO\'s canonical "سبيد (Speed)" detergent brand.\n2. Umbrella Spend Fallback: in by_spend rules, all isTargetCompany products match cleanly even when rule titles lack explicit brand keywords.\n3. Multiplier Tolerance Injection: computes vouchers using (totalEligibleSpend + discountTolerance) ~/ divisor, preventing customers from losing a second earned voucher due to small promotional price drops.\n4. Exact Dual-Card Resolution: unlocks 2 scratch cards (100 EGP) for Tanta receipts (263/2/243/021026 at 714 EGP net / 838 EGP gross, and 213/5/243/021026 at 802 EGP net).\n5. AI System Instruction Alignment: Gemini prompts explicitly incorporate ADCO brands and Speed printer variations for zero SKU leakage.',
+          exampleInput:
+              'فاتورة أسواق فتح الله طنطا أوتليت (263/2/243/021026) تحتوي على 7 أصناف أدكو بـ 658 ج.م + سطر 18: "سيد منظف ارضيات 28.00" بكمية 2 وإجمالي 56 ج.م (إجمالي صافي 714 ج.م وإجمالي أسعار أصلية 838 ج.م) في حملة حدها الأدنى 340 ج.م مع مضاعفة الجوائز.',
+          exampleOutput:
+              'التعرف على سطر "سيد منظف ارضيات" كمنتج سبيد التابع لأدكو، واحتساب إجمالي المشتريات = 714 ج.م، ومطابقة مضاعف 2 كارت (2 × كوبون مشتريات 50 ج.م بإجمالي 100 ج.م) ومنح الكارتين بالكامل للعميل.',
+          tags: ['adco-speed-sayed', 'pos-truncated-characters', 'spend-multipliers', 'discount-tolerance', 'fathalla-tanta-outlet', 'air-70'],
+          lastUpdated: '2026-10-03',
+        ),
+        const AiDirectiveModel(
+          id: 'AIR-71',
+          code: 'GENERIC_MULTIPACK_BRAND_AMBIGUITY_AND_STRICT_ISOLATION_GOVERNANCE',
+          orderIndex: 71,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار الحظر الصارم لاحتساب أصناف الشوكولاتة والمالتي باك العامة دون علامة تجارية صريحة (Generic Multipack Brand Ambiguity & Strict Brand Isolation Governance)',
+          titleEn: 'Generic Multipack Brand Ambiguity & Strict Brand Isolation Governance Standard',
+          descriptionAr:
+              'معيار حوكمة صارم يمنع نموذج الذكاء الاصطناعي ومحركات المطابقة من افتراض أو تخمين تبعية أي صنف عام مطبوع على بون الكاشير تحت مسمى عام مثل "مالتي باك شوكولات" أو "شوكولاتة مشكلة" أو "بسكويت ويفر" لشركة الحملة الراعية (مثل كادبوري / مونديليز)، ما لم يذكر في سطر البون صراحة اسم العلامة التجارية المعتمدة للشركة (مثل: كادبوري، ديري ميلك، مورو، بابلي، أوريو، ماندولين، فليك). يضمن هذا المعيار تعيين (isTargetCompany = false) لأي صنف عام غامض، واستبعاده كلياً من إجمالي قيمة الشركة الراعية (targetCompanyTotal) ومن احتساب فرص الجوائز، لمنع صرف قسائم وهدايا مجانية على منتجات شركات منافسة أو غير تابعة للراعي.',
+          descriptionEn:
+              'Strict governance standard preventing AI models and verification engines from hallucinating or assuming brand affiliation for generic cashier line items such as "مالتي باك شوكولات" (Multipack Chocolate) or "شوكولاتة مشكلة" for target sponsoring companies (e.g. Cadbury / Mondelez) unless the item line explicitly specifies a verified brand token (Cadbury, Dairy Milk, Moro, Bubbly, Oreo, Mandolin, Flake, CDM). Guarantees that generic or ambiguous items are strictly classified as isTargetCompany = false, excluded from targetCompanyTotal and prize multipliers, permanently eliminating fraudulent or erroneous prize disbursements on competitor or unverified products.',
+          logicAr:
+              '1. حارس الأصناف العامة (Generic Item Guard): فحص أسماء المنتجات ورصد السطور العامة (مثل "مالتي باك شوكولات"، "شيكولاتة سادة"، "بسكويت ويفر"، "بسكويت شاي") التي تخلو من الماركة الصريحة.\n2. حظر الاستنتاج بالسياق (Ban Contextual Association): يُمنع الذكاء الاصطناعي منعاً باتاً من الاستناد إلى وجود أصناف كادبوري أخرى بالفاتورة لافتراض أن الصنف العام يتبع كادبوري.\n3. اشتراط رمز العلامة الصريحة: لاعتماد أي مالتي باك كمنتج لكادبوري/مونديليز، يجب أن يتضمن السطر اسماً صريحاً (كادبوري، كدبوري، ديري ميلك، مورو، بابلي، اوريو، ماندولين، فليك، سي دي ام، cdm، cadbury).\n4. عزل القيمة ومنع التضخيم: في حال عدم وجود ماركة صريحة، يُلزم النظام بتعيين isTargetCompany = false، مما يعزل قيمة الصنف (مثل 500 ج.م في فاتورة دمنهور 372/2/235/011026) من targetCompanyTotal، ويخفض الإنفاق المؤهل من 1366.25 ج إلى 866.25 ج، ويضبط استحقاق الفواتشر إلى 2 فواتشر (200 ج) بدلاً من 3 أو 4.\n5. التطبيق الفوري في البرومبت وقاعدة البيانات: حقن هذه القاعدة في تعليمات Gemini 3.7 Flash لتطبيقها حتمياً في التدقيق الفوري.',
+          logicEn:
+              '1. Generic Item Guard: flags generic descriptions lacking explicit brand indicators.\n2. Ban Contextual Association: strictly forbids inferring brand identity from surrounding receipt items.\n3. Explicit Brand Token Requirement: requires an unmistakable brand keyword (Cadbury, Moro, Bubbly, Oreo, Mandolin, Flake, CDM) to qualify.\n4. Value Isolation & Inflation Prevention: sets isTargetCompany = false on generic items, subtracting their value from eligible spend and aligning vouchers accurately (e.g. Damanhour receipt 372/2/235/011026 reduced from 1366.25 EGP to 866.25 EGP, qualifying for 2 vouchers instead of 3 or 4).\n5. Direct AI System Prompt Integration: enforces zero-hallucination compliance across all Gemini 3.7 Flash audits.',
+          exampleInput:
+              'فاتورة من أسواق فتح الله دمنهور الأندلس (372/2/235/011026) تحتوي على 3 أصناف كادبوري صريحة بـ 866.25 ج + سطر رابع: "مالتي باك شوكولات 125.00" بكمية 4 وإجمالي 500.00 ج.م في حملة كادبوري (شرط الفرصة 390 ج.م).',
+          exampleOutput:
+              'استبعاد صنف "مالتي باك شوكولات" فوراً (isTargetCompany = false)، واحتساب إجمالي كادبوري المؤهل = 866.25 ج.م فقط، واستحقاق العميل بالضبط 2 فواتشر فئة 100 ج (إجمالي 200 ج.م) بدلاً من 3 فواتشر (300 ج) أو 4 فواتشر (400 ج).',
+          tags: ['generic-multipack', 'cadbury-mondelez', 'brand-isolation', 'zero-hallucination', 'fathalla-damanhour', 'spend-governance', 'air-71'],
+          lastUpdated: '2026-10-03',
+        ),
       ];
 }
+
 
 

@@ -532,6 +532,9 @@ class EventModel {
   /// Whether entering voucher card serial numbers is strictly mandatory for promoters upon gift claim (false = optional by default).
   final bool requireVoucherSerials;
 
+  /// Whether to allow complementary / multi-receipt spend aggregation for this campaign (strictly false by default - AIR-61).
+  final bool allowComplementaryReceipts;
+
   EventModel({
     required this.id,
     required this.eventName,
@@ -565,6 +568,7 @@ class EventModel {
     this.multiplierBasis = 'both',
     this.maxChancesPerReceipt = 0,
     this.requireVoucherSerials = false,
+    this.allowComplementaryReceipts = false,
   });
 
   bool get isExpired {
@@ -721,6 +725,7 @@ class EventModel {
       multiplierBasis: (data['multiplierBasis'] ?? 'both').toString(),
       maxChancesPerReceipt: (data['maxChancesPerReceipt'] as num?)?.toInt() ?? 0,
       requireVoucherSerials: data['requireVoucherSerials'] == true || data['require_voucher_serials'] == true,
+      allowComplementaryReceipts: data['allowComplementaryReceipts'] == true || data['allow_complementary_receipts'] == true,
     );
   }
 
@@ -783,6 +788,7 @@ class EventModel {
       'multiplierBasis': multiplierBasis,
       'maxChancesPerReceipt': maxChancesPerReceipt,
       'requireVoucherSerials': requireVoucherSerials,
+      'allowComplementaryReceipts': allowComplementaryReceipts,
     };
   }
 
@@ -819,6 +825,7 @@ class EventModel {
     String? multiplierBasis,
     int? maxChancesPerReceipt,
     bool? requireVoucherSerials,
+    bool? allowComplementaryReceipts,
   }) {
     return EventModel(
       id: id ?? this.id,
@@ -853,6 +860,7 @@ class EventModel {
       multiplierBasis: multiplierBasis ?? this.multiplierBasis,
       maxChancesPerReceipt: maxChancesPerReceipt ?? this.maxChancesPerReceipt,
       requireVoucherSerials: requireVoucherSerials ?? this.requireVoucherSerials,
+      allowComplementaryReceipts: allowComplementaryReceipts ?? this.allowComplementaryReceipts,
     );
   }
 }

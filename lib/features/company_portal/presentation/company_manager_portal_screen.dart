@@ -22,6 +22,7 @@ import '../../../core/utils/url_builder.dart';
 import '../../../core/utils/slug_utils.dart';
 import '../../../core/widgets/campaign_suspended_screen.dart';
 import '../../client_portal/presentation/client_receipt_upload_screen.dart';
+import '../../../core/utils/responsive.dart';
 
 /// Navigation destination model for Partner Portal Dashboard
 class _PortalNavItem {
@@ -68,7 +69,6 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
   int _selectedTab = 0;
   final Set<int> _loadedTabs = {0}; // Lazy loading set: only render tabs when requested
   final Map<String, Widget> _cachedTabWidgets = {}; // High performance memoized tab widget cache (0ms instant tab switching)
-  bool _isSidebarExpanded = true;
 
   @override
   void didUpdateWidget(covariant CompanyManagerPortalScreen oldWidget) {
@@ -131,7 +131,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
           index: 0,
           icon: Icons.receipt_long_outlined,
           selectedIcon: Icons.receipt_long_rounded,
-          title: strings.invoicesAuditTitle,
+          title: strings.partnerNavInvoices,
           subtitle: isAr ? 'سجل الفواتير وتدقيق المشتريات' : (isHi ? 'इनवॉइस ऑडिट और लॉग्स' : 'Invoices Audit & Live Logs'),
           tooltip: isAr ? 'متابعة وتدقيق فواتير اليوم المرفوعة من الفروع' : 'Review live receipts from branches',
           accentColor: const Color(0xFF006C50),
@@ -140,7 +140,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
           index: 1,
           icon: Icons.account_balance_wallet_outlined,
           selectedIcon: Icons.account_balance_wallet_rounded,
-          title: strings.branchBalancesNavTitle,
+          title: strings.partnerNavBalances,
           subtitle: strings.branchBalancesNavSubtitle,
           tooltip: strings.branchBalancesNavTooltip,
           accentColor: const Color(0xFF0284C7),
@@ -149,7 +149,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
           index: 2,
           icon: Icons.confirmation_number_outlined,
           selectedIcon: Icons.confirmation_number_rounded,
-          title: strings.vouchersNavTitle,
+          title: strings.partnerNavVouchers,
           subtitle: strings.vouchersNavSubtitle,
           tooltip: strings.vouchersNavTooltip,
           accentColor: const Color(0xFFD97706),
@@ -158,7 +158,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
           index: 3,
           icon: Icons.point_of_sale_outlined,
           selectedIcon: Icons.point_of_sale_rounded,
-          title: strings.dailyBranchSalesNavTitle,
+          title: strings.partnerNavSales,
           subtitle: strings.dailyBranchSalesNavSubtitle,
           tooltip: strings.dailyBranchSalesNavTooltip,
           accentColor: const Color(0xFF2563EB),
@@ -171,7 +171,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
         index: 0,
         icon: Icons.analytics_outlined,
         selectedIcon: Icons.analytics_rounded,
-        title: strings.analyticsTitle,
+        title: strings.partnerNavAnalytics,
         subtitle: isAr ? 'المؤشرات والتحليلات والـ ROI' : (isHi ? 'एनालिटिक्स और प्रदर्शन' : 'KPIs, Analytics & Sales'),
         tooltip: isAr ? 'التقارير والتحليلات التفاعلية الشاملة للشركة' : 'Comprehensive Analytics & Reports',
         accentColor: const Color(0xFF6750A4),
@@ -180,7 +180,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
         index: 1,
         icon: Icons.compare_arrows_outlined,
         selectedIcon: Icons.compare_arrows_rounded,
-        title: strings.campaignsComparisonNavTitle,
+        title: strings.partnerNavComparison,
         subtitle: strings.campaignsComparisonNavSubtitle,
         tooltip: strings.campaignsComparisonNavTooltip,
         accentColor: const Color(0xFF006C51),
@@ -189,7 +189,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
         index: 2,
         icon: Icons.receipt_long_outlined,
         selectedIcon: Icons.receipt_long_rounded,
-        title: strings.invoicesAuditTitle,
+        title: strings.partnerNavInvoices,
         subtitle: isAr ? 'سجل الفواتير وتدقيق المنتجات والـ CSV' : (isHi ? 'इनवॉइस ऑडिट और निर्यात' : 'Invoices Audit, Fraud & CSV Export'),
         tooltip: isAr ? 'سجل الفواتير وتدقيق المنتجات والمبيعات وعمليات التصدير' : 'Invoices Log, Product Audit & CSV',
         accentColor: const Color(0xFF0284C7),
@@ -198,7 +198,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
         index: 3,
         icon: Icons.point_of_sale_outlined,
         selectedIcon: Icons.point_of_sale_rounded,
-        title: strings.dailyBranchSalesNavTitle,
+        title: strings.partnerNavSales,
         subtitle: strings.dailyBranchSalesNavSubtitle,
         tooltip: strings.dailyBranchSalesNavTooltip,
         accentColor: const Color(0xFF2563EB),
@@ -207,7 +207,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
         index: 4,
         icon: Icons.account_balance_wallet_outlined,
         selectedIcon: Icons.account_balance_wallet_rounded,
-        title: strings.branchBalancesNavTitle,
+        title: strings.partnerNavBalances,
         subtitle: strings.branchBalancesNavSubtitle,
         tooltip: strings.branchBalancesNavTooltip,
         accentColor: const Color(0xFF7C3AED),
@@ -216,7 +216,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
         index: 5,
         icon: Icons.confirmation_number_outlined,
         selectedIcon: Icons.confirmation_number_rounded,
-        title: strings.vouchersNavTitle,
+        title: strings.partnerNavVouchers,
         subtitle: strings.vouchersNavSubtitle,
         tooltip: strings.vouchersNavTooltip,
         accentColor: const Color(0xFFD97706),
@@ -225,7 +225,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
         index: 6,
         icon: Icons.phone_android_rounded,
         selectedIcon: Icons.phone_android_rounded,
-        title: strings.livePromoterSimulationNavTitle,
+        title: strings.partnerNavPromoter,
         subtitle: strings.livePromoterSimulationNavSubtitle,
         tooltip: strings.livePromoterSimulationNavTooltip,
         accentColor: const Color(0xFF0D9488),
@@ -240,9 +240,11 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     required AppStrings strings,
     required bool isAr,
     required bool isHi,
-    required bool isMobile,
+    required M3LayoutMetrics layout,
     required List<QueryDocumentSnapshot> allDocs,
   }) {
+    final isCompact = layout.isCompact;
+    final isMedium = layout.isMedium;
     final allEvents = allDocs
         .map((doc) {
           try {
@@ -396,8 +398,9 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
               ? '$companyDisplayName • ${strings.agencyOpsPortalLabel}'
               : '$companyDisplayName • ${strings.brandExecutivePortalLabel}',
           companyLogoUrl: companyLogoUrl,
-          onMobileMenuPressed: isMobile ? () => _scaffoldKey.currentState?.openDrawer() : null,
-          customActions: isMobile
+          showMobileMenu: isCompact,
+          onMobileMenuPressed: isCompact ? () => _scaffoldKey.currentState?.openDrawer() : null,
+          customActions: isCompact
               ? null
               : [
                   // Copy Promoter Link quick button
@@ -433,8 +436,8 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                 ],
         ),
 
-        // Mobile Drawer for seamless phone navigation (Opens from Right in RTL, Left in LTR)
-        drawer: isMobile
+        // Mobile Drawer for compact smartphone navigation (Opens from Right in RTL, Left in LTR)
+        drawer: isCompact
             ? _buildMobileDrawer(
                 context: context,
                 colorScheme: colorScheme,
@@ -457,8 +460,8 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 1. M3 Collapsible Dashboard Menu (Placed at the START of layout: RIGHT in Arabic RTL, LEFT in English/Hindi LTR)
-          if (!isMobile)
+          // 1. M3 Collapsible Dashboard Menu / Navigation Rail (Placed at the START of layout: RIGHT in Arabic RTL, LEFT in English/Hindi LTR)
+          if (!isCompact)
             RepaintBoundary(
               child: _buildDesktopSidebar(
                 context: context,
@@ -473,6 +476,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                 navItems: navItems,
                 isAr: isAr,
                 isHi: isHi,
+                isMedium: isMedium,
               ),
             ),
 
@@ -746,7 +750,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     );
   }
 
-  /// Builds the desktop collapsible dashboard navigation sidebar (Right side in Arabic RTL, Left in English/Hindi LTR)
+  /// Builds the desktop/tablet M3 Navigation Rail (Fixed 80dp slim rail with icon on top and concise label underneath)
   Widget _buildDesktopSidebar({
     required BuildContext context,
     required ColorScheme colorScheme,
@@ -760,13 +764,12 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     required List<_PortalNavItem> navItems,
     required bool isAr,
     required bool isHi,
+    bool isMedium = false,
   }) {
-    final width = _isSidebarExpanded ? 275.0 : 76.0;
-
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       curve: Curves.fastOutSlowIn,
-      width: width,
+      width: 80.0,
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerLow,
         border: BorderDirectional(
@@ -783,269 +786,167 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
           ),
         ],
       ),
-      child: ClipRect(
-        child: OverflowBox(
-          minWidth: 0,
-          maxWidth: 275.0,
-          alignment: AlignmentDirectional.topStart,
-          child: SizedBox(
-            width: 275.0,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Sidebar Header: Company Info + Collapse Toggle Button
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: _isSidebarExpanded ? 14 : 10,
-                    vertical: 14,
-                  ),
-                  decoration: BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(
-                        color: colorScheme.outlineVariant.withValues(alpha: 0.5),
-                        width: 1,
-                      ),
+      child: SizedBox(
+        width: 80.0,
+        child: LayoutBuilder(
+          builder: (context, railConstraints) {
+            return SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: railConstraints.maxHeight),
+                child: IntrinsicHeight(
+                  child: NavigationRail(
+                    selectedIndex: _selectedTab,
+                    onDestinationSelected: (index) {
+                      setState(() {
+                        _selectedTab = index;
+                        _loadedTabs.add(index);
+                      });
+                    },
+                    labelType: NavigationRailLabelType.all,
+                    minWidth: 80.0,
+                    backgroundColor: colorScheme.surfaceContainerLow,
+                    elevation: 1,
+                    trailingAtBottom: true,
+                    indicatorColor: colorScheme.secondaryContainer,
+                    selectedIconTheme: IconThemeData(color: colorScheme.onSecondaryContainer, size: 24),
+                    unselectedIconTheme: IconThemeData(color: colorScheme.onSurfaceVariant, size: 22),
+                    selectedLabelTextStyle: GoogleFonts.cairo(
+                      color: colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 10,
+                      height: 1.15,
                     ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      if (_isSidebarExpanded) ...[
-                        // Company Icon & Name
-                        Expanded(
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 36,
-                                height: 36,
+                    unselectedLabelTextStyle: GoogleFonts.cairo(
+                      color: colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 9.5,
+                      height: 1.15,
+                    ),
+                    destinations: [
+                      for (final item in navItems)
+                        NavigationRailDestination(
+                          icon: Tooltip(
+                            message: item.tooltip,
+                            child: Icon(item.icon),
+                          ),
+                          selectedIcon: Tooltip(
+                            message: item.tooltip,
+                            child: Icon(item.selectedIcon),
+                          ),
+                          label: Text(
+                            item.title,
+                            maxLines: 2,
+                            textAlign: TextAlign.center,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    trailing: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          child: Divider(
+                            height: 1,
+                            thickness: 1,
+                            color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        if (campaignsCount > 0)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Tooltip(
+                              message: '$campaignsCount ${strings.companyAllCampaigns}',
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                                 decoration: BoxDecoration(
-                                  color: companyLogoUrl.isNotEmpty ? Colors.white : null,
-                                  gradient: companyLogoUrl.isEmpty
-                                      ? LinearGradient(
-                                          colors: [
-                                            colorScheme.primary,
-                                            colorScheme.secondary,
-                                          ],
-                                          begin: Alignment.topLeft,
-                                          end: Alignment.bottomRight,
-                                        )
-                                      : null,
+                                  color: colorScheme.surfaceContainerHighest,
                                   borderRadius: BorderRadius.circular(10),
-                                  border: companyLogoUrl.isNotEmpty
-                                      ? Border.all(
-                                          color: colorScheme.outlineVariant.withValues(alpha: 0.6),
-                                          width: 1,
-                                        )
-                                      : null,
+                                  border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                                 ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(9),
-                                  child: companyLogoUrl.isNotEmpty
-                                      ? Image.network(
-                                          companyLogoUrl,
-                                          fit: BoxFit.contain,
-                                          errorBuilder: (context, error, stackTrace) => Center(
-                                            child: Icon(
-                                              Icons.business_rounded,
-                                              color: colorScheme.primary,
-                                              size: 20,
-                                            ),
-                                          ),
-                                        )
-                                      : Center(
-                                          child: Icon(
-                                            Icons.business_rounded,
-                                            color: colorScheme.onPrimary,
-                                            size: 18,
-                                          ),
-                                        ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
+                                    Icon(Icons.campaign_rounded, size: 13, color: colorScheme.primary),
+                                    const SizedBox(width: 3),
                                     Text(
-                                      companyName,
+                                      '$campaignsCount',
                                       style: GoogleFonts.cairo(
-                                        fontSize: 13,
+                                        fontSize: 10.5,
                                         fontWeight: FontWeight.bold,
-                                        color: colorScheme.onSurface,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    Text(
-                                      strings.partnerPortalBadge,
-                                      style: GoogleFonts.cairo(
-                                        fontSize: 10,
                                         color: colorScheme.primary,
-                                        fontWeight: FontWeight.w600,
                                       ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ],
                                 ),
                               ),
-                            ],
+                            ),
+                          ),
+                        Tooltip(
+                          message: strings.copyPromoterLink,
+                          child: IconButton(
+                            icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => _copyPromoterLink(context, strings, effectiveSlug, activeEventId),
                           ),
                         ),
-                        const SizedBox(width: 4),
-                      ],
-
-                      // Collapse/Expand Action Button
-                      Tooltip(
-                        message: _isSidebarExpanded ? strings.collapseSidebar : strings.expandSidebar,
-                        child: IconButton.filledTonal(
-                          icon: Icon(
-                            _isSidebarExpanded
-                                ? (isAr ? Icons.keyboard_double_arrow_right_rounded : Icons.keyboard_double_arrow_left_rounded)
-                                : (isAr ? Icons.keyboard_double_arrow_left_rounded : Icons.keyboard_double_arrow_right_rounded),
-                            size: 18,
+                        Tooltip(
+                          message: strings.copyManagerPortalLink,
+                          child: IconButton(
+                            icon: const Icon(Icons.share_rounded, size: 18),
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => _copyPortalLink(context, strings, effectiveSlug, activeEventId),
                           ),
-                          style: IconButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            minimumSize: const Size(32, 32),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _isSidebarExpanded = !_isSidebarExpanded;
-                            });
-                          },
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Navigation Items List
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-                    children: [
-                      for (final item in navItems)
-                        _buildSidebarItemTile(
-                          item: item,
-                          isSelected: _selectedTab == item.index,
-                          isExpanded: _isSidebarExpanded,
-                          colorScheme: colorScheme,
-                          onTap: () {
-                            setState(() {
-                              _selectedTab = item.index;
-                              _loadedTabs.add(item.index);
-                            });
-                          },
-                        ),
-                    ],
-                  ),
-                ),
-
-                // Sidebar Footer: Quick Links & Summary
-                Container(
-                  padding: EdgeInsets.all(_isSidebarExpanded ? 12 : 8),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-                    border: Border(
-                      top: BorderSide(
-                        color: colorScheme.outlineVariant.withValues(alpha: 0.5),
-                        width: 1,
-                      ),
-                    ),
-                  ),
-                  child: _isSidebarExpanded
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // Active Campaigns Count Badge
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        const SizedBox(height: 6),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12, top: 2),
+                          child: Tooltip(
+                            message: '$companyName • ${strings.partnerPortalBadge}',
+                            child: Container(
+                              width: 42,
+                              height: 42,
                               decoration: BoxDecoration(
-                                color: colorScheme.surface,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.campaign_rounded, size: 16, color: colorScheme.primary),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      '$campaignsCount ${strings.companyAllCampaigns}',
-                                      style: GoogleFonts.cairo(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                        color: colorScheme.onSurfaceVariant,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
+                                color: companyLogoUrl.isNotEmpty ? Colors.white : colorScheme.primaryContainer,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+                                  width: 1,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.04),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
                                   ),
                                 ],
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            // Quick Copy Links
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: OutlinedButton.icon(
-                                    icon: const Icon(Icons.qr_code_scanner_rounded, size: 14),
-                                    label: Text(
-                                      isAr ? 'رابط البروموتر' : 'Promoter',
-                                      style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.bold),
-                                    ),
-                                    style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    ),
-                                    onPressed: () => _copyPromoterLink(context, strings, effectiveSlug, activeEventId),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: OutlinedButton.icon(
-                                    icon: const Icon(Icons.share_rounded, size: 14),
-                                    label: Text(
-                                      isAr ? 'رابط المدير' : 'Manager',
-                                      style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.bold),
-                                    ),
-                                    style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    ),
-                                    onPressed: () => _copyPortalLink(context, strings, effectiveSlug, activeEventId),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        )
-                      : Column(
-                          children: [
-                            Tooltip(
-                              message: strings.copyPromoterLink,
-                              child: IconButton(
-                                icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
-                                onPressed: () => _copyPromoterLink(context, strings, effectiveSlug, activeEventId),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(11),
+                                child: companyLogoUrl.isNotEmpty
+                                    ? Image.network(
+                                        companyLogoUrl,
+                                        fit: BoxFit.contain,
+                                        errorBuilder: (context, error, stackTrace) => Center(
+                                          child: Icon(Icons.business_rounded, color: colorScheme.primary, size: 20),
+                                        ),
+                                      )
+                                    : Center(
+                                        child: Icon(Icons.business_rounded, color: colorScheme.primary, size: 20),
+                                      ),
                               ),
                             ),
-                            Tooltip(
-                              message: strings.copyManagerPortalLink,
-                              child: IconButton(
-                                icon: const Icon(Icons.share_rounded, size: 18),
-                                onPressed: () => _copyPortalLink(context, strings, effectiveSlug, activeEventId),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
+                      ],
+                    ),
+                  ),
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -1309,13 +1210,30 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                         Navigator.of(context).pop();
                       },
                     ),
+                ],
+              ),
+            ),
 
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 10),
-                    child: Divider(height: 1),
+            const Divider(height: 1),
+
+            // 2. Bottom Fixed Section (الإعدادات + 3 أيقونات مشاركة الروابط + Tashil Gift)
+            Container(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerLowest,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.03),
+                    blurRadius: 10,
+                    offset: const Offset(0, -2),
                   ),
-
-                  // Section 2: Preferences & Settings (الإعدادات) - Collapsed by default
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Preferences & Settings (الإعدادات) - Collapsed by default
                   Theme(
                     data: Theme.of(context).copyWith(
                       dividerColor: Colors.transparent,
@@ -1323,26 +1241,26 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                     child: Container(
                       decoration: BoxDecoration(
                         color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                       ),
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(14),
                         child: ExpansionTile(
                           initiallyExpanded: false,
                           shape: const Border(),
                           collapsedShape: const Border(),
-                          tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-                          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                           leading: Icon(
                             Icons.settings_rounded,
-                            size: 20,
+                            size: 18,
                             color: colorScheme.secondary,
                           ),
                           title: Text(
                             isAr ? 'الإعدادات' : (isHi ? 'सेटिंग्स' : 'Settings'),
                             style: GoogleFonts.cairo(
-                              fontSize: 13,
+                              fontSize: 12.5,
                               fontWeight: FontWeight.bold,
                               color: colorScheme.onSurface,
                             ),
@@ -1350,193 +1268,283 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                           subtitle: Text(
                             isAr ? 'اللغة والدولة والمظهر' : (isHi ? 'भाषा, देश और थीम' : 'Language, country & theme'),
                             style: GoogleFonts.cairo(
-                              fontSize: 10.5,
+                              fontSize: 10,
                               color: colorScheme.outline,
                             ),
                           ),
                           children: [
-                            const Divider(height: 16),
-                            // Language Selector
-                            Row(
-                              children: [
-                                Icon(Icons.translate_rounded, size: 15, color: colorScheme.primary),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    isAr ? 'لغة الواجهة' : (isHi ? 'ऐप भाषा' : 'Language'),
-                                    style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: AppLanguage.values.map((lang) {
-                                final isSelected = ref.watch(localeProvider).languageCode == lang.code;
-                                return ChoiceChip(
-                                  avatar: Text(lang.flagEmoji, style: const TextStyle(fontSize: 13)),
-                                  label: Text(
-                                    lang.label,
-                                    style: GoogleFonts.cairo(
-                                      fontSize: 11,
-                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxHeight: 280),
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    const Divider(height: 12),
+                                    // Language Selector
+                                    Row(
+                                      children: [
+                                        Icon(Icons.translate_rounded, size: 14, color: colorScheme.primary),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            isAr ? 'لغة الواجهة' : (isHi ? 'ऐप भाषा' : 'Language'),
+                                            style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                  selected: isSelected,
-                                  onSelected: (val) {
-                                    if (val) ref.setLocale(lang.code);
-                                  },
-                                );
-                              }).toList(),
-                            ),
-                            const SizedBox(height: 14),
-
-                            // Country & Currency Selector
-                            Row(
-                              children: [
-                                Icon(Icons.payments_rounded, size: 15, color: colorScheme.secondary),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    isAr ? 'الدولة والعملة المعتمدة' : (isHi ? 'देश और मुद्रा' : 'Country & Currency'),
-                                    style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: CountryCurrencyConfig.supportedCountries.map((country) {
-                                final activeCountry = ref.watch(activeCountryProvider);
-                                final currentLangCode = ref.watch(localeProvider).languageCode;
-                                final isSelected = activeCountry.code == country.code;
-                                return ChoiceChip(
-                                  avatar: Text(country.flagEmoji, style: const TextStyle(fontSize: 13)),
-                                  label: Text(
-                                    '${country.name(currentLangCode)} (${country.currencySymbolFor(currentLangCode)})',
-                                    style: GoogleFonts.cairo(
-                                      fontSize: 11,
-                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                    const SizedBox(height: 6),
+                                    Container(
+                                      height: 38,
+                                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+                                      ),
+                                      child: DropdownButtonHideUnderline(
+                                        child: DropdownButton<String>(
+                                          value: ref.watch(localeProvider).languageCode,
+                                          isExpanded: true,
+                                          icon: Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: colorScheme.onSurfaceVariant),
+                                          dropdownColor: colorScheme.surfaceContainerHigh,
+                                          borderRadius: BorderRadius.circular(10),
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: colorScheme.onSurface,
+                                          ),
+                                          items: AppLanguage.values.map((lang) {
+                                            return DropdownMenuItem<String>(
+                                              value: lang.code,
+                                              child: Text(
+                                                lang.label,
+                                                style: GoogleFonts.cairo(
+                                                  fontSize: 11.5,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: colorScheme.onSurface,
+                                                ),
+                                              ),
+                                            );
+                                          }).toList(),
+                                          onChanged: (val) {
+                                            if (val != null) ref.setLocale(val);
+                                          },
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                  selected: isSelected,
-                                  onSelected: (val) {
-                                    if (val) ref.read(activeCountryProvider.notifier).state = country;
-                                  },
-                                );
-                              }).toList(),
-                            ),
-                            const SizedBox(height: 10),
+                                    const SizedBox(height: 10),
 
-                            // Dark / Light Theme Mode
-                            Builder(builder: (ctx) {
-                              final themeMode = ref.watch(themeModeProvider);
-                              final isDark = themeMode == ThemeMode.dark ||
-                                  (themeMode == ThemeMode.system && Theme.of(ctx).brightness == Brightness.dark);
-                              return SwitchListTile(
-                                contentPadding: EdgeInsets.zero,
-                                dense: true,
-                                secondary: Icon(
-                                  isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
-                                  color: isDark ? Colors.amber : colorScheme.primary,
-                                  size: 20,
+                                    // Country & Currency Selector
+                                    Row(
+                                      children: [
+                                        Icon(Icons.payments_rounded, size: 14, color: colorScheme.secondary),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            isAr ? 'الدولة والعملة المعتمدة' : (isHi ? 'देश और मुद्रा' : 'Country & Currency'),
+                                            style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Container(
+                                      height: 38,
+                                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+                                      ),
+                                      child: DropdownButtonHideUnderline(
+                                        child: DropdownButton<String>(
+                                          value: ref.watch(activeCountryProvider).code,
+                                          isExpanded: true,
+                                          icon: Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: colorScheme.onSurfaceVariant),
+                                          dropdownColor: colorScheme.surfaceContainerHigh,
+                                          borderRadius: BorderRadius.circular(10),
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: colorScheme.onSurface,
+                                          ),
+                                          items: CountryCurrencyConfig.supportedCountries.map((country) {
+                                            final currentLangCode = ref.watch(localeProvider).languageCode;
+                                            return DropdownMenuItem<String>(
+                                              value: country.code,
+                                              child: Text(
+                                                '${country.name(currentLangCode)} (${country.currencySymbolFor(currentLangCode)})',
+                                                style: GoogleFonts.cairo(
+                                                  fontSize: 11.5,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: colorScheme.onSurface,
+                                                ),
+                                              ),
+                                            );
+                                          }).toList(),
+                                          onChanged: (val) {
+                                            if (val != null) {
+                                              final country = CountryCurrencyConfig.findByCode(val);
+                                              ref.read(activeCountryProvider.notifier).state = country;
+                                            }
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+
+                                    // Dark / Light Theme Mode
+                                    Builder(builder: (ctx) {
+                                      final themeMode = ref.watch(themeModeProvider);
+                                      final isDark = themeMode == ThemeMode.dark ||
+                                          (themeMode == ThemeMode.system && Theme.of(ctx).brightness == Brightness.dark);
+                                      return SwitchListTile(
+                                        contentPadding: EdgeInsets.zero,
+                                        dense: true,
+                                        secondary: Icon(
+                                          isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                                          color: isDark ? Colors.amber : colorScheme.primary,
+                                          size: 18,
+                                        ),
+                                        title: Text(
+                                          isAr
+                                              ? (isDark ? 'الوضع الداكن' : 'الوضع الفاتح')
+                                              : (isHi
+                                                  ? (isDark ? 'डार्क मोड' : 'लाइट मोड')
+                                                  : (isDark ? 'Dark Mode' : 'Light Mode')),
+                                          style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
+                                        ),
+                                        value: isDark,
+                                        onChanged: (val) {
+                                          ref.read(themeModeProvider.notifier).state = val ? ThemeMode.dark : ThemeMode.light;
+                                        },
+                                      );
+                                    }),
+                                  ],
                                 ),
-                                title: Text(
-                                  isAr
-                                      ? (isDark ? 'الوضع الداكن (مفعل)' : 'الوضع الفاتح (مفعل)')
-                                      : (isHi
-                                          ? (isDark ? 'डार्क मोड (सक्रिय)' : 'लाइट मोड (सक्रिय)')
-                                          : (isDark ? 'Dark Mode (Active)' : 'Light Mode (Active)')),
-                                  style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
-                                ),
-                                subtitle: Text(
-                                  isAr ? 'تبديل المظهر بين الوضع الليلي والنهاري' : (isHi ? 'दिन और रात के मोड के बीच स्विच करें' : 'Toggle between Dark and Light mode'),
-                                  style: GoogleFonts.cairo(fontSize: 10, color: colorScheme.onSurfaceVariant),
-                                ),
-                                value: isDark,
-                                onChanged: (val) {
-                                  ref.read(themeModeProvider.notifier).state = val ? ThemeMode.dark : ThemeMode.light;
-                                },
-                              );
-                            }),
+                              ),
+                            ),
                           ],
                         ),
                       ),
                     ),
                   ),
 
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 10),
-                    child: Divider(height: 1),
-                  ),
+                  const SizedBox(height: 10),
 
-                  // Section 3: Quick Portal Links
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      children: [
-                        Icon(Icons.link_rounded, size: 16, color: colorScheme.primary),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            isAr ? 'مشاركة روابط البوابات' : (isHi ? 'पोर्टल लिंक साझा करें' : 'Share Portal Links'),
-                            style: GoogleFonts.cairo(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: colorScheme.primary,
-                            ),
-                          ),
+                  // Section 3: Quick Portal Links (مشاركة روابط البوابات - 3 أيكونات فقط)
+                  Row(
+                    children: [
+                      Icon(Icons.share_rounded, size: 13, color: colorScheme.outline),
+                      const SizedBox(width: 6),
+                      Text(
+                        isAr ? 'مشاركة روابط البوابات' : (isHi ? 'पोर्टल लिंक साझा करें' : 'Share Portal Links'),
+                        style: GoogleFonts.cairo(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.outline,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.qr_code_scanner_rounded, size: 16),
-                    label: Text(strings.copyPromoterLink),
-                    onPressed: () {
-                      _copyPromoterLink(context, strings, effectiveSlug, activeEventId);
-                      Navigator.of(context).pop();
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.store_mall_directory_rounded, size: 16),
-                    label: Text(strings.copyAgencyOpsLink),
-                    onPressed: () {
-                      _copyAgencyOpsLink(context, strings, effectiveSlug, activeEventId);
-                      Navigator.of(context).pop();
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.business_center_rounded, size: 16),
-                    label: Text(strings.copyBrandExecutiveLink),
-                    onPressed: () {
-                      _copyBrandExecutiveLink(context, strings, effectiveSlug, activeEventId);
-                      Navigator.of(context).pop();
-                    },
-                  ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 6),
 
-                  // App Version Info
+                  // The 3 Portal Share Icon Buttons Row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      // 1. رابط العميل / البروموتر
+                      _buildDrawerShareIconButton(
+                        context: context,
+                        icon: Icons.qr_code_scanner_rounded,
+                        tooltip: strings.copyPromoterLink,
+                        colorScheme: colorScheme,
+                        onTap: () {
+                          _copyPromoterLink(context, strings, effectiveSlug, activeEventId);
+                          Navigator.of(context).pop();
+                        },
+                      ),
+                      // 2. رابط بوابة شركة الدعاية
+                      _buildDrawerShareIconButton(
+                        context: context,
+                        icon: Icons.store_mall_directory_rounded,
+                        tooltip: strings.copyAgencyOpsLink,
+                        colorScheme: colorScheme,
+                        onTap: () {
+                          _copyAgencyOpsLink(context, strings, effectiveSlug, activeEventId);
+                          Navigator.of(context).pop();
+                        },
+                      ),
+                      // 3. رابط مدير الشركة الدائم
+                      _buildDrawerShareIconButton(
+                        context: context,
+                        icon: Icons.business_center_rounded,
+                        tooltip: strings.copyBrandExecutiveLink,
+                        colorScheme: colorScheme,
+                        onTap: () {
+                          _copyBrandExecutiveLink(context, strings, effectiveSlug, activeEventId);
+                          Navigator.of(context).pop();
+                        },
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Tashil Gift Version Footer
                   Center(
                     child: Text(
                       'Tashil Gift ${AppVersionConfig.versionDisplay} (Build #${AppVersionConfig.buildNumber})',
                       style: GoogleFonts.cairo(
-                        fontSize: 10.5,
-                        color: colorScheme.outline,
+                        fontSize: 10,
+                        color: colorScheme.outline.withValues(alpha: 0.8),
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
                 ],
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Builds a single compact share icon button for the mobile drawer bottom bar
+  Widget _buildDrawerShareIconButton({
+    required BuildContext context,
+    required IconData icon,
+    required String tooltip,
+    required ColorScheme colorScheme,
+    required VoidCallback onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            width: 58,
+            height: 44,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+                width: 1,
+              ),
+            ),
+            child: Icon(
+              icon,
+              size: 20,
+              color: colorScheme.primary,
+            ),
+          ),
         ),
       ),
     );
@@ -1550,8 +1558,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     final strings = AppStrings.of(ref);
     final isAr = ref.isArabic;
     final isHi = ref.watch(localeProvider).languageCode == 'hi';
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 900;
+    final layout = M3Layout.of(context);
 
     FirebaseFirestore? firestore;
     try {
@@ -1581,7 +1588,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
             strings: strings,
             isAr: isAr,
             isHi: isHi,
-            isMobile: isMobile,
+            layout: layout,
             allDocs: allDocs,
           );
         },
@@ -1595,7 +1602,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
       strings: strings,
       isAr: isAr,
       isHi: isHi,
-      isMobile: isMobile,
+      layout: layout,
       allDocs: const [],
     );
   }

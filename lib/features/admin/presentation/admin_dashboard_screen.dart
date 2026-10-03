@@ -16,6 +16,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/widgets/switch_point_branding.dart';
 import '../../../core/constants/country_currency_config.dart';
 import '../../../core/widgets/m3_button_groups.dart';
+import '../../../core/widgets/m3_action_menu.dart';
 import 'company_catalog_screen.dart';
 import '../../company_portal/presentation/company_customers_marketing_screen.dart';
 import 'company_gifts_screen.dart';
@@ -29,6 +30,7 @@ import '../../../core/services/ai_product_discovery_service.dart';
 import 'widgets/voucher_serials_management_dialog.dart';
 import '../../../core/services/company_gifts_service.dart';
 import '../../../core/utils/url_builder.dart';
+import '../../../core/utils/responsive.dart';
 
 class AdminDashboardScreen extends ConsumerStatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -40,8 +42,7 @@ class AdminDashboardScreen extends ConsumerStatefulWidget {
 class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   int _selectedIndex = 0;
   final Set<int> _loadedTabs = {0};
-  bool _isSidebarExpanded = true;
-  String _campaignFilter = 'ALL';
+  String _campaignFilter = 'ACTIVE';
   EventModel? _selectedReportsEvent;
   final _searchController = TextEditingController();
 
@@ -52,6 +53,79 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         _loadedTabs.add(index);
       });
     }
+  }
+
+  Future<void> _openCreateEventScreen() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const CreateEventScreen()),
+    );
+    if (mounted) setState(() {});
+  }
+
+  void _showMobileMoreSheet(BuildContext context, AppStrings strings, bool isAr) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        final colorScheme = Theme.of(ctx).colorScheme;
+        final items = [
+          (3, Icons.storefront_rounded, strings.navRetailChains),
+          (4, Icons.inventory_2_rounded, strings.navProductsIntelligence),
+          (6, Icons.card_giftcard_rounded, strings.navCompanyGifts),
+          (7, Icons.casino_rounded, strings.navGameTypes),
+          (8, Icons.speed_rounded, strings.navAiSpeedBenchmark),
+          (9, Icons.psychology_rounded, strings.navAiBrainRules),
+          (10, Icons.auto_awesome_rounded, strings.navAiProductDiscovery),
+          (11, Icons.mark_chat_read_rounded, strings.navWhatsAppMarketing),
+        ];
+
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 8.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Expanded(
+                  child: ListView(
+                    children: items.map((item) {
+                      final (idx, icon, title) = item;
+                      final isSelected = _selectedIndex == idx;
+                      return ListTile(
+                        leading: Icon(icon, color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant),
+                        title: Text(
+                          title,
+                          style: GoogleFonts.cairo(
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                            color: isSelected ? colorScheme.primary : colorScheme.onSurface,
+                          ),
+                        ),
+                        selected: isSelected,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _selectTab(idx);
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -290,160 +364,140 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           kPrimaryAdminEmail;
     } catch (_) {}
 
-    return PopupMenuButton<String>(
+    return M3ActionMenu(
       tooltip: strings.adminProfileTooltip,
-      position: PopupMenuPosition.under,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.6),
-        ),
-      ),
-      color: colorScheme.surfaceContainerHigh,
-      elevation: 6,
-      onSelected: (value) {
-        if (value == 'sign_out') {
-          _handleSignOut(context, strings);
-        }
-      },
-      itemBuilder: (BuildContext ctx) => [
-        // 1. Profile Info Header Card
-        PopupMenuItem<String>(
-          enabled: false,
+      anchorBuilder: (context, controller, child) {
+        return InkWell(
+          onTap: () {
+            if (controller.isOpen) {
+              controller.close();
+            } else {
+              controller.open();
+            }
+          },
+          borderRadius: BorderRadius.circular(12),
           child: Container(
-            constraints: const BoxConstraints(minWidth: 200),
-            padding: const EdgeInsets.symmetric(vertical: 4),
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 6 : 10,
+              vertical: isMobile ? 4 : 6,
+            ),
+            decoration: BoxDecoration(
+              color: colorScheme.primaryContainer.withValues(alpha: 0.45),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: colorScheme.primary.withValues(alpha: 0.35),
+              ),
+            ),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 CircleAvatar(
-                  radius: 18,
-                  backgroundColor: colorScheme.primaryContainer,
-                  child: Icon(
-                    Icons.admin_panel_settings_rounded,
+                  radius: isMobile ? 12 : 14,
+                  backgroundColor: colorScheme.primary,
+                  child: const Icon(
+                    Icons.person_rounded,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+                if (!isMobile) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    strings.systemAdminRole,
+                    style: GoogleFonts.cairo(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  Icon(
+                    Icons.arrow_drop_down_rounded,
+                    size: 18,
                     color: colorScheme.primary,
-                    size: 20,
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        strings.systemAdminRole,
-                        style: GoogleFonts.cairo(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                          color: colorScheme.onSurface,
-                        ),
-                      ),
-                      Text(
-                        sessionEmail,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.cairo(
-                          fontSize: 11,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Row(
-                        children: [
-                          Container(
-                            width: 7,
-                            height: 7,
-                            decoration: const BoxDecoration(
-                              color: Colors.green,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            strings.activeSessionLabel,
-                            style: GoogleFonts.cairo(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.green.shade700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+                ],
               ],
             ),
           ),
-        ),
-        const PopupMenuDivider(height: 1),
-        // 2. Sign Out Action
-        PopupMenuItem<String>(
-          value: 'sign_out',
+        );
+      },
+      children: [
+        // 1. Profile Info Header Card
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.logout_rounded,
-                color: colorScheme.error,
-                size: 20,
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: colorScheme.primaryContainer,
+                child: Icon(
+                  Icons.admin_panel_settings_rounded,
+                  color: colorScheme.primary,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 10),
-              Text(
-                strings.signOutBtn,
-                style: GoogleFonts.cairo(
-                  color: colorScheme.error,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    strings.systemAdminRole,
+                    style: GoogleFonts.cairo(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                  Text(
+                    sessionEmail,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.cairo(
+                      fontSize: 11,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: const BoxDecoration(
+                          color: Colors.green,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        strings.activeSessionLabel,
+                        style: GoogleFonts.cairo(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.green.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ],
           ),
+        ),
+        M3ActionMenu.divider(),
+        // 2. Sign Out Action
+        M3ActionMenu.item(
+          context: context,
+          label: strings.signOutBtn,
+          icon: Icons.logout_rounded,
+          isDestructive: true,
+          onPressed: () => _handleSignOut(context, strings),
         ),
       ],
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: isMobile ? 6 : 10,
-          vertical: isMobile ? 4 : 6,
-        ),
-        decoration: BoxDecoration(
-          color: colorScheme.primaryContainer.withValues(alpha: 0.45),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: colorScheme.primary.withValues(alpha: 0.35),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircleAvatar(
-              radius: isMobile ? 12 : 14,
-              backgroundColor: colorScheme.primary,
-              child: const Icon(
-                Icons.person_rounded,
-                color: Colors.white,
-                size: 16,
-              ),
-            ),
-            if (!isMobile) ...[
-              const SizedBox(width: 6),
-              Text(
-                strings.systemAdminRole,
-                style: GoogleFonts.cairo(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.primary,
-                ),
-              ),
-              const SizedBox(width: 2),
-              Icon(
-                Icons.arrow_drop_down_rounded,
-                size: 18,
-                color: colorScheme.primary,
-              ),
-            ],
-          ],
-        ),
-      ),
     );
   }
 
@@ -457,24 +511,14 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     } catch (_) {
       firestore = null;
     }
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 600;
-    final isTablet = screenWidth >= 600 && screenWidth < 1000;
+    final layout = M3Layout.of(context);
+    final isMobile = layout.isCompact;
     final strings = AppStrings.of(ref);
     final isAr = ref.isArabic;
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
       appBar: SwitchPointHeader(
-        leading: !isMobile
-            ? IconButton(
-                icon: Icon(_isSidebarExpanded ? Icons.menu_open : Icons.menu, color: colorScheme.primary),
-                tooltip: _isSidebarExpanded ? strings.collapseMenu : strings.expandMenu,
-                onPressed: () {
-                  setState(() => _isSidebarExpanded = !_isSidebarExpanded);
-                },
-              )
-            : null,
         customActions: [
           _buildProfileMenu(context, colorScheme, strings, isMobile),
         ],
@@ -484,108 +528,127 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           if (!isMobile) ...[
             // Sidebar Navigation (Desktop/Tablet) wrapped in RepaintBoundary for 60 FPS (Rule 9 / Pillar 2)
             RepaintBoundary(
-              child: NavigationRail(
-                selectedIndex: _selectedIndex,
-                onDestinationSelected: _selectTab,
-                extended: !isTablet && _isSidebarExpanded,
-                minWidth: 72,
-                minExtendedWidth: 230,
-                backgroundColor: colorScheme.surfaceContainerLow,
-                elevation: 1,
-                indicatorColor: colorScheme.secondaryContainer,
-                selectedIconTheme: IconThemeData(color: colorScheme.onSecondaryContainer, size: 24),
-                unselectedIconTheme: IconThemeData(color: colorScheme.onSurfaceVariant, size: 22),
-                selectedLabelTextStyle: GoogleFonts.cairo(color: colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 14, height: 1.25),
-                unselectedLabelTextStyle: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant, fontSize: 13, height: 1.25),
-                destinations: [
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.dashboard_outlined),
-                    selectedIcon: const Icon(Icons.dashboard_rounded),
-                    label: Text(strings.navEventsManagement, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
-                  ),
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.bar_chart_outlined),
-                    selectedIcon: const Icon(Icons.bar_chart_rounded),
-                    label: Text(strings.navAnalytics, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
-                  ),
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.business_center_outlined),
-                    selectedIcon: const Icon(Icons.business_center_rounded),
-                    label: Text(strings.navCompanyCatalog, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
-                  ),
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.storefront_outlined),
-                    selectedIcon: const Icon(Icons.storefront_rounded),
-                    label: Text(strings.navRetailChains, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
-                  ),
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.inventory_2_outlined),
-                    selectedIcon: const Icon(Icons.inventory_2_rounded),
-                    label: Text(strings.navProductsIntelligence, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
-                  ),
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.receipt_long_outlined),
-                    selectedIcon: const Icon(Icons.receipt_long_rounded),
-                    label: Text(strings.navInvoicesAudit, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
-                  ),
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.add_circle_outline_rounded),
-                    selectedIcon: const Icon(Icons.add_circle_rounded),
-                    label: Text(strings.navCreateCampaign, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
-                  ),
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.card_giftcard_outlined),
-                    selectedIcon: const Icon(Icons.card_giftcard_rounded),
-                    label: Text(strings.navCompanyGifts, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
-                  ),
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.casino_outlined),
-                    selectedIcon: const Icon(Icons.casino_rounded),
-                    label: Text(strings.navGameTypes, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
-                  ),
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.speed_outlined),
-                    selectedIcon: const Icon(Icons.speed_rounded),
-                    label: Text(strings.navAiSpeedBenchmark, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
-                  ),
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.psychology_outlined),
-                    selectedIcon: const Icon(Icons.psychology_rounded),
-                    label: Text(strings.navAiBrainRules, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
-                  ),
-                  NavigationRailDestination(
-                    icon: StreamBuilder<int>(
-                      stream: ref.watch(aiProductDiscoveryServiceProvider).streamPendingCount(),
-                      builder: (context, snapshot) {
-                        final count = snapshot.data ?? 0;
-                        return Badge(
-                          isLabelVisible: count > 0,
-                          label: Text('$count'),
-                          backgroundColor: Colors.orange.shade800,
-                          child: const Icon(Icons.auto_awesome_outlined),
-                        );
-                      },
-                    ),
-                    selectedIcon: StreamBuilder<int>(
-                      stream: ref.watch(aiProductDiscoveryServiceProvider).streamPendingCount(),
-                      builder: (context, snapshot) {
-                        final count = snapshot.data ?? 0;
-                        return Badge(
-                          isLabelVisible: count > 0,
-                          label: Text('$count'),
-                          backgroundColor: Colors.orange.shade800,
-                          child: const Icon(Icons.auto_awesome_rounded),
-                        );
-                      },
-                    ),
-                    label: Text(strings.navAiProductDiscovery, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
-                  ),
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.mark_chat_read_outlined),
-                    selectedIcon: const Icon(Icons.mark_chat_read_rounded),
-                    label: Text(strings.customersMarketingNavTitle, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
-                  ),
-                ],
+              child: SizedBox(
+                width: 80,
+                child: LayoutBuilder(
+                  builder: (context, railConstraints) {
+                    return SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: ConstrainedBox(
+                         constraints: BoxConstraints(minHeight: railConstraints.maxHeight),
+                        child: IntrinsicHeight(
+                          child: NavigationRail(
+                            selectedIndex: _selectedIndex,
+                            onDestinationSelected: _selectTab,
+                            labelType: NavigationRailLabelType.all,
+                            minWidth: 80,
+                            backgroundColor: colorScheme.surfaceContainerLow,
+                            elevation: 1,
+                            indicatorColor: colorScheme.secondaryContainer,
+                            selectedIconTheme: IconThemeData(color: colorScheme.onSecondaryContainer, size: 24),
+                            unselectedIconTheme: IconThemeData(color: colorScheme.onSurfaceVariant, size: 22),
+                            selectedLabelTextStyle: GoogleFonts.cairo(
+                              color: colorScheme.primary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                              height: 1.2,
+                            ),
+                            unselectedLabelTextStyle: GoogleFonts.cairo(
+                              color: colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 10.5,
+                              height: 1.2,
+                            ),
+                            destinations: [
+                              NavigationRailDestination(
+                                icon: const Icon(Icons.campaign_outlined),
+                                selectedIcon: const Icon(Icons.campaign_rounded),
+                                label: Text(strings.navEventsManagement, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              ),
+                              NavigationRailDestination(
+                                icon: const Icon(Icons.bar_chart_outlined),
+                                selectedIcon: const Icon(Icons.bar_chart_rounded),
+                                label: Text(strings.navAnalytics, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              ),
+                              NavigationRailDestination(
+                                icon: const Icon(Icons.business_center_outlined),
+                                selectedIcon: const Icon(Icons.business_center_rounded),
+                                label: Text(strings.navCompanyCatalog, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              ),
+                              NavigationRailDestination(
+                                icon: const Icon(Icons.storefront_outlined),
+                                selectedIcon: const Icon(Icons.storefront_rounded),
+                                label: Text(strings.navRetailChains, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              ),
+                              NavigationRailDestination(
+                                icon: const Icon(Icons.inventory_2_outlined),
+                                selectedIcon: const Icon(Icons.inventory_2_rounded),
+                                label: Text(strings.navProductsIntelligence, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              ),
+                              NavigationRailDestination(
+                                icon: const Icon(Icons.receipt_long_outlined),
+                                selectedIcon: const Icon(Icons.receipt_long_rounded),
+                                label: Text(strings.navInvoicesAudit, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              ),
+                              NavigationRailDestination(
+                                icon: const Icon(Icons.card_giftcard_outlined),
+                                selectedIcon: const Icon(Icons.card_giftcard_rounded),
+                                label: Text(strings.navCompanyGifts, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              ),
+                              NavigationRailDestination(
+                                icon: const Icon(Icons.casino_outlined),
+                                selectedIcon: const Icon(Icons.casino_rounded),
+                                label: Text(strings.navGameTypes, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              ),
+                              NavigationRailDestination(
+                                icon: const Icon(Icons.speed_outlined),
+                                selectedIcon: const Icon(Icons.speed_rounded),
+                                label: Text(strings.navAiSpeedBenchmark, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              ),
+                              NavigationRailDestination(
+                                icon: const Icon(Icons.psychology_outlined),
+                                selectedIcon: const Icon(Icons.psychology_rounded),
+                                label: Text(strings.navAiBrainRules, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              ),
+                              NavigationRailDestination(
+                                icon: StreamBuilder<int>(
+                                  stream: ref.watch(aiProductDiscoveryServiceProvider).streamPendingCount(),
+                                  builder: (context, snapshot) {
+                                    final count = snapshot.data ?? 0;
+                                    return Badge(
+                                      isLabelVisible: count > 0,
+                                      label: Text('$count'),
+                                      backgroundColor: Colors.orange.shade800,
+                                      child: const Icon(Icons.auto_awesome_outlined),
+                                    );
+                                  },
+                                ),
+                                selectedIcon: StreamBuilder<int>(
+                                  stream: ref.watch(aiProductDiscoveryServiceProvider).streamPendingCount(),
+                                  builder: (context, snapshot) {
+                                    final count = snapshot.data ?? 0;
+                                    return Badge(
+                                      isLabelVisible: count > 0,
+                                      label: Text('$count'),
+                                      backgroundColor: Colors.orange.shade800,
+                                      child: const Icon(Icons.auto_awesome_rounded),
+                                    );
+                                  },
+                                ),
+                                label: Text(strings.navAiProductDiscovery, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              ),
+                              NavigationRailDestination(
+                                icon: const Icon(Icons.mark_chat_read_outlined),
+                                selectedIcon: const Icon(Icons.mark_chat_read_rounded),
+                                label: Text(strings.navWhatsAppMarketing, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
             VerticalDivider(thickness: 1, width: 1, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
@@ -596,7 +659,11 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
             child: Column(
               children: [
                 Expanded(
-                  child: _buildMainView(firestore, strings, isAr),
+                  child: M3ContentBoundary(
+                    maxWidth: 1440.0,
+                    padding: EdgeInsets.zero,
+                    child: _buildMainView(firestore, strings, isAr),
+                  ),
                 ),
                 const SwitchPointFooter(),
               ],
@@ -606,70 +673,54 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       ),
       bottomNavigationBar: isMobile
           ? NavigationBar(
-              selectedIndex: _selectedIndex > 10 ? 0 : _selectedIndex,
-              onDestinationSelected: _selectTab,
+              selectedIndex: _selectedIndex.clamp(0, 4),
+              onDestinationSelected: (idx) {
+                if (idx < 4) {
+                  _selectTab(idx);
+                } else {
+                  _showMobileMoreSheet(context, strings, isAr);
+                }
+              },
               backgroundColor: colorScheme.surfaceContainerLow,
               destinations: [
                 NavigationDestination(
-                  icon: const Icon(Icons.dashboard_outlined),
-                  selectedIcon: const Icon(Icons.dashboard),
-                  label: isAr ? 'الحملات' : 'Campaigns',
+                  icon: const Icon(Icons.campaign_outlined),
+                  selectedIcon: const Icon(Icons.campaign_rounded),
+                  label: strings.navEventsManagement,
                 ),
                 NavigationDestination(
                   icon: const Icon(Icons.bar_chart_outlined),
-                  selectedIcon: const Icon(Icons.bar_chart),
-                  label: isAr ? 'التقارير' : 'Reports',
+                  selectedIcon: const Icon(Icons.bar_chart_rounded),
+                  label: strings.navAnalytics,
                 ),
                 NavigationDestination(
                   icon: const Icon(Icons.business_center_outlined),
-                  selectedIcon: const Icon(Icons.business_center),
-                  label: isAr ? 'الشركات' : 'Catalog',
-                ),
-                NavigationDestination(
-                  icon: const Icon(Icons.storefront_outlined),
-                  selectedIcon: const Icon(Icons.storefront),
-                  label: isAr ? 'السلاسل' : 'Chains',
-                ),
-                NavigationDestination(
-                  icon: const Icon(Icons.inventory_2_outlined),
-                  selectedIcon: const Icon(Icons.inventory_2),
-                  label: isAr ? 'المنتجات' : 'Products',
+                  selectedIcon: const Icon(Icons.business_center_rounded),
+                  label: strings.navCompanyCatalog,
                 ),
                 NavigationDestination(
                   icon: const Icon(Icons.receipt_long_outlined),
-                  selectedIcon: const Icon(Icons.receipt_long),
-                  label: isAr ? 'الفواتير' : 'Invoices',
+                  selectedIcon: const Icon(Icons.receipt_long_rounded),
+                  label: strings.navInvoicesAudit,
                 ),
                 NavigationDestination(
-                  icon: const Icon(Icons.add_circle_outline),
-                  selectedIcon: const Icon(Icons.add_circle),
-                  label: isAr ? 'حملة جديدة' : 'New',
-                ),
-                NavigationDestination(
-                  icon: const Icon(Icons.card_giftcard_outlined),
-                  selectedIcon: const Icon(Icons.card_giftcard),
-                  label: isAr ? 'الهدايا' : 'Gifts',
-                ),
-                NavigationDestination(
-                  icon: const Icon(Icons.casino_outlined),
-                  selectedIcon: const Icon(Icons.casino),
-                  label: isAr ? 'الألعاب' : 'Games',
-                ),
-                NavigationDestination(
-                  icon: const Icon(Icons.speed_outlined),
-                  selectedIcon: const Icon(Icons.speed),
-                  label: isAr ? 'سرعة AI' : 'AI Speed',
+                  icon: const Icon(Icons.more_horiz_rounded),
+                  selectedIcon: const Icon(Icons.more_horiz_rounded),
+                  label: isAr ? 'المزيد' : 'More',
                 ),
               ],
             )
           : null,
       floatingActionButton: _selectedIndex == 0
           ? FloatingActionButton.extended(
-              onPressed: () => _selectTab(6),
+              onPressed: _openCreateEventScreen,
               backgroundColor: colorScheme.primary,
               foregroundColor: colorScheme.onPrimary,
               icon: const Icon(Icons.add_rounded),
-              label: Text(strings.navCreateCampaign, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+              label: Text(
+                isAr ? 'إنشاء حملة' : 'New Campaign',
+                style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+              ),
             )
           : null,
     );
@@ -680,7 +731,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        for (int i = 0; i <= 12; i++)
+        for (int i = 0; i <= 11; i++)
           Offstage(
             offstage: _selectedIndex != i,
             child: TickerMode(
@@ -715,22 +766,16 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       case 5:
         return const InvoicesLogScreen();
       case 6:
-        return CreateEventScreen(
-          isEmbedded: true,
-          onCancel: () => _selectTab(0),
-          onSaved: () => _selectTab(0),
-        );
-      case 7:
         return const CompanyGiftsScreen();
-      case 8:
+      case 7:
         return const GameTypesScreen();
-      case 9:
+      case 8:
         return const AiSpeedBenchmarkScreen();
-      case 10:
+      case 9:
         return const AiBrainRulesScreen();
-      case 11:
+      case 10:
         return const AiProductDiscoveryScreen();
-      case 12:
+      case 11:
         return const CompanyCustomersMarketingScreen(isEmbedded: true);
       default:
         return _buildCampaignsDashboard(firestore, strings, isAr);
@@ -891,9 +936,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 ),
                 const SizedBox(height: 24),
                 FilledButton.icon(
-                  onPressed: () {
-                    setState(() => _selectedIndex = 6);
-                  },
+                  onPressed: _openCreateEventScreen,
                   icon: const Icon(Icons.add_rounded, size: 20),
                   label: Text(strings.navCreateCampaign, style: GoogleFonts.cairo(fontSize: 15, fontWeight: FontWeight.bold)),
                   style: FilledButton.styleFrom(
@@ -916,17 +959,16 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           // 1. Dashboard Metrics Banner (M3 Single-Seed Design)
           LayoutBuilder(
             builder: (context, constraints) {
-              final isWide = constraints.maxWidth > 800;
-              final isMedium = constraints.maxWidth > 500 && constraints.maxWidth <= 800;
-              final cardWidth = isWide 
-                  ? (constraints.maxWidth - 48) / 4 
-                  : isMedium 
-                      ? (constraints.maxWidth - 16) / 2 
+              final layout = M3Layout.fromConstraints(constraints);
+              final cardWidth = layout.isDesktop
+                  ? (constraints.maxWidth - (3 * M3Spacing.sm)) / 4 
+                  : (layout.isMedium || constraints.maxWidth >= 420)
+                      ? (constraints.maxWidth - M3Spacing.sm) / 2 
                       : constraints.maxWidth;
 
               return Wrap(
-                spacing: 16,
-                runSpacing: 16,
+                spacing: M3Spacing.sm,
+                runSpacing: M3Spacing.sm,
                 children: [
                   _buildMetricCard(
                     context: context,
@@ -936,7 +978,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     icon: Icons.campaign_rounded,
                     color: colorScheme.primary,
                     width: cardWidth,
-                    tooltip: isAr ? 'إجمالي عدد الحملات والفعاليات في النظام' : 'Total number of campaigns in system',
+                    tooltip: isAr ? 'إجمالي عدد الحملات والفعاليات في النظام (انقر للتصفية)' : 'Total number of campaigns in system (click to filter)',
+                    isSelected: _campaignFilter == 'ALL',
+                    onTap: () => setState(() => _campaignFilter = 'ALL'),
                   ),
                   _buildMetricCard(
                     context: context,
@@ -947,7 +991,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     color: Colors.green.shade600,
                     width: cardWidth,
                     hasPulse: true,
-                    tooltip: isAr ? 'الحملات النشطة التي تستقبل فواتير العملاء حالياً' : 'Campaigns currently active and accepting receipts',
+                    tooltip: isAr ? 'الحملات النشطة التي تستقبل فواتير العملاء حالياً (انقر للتصفية)' : 'Campaigns currently active and accepting receipts (click to filter)',
+                    isSelected: _campaignFilter == 'ACTIVE',
+                    onTap: () => setState(() => _campaignFilter = 'ACTIVE'),
                   ),
                   _buildMetricCard(
                     context: context,
@@ -967,7 +1013,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     icon: Icons.pause_circle_outline_rounded,
                     color: Colors.amber.shade700,
                     width: cardWidth,
-                    tooltip: isAr ? 'حملات متوقفة مؤقتاً أو انتهت صلاحيتها الزمنية' : 'Paused or expired campaigns',
+                    tooltip: isAr ? 'حملات متوقفة مؤقتاً أو انتهت صلاحيتها الزمنية (انقر للتصفية)' : 'Paused or expired campaigns (click to filter)',
+                    isSelected: _campaignFilter == 'INACTIVE',
+                    onTap: () => setState(() => _campaignFilter = 'INACTIVE'),
                   ),
                 ],
               );
@@ -1086,11 +1134,25 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 style: GoogleFonts.cairo(fontSize: 17, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
               ),
               const Spacer(),
-              if (filteredEvents.length != allEvents.length)
+              if (filteredEvents.length != allEvents.length) ...[
                 Text(
                   isAr ? 'تمت تصفية ${filteredEvents.length} من أصل $totalCampaigns' : 'Showing ${filteredEvents.length} of $totalCampaigns',
                   style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
                 ),
+                const SizedBox(width: 12),
+              ],
+              FilledButton.icon(
+                onPressed: _openCreateEventScreen,
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: Text(
+                  isAr ? 'إنشاء حملة جديدة' : 'New Campaign',
+                  style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -1137,105 +1199,122 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     required double width,
     required String tooltip,
     bool hasPulse = false,
+    bool isSelected = false,
+    VoidCallback? onTap,
   }) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
+    final card = Container(
+      width: width,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: isSelected ? color.withValues(alpha: 0.08) : colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isSelected ? color : color.withValues(alpha: 0.25),
+          width: isSelected ? 2.0 : 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: isSelected ? 0.12 : 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: color, size: 24),
+              ),
+              if (hasPulse)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.green.shade200),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: Colors.green,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'LIVE',
+                        style: GoogleFonts.cairo(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green.shade800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            value,
+            style: GoogleFonts.cairo(
+              fontSize: 26,
+              fontWeight: FontWeight.w900,
+              color: colorScheme.onSurface,
+              height: 1.1,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: GoogleFonts.cairo(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: colorScheme.onSurface,
+            ),
+          ),
+          Text(
+            subtitle,
+            style: GoogleFonts.cairo(
+              fontSize: 11,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+
     return Tooltip(
       message: tooltip,
       waitDuration: const Duration(milliseconds: 400),
-      child: Container(
-        width: width,
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: colorScheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withValues(alpha: 0.25)),
-          boxShadow: [
-            BoxShadow(
-              color: color.withValues(alpha: 0.05),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Icon(icon, color: color, size: 24),
-                ),
-                if (hasPulse)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.green.shade200),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Colors.green,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'LIVE',
-                          style: GoogleFonts.cairo(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green.shade800,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              value,
-              style: GoogleFonts.cairo(
-                fontSize: 26,
-                fontWeight: FontWeight.w900,
-                color: colorScheme.onSurface,
-                height: 1.1,
+      child: onTap != null
+          ? Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(20),
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(20),
+                child: card,
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              title,
-              style: GoogleFonts.cairo(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: colorScheme.onSurface,
-              ),
-            ),
-            Text(
-              subtitle,
-              style: GoogleFonts.cairo(
-                fontSize: 11,
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
+            )
+          : card,
     );
   }
 
@@ -1669,25 +1748,46 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   ),
                 ),
 
-                // 4. Previews Connected Icon Button Group (معاينات البوابات والتطبيق الميداني)
-                Container(
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.7), width: 1.2),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Preview Agency Operations Portal
-                      Tooltip(
-                        message: isAr
-                            ? 'معاينة بوابة شركة الدعاية والعمليات واستعراض الأرصدة والفواتير'
-                            : 'Live preview of Agency Operations Portal',
-                        waitDuration: const Duration(milliseconds: 400),
-                        child: InkWell(
-                          onTap: () {
+                // 4. Material Design 3 Campaign Action & Previews Menu
+                M3ActionMenu(
+                  tooltip: isAr ? 'خيارات ومعاينات الحملة' : 'Campaign Options & Previews',
+                  anchorBuilder: (context, controller, child) {
+                    return OutlinedButton.icon(
+                      onPressed: () {
+                        if (controller.isOpen) {
+                          controller.close();
+                        } else {
+                          controller.open();
+                        }
+                      },
+                      icon: const Icon(Icons.more_horiz_rounded, size: 20),
+                      label: Text(
+                        isAr ? 'الإجراءات والمعاينة' : 'Actions & Previews',
+                        style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.8)),
+                      ),
+                    );
+                  },
+                  children: [
+                    M3ActionMenu.header(
+                      context: context,
+                      title: isAr ? 'معاينات البوابات المباشرة' : 'Live Portal Previews',
+                      icon: Icons.visibility_outlined,
+                    ),
+                    M3ActionMenu.submenu(
+                      context: context,
+                      label: isAr ? 'معاينة تجربة المستخدم' : 'Live User Previews',
+                      icon: Icons.remove_red_eye_rounded,
+                      children: [
+                        M3ActionMenu.item(
+                          context: context,
+                          label: isAr ? 'بوابة شركة الدعاية والعمليات' : 'Agency Operations Portal',
+                          icon: Icons.store_mall_directory_rounded,
+                          onPressed: () {
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (context) => CompanyManagerPortalScreen(
@@ -1698,24 +1798,12 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                               ),
                             );
                           },
-                          borderRadius: const BorderRadiusDirectional.horizontal(
-                            start: Radius.circular(11),
-                          ).resolve(Directionality.of(context)),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                            child: Icon(Icons.store_mall_directory_rounded, size: 19, color: colorScheme.primary),
-                          ),
                         ),
-                      ),
-                      Container(width: 1, height: 22, color: colorScheme.outlineVariant.withValues(alpha: 0.7)),
-                      // Preview Brand Executive Master Portal
-                      Tooltip(
-                        message: isAr
-                            ? 'معاينة البوابة التنفيذية للعلامة التجارية واستعراض الـ ROI ومحاكاة البروموتر'
-                            : 'Live preview of Brand Executive Master Portal',
-                        waitDuration: const Duration(milliseconds: 400),
-                        child: InkWell(
-                          onTap: () {
+                        M3ActionMenu.item(
+                          context: context,
+                          label: isAr ? 'البوابة التنفيذية للعلامة التجارية' : 'Brand Executive Portal',
+                          icon: Icons.dashboard_customize_rounded,
+                          onPressed: () {
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (context) => CompanyManagerPortalScreen(
@@ -1726,21 +1814,12 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                               ),
                             );
                           },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                            child: Icon(Icons.dashboard_customize_rounded, size: 19, color: colorScheme.primary),
-                          ),
                         ),
-                      ),
-                      Container(width: 1, height: 22, color: colorScheme.outlineVariant.withValues(alpha: 0.7)),
-                      // Preview Client / Promoter Mobile App
-                      Tooltip(
-                        message: isAr
-                            ? 'معاينة تجربة العميل والبروموتر في رفع وفحص الفاتورة'
-                            : 'Live preview of client mobile web app',
-                        waitDuration: const Duration(milliseconds: 400),
-                        child: InkWell(
-                          onTap: () {
+                        M3ActionMenu.item(
+                          context: context,
+                          label: isAr ? 'تطبيق رفع الفواتير الميداني' : 'Promoter / Client Mobile App',
+                          icon: Icons.phone_android_rounded,
+                          onPressed: () {
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (context) => ClientReceiptUploadScreen(
@@ -1751,72 +1830,42 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                               ),
                             );
                           },
-                          borderRadius: const BorderRadiusDirectional.horizontal(
-                            end: Radius.circular(11),
-                          ).resolve(Directionality.of(context)),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                            child: Icon(Icons.phone_android_rounded, size: 19, color: colorScheme.primary),
+                        ),
+                      ],
+                    ),
+                    M3ActionMenu.divider(),
+                    M3ActionMenu.header(
+                      context: context,
+                      title: isAr ? 'إدارة وتحكم الحملة' : 'Campaign Management',
+                      icon: Icons.tune_rounded,
+                    ),
+                    M3ActionMenu.item(
+                      context: context,
+                      label: isAr ? 'تعديل بيانات وشروط وبرومبت الحملة' : 'Edit Campaign Rules & Prompt',
+                      icon: Icons.edit_note_rounded,
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => CreateEventScreen(eventToEdit: event),
                           ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // 5. Edit Campaign (Icon Only)
-                Tooltip(
-                  message: isAr ? 'تعديل الحملة: تعديل بيانات وشروط وبرومبت الفحص الذكي للحملة' : 'Edit campaign rules, target products & prompt',
-                  waitDuration: const Duration(milliseconds: 400),
-                  child: OutlinedButton(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => CreateEventScreen(eventToEdit: event),
-                        ),
-                      );
-                    },
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.8)),
+                        );
+                      },
                     ),
-                    child: Icon(Icons.edit_note_rounded, size: 20, color: colorScheme.primary),
-                  ),
-                ),
-
-                // 6. Voucher Cards & Reset Action (Icon Only)
-                Tooltip(
-                  message: isAr
-                      ? 'سجل وإعادة تعيين الفواتشرات: استعلام أرقام كروت الفواتشرات المسلمة، والبحث برقم الكارت، وإعادة التعيين'
-                      : 'Audit claimed voucher serials & reset registry for reuse',
-                  waitDuration: const Duration(milliseconds: 400),
-                  child: OutlinedButton(
-                    onPressed: () => VoucherSerialsManagementDialog.show(context, event),
-                    style: OutlinedButton.styleFrom(
-                      backgroundColor: Colors.amber.shade50,
-                      side: BorderSide(color: Colors.amber.shade300),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    M3ActionMenu.item(
+                      context: context,
+                      label: isAr ? 'سجل وإعادة تعيين كروت الفواتشرات' : 'Voucher Cards Registry & Reset',
+                      icon: Icons.confirmation_number_rounded,
+                      onPressed: () => VoucherSerialsManagementDialog.show(context, event),
                     ),
-                    child: Icon(Icons.confirmation_number_rounded, size: 19, color: Colors.amber.shade900),
-                  ),
-                ),
-
-                // 7. Delete Campaign (Icon Only)
-                Tooltip(
-                  message: strings.deleteCampaignTooltip,
-                  waitDuration: const Duration(milliseconds: 400),
-                  child: OutlinedButton(
-                    onPressed: () => _showDeleteCampaignDialog(context, event, strings, firestore),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: colorScheme.error,
-                      side: BorderSide(color: colorScheme.error.withValues(alpha: 0.5)),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    M3ActionMenu.divider(),
+                    M3ActionMenu.item(
+                      context: context,
+                      label: strings.deleteCampaignTooltip,
+                      icon: Icons.delete_forever_rounded,
+                      isDestructive: true,
+                      onPressed: () => _showDeleteCampaignDialog(context, event, strings, firestore),
                     ),
-                    child: Icon(Icons.delete_forever_rounded, size: 19, color: colorScheme.error),
-                  ),
+                  ],
                 ),
               ],
             ),

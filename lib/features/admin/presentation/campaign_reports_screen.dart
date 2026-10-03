@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -14,12 +15,14 @@ import '../../../core/localization/app_strings.dart';
 import '../../../core/constants/country_currency_config.dart';
 import '../../../core/widgets/switch_point_branding.dart';
 import '../../../core/widgets/m3_button_groups.dart';
+import '../../../core/widgets/m3_list_tile.dart';
 import '../domain/event_model.dart';
 import '../../../core/utils/file_download_helper.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
 import '../../../core/utils/slug_utils.dart';
 import '../../../core/widgets/portal_screen_header_card.dart';
 import 'widgets/branch_chain_analytics_charts.dart';
+import '../../../core/utils/responsive.dart';
 
 
 /// High-performance data structure for memoized report analytics
@@ -85,6 +88,150 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
   final TextEditingController _productSearchController = TextEditingController();
   String _productSortBy = 'QTY'; // 'QTY', 'REVENUE', 'NAME'
   bool _onlyCompanyProductsFilter = true; // Strict company products filtering
+
+  // Day Date Filter State
+  DateTime _selectedDate = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+  bool _isAllDays = true; // Default to all campaign days (cumulative)
+  bool _isExporting = false;
+
+  static bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  static bool _isDateToday(DateTime dt) {
+    final now = DateTime.now();
+    return dt.year == now.year && dt.month == now.month && dt.day == now.day;
+  }
+
+  static DateTime? _extractDocDate(Map<String, dynamic> data) {
+    final rawDate = (data['receipt_date'] ?? data['receiptDate'] ?? data['dateStr'] ?? '').toString().trim();
+    if (rawDate.isNotEmpty) {
+      if (RegExp(r'^\d{4}[-/]\d{1,2}[-/]\d{1,2}').hasMatch(rawDate)) {
+        final clean = rawDate.replaceAll('/', '-');
+        final parts = clean.split('-');
+        if (parts.length >= 3) {
+          final y = int.tryParse(parts[0]);
+          final m = int.tryParse(parts[1]);
+          final d = int.tryParse(parts[2].split('T').first.split(' ').first);
+          if (y != null && m != null && d != null) {
+            return DateTime(y, m, d);
+          }
+        }
+      }
+      if (RegExp(r'^\d{1,2}[-/]\d{1,2}[-/]\d{4}').hasMatch(rawDate)) {
+        final sep = rawDate.contains('/') ? '/' : '-';
+        final parts = rawDate.split(sep);
+        if (parts.length >= 3) {
+          final d = int.tryParse(parts[0]);
+          final m = int.tryParse(parts[1]);
+          final y = int.tryParse(parts[2].split('T').first.split(' ').first);
+          if (y != null && m != null && d != null) {
+            return DateTime(y, m, d);
+          }
+        }
+      }
+      final parsed = DateTime.tryParse(rawDate);
+      if (parsed != null) {
+        return DateTime(parsed.year, parsed.month, parsed.day);
+      }
+    }
+
+    final rawTs = data['timestamp'] ?? data['claimed_at'] ?? data['created_at'] ?? data['date'];
+    if (rawTs is Timestamp) {
+      final dt = rawTs.toDate();
+      return DateTime(dt.year, dt.month, dt.day);
+    } else if (rawTs is String && rawTs.isNotEmpty) {
+      final parsed = DateTime.tryParse(rawTs);
+      if (parsed != null) {
+        return DateTime(parsed.year, parsed.month, parsed.day);
+      }
+    }
+
+    return null;
+  }
+
+  static String _formatDisplayDate(DateTime dt, bool isAr) {
+    if (!isAr) {
+      return '${dt.day}/${dt.month}/${dt.year}';
+    }
+    const weekdays = [
+      'الإثنين',
+      'الثلاثاء',
+      'الأربعاء',
+      'الخميس',
+      'الجمعة',
+      'السبت',
+      'الأحد',
+    ];
+    const months = [
+      'يناير',
+      'فبراير',
+      'مارس',
+      'أبريل',
+      'مايو',
+      'يونيو',
+      'يوليو',
+      'أغسطس',
+      'سبتمبر',
+      'أكتوبر',
+      'نوفمبر',
+      'ديسمبر',
+    ];
+    final weekdayName = weekdays[(dt.weekday - 1) % 7];
+    final monthName = months[(dt.month - 1) % 12];
+    return '$weekdayName، ${dt.day} $monthName ${dt.year}';
+  }
+
+  static String _formatCompactDate(DateTime dt, bool isAr) {
+    if (!isAr) {
+      return '${dt.day}/${dt.month}';
+    }
+    const months = [
+      'يناير',
+      'فبراير',
+      'مارس',
+      'أبريل',
+      'مايو',
+      'يونيو',
+      'يوليو',
+      'أغسطس',
+      'سبتمبر',
+      'أكتوبر',
+      'نوفمبر',
+      'ديسمبر',
+    ];
+    final monthName = months[(dt.month - 1) % 12];
+    return '${dt.day} $monthName';
+  }
+
+  Future<void> _pickReportDate(BuildContext context) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2024, 1, 1),
+      lastDate: DateTime(now.year + 1, 12, 31),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme,
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _selectedDate = DateTime(picked.year, picked.month, picked.day);
+        _isAllDays = false;
+        _productsCurrentPage = 0;
+        _branchesCurrentPage = 0;
+        _cachedMetrics = null;
+        _lastMetricsCacheKey = null;
+      });
+    }
+  }
 
   // Golden Standard: Static Persistent In-Memory Caches for 0ms instant render across tab switches
   static final Map<String, _ReportAggregationResult> _persistentMetricsCache = {};
@@ -221,7 +368,13 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
       ),
       body: Column(
         children: [
-          Expanded(child: content),
+          Expanded(
+            child: M3ContentBoundary(
+              maxWidth: 1400.0,
+              padding: EdgeInsets.zero,
+              child: content,
+            ),
+          ),
           const SwitchPointFooter(),
         ],
       ),
@@ -315,7 +468,10 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
                 }
 
                 final cachedDocs = _persistentTransactionsCache[persistentKey];
-                final cachedResult = _persistentMetricsCache[persistentKey];
+                final dateFilterKey = _isAllDays
+                    ? 'all_days'
+                    : '${_selectedDate.year}_${_selectedDate.month}_${_selectedDate.day}';
+                final cachedResult = _persistentMetricsCache['${persistentKey}_$dateFilterKey'];
 
                 if (transactionsSnapshot.connectionState == ConnectionState.waiting &&
                     !transactionsSnapshot.hasData &&
@@ -339,8 +495,8 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
 
                 final allTransactions = cachedDocs ?? transactionsSnapshot.data?.docs ?? [];
 
-                // Filter transactions according to selected event or locked company
-                final filteredTransactions = allTransactions.where((doc) {
+                // 1. Scope transactions according to selected event or locked company
+                final campaignTransactions = allTransactions.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
                   final cId = data['campaignId']?.toString() ?? '';
                   final cSlug = data['companySlug']?.toString() ?? '';
@@ -364,6 +520,15 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
                   return true;
                 }).toList();
 
+                // 2. Day Date Filtering: If _isAllDays is false, only keep transactions for _selectedDate
+                final filteredTransactions = _isAllDays
+                    ? campaignTransactions
+                    : campaignTransactions.where((doc) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        final docDate = _extractDocDate(data);
+                        return docDate != null && _isSameDay(docDate, _selectedDate);
+                      }).toList();
+
                 return _buildReportsViewContent(
                   context: context,
                   colorScheme: colorScheme,
@@ -373,6 +538,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
                   activeCountry: activeCountry,
                   scopedEvents: scopedEvents,
                   filteredTransactions: filteredTransactions,
+                  totalCampaignTransactions: campaignTransactions.length,
                   dbBranches: dbBranches,
                 );
               },
@@ -395,7 +561,11 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
   }) {
     final firstId = filteredTransactions.isNotEmpty ? filteredTransactions.first.id : '';
     final lastId = filteredTransactions.isNotEmpty ? filteredTransactions.last.id : '';
-    final cacheKey = '${filteredTransactions.length}_${firstId}_${lastId}_${productSortBy}_${effectiveFilterCompanyOnly}_${_selectedEvent?.id}_$isAr';
+    final dateFilterKey = _isAllDays
+        ? 'all_days'
+        : '${_selectedDate.year}_${_selectedDate.month}_${_selectedDate.day}';
+    final cacheKey =
+        '${filteredTransactions.length}_${firstId}_${lastId}_${productSortBy}_${effectiveFilterCompanyOnly}_${_selectedEvent?.id}_${dateFilterKey}_$isAr';
 
     if (_cachedMetrics != null && _lastMetricsCacheKey == cacheKey) {
       return _cachedMetrics!;
@@ -522,7 +692,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
     );
     _lastMetricsCacheKey = cacheKey;
     final effectiveEventId = _selectedEvent?.id ?? (_selectedEventId != null && _selectedEventId != 'ALL' && _selectedEventId != 'all' ? _selectedEventId : null);
-    final persistentKey = '${widget.lockedCompanySlug ?? 'all'}_${effectiveEventId ?? 'all'}';
+    final persistentKey = '${widget.lockedCompanySlug ?? 'all'}_${effectiveEventId ?? 'all'}_$dateFilterKey';
     _persistentMetricsCache[persistentKey] = _cachedMetrics!;
     return _cachedMetrics!;
   }
@@ -536,6 +706,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
     required CountryCurrency activeCountry,
     required List<EventModel> scopedEvents,
     required List<QueryDocumentSnapshot> filteredTransactions,
+    int totalCampaignTransactions = 0,
     List<BranchModel> dbBranches = const [],
   }) {
     final String effectiveCompanySlug = widget.lockedCompanySlug?.isNotEmpty == true
@@ -596,7 +767,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Unified Header Bar with Event Selector & Export Excel Action
+                    // 1. Page Intro Card (Header Bar with Campaign Selector)
                     _buildHeaderCard(
                       context: context,
                       colorScheme: colorScheme,
@@ -608,32 +779,10 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
                       effectiveCompanyName: effectiveCompanyName,
                       filteredTransactions: filteredTransactions,
                       isMobile: isMobile,
-                      onExport: () => _exportAnalyticsExcel(
-                        context: context,
-                        filteredTransactions: filteredTransactions,
-                        sortedProducts: sortedProducts,
-                        sortedBranches: sortedBranches,
-                        effectiveCompanyName: effectiveCompanyName.isNotEmpty ? effectiveCompanyName : 'Tashil_Gift',
-                        isAr: isAr,
-                        activeCountry: activeCountry,
-                      ),
                     ),
                     const SizedBox(height: 14),
 
-                    // Active Campaign Information Card (if a specific campaign is selected)
-                    if (_selectedEvent != null) ...[
-                      _CampaignEventDetailsCard(
-                        event: _selectedEvent!,
-                        colorScheme: colorScheme,
-                        activeCountry: activeCountry,
-                        isAr: isAr,
-                        isHi: isHi,
-                        isMobile: isMobile,
-                      ),
-                      const SizedBox(height: 14),
-                    ],
-
-                    // M3 High-Impact KPI Metric Cards Grid
+                    // 2. M3 High-Impact KPI Metric Cards Grid (2 on top, 2 underneath on mobile)
                     _buildKpiMetricsGrid(
                       context: context,
                       colorScheme: colorScheme,
@@ -649,6 +798,50 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
                       topProductName: topProductName,
                       isWide: isWide,
                       effectiveFilterCompanyOnly: effectiveFilterCompanyOnly,
+                    ),
+                    const SizedBox(height: 14),
+
+                    // 3. Active Campaign Information Card (if a specific campaign is selected)
+                    if (_selectedEvent != null) ...[
+                      _CampaignEventDetailsCard(
+                        event: _selectedEvent!,
+                        colorScheme: colorScheme,
+                        activeCountry: activeCountry,
+                        isAr: isAr,
+                        isHi: isHi,
+                        isMobile: isMobile,
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+
+                    // 4. Day Date Filter & Export Bar (Excel & CSV)
+                    _buildDateAndExportBar(
+                      context: context,
+                      colorScheme: colorScheme,
+                      strings: strings,
+                      isAr: isAr,
+                      isHi: isHi,
+                      isMobile: isMobile,
+                      matchingInvoicesCount: filteredTransactions.length,
+                      totalInvoicesCount: totalCampaignTransactions > 0 ? totalCampaignTransactions : filteredTransactions.length,
+                      onExportExcel: () => _exportAnalyticsExcel(
+                        context: context,
+                        filteredTransactions: filteredTransactions,
+                        sortedProducts: sortedProducts,
+                        sortedBranches: sortedBranches,
+                        effectiveCompanyName: effectiveCompanyName.isNotEmpty ? effectiveCompanyName : 'Tashil_Gift',
+                        isAr: isAr,
+                        activeCountry: activeCountry,
+                      ),
+                      onExportCSV: () => _exportAnalyticsCSV(
+                        context: context,
+                        filteredTransactions: filteredTransactions,
+                        sortedProducts: sortedProducts,
+                        sortedBranches: sortedBranches,
+                        effectiveCompanyName: effectiveCompanyName.isNotEmpty ? effectiveCompanyName : 'Tashil_Gift',
+                        isAr: isAr,
+                        activeCountry: activeCountry,
+                      ),
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -732,7 +925,6 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
     required String effectiveSlug,
     required String effectiveCompanyName,
     required List<QueryDocumentSnapshot> filteredTransactions,
-    required VoidCallback onExport,
     required bool isMobile,
   }) {
     final effectiveEventId = _selectedEvent?.id ?? (_selectedEventId != null && _selectedEventId != 'ALL' && _selectedEventId != 'all' ? _selectedEventId : null);
@@ -740,9 +932,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
     return PortalScreenHeaderCard(
       icon: Icons.analytics_rounded,
       title: strings.analyticsTitle,
-      subtitle: isAr
-          ? 'تحليل مبيعات الأصناف، أداء الفعاليات، وتوزيع الفروع والسلاسل'
-          : (isHi ? 'उत्पाद बिक्री विश्लेषण, अभियान प्रदर्शन और शाखा वितरण' : 'Sales performance, top product rankings, and branch analytics'),
+      subtitle: '',
       events: allEvents,
       selectedEventId: effectiveEventId,
       onEventChanged: (val) {
@@ -760,20 +950,288 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
       },
       lockedCompanySlug: widget.lockedCompanySlug,
       isMobile: isMobile,
-      actions: [
-        FilledButton.tonalIcon(
-          onPressed: onExport,
-          icon: const Icon(Icons.table_chart_rounded, size: 18),
-          label: Text(
-            strings.exportExcelCsv,
-            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
-          ),
-          style: FilledButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          ),
+      actions: const [],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 1.5. Interactive Day Date Filter & Excel Action Bar (Material Design 3)
+  // ---------------------------------------------------------------------------
+  Widget _buildDateAndExportBar({
+    required BuildContext context,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+    required bool isHi,
+    required bool isMobile,
+    required int matchingInvoicesCount,
+    required int totalInvoicesCount,
+    required VoidCallback onExportExcel,
+    required VoidCallback onExportCSV,
+  }) {
+    final now = DateTime.now();
+    final isSelectedToday = !_isAllDays && _isDateToday(_selectedDate);
+    final canGoForward = !_isAllDays &&
+        (_selectedDate.year < now.year ||
+            (_selectedDate.year == now.year &&
+                (_selectedDate.month < now.month ||
+                    (_selectedDate.month == now.month && _selectedDate.day < now.day))));
+
+    final quickToggleGroup = M3ConnectedButtonGroup<String>(
+      height: 38,
+      borderRadius: 12,
+      isExpanded: true,
+      showCheckmark: false,
+      segments: [
+        M3ButtonSegment<String>(
+          value: 'ALL',
+          label: strings.totalLabel,
+          icon: Icons.analytics_rounded,
+          badgeText: '$totalInvoicesCount',
+          tooltip: isAr ? 'عرض إجمالي مبيعات وفواتير كافة أيام الحملة' : 'View total sales across all campaign days',
+        ),
+        M3ButtonSegment<String>(
+          value: 'DAYS',
+          label: strings.daysLabel,
+          icon: Icons.calendar_today_rounded,
+          tooltip: isAr ? 'استعراض وفلترة التقارير حسب الأيام' : 'Filter reports by day',
         ),
       ],
+      selectedValue: _isAllDays ? 'ALL' : 'DAYS',
+      onSelected: (val) {
+        setState(() {
+          if (val == 'ALL') {
+            _isAllDays = true;
+          } else {
+            _isAllDays = false;
+          }
+          _productsCurrentPage = 0;
+          _branchesCurrentPage = 0;
+          _cachedMetrics = null;
+          _lastMetricsCacheKey = null;
+        });
+      },
+    );
+
+    final dateNavigator = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Previous Day Button
+        IconButton.filledTonal(
+          icon: Icon(isAr ? Icons.chevron_right_rounded : Icons.chevron_left_rounded, size: isMobile ? 18 : 20),
+          tooltip: strings.previousDay,
+          style: IconButton.styleFrom(
+            backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+            foregroundColor: colorScheme.onSurfaceVariant,
+          ),
+          padding: EdgeInsets.all(isMobile ? 6 : 8),
+          constraints: BoxConstraints(minWidth: isMobile ? 34 : 38, minHeight: isMobile ? 34 : 38),
+          onPressed: () {
+            setState(() {
+              if (_isAllDays) {
+                _selectedDate = now.subtract(const Duration(days: 1));
+              } else {
+                _selectedDate = _selectedDate.subtract(const Duration(days: 1));
+              }
+              _isAllDays = false;
+              _productsCurrentPage = 0;
+              _branchesCurrentPage = 0;
+              _cachedMetrics = null;
+              _lastMetricsCacheKey = null;
+            });
+          },
+        ),
+        SizedBox(width: isMobile ? 4 : 6),
+
+        // Date Picker Button ("اختر اليوم" / التاريخ المحدد)
+        InkWell(
+          onTap: () => _pickReportDate(context),
+          borderRadius: BorderRadius.circular(12),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 12, vertical: isMobile ? 7 : 8),
+            decoration: BoxDecoration(
+              color: _isAllDays
+                  ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.35)
+                  : colorScheme.primaryContainer.withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _isAllDays
+                    ? colorScheme.outlineVariant.withValues(alpha: 0.8)
+                    : colorScheme.primary.withValues(alpha: 0.7),
+                width: 1.2,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.calendar_month_rounded,
+                  size: isMobile ? 15 : 17,
+                  color: _isAllDays
+                      ? colorScheme.onSurfaceVariant
+                      : colorScheme.primary,
+                ),
+                SizedBox(width: isMobile ? 6 : 8),
+                Text(
+                  _isAllDays
+                      ? strings.selectDay
+                      : (isMobile ? _formatCompactDate(_selectedDate, isAr) : _formatDisplayDate(_selectedDate, isAr)),
+                  style: GoogleFonts.cairo(
+                    fontSize: isMobile ? 12 : 12.5,
+                    fontWeight: FontWeight.bold,
+                    color: _isAllDays
+                        ? colorScheme.onSurfaceVariant
+                        : colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                if (!_isAllDays) ...[
+                  SizedBox(width: isMobile ? 6 : 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      isSelectedToday ? (isAr ? 'اليوم' : 'Today') : '$matchingInvoicesCount ${isAr ? 'فاتورة' : 'invoices'}',
+                      style: GoogleFonts.cairo(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        SizedBox(width: isMobile ? 4 : 6),
+
+        // Next Day Button
+        IconButton.filledTonal(
+          icon: Icon(isAr ? Icons.chevron_left_rounded : Icons.chevron_right_rounded, size: isMobile ? 18 : 20),
+          tooltip: strings.nextDay,
+          style: IconButton.styleFrom(
+            backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+            foregroundColor: colorScheme.onSurfaceVariant,
+          ),
+          padding: EdgeInsets.all(isMobile ? 6 : 8),
+          constraints: BoxConstraints(minWidth: isMobile ? 34 : 38, minHeight: isMobile ? 34 : 38),
+          onPressed: canGoForward
+              ? () {
+                  setState(() {
+                    _selectedDate = _selectedDate.add(const Duration(days: 1));
+                    _isAllDays = false;
+                    _productsCurrentPage = 0;
+                    _branchesCurrentPage = 0;
+                    _cachedMetrics = null;
+                    _lastMetricsCacheKey = null;
+                  });
+                }
+              : null,
+        ),
+      ],
+    );
+
+    final excelButton = FilledButton.tonalIcon(
+      onPressed: _isExporting ? null : onExportExcel,
+      style: FilledButton.styleFrom(
+        backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.6),
+        foregroundColor: colorScheme.primary,
+        padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 12, vertical: isMobile ? 7 : 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 0,
+      ),
+      icon: _isExporting
+          ? SizedBox(
+              width: 15,
+              height: 15,
+              child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary),
+            )
+          : Icon(Icons.table_chart_rounded, size: isMobile ? 16 : 17, color: colorScheme.primary),
+      label: Text(
+        strings.excelBtn,
+        style: GoogleFonts.cairo(
+          fontWeight: FontWeight.bold,
+          fontSize: isMobile ? 11.5 : 12,
+          color: colorScheme.primary,
+        ),
+      ),
+    );
+
+    final csvButton = FilledButton.tonalIcon(
+      onPressed: _isExporting ? null : onExportCSV,
+      style: FilledButton.styleFrom(
+        backgroundColor: colorScheme.secondaryContainer.withValues(alpha: 0.6),
+        foregroundColor: colorScheme.secondary,
+        padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 12, vertical: isMobile ? 7 : 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 0,
+      ),
+      icon: _isExporting
+          ? SizedBox(
+              width: 15,
+              height: 15,
+              child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.secondary),
+            )
+          : Icon(Icons.description_rounded, size: isMobile ? 16 : 17, color: colorScheme.secondary),
+      label: Text(
+        strings.csvBtn,
+        style: GoogleFonts.cairo(
+          fontWeight: FontWeight.bold,
+          fontSize: isMobile ? 11.5 : 12,
+          color: colorScheme.secondary,
+        ),
+      ),
+    );
+
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Row 1: quickToggleGroup takes the entire line ("الإجمالي والأيام دي هتاخد السطر كله")
+          quickToggleGroup,
+          const SizedBox(height: 10),
+          // Row 2: Underneath, 3 button groups: Date Navigator ("واختار اليوم"), Excel ("Excel"), and CSV ("CSV")
+          Row(
+            children: [
+              if (isMobile)
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: dateNavigator,
+                  ),
+                )
+              else ...[
+                dateNavigator,
+                const Spacer(),
+              ],
+              const SizedBox(width: 8),
+              excelButton,
+              const SizedBox(width: 6),
+              csvButton,
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -928,23 +1386,28 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final double width = constraints.maxWidth;
-        int crossAxisCount = 4;
-        double childAspectRatio = 1.65;
-        if (width < 600) {
-          crossAxisCount = 1;
-          childAspectRatio = 2.3;
-        } else if (width < 960) {
+        final layout = M3Layout.fromConstraints(constraints);
+        final int crossAxisCount;
+        final double childAspectRatio;
+
+        if (layout.isCompact) {
+          // Exactly 2 cards on top, 2 cards underneath on all mobile screens (2x2 grid)
+          crossAxisCount = 2;
+          childAspectRatio = constraints.maxWidth < 360 ? 1.25 : 1.35;
+        } else if (layout.isMedium) {
           crossAxisCount = 2;
           childAspectRatio = 1.85;
+        } else {
+          crossAxisCount = 4;
+          childAspectRatio = 1.65;
         }
 
         return GridView.count(
           crossAxisCount: crossAxisCount,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
+          crossAxisSpacing: layout.isCompact ? 8 : M3Spacing.sm,
+          mainAxisSpacing: layout.isCompact ? 8 : M3Spacing.sm,
           childAspectRatio: childAspectRatio,
           children: [
             // Card 1: Accepted Invoices
@@ -957,6 +1420,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
               badgeText: '$acceptanceRate% ${isAr ? "مقبول" : "valid"}',
               colorScheme: colorScheme,
               tooltip: isAr ? 'عدد الفواتير المستوفية لكافة الشروط والحد الأدنى' : 'Count of validated receipts meeting campaign rules',
+              isCompact: layout.isCompact,
             ),
 
             // Card 2: Total Sales Volume
@@ -969,6 +1433,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
               badgeText: activeCountry.nameAr,
               colorScheme: colorScheme,
               tooltip: isAr ? 'إجمالي المبيعات المحققة لمنتجات الحملة بالعُملة المحلية' : 'Total sales volume for verified promotional purchases',
+              isCompact: layout.isCompact,
             ),
 
             // Card 3: Total Units Sold
@@ -985,6 +1450,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
               tooltip: isAr
                   ? (effectiveFilterCompanyOnly ? 'إجمالي كميات منتجات الشركة المعتمدة في كافة الفواتير' : 'إجمالي كميات الأصناف المشتراة في كافة الفواتير')
                   : 'Total quantity of items purchased',
+              isCompact: layout.isCompact,
             ),
 
             // Card 4: Top Performing Product
@@ -997,6 +1463,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
               badgeText: '🏆 #1',
               colorScheme: colorScheme,
               tooltip: isAr ? 'المنتج الأكثر تكراراً وطلباً في الفواتير المقبولة' : 'The #1 most purchased product in this campaign',
+              isCompact: layout.isCompact,
             ),
           ],
         );
@@ -1013,15 +1480,16 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
     required String badgeText,
     required ColorScheme colorScheme,
     required String tooltip,
+    bool isCompact = false,
   }) {
     return Tooltip(
       message: tooltip,
       waitDuration: const Duration(milliseconds: 300),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: EdgeInsets.symmetric(horizontal: isCompact ? 10 : 14, vertical: isCompact ? 8 : 12),
         decoration: BoxDecoration(
           color: colorScheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(isCompact ? 16 : 20),
           border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
         ),
         child: Column(
@@ -1032,23 +1500,23 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(7),
+                  padding: EdgeInsets.all(isCompact ? 6 : 7),
                   decoration: BoxDecoration(
                     color: accentColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(icon, color: accentColor, size: 18),
+                  child: Icon(icon, color: accentColor, size: isCompact ? 16 : 18),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                   decoration: BoxDecoration(
                     color: colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     badgeText,
                     style: GoogleFonts.cairo(
-                      fontSize: 10.5,
+                      fontSize: isCompact ? 9.5 : 10.5,
                       fontWeight: FontWeight.bold,
                       color: accentColor,
                     ),
@@ -1068,7 +1536,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
                     child: Text(
                       value,
                       style: GoogleFonts.cairo(
-                        fontSize: 18,
+                        fontSize: isCompact ? 16 : 18,
                         fontWeight: FontWeight.w900,
                         color: colorScheme.onSurface,
                         letterSpacing: -0.3,
@@ -1081,7 +1549,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
                   Text(
                     title,
                     style: GoogleFonts.cairo(
-                      fontSize: 11.5,
+                      fontSize: isCompact ? 10.5 : 11.5,
                       fontWeight: FontWeight.bold,
                       color: colorScheme.onSurfaceVariant,
                       height: 1.15,
@@ -1092,7 +1560,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
                   Text(
                     subtitle,
                     style: GoogleFonts.cairo(
-                      fontSize: 10,
+                      fontSize: isCompact ? 9.5 : 10,
                       color: colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
                       height: 1.15,
                     ),
@@ -1119,7 +1587,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
     if (selectedTab == 0) {
       return isCompact ? 172.0 : 130.0;
     } else {
-      return isCompact ? 130.0 : 130.0;
+      return isCompact ? 206.0 : 130.0;
     }
   }
 
@@ -1348,6 +1816,62 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
       ),
     );
 
+    final activeDateChip = !_isAllDays
+        ? Container(
+            height: isCompact ? 38 : 42,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: colorScheme.primaryContainer.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: colorScheme.primary.withValues(alpha: 0.5),
+                width: 1.2,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                InkWell(
+                  onTap: () => _pickReportDate(context),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.event_rounded, size: 16, color: colorScheme.primary),
+                      const SizedBox(width: 6),
+                      Text(
+                        _formatDisplayDate(_selectedDate, isAr),
+                        style: GoogleFonts.cairo(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _isAllDays = true;
+                      _productsCurrentPage = 0;
+                      _branchesCurrentPage = 0;
+                      _cachedMetrics = null;
+                      _lastMetricsCacheKey = null;
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: Padding(
+                    padding: const EdgeInsets.all(2.0),
+                    child: Icon(Icons.close_rounded, size: 15, color: colorScheme.primary),
+                  ),
+                ),
+              ],
+            ),
+          )
+        : null;
+
     if (isCompact) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1358,6 +1882,10 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
+                if (activeDateChip != null) ...[
+                  activeDateChip,
+                  const SizedBox(width: 8),
+                ],
                 companyFilterWidget,
                 const SizedBox(width: 8),
                 sortSelectorWidget,
@@ -1371,6 +1899,10 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
     return Row(
       children: [
         Expanded(child: searchInputWidget),
+        if (activeDateChip != null) ...[
+          const SizedBox(width: 10),
+          activeDateChip,
+        ],
         const SizedBox(width: 10),
         companyFilterWidget,
         const SizedBox(width: 10),
@@ -1385,10 +1917,66 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
     required bool isAr,
     required bool isCompact,
   }) {
+    final activeDateChip = !_isAllDays
+        ? Container(
+            height: isCompact ? 36 : 42,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: colorScheme.primaryContainer.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: colorScheme.primary.withValues(alpha: 0.5),
+                width: 1.2,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                InkWell(
+                  onTap: () => _pickReportDate(context),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.event_rounded, size: 16, color: colorScheme.primary),
+                      const SizedBox(width: 6),
+                      Text(
+                        _formatDisplayDate(_selectedDate, isAr),
+                        style: GoogleFonts.cairo(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _isAllDays = true;
+                      _productsCurrentPage = 0;
+                      _branchesCurrentPage = 0;
+                      _cachedMetrics = null;
+                      _lastMetricsCacheKey = null;
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: Padding(
+                    padding: const EdgeInsets.all(2.0),
+                    child: Icon(Icons.close_rounded, size: 15, color: colorScheme.primary),
+                  ),
+                ),
+              ],
+            ),
+          )
+        : null;
+
     final viewModeGroup = M3ConnectedButtonGroup<String>(
-      height: isCompact ? 38 : 42,
+      height: isCompact ? 36 : 42,
       borderRadius: 12,
-      isExpanded: false,
+      isExpanded: isCompact,
       segments: [
         M3ButtonSegment<String>(
           value: 'DONUT',
@@ -1414,9 +2002,9 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
     );
 
     final aggregationGroup = M3ConnectedButtonGroup<String>(
-      height: isCompact ? 38 : 42,
+      height: isCompact ? 36 : 42,
       borderRadius: 12,
-      isExpanded: false,
+      isExpanded: isCompact,
       segments: [
         M3ButtonSegment<String>(
           value: 'BRANCH',
@@ -1439,9 +2027,9 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
     );
 
     final metricGroup = M3ConnectedButtonGroup<String>(
-      height: isCompact ? 38 : 42,
+      height: isCompact ? 36 : 42,
       borderRadius: 12,
-      isExpanded: false,
+      isExpanded: isCompact,
       segments: [
         M3ButtonSegment<String>(
           value: 'REVENUE',
@@ -1460,11 +2048,32 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
       onSelected: (val) => setState(() => _branchMetricDimension = val),
     );
 
+    if (isCompact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (activeDateChip != null) ...[
+            activeDateChip,
+            const SizedBox(height: 6),
+          ],
+          viewModeGroup,
+          const SizedBox(height: 6),
+          aggregationGroup,
+          const SizedBox(height: 6),
+          metricGroup,
+        ],
+      );
+    }
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (activeDateChip != null) ...[
+            activeDateChip,
+            const SizedBox(width: 8),
+          ],
           viewModeGroup,
           const SizedBox(width: 8),
           aggregationGroup,
@@ -1494,31 +2103,40 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
         ? (isAr ? 'الفروع' : (isHi ? 'शाखाएं' : 'Branches'))
         : (isAr ? 'توزيع الفروع والسلاسل' : (isHi ? 'शाखावार बिक्री' : 'Store & Branch Distribution'));
 
+    final tabsGroup = M3ConnectedButtonGroup<int>(
+      height: isMobile ? 42 : 48,
+      borderRadius: 16,
+      isExpanded: isMobile,
+      segments: [
+        M3ButtonSegment<int>(
+          value: 0,
+          label: prodLabel,
+          icon: Icons.bar_chart_rounded,
+          badgeText: '$productsCount',
+          tooltip: isAr ? 'ترتيب الأصناف والمنتجات المباعة بحسب الكمية والقيمة الإجمالية' : 'Ranked product sales by quantity and revenue',
+        ),
+        M3ButtonSegment<int>(
+          value: 1,
+          label: branchLabel,
+          icon: Icons.storefront_rounded,
+          badgeText: '$branchesCount',
+          tooltip: isAr ? 'توزيع المبيعات وعدد الفواتير حسب الفروع ومنافذ البيع' : 'Breakdown of sales by retail branch and supermarket chain',
+        ),
+      ],
+      selectedValue: _selectedTab,
+      onSelected: (val) => setState(() => _selectedTab = val),
+    );
+
+    if (isMobile) {
+      return SizedBox(
+        width: double.infinity,
+        child: tabsGroup,
+      );
+    }
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      child: M3ConnectedButtonGroup<int>(
-        height: isMobile ? 44 : 48,
-        borderRadius: 16,
-        isExpanded: false,
-        segments: [
-          M3ButtonSegment<int>(
-            value: 0,
-            label: prodLabel,
-            icon: Icons.bar_chart_rounded,
-            badgeText: '$productsCount',
-            tooltip: isAr ? 'ترتيب الأصناف والمنتجات المباعة بحسب الكمية والقيمة الإجمالية' : 'Ranked product sales by quantity and revenue',
-          ),
-          M3ButtonSegment<int>(
-            value: 1,
-            label: branchLabel,
-            icon: Icons.storefront_rounded,
-            badgeText: '$branchesCount',
-            tooltip: isAr ? 'توزيع المبيعات وعدد الفواتير حسب الفروع ومنافذ البيع' : 'Breakdown of sales by retail branch and supermarket chain',
-          ),
-        ],
-        selectedValue: _selectedTab,
-        onSelected: (val) => setState(() => _selectedTab = val),
-      ),
+      child: tabsGroup,
     );
   }
 
@@ -1553,18 +2171,54 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.inventory_2_outlined, size: 56, color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6)),
+              Icon(
+                !_isAllDays ? Icons.event_busy_rounded : Icons.inventory_2_outlined,
+                size: 56,
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+              ),
               const SizedBox(height: 16),
               Text(
-                isAr ? 'لا توجد بيانات أصناف مباعة مسجلة لهذه الفعالية بعد.' : 'No product sales recorded for this campaign yet.',
+                !_isAllDays
+                    ? (isAr
+                        ? 'لا توجد مبيعات أصناف مسجلة في هذا اليوم (${_formatDisplayDate(_selectedDate, isAr)})'
+                        : 'No product sales recorded for this date (${_formatDisplayDate(_selectedDate, isAr)})')
+                    : (isAr
+                        ? 'لا توجد بيانات أصناف مباعة مسجلة لهذه الفعالية بعد.'
+                        : 'No product sales recorded for this campaign yet.'),
                 style: GoogleFonts.cairo(fontSize: 15, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+                textAlign: TextAlign.center,
               ),
               const SizedBox(height: 6),
               Text(
-                isAr ? 'بمجرد فحص وقبول فواتير العملاء، ستظهر هنا إحصائيات المنتجات بدقة.' : 'Once receipts are scanned and validated, product statistics will populate automatically.',
+                !_isAllDays
+                    ? (isAr
+                        ? 'يمكنك التبديل ليوم آخر أو استعراض إجمالي كافة أيام الفعالية.'
+                        : 'You can navigate to another day or view all campaign days.')
+                    : (isAr
+                        ? 'بمجرد فحص وقبول فواتير العملاء، ستظهر هنا إحصائيات المنتجات بدقة.'
+                        : 'Once receipts are scanned and validated, product statistics will populate automatically.'),
                 style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
                 textAlign: TextAlign.center,
               ),
+              if (!_isAllDays) ...[
+                const SizedBox(height: 14),
+                FilledButton.tonalIcon(
+                  onPressed: () {
+                    setState(() {
+                      _isAllDays = true;
+                      _productsCurrentPage = 0;
+                      _branchesCurrentPage = 0;
+                      _cachedMetrics = null;
+                      _lastMetricsCacheKey = null;
+                    });
+                  },
+                  icon: const Icon(Icons.all_inclusive_rounded, size: 18),
+                  label: Text(
+                    strings.allDays,
+                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -1827,13 +2481,48 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
           border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
         ),
         child: Center(
-          child: Text(
-            isAr
-                ? (isChainMode ? 'لا توجد بيانات سلاسل مسجلة حتى الآن.' : 'لا توجد بيانات فروع مسجلة حتى الآن.')
-                : (isHi
-                    ? (isChainMode ? 'अभी तक कोई रिटेल चेन डेटा दर्ज नहीं किया गया है।' : 'अभी तक कोई शाखा डेटा दर्ज नहीं किया गया है।')
-                    : (isChainMode ? 'No retail chain data recorded yet.' : 'No branch data recorded yet.')),
-            style: GoogleFonts.cairo(fontSize: 15, color: colorScheme.onSurfaceVariant),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                !_isAllDays ? Icons.event_busy_rounded : Icons.store_mall_directory_outlined,
+                size: 56,
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                !_isAllDays
+                    ? (isAr
+                        ? 'لا توجد بيانات ${isChainMode ? "سلاسل" : "فروع"} مسجلة في هذا اليوم (${_formatDisplayDate(_selectedDate, isAr)})'
+                        : 'No ${isChainMode ? "chain" : "branch"} data recorded for this date (${_formatDisplayDate(_selectedDate, isAr)})')
+                    : (isAr
+                        ? (isChainMode ? 'لا توجد بيانات سلاسل مسجلة حتى الآن.' : 'لا توجد بيانات فروع مسجلة حتى الآن.')
+                        : (isHi
+                            ? (isChainMode ? 'अभी तक कोई रिटेल चेन डेटा दर्ज नहीं किया गया है।' : 'अभी तक कोई शाखा डेटा दर्ज नहीं किया गया है।')
+                            : (isChainMode ? 'No retail chain data recorded yet.' : 'No branch data recorded yet.'))),
+                style: GoogleFonts.cairo(fontSize: 15, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+                textAlign: TextAlign.center,
+              ),
+              if (!_isAllDays) ...[
+                const SizedBox(height: 14),
+                FilledButton.tonalIcon(
+                  onPressed: () {
+                    setState(() {
+                      _isAllDays = true;
+                      _productsCurrentPage = 0;
+                      _branchesCurrentPage = 0;
+                      _cachedMetrics = null;
+                      _lastMetricsCacheKey = null;
+                    });
+                  },
+                  icon: const Icon(Icons.all_inclusive_rounded, size: 18),
+                  label: Text(
+                    strings.allDays,
+                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       );
@@ -2215,6 +2904,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
     required CountryCurrency activeCountry,
   }) {
     final messenger = ScaffoldMessenger.of(context);
+    setState(() => _isExporting = true);
     try {
       final excel = Excel.createExcel();
 
@@ -2313,15 +3003,18 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
       final fileBytes = excel.encode();
       if (fileBytes != null) {
         final now = DateTime.now();
-        final dateStr = '${now.year}_${now.month.toString().padLeft(2, '0')}_${now.day.toString().padLeft(2, '0')}';
+        final datePart = _isAllDays
+            ? '${now.year}_${now.month.toString().padLeft(2, '0')}_${now.day.toString().padLeft(2, '0')}'
+            : 'Day_${_selectedDate.year}_${_selectedDate.month.toString().padLeft(2, '0')}_${_selectedDate.day.toString().padLeft(2, '0')}';
         final cleanName = effectiveCompanyName.replaceAll(RegExp(r'[^\w\s\u0600-\u06FF]'), '').replaceAll(' ', '_');
-        final fileName = 'Tashil_Report_${cleanName}_$dateStr.xlsx';
+        final fileName = 'Tashil_Report_${cleanName}_$datePart.xlsx';
 
         downloadFileBytes(
           bytes: fileBytes,
           fileName: fileName,
         );
 
+        final dateLabel = _isAllDays ? (isAr ? 'كافة الأيام' : 'All Days') : _formatDisplayDate(_selectedDate, isAr);
         messenger.showSnackBar(
           SnackBar(
             content: Row(
@@ -2331,14 +3024,14 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
                 Expanded(
                   child: Text(
                     isAr
-                        ? 'تم تحميل وتنزيل ملف تقرير Excel بنجاح ($fileName)'
-                        : 'Excel report downloaded successfully ($fileName)',
+                        ? 'تم تنزيل شيت إكسيل بنجاح ($dateLabel)'
+                        : 'Excel sheet downloaded successfully ($dateLabel)',
                     style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
             ),
-            backgroundColor: const Color(0xFF107C41),
+            backgroundColor: Theme.of(context).colorScheme.primary,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -2351,6 +3044,147 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
           behavior: SnackBarBehavior.floating,
         ),
       );
+    } finally {
+      if (mounted) {
+        setState(() => _isExporting = false);
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 10. Export Analytics CSV (.csv)
+  // ---------------------------------------------------------------------------
+  void _exportAnalyticsCSV({
+    required BuildContext context,
+    required List<QueryDocumentSnapshot> filteredTransactions,
+    required List<_ProductStat> sortedProducts,
+    required List<_BranchStat> sortedBranches,
+    required String effectiveCompanyName,
+    required bool isAr,
+    required CountryCurrency activeCountry,
+  }) {
+    final messenger = ScaffoldMessenger.of(context);
+    final themeColor = Theme.of(context).colorScheme.primary;
+    setState(() => _isExporting = true);
+    try {
+      final buffer = StringBuffer();
+
+      // Section 1: Invoices Log
+      buffer.writeln(isAr ? 'سجل الفواتير والمرفوعات' : 'Invoices & Transactions Log');
+      buffer.writeln(
+        '${isAr ? "رقم الفاتورة" : "Receipt #"},'
+        '${isAr ? "تاريخ الفاتورة" : "Receipt Date"},'
+        '${isAr ? "السلسلة التجارية" : "Store Chain"},'
+        '${isAr ? "الفرع" : "Branch"},'
+        '${isAr ? "اسم العميل" : "Customer Name"},'
+        '${isAr ? "رقم الهاتف" : "Phone Number"},'
+        '${isAr ? "قيمة المشتريات (${activeCountry.currencySymbol})" : "Amount (${activeCountry.currencySymbol})"},'
+        '${isAr ? "حالة الفاتورة" : "Status"},'
+        '${isAr ? "سبب الرفض" : "Rejection Reason"},'
+        '${isAr ? "تاريخ التسجيل" : "Timestamp"}',
+      );
+
+      for (final doc in filteredTransactions) {
+        final data = doc.data() as Map<String, dynamic>;
+        final recNum = data['receipt_number']?.toString().replaceAll('"', '""') ?? '';
+        final recDate = data['receipt_date']?.toString().replaceAll('"', '""') ?? '';
+        final chain = data['store_chain_detected']?.toString().replaceAll('"', '""') ?? '';
+        final branch = data['branch_detected']?.toString().replaceAll('"', '""') ?? '';
+        final custName = data['customerName']?.toString().replaceAll('"', '""') ?? '';
+        final custPhone = data['customerPhone']?.toString().replaceAll('"', '""') ?? '';
+        final val = (data['target_company_total'] ?? data['total_value'] as num?)?.toDouble() ?? 0.0;
+        final bool isExplicitlyValid = data['is_valid'] == true || data['status'] == 'accepted' || data['isValid'] == true;
+        final bool isExplicitlyRejected = data['is_valid'] == false || data['status'] == 'rejected' || data['isValid'] == false || ((data['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
+        final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((data['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
+        final status = isValid ? (isAr ? 'مقبولة' : 'Accepted') : (isAr ? 'مرفوضة' : 'Rejected');
+        final unfulfilled = (data['unfulfilled_conditions'] as List?)?.join(' - ') ?? '';
+        final rejectionReason = (data['rejection_reason']?.toString() ?? unfulfilled).replaceAll('"', '""');
+        final ts = data['timestamp'] != null ? (data['timestamp'] as Timestamp).toDate().toString() : '';
+
+        buffer.writeln('"$recNum","$recDate","$chain","$branch","$custName","$custPhone",${val.toStringAsFixed(2)},"$status","$rejectionReason","$ts"');
+      }
+
+      buffer.writeln();
+      // Section 2: Top Selling Products
+      buffer.writeln(isAr ? 'الأصناف الأكثر مبيعاً' : 'Top Selling Products');
+      buffer.writeln(
+        '${isAr ? "الترتيب" : "Rank"},'
+        '${isAr ? "اسم الصنف" : "Product Name"},'
+        '${isAr ? "الباركود" : "Barcode"},'
+        '${isAr ? "الكمية المباعة" : "Quantity Sold"},'
+        '${isAr ? "إجمالي المبيعات (${activeCountry.currencySymbol})" : "Total Revenue (${activeCountry.currencySymbol})"},'
+        '${isAr ? "نوع المنتج" : "Item Type"}',
+      );
+
+      for (int i = 0; i < sortedProducts.length; i++) {
+        final p = sortedProducts[i];
+        final pName = p.name.replaceAll('"', '""');
+        final pType = p.isTargetCompany ? (isAr ? 'منتج العرض' : 'Target Item') : (isAr ? 'منتج عام' : 'Regular Item');
+        buffer.writeln('${i + 1},"$pName","${p.barcode}",${p.totalQty},${p.totalRevenue.toStringAsFixed(2)},"$pType"');
+      }
+
+      buffer.writeln();
+      // Section 3: Branches Breakdown
+      buffer.writeln(isAr ? 'توزيع الفروع' : 'Branches Breakdown');
+      buffer.writeln(
+        '${isAr ? "اسم الفرع" : "Branch Name"},'
+        '${isAr ? "عدد الفواتير" : "Receipts Count"},'
+        '${isAr ? "إجمالي المبيعات (${activeCountry.currencySymbol})" : "Total Revenue (${activeCountry.currencySymbol})"}',
+      );
+
+      for (final b in sortedBranches) {
+        final bName = b.branchName.replaceAll('"', '""');
+        buffer.writeln('"$bName",${b.receiptCount},${b.totalRevenue.toStringAsFixed(2)}');
+      }
+
+      // Encode UTF-8 with BOM (\uFEFF) for Arabic spreadsheet compatibility
+      final bytes = utf8.encode('\uFEFF${buffer.toString()}');
+      final now = DateTime.now();
+      final datePart = _isAllDays
+          ? '${now.year}_${now.month.toString().padLeft(2, '0')}_${now.day.toString().padLeft(2, '0')}'
+          : 'Day_${_selectedDate.year}_${_selectedDate.month.toString().padLeft(2, '0')}_${_selectedDate.day.toString().padLeft(2, '0')}';
+      final cleanName = effectiveCompanyName.replaceAll(RegExp(r'[^\w\s\u0600-\u06FF]'), '').replaceAll(' ', '_');
+      final fileName = 'Tashil_Report_${cleanName}_$datePart.csv';
+
+      downloadFileBytes(
+        bytes: bytes,
+        fileName: fileName,
+        mimeType: 'text/csv;charset=utf-8',
+      );
+
+      final dateLabel = _isAllDays ? (isAr ? 'كافة الأيام' : 'All Days') : _formatDisplayDate(_selectedDate, isAr);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  isAr
+                      ? 'تم تنزيل ملف CSV بنجاح ($dateLabel)'
+                      : 'CSV file downloaded successfully ($dateLabel)',
+                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: themeColor,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('${isAr ? "خطأ في تحميل CSV: " : "CSV export error: "}$e'),
+          backgroundColor: Colors.red.shade800,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isExporting = false);
+      }
     }
   }
 }
@@ -2986,16 +3820,8 @@ class _CampaignEventDetailsCardState extends ConsumerState<_CampaignEventDetails
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Divider(
-          height: 1,
-          thickness: 1,
-          color: colorScheme.outlineVariant.withValues(alpha: 0.4),
-        ),
+        const M3InsetDivider(),
         Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: isMobile ? 14 : 18,
-            vertical: 14,
-          ),
           decoration: BoxDecoration(
             color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
             borderRadius: const BorderRadius.vertical(
@@ -3005,143 +3831,131 @@ class _CampaignEventDetailsCardState extends ConsumerState<_CampaignEventDetails
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header Row: Title + Chain Filter Chips + Collapse Button
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  // Title and Count
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.pin_drop_outlined,
-                        size: 16,
-                        color: colorScheme.primary,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        _selectedChainFilter == null
-                            ? (isAr
-                                ? 'المنافذ والفروع المعتمدة لكافة السلاسل ($totalBranchesCount فرع):'
-                                : 'Authorized Outlets Across All Chains ($totalBranchesCount Branches):')
-                            : (isAr
-                                ? 'فروع ومنافذ "$_selectedChainFilter" المعتمدة (${activeBranches.length} فرع):'
-                                : 'Authorized Outlets for "$_selectedChainFilter" (${activeBranches.length} Branches):'),
-                        style: GoogleFonts.cairo(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.onSurface,
-                        ),
-                      ),
-                    ],
+              // 48dp M3Subheader with Outlets Title and Collapse Action
+              M3Subheader(
+                height: 48,
+                icon: Icons.pin_drop_outlined,
+                title: Text(
+                  _selectedChainFilter == null
+                      ? (isAr
+                          ? 'المنافذ والفروع المعتمدة لكافة السلاسل ($totalBranchesCount فرع)'
+                          : 'Authorized Outlets Across All Chains ($totalBranchesCount Branches)')
+                      : (isAr
+                          ? 'فروع ومنافذ "$_selectedChainFilter" المعتمدة (${activeBranches.length} فرع)'
+                          : 'Authorized Outlets for "$_selectedChainFilter" (${activeBranches.length} Branches)'),
+                  style: GoogleFonts.cairo(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
                   ),
+                ),
+                trailing: InkWell(
+                  onTap: () {
+                    setState(() {
+                      _isBranchesExpanded = false;
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.keyboard_arrow_up_rounded,
+                          size: 14,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          isAr ? 'إخفاء الفروع' : 'Hide',
+                          style: GoogleFonts.cairo(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
 
-                  // Interactive Filters + Close Button
-                  Wrap(
+              if (chainNames.length > 1) ...[
+                const M3InsetDivider(),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Wrap(
                     spacing: 6,
                     runSpacing: 6,
-                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      if (chainNames.length > 1) ...[
-                        // "All Chains" filter badge
+                      _buildFilterChip(
+                        label: isAr ? 'كافة السلاسل ($totalBranchesCount)' : 'All ($totalBranchesCount)',
+                        isActive: _selectedChainFilter == null,
+                        colorScheme: colorScheme,
+                        onTap: () {
+                          setState(() {
+                            _selectedChainFilter = null;
+                          });
+                        },
+                      ),
+                      for (final c in chainNames)
                         _buildFilterChip(
-                          label: isAr ? 'كافة السلاسل ($totalBranchesCount)' : 'All ($totalBranchesCount)',
-                          isActive: _selectedChainFilter == null,
+                          label: '$c (${chainToBranchesMap[c]?.length ?? 0})',
+                          isActive: _selectedChainFilter == c,
                           colorScheme: colorScheme,
                           onTap: () {
                             setState(() {
-                              _selectedChainFilter = null;
+                              _selectedChainFilter = c;
                             });
                           },
                         ),
-                        // Individual chain filter badges
-                        for (final c in chainNames)
-                          _buildFilterChip(
-                            label: '$c (${chainToBranchesMap[c]?.length ?? 0})',
-                            isActive: _selectedChainFilter == c,
-                            colorScheme: colorScheme,
-                            onTap: () {
-                              setState(() {
-                                _selectedChainFilter = c;
-                              });
-                            },
-                          ),
-                      ],
-
-                      // Collapse button
-                      InkWell(
-                        onTap: () {
-                          setState(() {
-                            _isBranchesExpanded = false;
-                          });
-                        },
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: colorScheme.surface,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: colorScheme.outlineVariant.withValues(alpha: 0.5),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.keyboard_arrow_up_rounded,
-                                size: 14,
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                isAr ? 'إخفاء الفروع' : 'Hide',
-                                style: GoogleFonts.cairo(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
                     ],
                   ),
-                ],
-              ),
-              const SizedBox(height: 12),
+                ),
+              ],
+
+              const M3InsetDivider(),
 
               // Branches list / Wrap
-              if (activeBranches.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    isAr ? 'لا توجد فروع مسجلة لهذه السلسلة في الحملة' : 'No branches registered for this chain in this campaign',
-                    style: GoogleFonts.cairo(
-                      fontSize: 12,
-                      color: colorScheme.onSurfaceVariant,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                )
-              else
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    for (final b in activeBranches)
-                      _buildBranchPill(
-                        branchName: b,
-                        chainName: _getChainNameForBranch(b, chainToBranchesMap),
-                        showChainTag: _selectedChainFilter == null && chainNames.length > 1,
-                        colorScheme: colorScheme,
-                      ),
-                  ],
+              Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: isMobile ? 14 : 18,
+                  vertical: 12,
                 ),
+                child: activeBranches.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          isAr ? 'لا توجد فروع مسجلة لهذه السلسلة في الحملة' : 'No branches registered for this chain in this campaign',
+                          style: GoogleFonts.cairo(
+                            fontSize: 12,
+                            color: colorScheme.onSurfaceVariant,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      )
+                    : Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final b in activeBranches)
+                            _buildBranchPill(
+                              branchName: b,
+                              chainName: _getChainNameForBranch(b, chainToBranchesMap),
+                              showChainTag: _selectedChainFilter == null && chainNames.length > 1,
+                              colorScheme: colorScheme,
+                            ),
+                        ],
+                      ),
+              ),
             ],
           ),
         ),

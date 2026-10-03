@@ -1,13 +1,15 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:csv/csv.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 import '../../../core/services/firebase_service.dart';
 import '../../../core/services/company_gifts_service.dart';
@@ -23,11 +25,17 @@ import '../../../core/utils/arabic_numbers_utils.dart';
 import '../../../core/widgets/portal_screen_header_card.dart';
 import '../../../core/widgets/interactive_receipt_viewer_dialog.dart';
 import '../../../core/services/multi_campaign_receipt_evaluator.dart';
+import '../../../core/utils/responsive.dart';
+import '../../../core/widgets/m3_adaptive_scaffold.dart';
+import '../../../core/widgets/m3_date_range_picker_dialog.dart';
+import '../../../core/widgets/m3_list_tile.dart';
+import '../../../core/widgets/m3_action_menu.dart';
 import 'package:http/http.dart' as http;
 import '../../games/presentation/choose_gift_screen.dart';
 import '../../games/presentation/spin_the_wheel_screen.dart';
 import '../../games/presentation/scratch_card_screen.dart';
 import '../../games/presentation/direct_gift_claim_screen.dart';
+import '../../admin/presentation/ai_brain_rules_screen.dart';
 
 enum DateFilterType { all, today, last7Days, thisMonth, custom }
 
@@ -60,11 +68,14 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
   String _selectedCampaignId = 'all';
   String _selectedCompanySlug = 'all';
   String _selectedBranch = 'all';
-  String _statusFilter = 'all'; // 'all', 'accepted', 'rejected'
+  String _statusFilter = 'accepted'; // 'accepted', 'rejected', 'all'
   DateFilterType _dateFilter = DateFilterType.all;
   DateTimeRange? _customDateRange;
   final Set<String> _expandedDocIds = <String>{};
   final Set<String> _recheckingDocIds = <String>{};
+  bool _isBranchChartExpanded = true;
+  int _branchChartViewMode = 0; // 0: Ranked Bars, 1: fl_chart BarChart
+  String? _selectedDocId; // Active selected invoice in M3ListDetailLayout
 
   // Golden Standard: Static Persistent In-Memory Caches for 0ms instant render across tab switches
   static final Map<String, List<QueryDocumentSnapshot>> _persistentInvoicesCache = {};
@@ -78,6 +89,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
   // Memoized computation caches
   String? _lastAllInvoicesCacheKey;
   List<Map<String, dynamic>>? _cachedAllInvoices;
+  int _invoicesRevisionCounter = 0;
 
   void _ensureStreams(FirebaseFirestore? firestore, {bool force = false}) {
     if (firestore == null) return;
@@ -191,30 +203,14 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
   }
 
   Future<void> _pickCustomDateRange(BuildContext context) async {
-    final now = DateTime.now();
-    final picked = await showDateRangePicker(
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
+    final picked = await showM3DateRangePicker(
       context: context,
-      initialDateRange: _customDateRange ??
-          DateTimeRange(
-            start: now.subtract(const Duration(days: 7)),
-            end: now,
-          ),
+      initialStartDate: _customDateRange?.start,
+      initialEndDate: _customDateRange?.end,
       firstDate: DateTime(2023),
-      lastDate: DateTime(2030),
-      builder: (context, child) {
-        final theme = Theme.of(context);
-        return Theme(
-          data: theme.copyWith(
-            colorScheme: theme.colorScheme.copyWith(
-              primary: theme.colorScheme.primary,
-              onPrimary: theme.colorScheme.onPrimary,
-              surface: theme.colorScheme.surface,
-              onSurface: theme.colorScheme.onSurface,
-            ),
-          ),
-          child: child!,
-        );
-      },
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      isAr: isAr,
     );
 
     if (picked != null) {
@@ -232,7 +228,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       _selectedCampaignId = 'all';
       _selectedCompanySlug = widget.lockedCompanySlug ?? 'all';
       _selectedBranch = 'all';
-      _statusFilter = 'all';
+      _statusFilter = 'accepted';
       _dateFilter = DateFilterType.all;
       _customDateRange = null;
       _currentPage = 0;
@@ -524,7 +520,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${strings.exportCsvBtn}: تم نسخ البيانات بصيغة CSV للحافظة بنجاح'),
+          content: Text(strings.isAr ? 'تم نسخ البيانات بصيغة CSV للحافظة بنجاح' : 'Invoices data copied as CSV to clipboard'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -832,6 +828,12 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
 
       if (!mounted) return;
 
+      setState(() {
+        _invoicesRevisionCounter++;
+        _cachedAllInvoices = null;
+        _lastAllInvoicesCacheKey = null;
+      });
+
       messenger.hideCurrentSnackBar();
       messenger.showSnackBar(
         SnackBar(
@@ -1094,6 +1096,84 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                 ),
               ),
             ),
+
+            const SizedBox(height: 10),
+
+            // Option 3: Interactive AI Brain Co-Pilot Studio
+            InkWell(
+              onTap: () {
+                Navigator.pop(dialogCtx);
+                _openAiBrainCoPilotForInvoice(
+                  context: context,
+                  inv: inv,
+                  event: event,
+                  strings: strings,
+                  isAr: isAr,
+                );
+              },
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.psychology_rounded, color: colorScheme.primary, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  isAr ? 'تشخيص في استوديو عقل الذكاء الاصطناعي' : 'Diagnose in AI Brain Studio',
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: colorScheme.primary,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.primary.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  isAr ? '🧠 تفاعلي' : '🧠 Co-Pilot',
+                                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: colorScheme.primary),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            isAr
+                                ? 'فتح شات تفاعلي مباشر مع Gemini 3.7 Flash لتشخيص سبب الرفض وتدريب الذكاء فوراً واعتماد المعيار'
+                                : 'Interactive chat with Gemini 3.7 Flash to diagnose rejections and deploy new directives',
+                            style: const TextStyle(fontSize: 11, color: Color(0xFF4F378B), height: 1.3),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
         actions: [
@@ -1102,6 +1182,56 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
             child: Text(isAr ? 'إلغاء' : 'Cancel'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _openAiBrainCoPilotForInvoice({
+    required BuildContext context,
+    required Map<String, dynamic> inv,
+    required EventModel? event,
+    required AppStrings strings,
+    required bool isAr,
+  }) {
+    final receiptNumber = inv['receipt_number']?.toString() ?? 'N/A';
+    final storeChain = (inv['store_chain_detected'] ?? inv['retail_chain_name'] ?? '').toString();
+    final branch = (inv['branch_detected'] ?? '').toString();
+    final eventName = event?.eventName ?? inv['eventName']?.toString() ?? '';
+    final reasons = (inv['unfulfilled_conditions'] as List?)?.join('\n- ') ?? inv['rejection_reason']?.toString() ?? '';
+    final rawProducts = (inv['extracted_products'] as List?) ?? [];
+    final productsStr = rawProducts.map((p) {
+      if (p is Map) {
+        return '${p['name']} (${p['quantity']} × ${p['price']} ج.م)';
+      }
+      return p.toString();
+    }).join('\n- ');
+    final imageUrl = inv['image_url']?.toString();
+    final List<String> imageUrls = [];
+    if (inv['image_urls'] is List && (inv['image_urls'] as List).isNotEmpty) {
+      imageUrls.addAll((inv['image_urls'] as List).map((e) => e.toString()).where((e) => e.isNotEmpty));
+    }
+    if (imageUrls.isEmpty && imageUrl != null && imageUrl.isNotEmpty) {
+      imageUrls.add(imageUrl);
+    }
+
+    final invoiceContext = '''
+رقم الفاتورة: #$receiptNumber
+السلسلة والفرع: $storeChain ($branch)
+الحملة: $eventName
+أسباب الرفض المسجلة:
+- ${reasons.isNotEmpty ? reasons : 'غير محددة'}
+المنتجات المستخرجة في الفاتورة:
+${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مستخرجة'}
+''';
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AiBrainRulesScreen(
+          initialTabIndex: 1, // Open AI Brain Co-Pilot Studio Tab directly
+          initialInvoiceContext: invoiceContext,
+          initialInvoiceImageUrl: imageUrl,
+          initialInvoiceImageUrls: imageUrls.isNotEmpty ? imageUrls : null,
+        ),
       ),
     );
   }
@@ -1360,6 +1490,20 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       final canonical = winningEval.resolvedBranchName ?? _normalizeBranchName(rawBranch, winningCampaign.branchNames, isAr);
       final double promoSpend = winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : targetTotal;
 
+      inv['is_valid'] = true;
+      inv['status'] = 'accepted';
+      inv['unfulfilled_conditions'] = <String>[];
+      inv['rejection_reason'] = null;
+      inv['target_company_total'] = promoSpend;
+      inv['total_value'] = promoSpend;
+      inv['campaignId'] = winningCampaign.id;
+      inv['campaign_name'] = winningCampaign.eventName;
+      inv['eventName'] = winningCampaign.eventName;
+      inv['chances_earned'] = chances;
+      inv['canonical_branch'] = canonical;
+      inv['branch_detected'] = canonical;
+      if (claimedGifts.isNotEmpty) inv['claimed_gifts'] = claimedGifts;
+
       await firestore.collection('receipts_transactions').doc(docId).update({
         'is_valid': true,
         'status': 'accepted',
@@ -1381,6 +1525,14 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       });
 
       if (mounted) {
+        setState(() {
+          _invoicesRevisionCounter++;
+          _cachedAllInvoices = null;
+          _lastAllInvoicesCacheKey = null;
+          _statusFilter = 'accepted';
+          _selectedCampaignId = winningCampaign.id;
+        });
+
         _showRecheckSuccessDialog(
           context: context,
           isAr: isAr,
@@ -1396,6 +1548,9 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
           resolvedIsVoucher: winningEval.resolvedIsVoucher,
           onViewAccepted: () {
             setState(() {
+              _invoicesRevisionCounter++;
+              _cachedAllInvoices = null;
+              _lastAllInvoicesCacheKey = null;
               _statusFilter = 'accepted';
               _selectedCampaignId = winningCampaign.id;
             });
@@ -1430,6 +1585,8 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
           isAr,
           strings,
           canRunFullAi: hasImage,
+          inv: inv,
+          activeEvent: activeEvent,
           onRunFullAi: () {
             Navigator.pop(context);
             _executeRecheck(
@@ -1465,17 +1622,59 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     final productsService = ref.read(companyProductsServiceProvider);
     final retailChainsService = ref.read(retailChainsServiceProvider);
 
-    final imageUrl = (inv['image_url'] ?? '').toString();
-    final storagePath = inv['storage_path']?.toString();
+    // Collect all image URLs & storage paths (supporting multi-part receipts)
+    final List<String> rawUrls = [];
+    if (inv['image_urls'] is List && (inv['image_urls'] as List).isNotEmpty) {
+      rawUrls.addAll((inv['image_urls'] as List).map((e) => e.toString()).where((e) => e.isNotEmpty));
+    }
+    if (rawUrls.isEmpty && (inv['image_url'] ?? '').toString().isNotEmpty) {
+      rawUrls.add(inv['image_url'].toString());
+    }
 
-    if (imageUrl.isEmpty && (storagePath == null || storagePath.isEmpty)) {
+    final List<String> rawPaths = [];
+    if (inv['storage_paths'] is List && (inv['storage_paths'] as List).isNotEmpty) {
+      rawPaths.addAll((inv['storage_paths'] as List).map((e) => e.toString()).where((e) => e.isNotEmpty));
+    }
+    if (rawPaths.isEmpty && (inv['storage_path'] ?? '').toString().isNotEmpty) {
+      rawPaths.add(inv['storage_path'].toString());
+    }
+
+    if (rawUrls.isEmpty && rawPaths.isEmpty) {
       throw Exception(isAr ? 'لا توجد صورة مسجلة لهذه الفاتورة لإعادة الفحص بالذكاء الاصطناعي.' : 'No receipt image found for full AI scan.');
     }
 
-    final Uint8List? imageBytes = await _downloadReceiptImageBytes(imageUrl, storagePath);
-    if (imageBytes == null || imageBytes.isEmpty) {
-      throw Exception(isAr ? 'تعذر تنزيل صورة الفاتورة من السيرفر.' : 'Failed to download receipt image.');
+    final int imageCount = rawUrls.length > rawPaths.length ? rawUrls.length : rawPaths.length;
+    final List<MapEntry<String, String?>> imageTargets = [];
+    for (int i = 0; i < imageCount; i++) {
+      final u = i < rawUrls.length ? rawUrls[i] : '';
+      final p = i < rawPaths.length ? rawPaths[i] : null;
+      imageTargets.add(MapEntry(u, p));
     }
+
+    // Sort naturally so part1 comes before part2
+    imageTargets.sort((a, b) {
+      final aKey = (a.value ?? a.key).toLowerCase();
+      final bKey = (b.value ?? b.key).toLowerCase();
+      final aPart = RegExp(r'part(\d+)').firstMatch(aKey)?.group(1);
+      final bPart = RegExp(r'part(\d+)').firstMatch(bKey)?.group(1);
+      if (aPart != null && bPart != null) {
+        return int.parse(aPart).compareTo(int.parse(bPart));
+      }
+      return aKey.compareTo(bKey);
+    });
+
+    final downloadedBytesList = (await Future.wait(
+      imageTargets.map((target) => _downloadReceiptImageBytes(target.key, target.value)),
+    )).whereType<Uint8List>().where((b) => b.isNotEmpty).toList();
+
+    if (downloadedBytesList.isEmpty) {
+      throw Exception(isAr ? 'تعذر تنزيل صور الفاتورة من السيرفر.' : 'Failed to download receipt image(s).');
+    }
+
+    final Uint8List imageBytes = downloadedBytesList.first;
+    final List<Uint8List> additionalImagesBytes = downloadedBytesList.length > 1
+        ? downloadedBytesList.sublist(1)
+        : const [];
 
     // Load knowledge context for retail chains & products
     List<String> registeredBarcodes = [];
@@ -1539,6 +1738,8 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     final result = await aiService.analyzeReceiptImage(
       imageBytes,
       'image/jpeg',
+      additionalImagesBytes: additionalImagesBytes,
+      additionalMimeTypes: List.filled(additionalImagesBytes.length, 'image/jpeg'),
       targetCompany: activeEvent.targetCompany,
       minimumSpend: 0.0,
       requiredProducts: combinedReqProds.toList(),
@@ -1550,11 +1751,12 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       registeredBranches: chainBranches,
       startDate: null,
       endDate: null,
-      customPrompt: '',
+      customPrompt: activeEvent.customPrompt,
       allowMultipleChances: true,
       multiplierBasis: 'both',
       maxChancesPerReceipt: 0,
       promotionalRules: combinedPromotionalRules,
+      allowComplementaryReceipts: activeEvent.allowComplementaryReceipts,
     );
 
     // Multi-campaign evaluation
@@ -1599,6 +1801,23 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       final double totalSpend = computedTotal > 0 ? computedTotal : result.targetCompanyTotal;
       final canonical = winningEval.resolvedBranchName ?? _normalizeBranchName(result.branchDetected, winningCampaign.branchNames, isAr);
 
+      inv['is_valid'] = true;
+      inv['status'] = 'accepted';
+      inv['unfulfilled_conditions'] = <String>[];
+      inv['rejection_reason'] = null;
+      inv['target_company_total'] = winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : result.targetCompanyTotal;
+      inv['total_value'] = totalSpend;
+      inv['campaignId'] = winningCampaign.id;
+      inv['campaign_name'] = winningCampaign.eventName;
+      inv['eventName'] = winningCampaign.eventName;
+      inv['chances_earned'] = chances;
+      inv['canonical_branch'] = canonical;
+      inv['branch_detected'] = canonical;
+      if (result.extractedProducts.isNotEmpty) {
+        inv['extracted_products'] = result.extractedProducts.map((p) => p.toJson()).toList();
+      }
+      if (claimedGifts.isNotEmpty) inv['claimed_gifts'] = claimedGifts;
+
       await firestore.collection('receipts_transactions').doc(docId).update({
         'is_valid': true,
         'status': 'accepted',
@@ -1626,6 +1845,14 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       });
 
       if (mounted) {
+        setState(() {
+          _invoicesRevisionCounter++;
+          _cachedAllInvoices = null;
+          _lastAllInvoicesCacheKey = null;
+          _statusFilter = 'accepted';
+          _selectedCampaignId = winningCampaign.id;
+        });
+
         _showRecheckSuccessDialog(
           context: context,
           isAr: isAr,
@@ -1641,6 +1868,9 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
           resolvedIsVoucher: winningEval.resolvedIsVoucher,
           onViewAccepted: () {
             setState(() {
+              _invoicesRevisionCounter++;
+              _cachedAllInvoices = null;
+              _lastAllInvoicesCacheKey = null;
               _statusFilter = 'accepted';
               _selectedCampaignId = winningCampaign.id;
             });
@@ -1673,7 +1903,14 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       });
 
       if (mounted) {
-        _showRecheckStillRejectedDialog(context, unfulfilledList, isAr, strings);
+        _showRecheckStillRejectedDialog(
+          context,
+          unfulfilledList,
+          isAr,
+          strings,
+          inv: inv,
+          activeEvent: activeEvent,
+        );
       }
     }
   }
@@ -2091,6 +2328,8 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     AppStrings strings, {
     bool canRunFullAi = false,
     VoidCallback? onRunFullAi,
+    Map<String, dynamic>? inv,
+    EventModel? activeEvent,
   }) {
     showDialog(
       context: context,
@@ -2150,6 +2389,28 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),
+          if (inv != null)
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _openAiBrainCoPilotForInvoice(
+                  context: context,
+                  inv: inv,
+                  event: activeEvent,
+                  strings: strings,
+                  isAr: isAr,
+                );
+              },
+              icon: const Icon(Icons.psychology_rounded, size: 18),
+              label: Text(
+                isAr ? 'تشخيص في عقل الذكاء' : 'Diagnose in AI Brain',
+                style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
           OutlinedButton(
             onPressed: () => Navigator.pop(ctx),
             style: OutlinedButton.styleFrom(
@@ -2165,6 +2426,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
   void _showImagePreviewDialog({
     required BuildContext context,
     required String imageUrl,
+    List<String>? imageUrls,
     required String receiptNumber,
     required String store,
     required dynamic totalValue,
@@ -2179,6 +2441,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     InteractiveReceiptViewerDialog.show(
       context,
       imageUrl: imageUrl,
+      imageUrls: imageUrls,
       receiptNumber: receiptNumber,
       storeName: store,
       totalValue: totalValue,
@@ -2281,6 +2544,9 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
               }
 
               final rawDocs = cachedDocs ?? transactionsSnapshot.data?.docs ?? [];
+              final int snapshotHash = transactionsSnapshot.data != null
+                  ? identityHashCode(transactionsSnapshot.data)
+                  : 0;
               return _buildInvoicesView(
                 context: context,
                 activeCountry: activeCountry,
@@ -2291,6 +2557,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                 textTheme: textTheme,
                 eventsMap: eventsMap,
                 rawDocs: rawDocs,
+                snapshotHash: snapshotHash,
               );
             },
           );
@@ -2309,6 +2576,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     required TextTheme textTheme,
     required Map<String, EventModel> eventsMap,
     required List<QueryDocumentSnapshot> rawDocs,
+    int snapshotHash = 0,
   }) {
     // 1. Scoped Events by locked company
     final scopedEvents = (widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty)
@@ -2335,7 +2603,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     }
 
     // Map documents to enriched representations with canonical branch resolution (O(1) memoized cache)
-    final allInvoicesCacheKey = '${rawDocs.length}_${rawDocs.isEmpty ? "" : rawDocs.first.id}_${rawDocs.isEmpty ? "" : rawDocs.last.id}_${eventsMap.length}_${canonicalBranches.length}_$isAr';
+    final allInvoicesCacheKey = '${rawDocs.length}_${rawDocs.isEmpty ? "" : rawDocs.first.id}_${rawDocs.isEmpty ? "" : rawDocs.last.id}_${eventsMap.length}_${canonicalBranches.length}_${snapshotHash}_${_invoicesRevisionCounter}_$isAr';
     final List<Map<String, dynamic>> allInvoices;
     if (_lastAllInvoicesCacheKey == allInvoicesCacheKey && _cachedAllInvoices != null) {
       allInvoices = _cachedAllInvoices!;
@@ -2411,7 +2679,8 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     }
 
     // Apply Filters
-    final query = _searchController.text.trim().toLowerCase();
+    final rawQuery = _searchController.text.trim();
+    final query = rawQuery.toEnglishDigits().toLowerCase();
     final filteredInvoices = allInvoices.where((inv) {
       // 1. Campaign Filter
       if (_selectedCampaignId != 'all' && inv['campaignId'] != _selectedCampaignId) {
@@ -2448,9 +2717,10 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       if (_statusFilter == 'accepted' && !isValid) return false;
       if (_statusFilter == 'rejected' && isValid) return false;
 
-      // 6. Search Query (Receipt Number, Branch, Store, Customer)
+      // 6. Search Query (Receipt Number, Branch, Store, Customer, Doc ID, Delimiter-Insensitive)
       if (query.isNotEmpty) {
         final receiptNum = (inv['receipt_number'] ?? '').toString().toLowerCase();
+        final docId = (inv['id'] ?? '').toString().toLowerCase();
         final store = (inv['store_chain_detected'] ?? inv['retail_chain_name'] ?? '').toString().toLowerCase();
         final branch = (inv['branch_detected'] ?? '').toString().toLowerCase();
         final eventName = (inv['eventName'] ?? '').toString().toLowerCase();
@@ -2458,13 +2728,30 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
         final custName = (inv['customerName'] ?? '').toString().toLowerCase();
         final custPhone = (inv['customerPhone'] ?? '').toString().toLowerCase();
 
-        final matches = receiptNum.contains(query) ||
+        bool matches = receiptNum.contains(query) ||
+            docId.contains(query) ||
             store.contains(query) ||
             branch.contains(query) ||
             eventName.contains(query) ||
             targetComp.contains(query) ||
             custName.contains(query) ||
             custPhone.contains(query);
+
+        // Delimiter-insensitive matching for receipt numbers & segment token matching
+        if (!matches && query.contains(RegExp(r'\d'))) {
+          final cleanReceipt = receiptNum.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+          final cleanDocId = docId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+          final cleanQuery = query.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+          if (cleanQuery.isNotEmpty && (cleanReceipt.contains(cleanQuery) || cleanDocId.contains(cleanQuery))) {
+            matches = true;
+          }
+          if (!matches) {
+            final segments = receiptNum.split(RegExp(r'[/\\-_ ]+'));
+            if (segments.any((seg) => seg == query)) {
+              matches = true;
+            }
+          }
+        }
 
         if (!matches) return false;
       }
@@ -2474,6 +2761,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
 
     // Calculate Metrics
     final totalInvoicesCount = filteredInvoices.length;
+    int totalAcceptedInvoices = 0;
     double totalPromoSales = 0.0;
     int totalExtractedItems = 0;
     double totalDurationSec = 0.0;
@@ -2495,6 +2783,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((inv['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
 
       if (isValid) {
+        totalAcceptedInvoices++;
         final promoTotal = (inv['target_company_total'] ?? inv['total_value'] ?? 0);
         if (promoTotal is num) totalPromoSales += promoTotal.toDouble();
 
@@ -2525,9 +2814,11 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
-      body: CustomScrollView(
-        controller: _scrollController,
-        slivers: [
+      body: M3ContentBoundary(
+        maxWidth: 1440.0,
+        child: CustomScrollView(
+          controller: _scrollController,
+          slivers: [
           // 1. SCROLLABLE TOP HEADER & 4 KPI SUMMARY CARDS (تختفي بسلاسة مع التمرير لأسفل)
           SliverToBoxAdapter(
             child: Column(
@@ -2549,10 +2840,53 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                     lockedCompanySlug: widget.lockedCompanySlug,
                     isMobile: isMobile,
                     actions: [
-                      FilledButton.tonalIcon(
-                        onPressed: () => _exportInvoicesToCsv(filteredInvoices, strings),
-                        icon: const Icon(Icons.file_download_outlined, size: 18),
-                        label: Text(strings.exportCsvBtn, style: const TextStyle(fontSize: 12)),
+                      M3ActionMenu(
+                        tooltip: isAr ? 'تصدير البيانات (CSV)' : 'Export CSV',
+                        anchorBuilder: (context, controller, child) {
+                          return FilledButton.tonalIcon(
+                            onPressed: () {
+                              if (controller.isOpen) {
+                                controller.close();
+                              } else {
+                                controller.open();
+                              }
+                            },
+                            icon: const Icon(Icons.file_download_outlined, size: 18),
+                            label: Text(strings.exportCsvBtn, style: const TextStyle(fontSize: 12)),
+                          );
+                        },
+                        children: [
+                          M3ActionMenu.header(
+                            context: context,
+                            title: isAr ? 'خيارات التصدير والتقارير' : 'Export & Report Options',
+                            icon: Icons.download_rounded,
+                          ),
+                          M3ActionMenu.item(
+                            context: context,
+                            label: isAr ? 'تصدير جدول الفواتير (CSV)' : 'Export Invoices Table (CSV)',
+                            icon: Icons.table_chart_rounded,
+                            onPressed: () => _exportInvoicesToCsv(filteredInvoices, strings),
+                          ),
+                          M3ActionMenu.submenu(
+                            context: context,
+                            label: isAr ? 'تنسيقات إضافية ومتقدمة' : 'Advanced Formats',
+                            icon: Icons.tune_rounded,
+                            children: [
+                              M3ActionMenu.item(
+                                context: context,
+                                label: isAr ? 'ملف إكسيل شامل (Excel / CSV)' : 'Full Excel Data (.csv)',
+                                icon: Icons.description_rounded,
+                                onPressed: () => _exportInvoicesToCsv(filteredInvoices, strings),
+                              ),
+                              M3ActionMenu.item(
+                                context: context,
+                                label: isAr ? 'طباعة / حفظ بتنسيق PDF' : 'Print / Export PDF',
+                                icon: Icons.print_rounded,
+                                onPressed: () => _exportInvoicesToCsv(filteredInvoices, strings),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -2563,6 +2897,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                   isHi: ref.isHindi,
                   activeCountry: activeCountry,
                   totalInvoices: totalInvoicesCount,
+                  totalAcceptedInvoices: totalAcceptedInvoices,
                   totalPromoSales: totalPromoSales,
                   totalItems: totalExtractedItems,
                   avgSpeed: avgAiSpeed,
@@ -2633,6 +2968,19 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
               ),
             ),
 
+          // 2.5. BRANCH INVOICES DISTRIBUTION & ANALYTICS CHART
+          SliverToBoxAdapter(
+            child: _buildBranchInvoicesChartCard(
+              allInvoices: allInvoices,
+              canonicalBranches: sortedBranches,
+              colorScheme: colorScheme,
+              strings: strings,
+              activeCountry: activeCountry,
+              isAr: isAr,
+              isMobile: isMobile,
+            ),
+          ),
+
           // 3. SCROLLABLE INVOICES FEED / DATA ROWS
           if (filteredInvoices.isEmpty)
             SliverToBoxAdapter(
@@ -2652,8 +3000,9 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
             ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildKpiSummaryBar({
     required ColorScheme colorScheme,
@@ -2662,6 +3011,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     required bool isHi,
     required CountryCurrency activeCountry,
     required int totalInvoices,
+    required int totalAcceptedInvoices,
     required double totalPromoSales,
     required int totalItems,
     required double avgSpeed,
@@ -2675,8 +3025,8 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
         int crossAxisCount = 4;
         double childAspectRatio = 1.65;
         if (width < 600) {
-          crossAxisCount = 1;
-          childAspectRatio = 2.3;
+          crossAxisCount = 2;
+          childAspectRatio = 1.25;
         } else if (width < 960) {
           crossAxisCount = 2;
           childAspectRatio = 1.85;
@@ -2687,14 +3037,14 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
 
         final List<Widget> cards = [
           _buildStatKpiCard(
-            title: strings.totalReceiptsCount,
-            value: '$totalInvoices',
-            subtitle: isAr ? 'سجل العمليات والفواتير المدققة' : (isHi ? 'सत्यापित रसीदें' : 'Audited receipts & scan logs'),
-            icon: Icons.receipt_long_rounded,
-            accentColor: Colors.blue.shade700,
-            badgeText: isAr ? 'فاتورة مفحوصة' : (isHi ? 'रसीदें' : 'Audited'),
+            title: isAr ? 'إجمالي الفواتير المقبولة' : (isHi ? 'स्वीकृत चालान' : 'Total Accepted Invoices'),
+            value: '$totalAcceptedInvoices',
+            subtitle: isAr ? 'الفواتير المستوفية للشروط والمعتمدة' : (isHi ? 'स्वीकृत और वैध रसीदें' : 'Qualified & approved invoices'),
+            icon: Icons.task_alt_rounded,
+            accentColor: colorScheme.primary,
+            badgeText: isAr ? 'فاتورة مقبولة' : (isHi ? 'स्वीकृत' : 'Accepted'),
             colorScheme: colorScheme,
-            tooltip: isAr ? 'إجمالي عدد الفواتير التي تم مسحها وتدقيقها بالذكاء الاصطناعي' : 'Total receipts processed & audited',
+            tooltip: isAr ? 'إجمالي عدد الفواتير المقبولة والمطابقة لشروط الحملة' : 'Total accepted invoices meeting campaign rules',
             isMobile: isMobile,
           ),
           _buildStatKpiCard(
@@ -2738,8 +3088,8 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
             crossAxisCount: crossAxisCount,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            crossAxisSpacing: isMobile ? 12 : 14,
-            mainAxisSpacing: isMobile ? 12 : 14,
+            crossAxisSpacing: isMobile ? 10 : 14,
+            mainAxisSpacing: isMobile ? 10 : 14,
             childAspectRatio: childAspectRatio,
             children: cards,
           ),
@@ -2763,10 +3113,10 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       message: tooltip,
       waitDuration: const Duration(milliseconds: 300),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 14, vertical: isMobile ? 12 : 12),
+        padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 14, vertical: isMobile ? 10 : 12),
         decoration: BoxDecoration(
           color: colorScheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(isMobile ? 16 : 20),
           border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
         ),
         child: Column(
@@ -2777,40 +3127,42 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(7),
+                  padding: EdgeInsets.all(isMobile ? 5 : 7),
                   decoration: BoxDecoration(
                     color: accentColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(icon, color: accentColor, size: 18),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text(
-                    badgeText,
-                    style: GoogleFonts.cairo(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: accentColor,
+                  child: Icon(icon, color: accentColor, size: isMobile ? 16 : 18),
+                ),
+                Flexible(
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: isMobile ? 6 : 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(6),
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    child: Text(
+                      badgeText,
+                      style: GoogleFonts.cairo(
+                        fontSize: isMobile ? 9 : 10,
+                        fontWeight: FontWeight.bold,
+                        color: accentColor,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             FittedBox(
               fit: BoxFit.scaleDown,
               alignment: AlignmentDirectional.centerStart,
               child: Text(
                 value,
                 style: GoogleFonts.cairo(
-                  fontSize: 18,
+                  fontSize: isMobile ? 17 : 18,
                   fontWeight: FontWeight.w900,
                   color: colorScheme.onSurface,
                   letterSpacing: -0.3,
@@ -2818,25 +3170,30 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                 maxLines: 1,
               ),
             ),
-            const SizedBox(height: 1),
-            Text(
-              title,
-              style: GoogleFonts.cairo(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: colorScheme.onSurfaceVariant,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            Text(
-              subtitle,
-              style: GoogleFonts.cairo(
-                fontSize: 9.5,
-                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.cairo(
+                    fontSize: isMobile ? 11 : 12,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.cairo(
+                    fontSize: isMobile ? 8.5 : 9.5,
+                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ],
         ),
@@ -2853,14 +3210,16 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     required List<String> availableBranches,
     required List<Map<String, dynamic>> allInvoices,
   }) {
+    final isHi = ref.isHindi;
+    final isMobile = Responsive.isMobile(context);
     final hasActiveFilters = _searchController.text.isNotEmpty ||
         _selectedCampaignId != 'all' ||
         _selectedCompanySlug != 'all' ||
         _selectedBranch != 'all' ||
-        _statusFilter != 'all' ||
+        _statusFilter != 'accepted' ||
         _dateFilter != DateFilterType.all;
 
-    final scopedEventsMap = (widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty)
+    final baseScopedEventsMap = (widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty)
         ? Map.fromEntries(eventsMap.entries.where((e) {
             final slug = e.value.companySlug.toLowerCase();
             final name = e.value.targetCompany.toLowerCase();
@@ -2869,24 +3228,61 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
           }))
         : eventsMap;
 
+    // Sort scopedEventsMap so active campaigns appear first in quick chips & selectors
+    final sortedScopedEntries = baseScopedEventsMap.entries.toList()
+      ..sort((a, b) {
+        final aActive = (a.value.isActive && !a.value.isExpired) ? 0 : 1;
+        final bActive = (b.value.isActive && !b.value.isExpired) ? 0 : 1;
+        if (aActive != bActive) return aActive.compareTo(bActive);
+        return a.value.eventName.compareTo(b.value.eventName);
+      });
+    final scopedEventsMap = Map<String, EventModel>.fromEntries(sortedScopedEntries);
+
     final searchFieldWidget = TextField(
       controller: _searchController,
+      textDirection: TextDirection.ltr,
+      textAlign: isAr ? TextAlign.right : TextAlign.left,
+      inputFormatters: [
+        const ArabicToEnglishDigitsFormatter(digitsOnly: false, allowDecimal: true),
+      ],
       onChanged: (_) {
         setState(() {});
         _resetPagination();
       },
       decoration: InputDecoration(
-        hintText: strings.searchReceiptPlaceholder,
+        hintText: isAr
+            ? 'بحث برقم الحركة (مثال: 263 أو 263/2) أو الفرع...'
+            : strings.searchReceiptPlaceholder,
         prefixIcon: const Icon(Icons.search_rounded),
-        suffixIcon: _searchController.text.isNotEmpty
-            ? IconButton(
+        suffixIcon: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_searchController.text.isNotEmpty)
+              IconButton(
                 icon: const Icon(Icons.clear_rounded, size: 18),
+                tooltip: isAr ? 'مسح البحث' : 'Clear search',
                 onPressed: () {
                   setState(() => _searchController.clear());
                   _resetPagination();
                 },
-              )
-            : null,
+              ),
+            Tooltip(
+              message: isAr
+                  ? 'بحث مفصل برقم الحركة والكاشير (Trans / POS)'
+                  : 'Detailed Receipt Search (Trans / POS)',
+              child: IconButton(
+                icon: const Icon(Icons.receipt_long_rounded, color: Color(0xFF1976D2), size: 20),
+                onPressed: () => _openReceiptLookupDialog(
+                  context: context,
+                  isAr: isAr,
+                  strings: strings,
+                  allInvoices: allInvoices,
+                  eventsMap: eventsMap,
+                ),
+              ),
+            ),
+          ],
+        ),
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -2896,18 +3292,37 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     final statusFilterWidget = SegmentedButton<String>(
       segments: [
         ButtonSegment<String>(
-          value: 'all',
-          label: Text(isAr ? 'الكل' : 'All', style: GoogleFonts.cairo(fontSize: 11)),
-        ),
-        ButtonSegment<String>(
           value: 'accepted',
-          label: Text(isAr ? 'المقبولة' : 'Accepted', style: GoogleFonts.cairo(fontSize: 11)),
-          icon: const Icon(Icons.check_circle_outline_rounded, size: 14, color: Colors.green),
+          label: Text(
+            isAr ? 'المقبولة' : (isHi ? 'स्वीकृत' : 'Accepted'),
+            style: GoogleFonts.cairo(
+              fontSize: isMobile ? 11.5 : 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          icon: const Icon(Icons.check_circle_rounded, size: 16),
         ),
         ButtonSegment<String>(
           value: 'rejected',
-          label: Text(isAr ? 'المرفوضة' : 'Rejected', style: GoogleFonts.cairo(fontSize: 11)),
-          icon: const Icon(Icons.cancel_outlined, size: 14, color: Colors.red),
+          label: Text(
+            isAr ? 'المرفوضة' : (isHi ? 'अस्वीकृत' : 'Rejected'),
+            style: GoogleFonts.cairo(
+              fontSize: isMobile ? 11.5 : 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          icon: const Icon(Icons.cancel_rounded, size: 16),
+        ),
+        ButtonSegment<String>(
+          value: 'all',
+          label: Text(
+            isAr ? 'الكل' : (isHi ? 'सभी' : 'All'),
+            style: GoogleFonts.cairo(
+              fontSize: isMobile ? 11.5 : 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          icon: const Icon(Icons.format_list_bulleted_rounded, size: 16),
         ),
       ],
       selected: {_statusFilter},
@@ -2915,223 +3330,440 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
         setState(() => _statusFilter = set.first);
         _resetPagination();
       },
-      style: ButtonStyle(
+      showSelectedIcon: true,
+      style: SegmentedButton.styleFrom(
+        selectedBackgroundColor: colorScheme.primaryContainer,
+        selectedForegroundColor: colorScheme.onPrimaryContainer,
+        backgroundColor: colorScheme.surfaceContainerLow,
+        foregroundColor: colorScheme.onSurfaceVariant,
+        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.7)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         visualDensity: VisualDensity.compact,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
     );
 
-    final branchPickerWidget = PopupMenuButton<String>(
-      initialValue: _selectedBranch,
-      tooltip: isAr ? 'تصفية حسب الفرع' : 'Filter by Branch',
-      onSelected: (val) {
-        setState(() {
-          _selectedBranch = val;
-        });
-        _resetPagination();
-      },
-      itemBuilder: (context) => [
-        PopupMenuItem(
-          value: 'all',
-          child: Row(
-            children: [
-              Icon(
-                Icons.store_mall_directory_rounded,
-                size: 16,
-                color: _selectedBranch == 'all' ? colorScheme.primary : colorScheme.onSurfaceVariant,
+    // Filter invoices by campaign, company, date, and status to compute accurate branch counts matching the active date/filter selection
+    final dateScopedInvoices = allInvoices.where((inv) {
+      if (_selectedCampaignId != 'all' && inv['campaignId'] != _selectedCampaignId) return false;
+      if (_selectedCompanySlug != 'all') {
+        final slug = (inv['companySlug'] ?? '').toString().toLowerCase();
+        final target = (inv['targetCompany'] ?? '').toString().toLowerCase();
+        if (slug != _selectedCompanySlug.toLowerCase() && !target.contains(_selectedCompanySlug.toLowerCase())) {
+          return false;
+        }
+      }
+      if (!_passesDateFilter(inv['date'] as DateTime?)) return false;
+
+      final bool isExplicitlyValid = inv['is_valid'] == true || inv['status'] == 'accepted' || inv['isValid'] == true;
+      final bool isExplicitlyRejected = inv['is_valid'] == false || inv['status'] == 'rejected' || inv['isValid'] == false || ((inv['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
+      final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((inv['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
+      if (_statusFilter == 'accepted' && !isValid) return false;
+      if (_statusFilter == 'rejected' && isValid) return false;
+
+      return true;
+    }).toList();
+
+    // Pre-calculate count per branch for O(1) lookups in the dropdown
+    final Map<String, int> branchInvoiceCounts = {};
+    for (final b in availableBranches) {
+      branchInvoiceCounts[b] = 0;
+    }
+    for (final inv in dateScopedInvoices) {
+      final b = (inv['canonical_branch'] ?? '').toString().trim();
+      if (b.isNotEmpty && branchInvoiceCounts.containsKey(b)) {
+        branchInvoiceCounts[b] = (branchInvoiceCounts[b] ?? 0) + 1;
+      }
+    }
+
+    Widget buildBranchPickerWidget({bool isMobile = false}) {
+      final String branchLabel;
+      if (_selectedBranch == 'all') {
+        branchLabel = isMobile
+            ? (isAr ? 'الفروع' : (isHi ? 'शाखाएं' : 'Branches'))
+            : (isAr ? 'كافة الفروع (${availableBranches.length})' : 'All Branches (${availableBranches.length})');
+      } else {
+        branchLabel = _selectedBranch;
+      }
+
+      return M3ActionMenu(
+        tooltip: isAr ? 'تصفية حسب الفرع' : 'Filter by Branch',
+        anchorBuilder: (context, controller, child) {
+          return InkWell(
+            onTap: () {
+              if (controller.isOpen) {
+                controller.close();
+              } else {
+                controller.open();
+              }
+            },
+            borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 12, vertical: isMobile ? 8 : 10),
+              decoration: BoxDecoration(
+                color: _selectedBranch != 'all' ? colorScheme.primaryContainer : colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
+                border: Border.all(
+                  color: _selectedBranch != 'all' ? colorScheme.primary : colorScheme.outlineVariant,
+                ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  isAr ? 'كافة الفروع (${availableBranches.length})' : 'All Branches (${availableBranches.length})',
-                  style: TextStyle(
-                    fontWeight: _selectedBranch == 'all' ? FontWeight.bold : FontWeight.normal,
-                    color: _selectedBranch == 'all' ? colorScheme.primary : null,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.storefront_rounded,
+                    size: isMobile ? 16 : 18,
+                    color: _selectedBranch != 'all' ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      branchLabel,
+                      style: TextStyle(
+                        fontSize: isMobile ? 11.5 : 12,
+                        fontWeight: FontWeight.w600,
+                        color: _selectedBranch != 'all' ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  Icon(
+                    Icons.arrow_drop_down_rounded,
+                    size: isMobile ? 16 : 18,
+                    color: _selectedBranch != 'all' ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+        children: [
+          M3ActionMenu.header(
+            context: context,
+            title: isAr
+                ? (_dateFilter != DateFilterType.all
+                    ? 'الفروع المعتمدة (${_getDateFilterLabel(strings)})'
+                    : 'الفروع المعتمدة')
+                : (_dateFilter != DateFilterType.all
+                    ? 'Campaign Branches (${_getDateFilterLabel(strings)})'
+                    : 'Campaign Branches'),
+            icon: Icons.store_mall_directory_rounded,
+          ),
+          M3ActionMenu.item(
+            context: context,
+            label: isAr ? 'كافة الفروع (${availableBranches.length})' : 'All Branches (${availableBranches.length})',
+            icon: Icons.store_mall_directory_rounded,
+            isSelected: _selectedBranch == 'all',
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: _selectedBranch == 'all'
+                    ? colorScheme.primary.withValues(alpha: 0.15)
+                    : colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                '${dateScopedInvoices.length}',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: _selectedBranch == 'all' ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            onPressed: () {
+              setState(() => _selectedBranch = 'all');
+              _resetPagination();
+            },
+          ),
+          if (availableBranches.isNotEmpty) M3ActionMenu.divider(),
+          for (final b in availableBranches)
+            () {
+              final count = branchInvoiceCounts[b] ?? 0;
+              final isCurrent = _selectedBranch == b;
+              return M3ActionMenu.item(
+                context: context,
+                label: b,
+                icon: Icons.storefront_rounded,
+                isSelected: isCurrent,
+                trailing: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isCurrent
+                        ? colorScheme.primary.withValues(alpha: 0.15)
+                        : (count > 0 ? Colors.green.withValues(alpha: 0.12) : colorScheme.surfaceContainerHighest),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '$count',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: isCurrent
+                          ? colorScheme.primary
+                          : (count > 0 ? Colors.green.shade800 : colorScheme.onSurfaceVariant),
+                    ),
+                  ),
+                ),
+                onPressed: () {
+                  setState(() => _selectedBranch = b);
+                  _resetPagination();
+                },
+              );
+            }(),
+        ],
+      );
+    }
+
+    Widget buildDatePickerWidget({bool isMobile = false}) {
+      final String dateLabel;
+      if (_dateFilter == DateFilterType.all) {
+        dateLabel = isMobile
+            ? (isAr ? 'التاريخ' : (isHi ? 'तिथि' : 'Date'))
+            : _getDateFilterLabel(strings);
+      } else {
+        dateLabel = _getDateFilterLabel(strings);
+      }
+
+      return M3ActionMenu(
+        tooltip: isAr ? 'تصفية حسب التاريخ' : 'Filter by Date',
+        anchorBuilder: (context, controller, child) {
+          return InkWell(
+            onTap: () {
+              if (controller.isOpen) {
+                controller.close();
+              } else {
+                controller.open();
+              }
+            },
+            borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 12, vertical: isMobile ? 8 : 10),
+              decoration: BoxDecoration(
+                color: _dateFilter != DateFilterType.all ? colorScheme.primaryContainer : colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
+                border: Border.all(color: _dateFilter != DateFilterType.all ? colorScheme.primary : colorScheme.outlineVariant),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.calendar_month_rounded,
+                    size: isMobile ? 16 : 18,
+                    color: _dateFilter != DateFilterType.all ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      dateLabel,
+                      style: TextStyle(
+                        fontSize: isMobile ? 11.5 : 12,
+                        fontWeight: FontWeight.w600,
+                        color: _dateFilter != DateFilterType.all ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  Icon(
+                    Icons.arrow_drop_down_rounded,
+                    size: isMobile ? 16 : 18,
+                    color: _dateFilter != DateFilterType.all ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+        children: [
+          M3ActionMenu.header(
+            context: context,
+            title: isAr ? 'الفترة الزمنية' : 'Time Period',
+            icon: Icons.date_range_rounded,
+          ),
+          M3ActionMenu.item(
+            context: context,
+            label: strings.filterByDate,
+            icon: Icons.calendar_today_rounded,
+            isSelected: _dateFilter == DateFilterType.all,
+            onPressed: () {
+              setState(() {
+                _dateFilter = DateFilterType.all;
+                _customDateRange = null;
+              });
+              _resetPagination();
+            },
+          ),
+          M3ActionMenu.item(
+            context: context,
+            label: strings.filterToday,
+            icon: Icons.today_rounded,
+            isSelected: _dateFilter == DateFilterType.today,
+            onPressed: () {
+              setState(() {
+                _dateFilter = DateFilterType.today;
+                _customDateRange = null;
+              });
+              _resetPagination();
+            },
+          ),
+          M3ActionMenu.divider(),
+          M3ActionMenu.item(
+            context: context,
+            label: strings.filterCustomDate,
+            icon: Icons.date_range_rounded,
+            isSelected: _dateFilter == DateFilterType.custom,
+            onPressed: () => _pickCustomDateRange(context),
+          ),
+        ],
+      );
+    }
+
+    Widget buildMobileActionsGroup() {
+      return Container(
+        height: 38,
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+        ),
+        child: IntrinsicHeight(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 1. CSV Button (Icon + "CSV")
+              Tooltip(
+                message: strings.exportCsvBtn,
+                child: InkWell(
+                  onTap: () => _exportInvoicesToCsv(allInvoices, strings),
+                  borderRadius: isAr
+                      ? const BorderRadius.horizontal(right: Radius.circular(9))
+                      : const BorderRadius.horizontal(left: Radius.circular(9)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.file_download_outlined, size: 15, color: colorScheme.primary),
+                        const SizedBox(width: 3),
+                        Text(
+                          'CSV',
+                          style: GoogleFonts.cairo(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(6),
+              VerticalDivider(width: 1, thickness: 1, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+              // 2. Filter Campaigns / Festivals (Icon only)
+              Tooltip(
+                message: isAr ? 'تصفية الفعاليات والمهرجانات' : (isHi ? 'अभियान फ़िल्टर' : 'Filter Campaigns'),
+                child: InkWell(
+                  onTap: () => _showCampaignSelectorDialog(
+                    context: context,
+                    colorScheme: colorScheme,
+                    strings: strings,
+                    isAr: isAr,
+                    eventsMap: scopedEventsMap,
+                    availableCompanies: availableCompanies,
+                    allInvoices: allInvoices,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
+                    child: Icon(
+                      Icons.tune_rounded,
+                      size: 16,
+                      color: _selectedCampaignId != 'all' ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 ),
-                child: Text(
-                  '${allInvoices.length}',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.onSurfaceVariant,
+              ),
+              VerticalDivider(width: 1, thickness: 1, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+              // 3. Clear Filters (Icon only)
+              Tooltip(
+                message: strings.clearFiltersBtn,
+                child: InkWell(
+                  onTap: hasActiveFilters ? _resetFilters : null,
+                  borderRadius: isAr
+                      ? const BorderRadius.horizontal(left: Radius.circular(9))
+                      : const BorderRadius.horizontal(right: Radius.circular(9)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
+                    child: Icon(
+                      Icons.filter_alt_off_rounded,
+                      size: 16,
+                      color: hasActiveFilters ? colorScheme.error : colorScheme.outlineVariant.withValues(alpha: 0.4),
+                    ),
                   ),
                 ),
               ),
             ],
           ),
         ),
-        if (availableBranches.isNotEmpty) const PopupMenuDivider(),
-        for (final b in availableBranches)
-          () {
-            final count = allInvoices.where((inv) => inv['canonical_branch'] == b).length;
-            return PopupMenuItem(
-              value: b,
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.storefront_rounded,
-                    size: 16,
-                    color: _selectedBranch == b ? colorScheme.primary : colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      b,
-                      style: TextStyle(
-                        fontWeight: _selectedBranch == b ? FontWeight.bold : FontWeight.normal,
-                        color: _selectedBranch == b ? colorScheme.primary : null,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: _selectedBranch == b
-                          ? colorScheme.primary.withValues(alpha: 0.15)
-                          : colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      '$count',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: _selectedBranch == b ? colorScheme.primary : colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  if (_selectedBranch == b) ...[
-                    const SizedBox(width: 4),
-                    Icon(Icons.check_rounded, size: 16, color: colorScheme.primary),
-                  ],
-                ],
-              ),
-            );
-          }(),
-      ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: _selectedBranch != 'all' ? colorScheme.primaryContainer : colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: _selectedBranch != 'all' ? colorScheme.primary : colorScheme.outlineVariant,
+      );
+    }
+
+    final exportCsvButton = M3ActionMenu(
+      tooltip: isAr ? 'تصدير البيانات (CSV)' : 'Export CSV',
+      anchorBuilder: (context, controller, child) {
+        return FilledButton.tonalIcon(
+          onPressed: () {
+            if (controller.isOpen) {
+              controller.close();
+            } else {
+              controller.open();
+            }
+          },
+          icon: const Icon(Icons.file_download_outlined, size: 18),
+          label: Text(strings.exportCsvBtn, style: const TextStyle(fontSize: 12)),
+          style: FilledButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.storefront_rounded,
-              size: 18,
-              color: _selectedBranch != 'all' ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                _selectedBranch == 'all'
-                    ? (isAr ? 'كافة الفروع (${availableBranches.length})' : 'All Branches (${availableBranches.length})')
-                    : _selectedBranch,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: _selectedBranch != 'all' ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Icon(
-              Icons.arrow_drop_down_rounded,
-              size: 18,
-              color: _selectedBranch != 'all' ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
-            ),
-          ],
-        ),
-      ),
-    );
-
-    final datePickerWidget = PopupMenuButton<DateFilterType>(
-      initialValue: _dateFilter,
-      onSelected: (type) {
-        if (type == DateFilterType.custom) {
-          _pickCustomDateRange(context);
-        } else {
-          setState(() {
-            _dateFilter = type;
-            _customDateRange = null;
-          });
-          _resetPagination();
-        }
+        );
       },
-      itemBuilder: (context) => [
-        PopupMenuItem(value: DateFilterType.all, child: Text(strings.filterByDate)),
-        PopupMenuItem(value: DateFilterType.today, child: Text(strings.filterToday)),
-        PopupMenuItem(value: DateFilterType.last7Days, child: Text(strings.filterLast7Days)),
-        PopupMenuItem(value: DateFilterType.thisMonth, child: Text(strings.filterThisMonth)),
-        PopupMenuItem(value: DateFilterType.custom, child: Text(strings.filterCustomDate)),
-      ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: _dateFilter != DateFilterType.all ? colorScheme.primaryContainer : colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _dateFilter != DateFilterType.all ? colorScheme.primary : colorScheme.outlineVariant),
+      children: [
+        M3ActionMenu.header(
+          context: context,
+          title: isAr ? 'خيارات التصدير والتقارير' : 'Export & Report Options',
+          icon: Icons.download_rounded,
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
+        M3ActionMenu.item(
+          context: context,
+          label: isAr ? 'تصدير جدول الفواتير (CSV)' : 'Export Invoices Table (CSV)',
+          icon: Icons.table_chart_rounded,
+          onPressed: () => _exportInvoicesToCsv(allInvoices, strings),
+        ),
+        M3ActionMenu.submenu(
+          context: context,
+          label: isAr ? 'تنسيقات إضافية ومتقدمة' : 'Advanced Formats',
+          icon: Icons.tune_rounded,
           children: [
-            Icon(
-              Icons.calendar_month_rounded,
-              size: 18,
-              color: _dateFilter != DateFilterType.all ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
+            M3ActionMenu.item(
+              context: context,
+              label: isAr ? 'ملف إكسيل شامل (Excel / CSV)' : 'Full Excel Data (.csv)',
+              icon: Icons.description_rounded,
+              onPressed: () => _exportInvoicesToCsv(allInvoices, strings),
             ),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                _getDateFilterLabel(strings),
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: _dateFilter != DateFilterType.all ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Icon(
-              Icons.arrow_drop_down_rounded,
-              size: 18,
-              color: _dateFilter != DateFilterType.all ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
+            M3ActionMenu.item(
+              context: context,
+              label: isAr ? 'طباعة / حفظ بتنسيق PDF' : 'Print / Export PDF',
+              icon: Icons.print_rounded,
+              onPressed: () => _exportInvoicesToCsv(allInvoices, strings),
             ),
           ],
         ),
-      ),
-    );
-
-    final exportCsvButton = FilledButton.tonalIcon(
-      onPressed: () => _exportInvoicesToCsv(allInvoices, strings),
-      icon: const Icon(Icons.file_download_outlined, size: 18),
-      label: Text(strings.exportCsvBtn, style: const TextStyle(fontSize: 12)),
-      style: FilledButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
+      ],
     );
 
     return LayoutBuilder(
@@ -3152,12 +3784,39 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                   Row(
                     children: [
                       Expanded(child: searchFieldWidget),
+                      const SizedBox(width: 8),
+                      Tooltip(
+                        message: isAr
+                            ? 'فتح نافذة البحث المفصل برقم الحركة والكاشير'
+                            : 'Open detailed receipt lookup dialog',
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          icon: const Icon(Icons.receipt_long_rounded, size: 18),
+                          label: Text(
+                            isAr ? 'بحث مفصل بالفاتورة' : 'Receipt Lookup',
+                            style: GoogleFonts.cairo(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                          onPressed: () => _openReceiptLookupDialog(
+                            context: context,
+                            isAr: isAr,
+                            strings: strings,
+                            allInvoices: allInvoices,
+                            eventsMap: eventsMap,
+                          ),
+                        ),
+                      ),
                       const SizedBox(width: 10),
                       statusFilterWidget,
                       const SizedBox(width: 10),
-                      branchPickerWidget,
+                      buildBranchPickerWidget(isMobile: false),
                       const SizedBox(width: 10),
-                      datePickerWidget,
+                      buildDatePickerWidget(isMobile: false),
                       const SizedBox(width: 10),
                       exportCsvButton,
                       if (hasActiveFilters) ...[
@@ -3182,35 +3841,14 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                   ),
                   const SizedBox(height: 8),
 
-                  // Row 3: 50% Branch Picker + 50% Date Picker in a balanced 2-Column Row
+                  // Row 3: All-In-One Unified Mobile Row (الفروع + التاريخ + مجموعة أزرار الإجراءات CSV/فلترة/مسح)
                   Row(
                     children: [
-                      Expanded(child: branchPickerWidget),
-                      const SizedBox(width: 8),
-                      Expanded(child: datePickerWidget),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Row 4: Export CSV Button + Clear Filters (if active)
-                  Row(
-                    children: [
-                      Expanded(child: exportCsvButton),
-                      if (hasActiveFilters) ...[
-                        const SizedBox(width: 8),
-                        SizedBox(
-                          height: 42,
-                          width: 42,
-                          child: IconButton.filledTonal(
-                            tooltip: strings.clearFiltersBtn,
-                            icon: const Icon(Icons.filter_alt_off_rounded, color: Colors.red, size: 18),
-                            onPressed: _resetFilters,
-                            style: IconButton.styleFrom(
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                          ),
-                        ),
-                      ],
+                      Expanded(child: buildBranchPickerWidget(isMobile: true)),
+                      const SizedBox(width: 6),
+                      Expanded(child: buildDatePickerWidget(isMobile: true)),
+                      const SizedBox(width: 6),
+                      buildMobileActionsGroup(),
                     ],
                   ),
                 ] else ...[
@@ -3223,9 +3861,35 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                         width: constraints.maxWidth > 950 ? 280 : 220,
                         child: searchFieldWidget,
                       ),
+                      Tooltip(
+                        message: isAr
+                            ? 'فتح نافذة البحث المفصل برقم الحركة والكاشير'
+                            : 'Open detailed receipt lookup dialog',
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          icon: const Icon(Icons.receipt_long_rounded, size: 16),
+                          label: Text(
+                            isAr ? 'بحث مفصل' : 'Lookup',
+                            style: GoogleFonts.cairo(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                          onPressed: () => _openReceiptLookupDialog(
+                            context: context,
+                            isAr: isAr,
+                            strings: strings,
+                            allInvoices: allInvoices,
+                            eventsMap: eventsMap,
+                          ),
+                        ),
+                      ),
                       statusFilterWidget,
-                      branchPickerWidget,
-                      datePickerWidget,
+                      buildBranchPickerWidget(isMobile: false),
+                      buildDatePickerWidget(isMobile: false),
                       exportCsvButton,
                       if (hasActiveFilters) ...[
                         SizedBox(
@@ -3494,33 +4158,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
 
         // Quick Filter Bar + Open Full Campaign Search Dialog Button
         if (isMobile) ...[
-          // Mobile: Full Width Filter Button + Quick Choice Chips with Wrap
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: () => _showCampaignSelectorDialog(
-                context: context,
-                colorScheme: colorScheme,
-                strings: strings,
-                isAr: isAr,
-                eventsMap: scopedEventsMap,
-                availableCompanies: availableCompanies,
-                allInvoices: allInvoices,
-              ),
-              icon: const Icon(Icons.tune_rounded, size: 16),
-              label: Text(
-                isAr
-                    ? 'تصفية الفعاليات والمهرجانات (${scopedEventsMap.length})'
-                    : 'Filter Campaigns (${scopedEventsMap.length})',
-                style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
-              ),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
+          // Quick Choice Chips with Wrap (Full Campaign Filter dialog is accessible from toolbar action button)
           Wrap(
             spacing: 6,
             runSpacing: 6,
@@ -3780,7 +4418,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     required List<Map<String, dynamic>> allInvoices,
   }) async {
     final searchModalController = TextEditingController();
-    String filterStatus = 'all';
+    String filterStatus = 'active';
     String filterCompany = 'all';
 
     await showModalBottomSheet(
@@ -4231,6 +4869,461 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     );
   }
 
+  Future<void> _openReceiptLookupDialog({
+    required BuildContext context,
+    required bool isAr,
+    required AppStrings strings,
+    required List<Map<String, dynamic>> allInvoices,
+    required Map<String, EventModel> eventsMap,
+  }) async {
+    final transController = TextEditingController();
+    final posController = TextEditingController();
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    await showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final transRaw = transController.text.trim().toEnglishDigits();
+            final posRaw = posController.text.trim().toEnglishDigits();
+
+            // Auto-parse if user typed or pasted the full barcode e.g. 263/2/243/021026
+            String effectiveTrans = transRaw;
+            String effectivePos = posRaw;
+            if (transRaw.contains('/')) {
+              final parts = transRaw.split('/');
+              effectiveTrans = parts[0].trim();
+              if (parts.length > 1 && effectivePos.isEmpty) {
+                effectivePos = parts[1].trim();
+              }
+            }
+
+            final List<Map<String, dynamic>> matchingInvoices;
+            if (effectiveTrans.isEmpty && effectivePos.isEmpty) {
+              matchingInvoices = [];
+            } else {
+              matchingInvoices = allInvoices.where((inv) {
+                final receiptNum = (inv['receipt_number'] ?? '').toString();
+                final docId = (inv['id'] ?? '').toString();
+                final segments = receiptNum.split(RegExp(r'[/\\-_ ]+'));
+
+                bool transMatches = false;
+                if (effectiveTrans.isNotEmpty) {
+                  if (segments.isNotEmpty && segments[0] == effectiveTrans) {
+                    transMatches = true;
+                  } else if (segments.contains(effectiveTrans)) {
+                    transMatches = true;
+                  } else if (receiptNum.contains(effectiveTrans) || docId.contains(effectiveTrans)) {
+                    transMatches = true;
+                  }
+                } else {
+                  transMatches = true;
+                }
+
+                bool posMatches = false;
+                if (effectivePos.isNotEmpty) {
+                  if (segments.length > 1 && segments[1] == effectivePos) {
+                    posMatches = true;
+                  } else if (receiptNum.contains('/$effectivePos/') || receiptNum.contains('-$effectivePos-')) {
+                    posMatches = true;
+                  }
+                } else {
+                  posMatches = true;
+                }
+
+                return transMatches && posMatches;
+              }).toList();
+            }
+
+            return Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              backgroundColor: colorScheme.surfaceContainer,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 580, maxHeight: 680),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Header
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primaryContainer,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(Icons.receipt_long_rounded, color: colorScheme.primary, size: 24),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  isAr ? 'البحث المفصل عن الفاتورة' : 'Detailed Receipt Search',
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Text(
+                                  isAr
+                                      ? 'أدخل رقم الحركة (Trans) ورقم الكاشير (PoS) المطبوعين بالفاتورة'
+                                      : 'Enter Trans and PoS numbers printed on the receipt',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded),
+                            onPressed: () => Navigator.of(dialogCtx).pop(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Visual Receipt Diagram Box
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.info_outline_rounded, size: 14, color: Colors.blueAccent),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      isAr ? 'أين تجد هذه الأرقام في الفاتورة الورقية؟' : 'Where to find them on receipt:',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Text(
+                                  'Fathalla / Retail POS',
+                                  style: TextStyle(fontSize: 10, color: colorScheme.outline),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Directionality(
+                              textDirection: TextDirection.ltr,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.04),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Trans: [263]   PoS: [2]   Store: [243]   Date: 02/10/26\nBarcode: [ 263 / 2 / 243 / 021026 ]',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.onSurface,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Form Inputs Row
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: TextField(
+                              controller: transController,
+                              autofocus: true,
+                              textDirection: TextDirection.ltr,
+                              textAlign: TextAlign.left,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                const ArabicToEnglishDigitsFormatter.digitsOnly(),
+                              ],
+                              onChanged: (_) => setDialogState(() {}),
+                              decoration: InputDecoration(
+                                labelText: isAr ? 'رقم الحركة (Trans #)' : 'Trans Number',
+                                hintText: 'مثال: 263',
+                                prefixIcon: const Icon(Icons.tag_rounded, size: 18),
+                                isDense: true,
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            flex: 2,
+                            child: TextField(
+                              controller: posController,
+                              textDirection: TextDirection.ltr,
+                              textAlign: TextAlign.left,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                const ArabicToEnglishDigitsFormatter.digitsOnly(),
+                              ],
+                              onChanged: (_) => setDialogState(() {}),
+                              decoration: InputDecoration(
+                                labelText: isAr ? 'الكاشير (PoS #)' : 'PoS Number',
+                                hintText: 'مثال: 2',
+                                prefixIcon: const Icon(Icons.point_of_sale_rounded, size: 18),
+                                isDense: true,
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Live Results Section
+                      Expanded(
+                        child: effectiveTrans.isEmpty && effectivePos.isEmpty
+                            ? Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.search_rounded, size: 40, color: colorScheme.outlineVariant),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      isAr
+                                          ? 'اكتب رقم الحركة (Trans) للبحث التلقائي في أجزاء من الثانية'
+                                          : 'Type Trans number to instantly search matching invoices',
+                                      style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : matchingInvoices.isEmpty
+                                ? Center(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.search_off_rounded, size: 40, color: Colors.orange.shade400),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          isAr
+                                              ? 'لم يتم العثور على فاتورة برقم حركة ($effectiveTrans)${effectivePos.isNotEmpty ? " وكاشير ($effectivePos)" : ""}'
+                                              : 'No receipt found matching Trans ($effectiveTrans)',
+                                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: colorScheme.onSurface),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                : ListView.separated(
+                                    itemCount: matchingInvoices.length,
+                                    separatorBuilder: (context, index) => const SizedBox(height: 8),
+                                    itemBuilder: (context, index) {
+                                      final inv = matchingInvoices[index];
+                                      final docId = inv['id'] as String;
+                                      final receiptNum = inv['receipt_number']?.toString() ?? 'N/A';
+                                      final branch = inv['canonical_branch']?.toString() ?? inv['branch_detected']?.toString() ?? '';
+                                      final dateStr = inv['formattedDate']?.toString() ?? '';
+                                      final campaignId = inv['campaignId']?.toString() ?? '';
+                                      final event = eventsMap[campaignId];
+                                      final eventTitle = event?.eventName ?? inv['eventName']?.toString() ?? '';
+                                      final totalValue = (inv['target_company_total'] ?? inv['total_value'] ?? 0);
+                                      final chances = (inv['chances_earned'] ?? 1) as int;
+                                      final isValid = inv['is_valid'] == true || inv['status'] == 'accepted' || inv['isValid'] == true;
+
+                                      return Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: colorScheme.surface,
+                                          borderRadius: BorderRadius.circular(14),
+                                          border: Border.all(
+                                            color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+                                          ),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Flexible(
+                                                  child: Directionality(
+                                                    textDirection: TextDirection.ltr,
+                                                    child: Text(
+                                                      '#$receiptNum',
+                                                      style: const TextStyle(
+                                                        fontSize: 14,
+                                                        fontWeight: FontWeight.bold,
+                                                        letterSpacing: 0.5,
+                                                      ),
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                  decoration: BoxDecoration(
+                                                    color: isValid
+                                                        ? Colors.green.withValues(alpha: 0.12)
+                                                        : Colors.red.withValues(alpha: 0.12),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                  ),
+                                                  child: Text(
+                                                    isValid
+                                                        ? (isAr ? 'مقبولة ($chances كارت)' : 'Accepted ($chances cards)')
+                                                        : (isAr ? 'مرفوضة' : 'Rejected'),
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: isValid ? Colors.green.shade800 : Colors.red.shade800,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Row(
+                                              children: [
+                                                Icon(Icons.storefront_rounded, size: 14, color: colorScheme.onSurfaceVariant),
+                                                const SizedBox(width: 4),
+                                                Expanded(
+                                                  child: Text(
+                                                    branch.isNotEmpty ? branch : (isAr ? 'غير محدد' : 'Unknown'),
+                                                    style: TextStyle(fontSize: 11.5, color: colorScheme.onSurfaceVariant),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  '$totalValue ج.م',
+                                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.primary),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              children: [
+                                                Icon(Icons.event_note_rounded, size: 14, color: colorScheme.outline),
+                                                const SizedBox(width: 4),
+                                                Expanded(
+                                                  child: Text(
+                                                    '$eventTitle • $dateStr',
+                                                    style: TextStyle(fontSize: 10.5, color: colorScheme.outline),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 8),
+                                            SizedBox(
+                                              width: double.infinity,
+                                              child: FilledButton.icon(
+                                                style: FilledButton.styleFrom(
+                                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                ),
+                                                icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                                                label: Text(
+                                                  isAr ? 'فتح وفحص الفاتورة فوراً (0ms)' : 'Open & Inspect Receipt',
+                                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
+                                                ),
+                                                onPressed: () {
+                                                  Navigator.of(dialogCtx).pop();
+                                                  setState(() {
+                                                    if (campaignId.isNotEmpty && _selectedCampaignId != campaignId) {
+                                                      _selectedCampaignId = campaignId;
+                                                    }
+                                                    _selectedDocId = docId;
+                                                    _searchController.text = receiptNum;
+                                                    _resetPagination();
+                                                  });
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    SnackBar(
+                                                      content: Row(
+                                                        children: [
+                                                          const Icon(Icons.check_circle_rounded, color: Colors.greenAccent),
+                                                          const SizedBox(width: 8),
+                                                          Text(
+                                                            isAr
+                                                                ? 'تم فتح الفاتورة #$receiptNum بنجاح'
+                                                                : 'Receipt #$receiptNum opened successfully',
+                                                            style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                      duration: const Duration(seconds: 2),
+                                                      behavior: SnackBarBehavior.floating,
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Bottom actions
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.of(dialogCtx).pop(),
+                            child: Text(isAr ? 'إغلاق' : 'Close'),
+                          ),
+                          if (matchingInvoices.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            FilledButton.tonal(
+                              onPressed: () {
+                                Navigator.of(dialogCtx).pop();
+                                setState(() {
+                                  _searchController.text = effectiveTrans;
+                                  _resetPagination();
+                                });
+                              },
+                              child: Text(
+                                isAr
+                                    ? 'تطبيق كفلتر (${matchingInvoices.length} نتيجة)'
+                                    : 'Apply Filter (${matchingInvoices.length})',
+                                style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   String _getDateFilterLabel(AppStrings strings) {
     switch (_dateFilter) {
       case DateFilterType.all:
@@ -4290,6 +5383,1309 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Branch Invoices Distribution & Analytics Chart (البيان الإحصائي لتوزيع فواتير الفروع)
+  // Dynamic visual reporting by date filter, branch ranking, and interactive fl_chart
+  // ---------------------------------------------------------------------------
+
+  Widget _buildBranchInvoicesChartCard({
+    required List<Map<String, dynamic>> allInvoices,
+    required List<String> canonicalBranches,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required CountryCurrency activeCountry,
+    required bool isAr,
+    required bool isMobile,
+  }) {
+    if (canonicalBranches.isEmpty && allInvoices.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // 1. Filter invoices strictly by campaign, company, date, and status (ignoring _selectedBranch for the chart)
+    final periodInvoices = allInvoices.where((inv) {
+      if (_selectedCampaignId != 'all' && inv['campaignId'] != _selectedCampaignId) return false;
+      if (_selectedCompanySlug != 'all') {
+        final slug = (inv['companySlug'] ?? '').toString().toLowerCase();
+        final target = (inv['targetCompany'] ?? '').toString().toLowerCase();
+        if (slug != _selectedCompanySlug.toLowerCase() && !target.contains(_selectedCompanySlug.toLowerCase())) {
+          return false;
+        }
+      }
+      if (!_passesDateFilter(inv['date'] as DateTime?)) return false;
+
+      final bool isExplicitlyValid = inv['is_valid'] == true || inv['status'] == 'accepted' || inv['isValid'] == true;
+      final bool isExplicitlyRejected = inv['is_valid'] == false || inv['status'] == 'rejected' || inv['isValid'] == false || ((inv['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
+      final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((inv['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
+      if (_statusFilter == 'accepted' && !isValid) return false;
+      if (_statusFilter == 'rejected' && isValid) return false;
+
+      return true;
+    }).toList();
+
+    final totalPeriodInvoices = periodInvoices.length;
+
+    // 2. Aggregate per canonical branch
+    final Map<String, int> branchInvoiceCounts = {};
+    final Map<String, double> branchSalesMap = {};
+    final Map<String, int> branchItemsMap = {};
+
+    for (final b in canonicalBranches) {
+      branchInvoiceCounts[b] = 0;
+      branchSalesMap[b] = 0.0;
+      branchItemsMap[b] = 0;
+    }
+
+    for (final inv in periodInvoices) {
+      final b = (inv['canonical_branch'] ?? '').toString().trim();
+      if (b.isNotEmpty) {
+        branchInvoiceCounts[b] = (branchInvoiceCounts[b] ?? 0) + 1;
+        final total = (inv['target_company_total'] ?? inv['total_value'] ?? 0);
+        if (total is num) {
+          branchSalesMap[b] = (branchSalesMap[b] ?? 0.0) + total.toDouble();
+        }
+        final products = (inv['extracted_products'] as List?) ?? [];
+        for (final p in products) {
+          if (p is Map) {
+            final qty = p['quantity'];
+            branchItemsMap[b] = (branchItemsMap[b] ?? 0) + (qty is num ? qty.toInt() : 1);
+          }
+        }
+      }
+    }
+
+    // Build branch stats
+    final List<_BranchStat> branchStats = [];
+    for (final entry in branchInvoiceCounts.entries) {
+      final count = entry.value;
+      final sales = branchSalesMap[entry.key] ?? 0.0;
+      final items = branchItemsMap[entry.key] ?? 0;
+      final pct = totalPeriodInvoices > 0 ? (count / totalPeriodInvoices) * 100 : 0.0;
+      branchStats.add(_BranchStat(
+        branchName: entry.key,
+        invoicesCount: count,
+        promoSales: sales,
+        extractedItems: items,
+        percentage: pct,
+      ));
+    }
+
+    // Sort descending by invoices count
+    branchStats.sort((a, b) {
+      final cmp = b.invoicesCount.compareTo(a.invoicesCount);
+      if (cmp != 0) return cmp;
+      return b.promoSales.compareTo(a.promoSales);
+    });
+
+    final activeBranchesCount = branchStats.where((b) => b.invoicesCount > 0).length;
+    final maxInvoices = branchStats.isNotEmpty ? branchStats.first.invoicesCount : 0;
+    final currency = activeCountry.currencySymbol;
+    final dateFilterLabel = _getDateFilterLabel(strings);
+
+    return Container(
+      margin: EdgeInsets.symmetric(
+        horizontal: isMobile ? 12 : 20,
+        vertical: 12,
+      ),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header Bar
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: isMobile
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Row 1: Icon + Title ("توزيع فواتير الفروع") + Subtitle
+                      Row(
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              Icons.bar_chart_rounded,
+                              color: colorScheme.primary,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  isAr ? 'توزيع فواتير الفروع' : strings.branchInvoicesChartTitle,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: colorScheme.onSurface,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  isAr
+                                      ? 'إجمالي الفروع النشطة: $activeBranchesCount من أصل ${canonicalBranches.length} فرع معتمد'
+                                      : 'Active Branches: $activeBranchesCount of ${canonicalBranches.length} canonical branches',
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 10.5,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (_selectedBranch != 'all')
+                            ActionChip(
+                              avatar: Icon(Icons.check_circle_rounded, size: 14, color: colorScheme.primary),
+                              label: Text(
+                                '$_selectedBranch ✕',
+                                style: GoogleFonts.cairo(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: colorScheme.primary,
+                                ),
+                              ),
+                              backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.3),
+                              side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.4)),
+                              onPressed: () {
+                                setState(() {
+                                  _selectedBranch = 'all';
+                                  _resetPagination();
+                                });
+                              },
+                              tooltip: strings.showAllBranchesBtn,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      // Row 2: Dynamic Period Badge + View Mode Switcher + Collapse Button (كلهم في نفس الصف في الموبايل)
+                      Row(
+                        children: [
+                          // Dynamic Period Badge (نطاق التاريخ • 111 فاتورة)
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: colorScheme.primary.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: colorScheme.primary.withValues(alpha: 0.25),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.event_note_rounded,
+                                    size: 13,
+                                    color: colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      '$dateFilterLabel • $totalPeriodInvoices ${isAr ? "فاتورة" : "Invoices"}',
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: colorScheme.primary,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+
+                          // View Mode Switcher: Ranked Bars vs BarChart
+                          Container(
+                            decoration: BoxDecoration(
+                              color: colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            padding: const EdgeInsets.all(2),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _buildChartModeOption(
+                                  icon: Icons.view_headline_rounded,
+                                  isSelected: _branchChartViewMode == 0,
+                                  tooltip: isAr ? 'أشرطة الحصص والتفوق' : 'Ranked Share Bars',
+                                  colorScheme: colorScheme,
+                                  onTap: () => setState(() => _branchChartViewMode = 0),
+                                ),
+                                _buildChartModeOption(
+                                  icon: Icons.bar_chart_rounded,
+                                  isSelected: _branchChartViewMode == 1,
+                                  tooltip: isAr ? 'مخطط الأعمدة' : 'Bar Chart',
+                                  colorScheme: colorScheme,
+                                  onTap: () => setState(() => _branchChartViewMode = 1),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+
+                          // Expand / Collapse
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            icon: Icon(
+                              _isBranchChartExpanded
+                                  ? Icons.keyboard_arrow_up_rounded
+                                  : Icons.keyboard_arrow_down_rounded,
+                              color: colorScheme.onSurfaceVariant,
+                              size: 20,
+                            ),
+                            tooltip: _isBranchChartExpanded
+                                ? (isAr ? 'طي البيان البياني' : 'Collapse Chart')
+                                : (isAr ? 'توسيع البيان البياني' : 'Expand Chart'),
+                            onPressed: () {
+                              setState(() {
+                                _isBranchChartExpanded = !_isBranchChartExpanded;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      // Desktop Header: Icon + Title + Period Badge
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          Icons.bar_chart_rounded,
+                          color: colorScheme.primary,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                isAr ? 'توزيع فواتير الفروع' : strings.branchInvoicesChartTitle,
+                                style: GoogleFonts.cairo(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: colorScheme.onSurface,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              // Dynamic Period Badge
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.primary.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: colorScheme.primary.withValues(alpha: 0.25),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.event_note_rounded,
+                                      size: 13,
+                                      color: colorScheme.primary,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      dateFilterLabel,
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                    Text(
+                                      ' • $totalPeriodInvoices ${isAr ? "فاتورة" : "Invoices"}',
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            isAr
+                                ? 'إجمالي الفروع النشطة: $activeBranchesCount من أصل ${canonicalBranches.length} فرع معتمد'
+                                : 'Active Branches: $activeBranchesCount of ${canonicalBranches.length} canonical branches',
+                            style: GoogleFonts.cairo(
+                              fontSize: 11,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Spacer(),
+
+                      // Controls: Filtered branch pill + View mode toggle + Collapse button
+                      if (_selectedBranch != 'all')
+                        Container(
+                          margin: const EdgeInsetsDirectional.only(end: 8),
+                          child: ActionChip(
+                            avatar: Icon(Icons.check_circle_rounded, size: 16, color: colorScheme.primary),
+                            label: Text(
+                              '$_selectedBranch ✕',
+                              style: GoogleFonts.cairo(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.primary,
+                              ),
+                            ),
+                            backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.25),
+                            side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.4)),
+                            onPressed: () {
+                              setState(() {
+                                _selectedBranch = 'all';
+                                _resetPagination();
+                              });
+                            },
+                            tooltip: strings.showAllBranchesBtn,
+                          ),
+                        ),
+
+                      // View Mode Switcher: Ranked Bars vs BarChart
+                      Container(
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.all(2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildChartModeOption(
+                              icon: Icons.view_headline_rounded,
+                              isSelected: _branchChartViewMode == 0,
+                              tooltip: isAr ? 'أشرطة الحصص والتفوق' : 'Ranked Share Bars',
+                              colorScheme: colorScheme,
+                              onTap: () => setState(() => _branchChartViewMode = 0),
+                            ),
+                            _buildChartModeOption(
+                              icon: Icons.bar_chart_rounded,
+                              isSelected: _branchChartViewMode == 1,
+                              tooltip: isAr ? 'مخطط الأعمدة' : 'Bar Chart',
+                              colorScheme: colorScheme,
+                              onTap: () => setState(() => _branchChartViewMode = 1),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(width: 6),
+
+                      // Expand / Collapse
+                      IconButton(
+                        icon: Icon(
+                          _isBranchChartExpanded
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        tooltip: _isBranchChartExpanded
+                            ? (isAr ? 'طي البيان البياني' : 'Collapse Chart')
+                            : (isAr ? 'توسيع البيان البياني' : 'Expand Chart'),
+                        onPressed: () {
+                          setState(() {
+                            _isBranchChartExpanded = !_isBranchChartExpanded;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+          ),
+
+          // Body: when expanded
+          if (_isBranchChartExpanded) ...[
+            const Divider(height: 1, thickness: 1),
+            if (totalPeriodInvoices == 0)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.event_busy_rounded,
+                      size: 36,
+                      color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${strings.noInvoicesForSelectedPeriod} ($dateFilterLabel)',
+                      style: GoogleFonts.cairo(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              )
+            else if (_branchChartViewMode == 0)
+              _buildBranchRankedBarsView(
+                branchStats: branchStats,
+                maxInvoices: maxInvoices,
+                currency: currency,
+                colorScheme: colorScheme,
+                strings: strings,
+                isAr: isAr,
+              )
+            else
+              _buildBranchFlBarChartView(
+                branchStats: branchStats,
+                currency: currency,
+                colorScheme: colorScheme,
+                strings: strings,
+                isAr: isAr,
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChartModeOption({
+    required IconData icon,
+    required bool isSelected,
+    required String tooltip,
+    required ColorScheme colorScheme,
+    required VoidCallback onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected ? colorScheme.surface : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Icon(
+            icon,
+            size: 18,
+            color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBranchRankedBarsView({
+    required List<_BranchStat> branchStats,
+    required int maxInvoices,
+    required String currency,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+  }) {
+    final displayStats = branchStats.where((b) => b.invoicesCount > 0).toList();
+    final effectiveStats = displayStats.isEmpty ? branchStats : displayStats;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth > 850;
+        final halfLength = (effectiveStats.length / 2).ceil();
+        final col1 = isWide ? effectiveStats.take(halfLength).toList() : effectiveStats;
+        final col2 = isWide ? effectiveStats.skip(halfLength).toList() : <_BranchStat>[];
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: isWide
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        children: col1.asMap().entries.map((entry) {
+                          return _buildBranchRowCard(
+                            stat: entry.value,
+                            rank: entry.key + 1,
+                            maxInvoices: maxInvoices,
+                            currency: currency,
+                            colorScheme: colorScheme,
+                            strings: strings,
+                            isAr: isAr,
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        children: col2.asMap().entries.map((entry) {
+                          return _buildBranchRowCard(
+                            stat: entry.value,
+                            rank: halfLength + entry.key + 1,
+                            maxInvoices: maxInvoices,
+                            currency: currency,
+                            colorScheme: colorScheme,
+                            strings: strings,
+                            isAr: isAr,
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ],
+                )
+              : Column(
+                  children: effectiveStats.asMap().entries.map((entry) {
+                    return _buildBranchRowCard(
+                      stat: entry.value,
+                      rank: entry.key + 1,
+                      maxInvoices: maxInvoices,
+                      currency: currency,
+                      colorScheme: colorScheme,
+                      strings: strings,
+                      isAr: isAr,
+                    );
+                  }).toList(),
+                ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBranchRowCard({
+    required _BranchStat stat,
+    required int rank,
+    required int maxInvoices,
+    required String currency,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+  }) {
+    final isSelected = _selectedBranch == stat.branchName;
+    final progress = maxInvoices > 0 ? (stat.invoicesCount / maxInvoices).clamp(0.0, 1.0) : 0.0;
+
+    String rankPrefix;
+    Color rankColor;
+    if (rank == 1) {
+      rankPrefix = '🥇 #1';
+      rankColor = const Color(0xFFD4AF37);
+    } else if (rank == 2) {
+      rankPrefix = '🥈 #2';
+      rankColor = const Color(0xFF9E9E9E);
+    } else if (rank == 3) {
+      rankPrefix = '🥉 #3';
+      rankColor = const Color(0xFFCD7F32);
+    } else {
+      rankPrefix = '#$rank';
+      rankColor = colorScheme.onSurfaceVariant;
+    }
+
+    return Tooltip(
+      message: strings.filterByThisBranchTooltip,
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            if (_selectedBranch == stat.branchName) {
+              _selectedBranch = 'all';
+            } else {
+              _selectedBranch = stat.branchName;
+            }
+            _resetPagination();
+          });
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? colorScheme.primaryContainer.withValues(alpha: 0.25)
+                : colorScheme.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected
+                  ? colorScheme.primary
+                  : colorScheme.outlineVariant.withValues(alpha: 0.4),
+              width: isSelected ? 1.8 : 1,
+            ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: colorScheme.primary.withValues(alpha: 0.12),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header: Rank + Branch Name + Badges
+              Row(
+                children: [
+                  // Rank badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: rankColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: rankColor.withValues(alpha: 0.25)),
+                    ),
+                    child: Text(
+                      rankPrefix,
+                      style: GoogleFonts.cairo(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: rankColor,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // Branch Name
+                  Expanded(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            stat.branchName,
+                            style: GoogleFonts.cairo(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.bold,
+                              color: isSelected ? colorScheme.primary : colorScheme.onSurface,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (isSelected) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primary,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              isAr ? 'محدد' : 'Selected',
+                              style: GoogleFonts.cairo(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.onPrimary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(width: 8),
+
+                  // Invoices count badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: colorScheme.primary.withValues(alpha: 0.25)),
+                    ),
+                    child: Text(
+                      '${stat.invoicesCount} ${isAr ? "فاتورة" : "Invoices"}',
+                      style: GoogleFonts.cairo(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 6),
+
+                  // Share %
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '${stat.percentage.toStringAsFixed(1)}%',
+                      style: GoogleFonts.cairo(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 8),
+
+              // Progress Bar
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 6,
+                  backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    isSelected
+                        ? colorScheme.primary
+                        : (rank == 1 ? colorScheme.primary : colorScheme.secondary),
+                  ),
+                ),
+              ),
+
+              if (stat.promoSales > 0) ...[
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Text(
+                      '${isAr ? "مبيعات" : "Sales"}: ${NumberFormat('#,##0').format(stat.promoSales)} $currency',
+                      style: GoogleFonts.cairo(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBranchFlBarChartView({
+    required List<_BranchStat> branchStats,
+    required String currency,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+  }) {
+    final activeStats = branchStats.where((b) => b.invoicesCount > 0).toList();
+    final effectiveStats = activeStats.isEmpty ? branchStats.take(6).toList() : activeStats.take(12).toList();
+    final maxInvoices = effectiveStats.fold<int>(0, (prev, e) => math.max(prev, e.invoicesCount));
+    final maxY = (maxInvoices * 1.25).ceilToDouble().clamp(5.0, 999999.0);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: 220,
+            child: BarChart(
+              BarChartData(
+                maxY: maxY,
+                barTouchData: BarTouchData(
+                  touchTooltipData: BarTouchTooltipData(
+                    getTooltipColor: (_) => colorScheme.surfaceContainerHighest,
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                      final item = effectiveStats[groupIndex];
+                      final formattedSales = NumberFormat.compact().format(item.promoSales);
+                      return BarTooltipItem(
+                        '${item.branchName}\n',
+                        GoogleFonts.cairo(
+                          color: colorScheme.onSurface,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: '${item.invoicesCount} ${isAr ? "فاتورة" : "Invoices"} (${item.percentage.toStringAsFixed(1)}%)\n',
+                            style: GoogleFonts.cairo(
+                              color: colorScheme.primary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                          TextSpan(
+                            text: '$formattedSales $currency',
+                            style: GoogleFonts.cairo(
+                              color: colorScheme.secondary,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  touchCallback: (event, response) {
+                    if (event is FlTapUpEvent && response?.spot != null) {
+                      final idx = response!.spot!.touchedBarGroupIndex;
+                      if (idx >= 0 && idx < effectiveStats.length) {
+                        final clickedBranch = effectiveStats[idx].branchName;
+                        setState(() {
+                          if (_selectedBranch == clickedBranch) {
+                            _selectedBranch = 'all';
+                          } else {
+                            _selectedBranch = clickedBranch;
+                          }
+                          _resetPagination();
+                        });
+                      }
+                    }
+                  },
+                ),
+                titlesData: FlTitlesData(
+                  show: true,
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 32,
+                      getTitlesWidget: (value, meta) {
+                        if (value == 0 || value == (maxY / 2).roundToDouble() || value == maxY) {
+                          return Text(
+                            value.toInt().toString(),
+                            style: GoogleFonts.cairo(
+                              fontSize: 9.5,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 32,
+                      getTitlesWidget: (value, meta) {
+                        final idx = value.toInt();
+                        if (idx >= 0 && idx < effectiveStats.length) {
+                          final item = effectiveStats[idx];
+                          final isSelected = _selectedBranch == item.branchName;
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              '#${idx + 1}',
+                              style: GoogleFonts.cairo(
+                                fontSize: 11,
+                                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                                color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                  ),
+                ),
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (val) => FlLine(
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.25),
+                    strokeWidth: 1,
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                barGroups: List.generate(effectiveStats.length, (idx) {
+                  final item = effectiveStats[idx];
+                  final isSelected = _selectedBranch == item.branchName;
+                  return BarChartGroupData(
+                    x: idx,
+                    barRods: [
+                      BarChartRodData(
+                        toY: item.invoicesCount.toDouble(),
+                        color: isSelected ? colorScheme.primary : colorScheme.secondary,
+                        width: effectiveStats.length > 8 ? 16 : 22,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                      ),
+                    ],
+                  );
+                }),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          // Legend below chart showing ranks and names
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: List.generate(effectiveStats.length, (idx) {
+              final item = effectiveStats[idx];
+              final isSelected = _selectedBranch == item.branchName;
+              return InkWell(
+                onTap: () {
+                  setState(() {
+                    if (_selectedBranch == item.branchName) {
+                      _selectedBranch = 'all';
+                    } else {
+                      _selectedBranch = item.branchName;
+                    }
+                    _resetPagination();
+                  });
+                },
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? colorScheme.primaryContainer.withValues(alpha: 0.5)
+                        : colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: isSelected ? colorScheme.primary : colorScheme.outlineVariant.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Text(
+                    '#${idx + 1} ${item.branchName} (${item.invoicesCount})',
+                    style: GoogleFonts.cairo(
+                      fontSize: 10.5,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      color: isSelected ? colorScheme.primary : colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopCompactInvoiceTile({
+    required BuildContext context,
+    required Map<String, dynamic> inv,
+    required bool isSelected,
+    required ColorScheme colorScheme,
+    required CountryCurrency activeCountry,
+    required AppStrings strings,
+    required bool isAr,
+    required bool isAdmin,
+    required Map<String, EventModel> eventsMap,
+    required VoidCallback onTap,
+  }) {
+    final docId = inv['id'] as String;
+    final receiptNumber = inv['receipt_number']?.toString() ?? 'N/A';
+    final totalValue = inv['target_company_total'] ?? inv['total_value'] ?? 0;
+    final storeChain = (inv['store_chain_detected'] ?? inv['retail_chain_name'] ?? '').toString();
+    final branch = (inv['branch_detected'] ?? '').toString();
+    final formattedDate = inv['formattedDate']?.toString() ?? '';
+    final durationSec = inv['analysis_duration_seconds'] is num
+        ? (inv['analysis_duration_seconds'] as num).toDouble()
+        : null;
+    final products = (inv['extracted_products'] as List?) ?? [];
+
+    final imageUrl = inv['image_url']?.toString() ?? '';
+    final List<String> allReceiptUrls = [];
+    if (inv['image_urls'] is List && (inv['image_urls'] as List).isNotEmpty) {
+      allReceiptUrls.addAll((inv['image_urls'] as List).map((e) => e.toString()).where((e) => e.isNotEmpty));
+    }
+    if (allReceiptUrls.isEmpty && imageUrl.isNotEmpty) {
+      allReceiptUrls.add(imageUrl);
+    }
+    final isRechecking = _recheckingDocIds.contains(docId);
+    final campaignId = (inv['campaignId'] ?? '').toString();
+    final event = eventsMap[campaignId];
+
+    final bool isExplicitlyValid = inv['is_valid'] == true || inv['status'] == 'accepted' || inv['isValid'] == true;
+    final bool isExplicitlyRejected = inv['is_valid'] == false || inv['status'] == 'rejected' || inv['isValid'] == false || ((inv['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
+    final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((inv['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
+
+    final statusColor = isValid ? const Color(0xFF00897B) : const Color(0xFFD32F2F);
+    final statusText = isValid
+        ? (isAr ? 'مقبولة' : 'Accepted')
+        : (isAr ? 'مرفوضة' : 'Rejected');
+    final statusIcon = isValid ? Icons.check_circle_rounded : Icons.cancel_rounded;
+
+    final avatarWidget = Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: isValid
+            ? colorScheme.primary.withValues(alpha: 0.12)
+            : colorScheme.error.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isValid
+              ? colorScheme.primary.withValues(alpha: 0.3)
+              : colorScheme.error.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.storefront_rounded,
+          color: isValid ? colorScheme.primary : colorScheme.error,
+          size: 20,
+        ),
+      ),
+    );
+
+    final headlineWidget = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(
+          child: Text(
+            '#$receiptNumber',
+            style: GoogleFonts.cairo(
+              fontSize: 13.5,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.2,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        if (durationSec != null) ...[
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(
+              color: durationSec <= 2.0
+                  ? Colors.green.shade50
+                  : (durationSec <= 3.5 ? Colors.teal.shade50 : Colors.amber.shade50),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              '⚡${durationSec.toStringAsFixed(1)}s',
+              style: TextStyle(
+                fontSize: 9.5,
+                fontWeight: FontWeight.bold,
+                color: durationSec <= 2.0 ? Colors.green.shade900 : Colors.amber.shade900,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+
+    final subtitleWidget = Text(
+      storeChain.isNotEmpty
+          ? (branch.isNotEmpty ? '$storeChain - $branch' : storeChain)
+          : (branch.isNotEmpty ? branch : (isAr ? 'متجر غير محدد' : 'Unknown Store')),
+      style: GoogleFonts.cairo(
+        fontSize: 11.5,
+        color: colorScheme.onSurfaceVariant,
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+
+    final supportingWidget = Row(
+      children: [
+        if (formattedDate.isNotEmpty) ...[
+          Icon(Icons.access_time_rounded, size: 11, color: colorScheme.outline),
+          const SizedBox(width: 3),
+          Text(
+            formattedDate,
+            style: TextStyle(fontSize: 10, color: colorScheme.outline),
+          ),
+          const SizedBox(width: 8),
+        ],
+        Text(
+          '${products.length} ${isAr ? "صنف" : "items"}',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: colorScheme.outline,
+          ),
+        ),
+      ],
+    );
+
+    final trailingWidget = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(
+          '$totalValue ${activeCountry.currencySymbol}',
+          style: GoogleFonts.cairo(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: isSelected ? colorScheme.primary : colorScheme.onSurface,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: statusColor.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(statusIcon, size: 10, color: statusColor),
+              const SizedBox(width: 3),
+              Text(
+                statusText,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: statusColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: M3ListTile.threeLine(
+        leading: avatarWidget,
+        headline: headlineWidget,
+        subtitle: subtitleWidget,
+        supportingText: supportingWidget,
+        trailing: trailingWidget,
+        trailingActions: [
+          M3ActionMenu(
+            tooltip: isAr ? 'خيارات الفاتورة' : 'Invoice options',
+            children: [
+              M3ActionMenu.header(
+                context: context,
+                title: isAr ? 'إجراءات الفاتورة' : 'Invoice Actions',
+                icon: Icons.receipt_long_rounded,
+              ),
+              M3ActionMenu.item(
+                context: context,
+                label: isAr ? 'عرض التفاصيل والصورة' : 'View Details & Image',
+                icon: Icons.visibility_outlined,
+                onPressed: () {
+                  onTap();
+                  if (allReceiptUrls.isNotEmpty || (inv['storage_path']?.toString().isNotEmpty ?? false)) {
+                    _showImagePreviewDialog(
+                      context: context,
+                      imageUrl: imageUrl,
+                      imageUrls: allReceiptUrls,
+                      receiptNumber: receiptNumber,
+                      store: storeChain,
+                      totalValue: totalValue,
+                      date: formattedDate,
+                      currencySymbol: activeCountry.currencySymbol,
+                      colorScheme: colorScheme,
+                      strings: strings,
+                      docId: docId,
+                      storagePath: inv['storage_path']?.toString(),
+                      canDelete: isAdmin,
+                    );
+                  }
+                },
+              ),
+              M3ActionMenu.item(
+                context: context,
+                label: isAr ? 'تحميل صورة الفاتورة' : 'Download Receipt Image',
+                icon: Icons.download_rounded,
+                enabled: imageUrl.isNotEmpty,
+                onPressed: () {
+                  if (imageUrl.isNotEmpty) {
+                    launchUrl(Uri.parse(imageUrl), mode: LaunchMode.externalApplication);
+                  }
+                },
+              ),
+              M3ActionMenu.item(
+                context: context,
+                label: isAr ? 'إعادة فحص OCR بالذكاء الاصطناعي' : 'Re-run AI OCR Scan',
+                icon: Icons.sync_rounded,
+                enabled: !isRechecking,
+                onPressed: () => _promptRecheckOptions(
+                  context: context,
+                  inv: inv,
+                  event: event,
+                  eventsMap: eventsMap,
+                  strings: strings,
+                  colorScheme: colorScheme,
+                  activeCountry: activeCountry,
+                  isAr: isAr,
+                ),
+              ),
+              if (isAdmin) ...[
+                M3ActionMenu.divider(),
+                M3ActionMenu.item(
+                  context: context,
+                  label: isAr ? 'إلغاء وحذف الفاتورة' : 'Cancel & Delete Invoice',
+                  icon: Icons.delete_outline_rounded,
+                  isDestructive: true,
+                  onPressed: () => _confirmAndDeleteInvoice(
+                    context: context,
+                    docId: docId,
+                    receiptNumber: receiptNumber,
+                    totalValue: totalValue,
+                    currencySymbol: activeCountry.currencySymbol,
+                    storagePath: inv['storage_path']?.toString(),
+                    imageUrl: imageUrl,
+                    strings: strings,
+                    colorScheme: colorScheme,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+        isSelected: isSelected,
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        backgroundColor: colorScheme.surfaceContainerLow,
+        semanticsLabel: isAr
+            ? 'فاتورة رقم $receiptNumber، $statusText، الإجمالي $totalValue ${activeCountry.currencySymbol}'
+            : 'Invoice $receiptNumber, $statusText, Total $totalValue ${activeCountry.currencySymbol}',
+      ),
+    );
+  }
+
   Widget _buildInvoicesFeed({
     required List<Map<String, dynamic>> filteredInvoices,
     required ColorScheme colorScheme,
@@ -4317,6 +6713,99 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       final startIndex = safePage * _pageSize;
       final endIndex = (startIndex + _pageSize).clamp(0, totalItems);
       visibleInvoices = filteredInvoices.sublist(startIndex, endIndex);
+    }
+
+    // Material Design 3 Dual-Pane List-Detail Layout on Desktop (≥ 960dp)
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDesktopMultiPane = !isMobile && screenWidth >= 960;
+
+    if (isDesktopMultiPane) {
+      if (_selectedDocId == null || !visibleInvoices.any((i) => i['id'] == _selectedDocId)) {
+        if (visibleInvoices.isNotEmpty) {
+          _selectedDocId = visibleInvoices.first['id'] as String?;
+        }
+      }
+
+      final selectedInv = visibleInvoices.firstWhere(
+        (i) => i['id'] == _selectedDocId,
+        orElse: () => visibleInvoices.isNotEmpty ? visibleInvoices.first : <String, dynamic>{},
+      );
+
+      final selectedEvent = selectedInv.isNotEmpty
+          ? eventsMap[(selectedInv['campaignId'] ?? '').toString()]
+          : null;
+
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+        child: M3ListDetailLayout(
+          listPaneWidth: 380.0,
+          showDivider: false,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          listPane: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ...visibleInvoices.map((inv) {
+                final docId = inv['id'] as String;
+                final isSelected = _selectedDocId == docId;
+                return _buildDesktopCompactInvoiceTile(
+                  context: context,
+                  inv: inv,
+                  isSelected: isSelected,
+                  colorScheme: colorScheme,
+                  activeCountry: activeCountry,
+                  strings: strings,
+                  isAr: isAr,
+                  isAdmin: isAdmin,
+                  eventsMap: eventsMap,
+                  onTap: () => setState(() => _selectedDocId = docId),
+                );
+              }),
+              if (totalPages > 1) ...[
+                const SizedBox(height: M3Spacing.sm),
+                _buildPaginationControls(
+                  totalItems: totalItems,
+                  currentPage: safePage,
+                  pageSize: _pageSize,
+                  colorScheme: colorScheme,
+                  strings: strings,
+                  isAr: isAr,
+                  onPageChanged: (newPage) {
+                    setState(() {
+                      _currentPage = newPage;
+                      _selectedDocId = null;
+                    });
+                    if (_scrollController.hasClients) {
+                      _scrollController.animateTo(
+                        0,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOut,
+                      );
+                    }
+                  },
+                ),
+              ],
+            ],
+          ),
+          detailPane: selectedInv.isNotEmpty
+              ? Padding(
+                  padding: const EdgeInsetsDirectional.only(start: M3Spacing.md),
+                  child: _buildInvoiceCard(
+                    context: context,
+                    inv: selectedInv,
+                    event: selectedEvent,
+                    eventsMap: eventsMap,
+                    colorScheme: colorScheme,
+                    activeCountry: activeCountry,
+                    strings: strings,
+                    isAr: isAr,
+                    isMobile: false,
+                    isAdmin: isAdmin,
+                    isDesktopDetailPane: true,
+                  ),
+                )
+              : null,
+        ),
+      );
     }
 
     return ListView.builder(
@@ -4386,14 +6875,35 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     required bool isAr,
     required bool isMobile,
     required bool isAdmin,
+    bool isDesktopDetailPane = false,
   }) {
     final docId = inv['id'] as String;
-    final isExpanded = _expandedDocIds.contains(docId);
+    final isExpanded = isDesktopDetailPane || _expandedDocIds.contains(docId);
     final isRechecking = _recheckingDocIds.contains(docId);
 
     final receiptNumber = inv['receipt_number']?.toString() ?? 'N/A';
     final totalValue = inv['target_company_total'] ?? inv['total_value'] ?? 0;
     final imageUrl = inv['image_url']?.toString() ?? '';
+    final List<String> allReceiptUrls = [];
+    if (inv['image_urls'] is List && (inv['image_urls'] as List).isNotEmpty) {
+      allReceiptUrls.addAll((inv['image_urls'] as List).map((e) => e.toString()).where((e) => e.isNotEmpty));
+    }
+    if (allReceiptUrls.isEmpty && imageUrl.isNotEmpty) {
+      allReceiptUrls.add(imageUrl);
+    }
+    if (allReceiptUrls.length > 1) {
+      allReceiptUrls.sort((a, b) {
+        final aPart = RegExp(r'part(\d+)').firstMatch(a.toLowerCase())?.group(1);
+        final bPart = RegExp(r'part(\d+)').firstMatch(b.toLowerCase())?.group(1);
+        if (aPart != null && bPart != null) {
+          return int.parse(aPart).compareTo(int.parse(bPart));
+        }
+        return a.compareTo(b);
+      });
+    }
+    final int partsCount = (inv['parts_count'] is num)
+        ? (inv['parts_count'] as num).toInt()
+        : allReceiptUrls.length;
     final storeChain = (inv['store_chain_detected'] ?? inv['retail_chain_name'] ?? '').toString();
     final branch = (inv['branch_detected'] ?? '').toString();
     final eventName = inv['eventName']?.toString() ?? '';
@@ -4501,6 +7011,47 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (isDesktopDetailPane)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+                border: Border(
+                  bottom: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.rate_review_rounded, size: 16, color: colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    isAr ? 'لوحة الفحص والتدقيق الفوري (0ms)' : 'Real-time Inspection Pane (0ms)',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '#$receiptNumber',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           // Header Row
           Padding(
             padding: const EdgeInsets.all(14.0),
@@ -4511,7 +7062,8 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                 GestureDetector(
                   onTap: () => _showImagePreviewDialog(
                     context: context,
-                    imageUrl: imageUrl,
+                    imageUrl: allReceiptUrls.isNotEmpty ? allReceiptUrls.first : imageUrl,
+                    imageUrls: allReceiptUrls.length > 1 ? allReceiptUrls : null,
                     receiptNumber: receiptNumber,
                     store: storeChain.isNotEmpty ? (branch.isNotEmpty ? '$storeChain - $branch' : storeChain) : '',
                     totalValue: totalValue,
@@ -4524,7 +7076,11 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                     canDelete: isAdmin,
                   ),
                   child: Tooltip(
-                    message: imageUrl.isNotEmpty ? 'انقر لمعاينة وتكبير صورة الفاتورة' : 'لا توجد صورة مسجلة',
+                    message: (imageUrl.isNotEmpty || allReceiptUrls.isNotEmpty)
+                        ? (partsCount > 1
+                            ? (isAr ? 'فاتورة متعددة الأجزاء ($partsCount أجزاء) - انقر للمعاينة والتقليب' : 'Multi-part receipt ($partsCount parts) - Click to inspect')
+                            : (isAr ? 'انقر لمعاينة وتكبير صورة الفاتورة' : 'Click to preview'))
+                        : (isAr ? 'لا توجد صورة مسجلة' : 'No image recorded'),
                     child: MouseRegion(
                       cursor: SystemMouseCursors.click,
                       child: ClipRRect(
@@ -4540,8 +7096,35 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              _buildReceiptImage(imageUrl, fit: BoxFit.cover),
-                              if (imageUrl.isNotEmpty)
+                              _buildReceiptImage(allReceiptUrls.isNotEmpty ? allReceiptUrls.first : imageUrl, fit: BoxFit.cover),
+                              if (partsCount > 1 || allReceiptUrls.length > 1)
+                                Positioned(
+                                  top: 3,
+                                  left: 3,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withValues(alpha: 0.75),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.collections_rounded, size: 9, color: Colors.white),
+                                        const SizedBox(width: 2),
+                                        Text(
+                                          '${partsCount > allReceiptUrls.length ? partsCount : allReceiptUrls.length}',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              if (imageUrl.isNotEmpty || allReceiptUrls.isNotEmpty)
                                 Positioned(
                                   bottom: 3,
                                   right: 3,
@@ -4842,6 +7425,32 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                     ),
                                   ),
+                                  const SizedBox(width: 6),
+                                  // AI Brain Co-Pilot Studio Shortcut
+                                  TextButton.icon(
+                                    onPressed: () => _openAiBrainCoPilotForInvoice(
+                                      context: context,
+                                      inv: inv,
+                                      event: event,
+                                      strings: strings,
+                                      isAr: isAr,
+                                    ),
+                                    icon: Icon(Icons.psychology_rounded, size: 14, color: colorScheme.primary),
+                                    label: Text(
+                                      isAr ? 'عقل الذكاء' : 'AI Brain',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      visualDensity: VisualDensity.compact,
+                                      backgroundColor: colorScheme.primary.withValues(alpha: 0.12),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                  ),
                                 ],
                               ),
                               const SizedBox(height: 6),
@@ -4974,54 +7583,137 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
 
                     const SizedBox(width: 8),
 
-                    // Items Count Button with Expand action
-                    OutlinedButton.icon(
-                      onPressed: () => _toggleExpand(docId),
-                      icon: Icon(
-                        isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                        size: isCardMobile ? 16 : 18,
-                      ),
-                      label: Text(
-                        itemsBtnLabel,
-                        style: TextStyle(
-                          fontSize: isCardMobile ? 11 : 12,
-                          fontWeight: FontWeight.bold,
+                    // Items Count Button with Expand action (or static indicator in detail pane)
+                    if (!isDesktopDetailPane)
+                      OutlinedButton.icon(
+                        onPressed: () => _toggleExpand(docId),
+                        icon: Icon(
+                          isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                          size: isCardMobile ? 16 : 18,
                         ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isCardMobile ? 8 : 12,
-                          vertical: isCardMobile ? 6 : 8,
+                        label: Text(
+                          itemsBtnLabel,
+                          style: TextStyle(
+                            fontSize: isCardMobile ? 11 : 12,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                    ),
-
-                    // Admin-Only Delete Action Button (Never displayed for Company Manager View)
-                    if (isAdmin) ...[
-                      const SizedBox(width: 8),
-                      IconButton.outlined(
-                        onPressed: () => _confirmAndDeleteInvoice(
-                          context: context,
-                          docId: docId,
-                          receiptNumber: receiptNumber,
-                          totalValue: totalValue,
-                          currencySymbol: activeCountry.currencySymbol,
-                          storagePath: inv['storage_path']?.toString(),
-                          imageUrl: imageUrl,
-                          strings: strings,
-                          colorScheme: colorScheme,
-                        ),
-                        icon: Icon(Icons.delete_outline_rounded, color: colorScheme.error, size: isCardMobile ? 18 : 20),
-                        style: IconButton.styleFrom(
-                          side: BorderSide(color: colorScheme.error.withValues(alpha: 0.4)),
-                          backgroundColor: colorScheme.errorContainer.withValues(alpha: 0.2),
-                          padding: EdgeInsets.all(isCardMobile ? 6 : 8),
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isCardMobile ? 8 : 12,
+                            vertical: isCardMobile ? 6 : 8,
+                          ),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
-                        tooltip: strings.deleteInvoiceTooltip,
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: colorScheme.primary.withValues(alpha: 0.25)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.inventory_2_rounded, size: 15, color: colorScheme.primary),
+                            const SizedBox(width: 6),
+                            Text(
+                              '${products.length} ${strings.itemsCountLabel}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.primary,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ],
+
+                    // Material Design 3 Invoice Action Menu
+                    const SizedBox(width: 8),
+                    M3ActionMenu(
+                      tooltip: isAr ? 'خيارات الفاتورة' : 'Invoice Options',
+                      children: [
+                        M3ActionMenu.header(
+                          context: context,
+                          title: isAr ? 'خيارات الفاتورة' : 'Invoice Options',
+                          icon: Icons.receipt_long_rounded,
+                        ),
+                        M3ActionMenu.item(
+                          context: context,
+                          label: isAr ? 'عرض الفاتورة والصورة' : 'View Receipt & Details',
+                          icon: Icons.visibility_outlined,
+                          onPressed: () {
+                            if (allReceiptUrls.isNotEmpty || (inv['storage_path']?.toString().isNotEmpty ?? false)) {
+                              _showImagePreviewDialog(
+                                context: context,
+                                imageUrl: imageUrl,
+                                imageUrls: allReceiptUrls,
+                                receiptNumber: receiptNumber,
+                                store: storeChain,
+                                totalValue: totalValue,
+                                date: formattedDate,
+                                currencySymbol: activeCountry.currencySymbol,
+                                colorScheme: colorScheme,
+                                strings: strings,
+                                docId: docId,
+                                storagePath: inv['storage_path']?.toString(),
+                                canDelete: isAdmin,
+                              );
+                            }
+                          },
+                        ),
+                        M3ActionMenu.item(
+                          context: context,
+                          label: isAr ? 'تحميل صورة الفاتورة' : 'Download Receipt Image',
+                          icon: Icons.download_rounded,
+                          enabled: imageUrl.isNotEmpty,
+                          onPressed: () {
+                            if (imageUrl.isNotEmpty) {
+                              launchUrl(Uri.parse(imageUrl), mode: LaunchMode.externalApplication);
+                            }
+                          },
+                        ),
+                        M3ActionMenu.item(
+                          context: context,
+                          label: isAr ? 'إعادة فحص OCR بالذكاء الاصطناعي' : 'Re-run AI OCR Scan',
+                          icon: Icons.sync_rounded,
+                          enabled: !isRechecking,
+                          onPressed: () => _promptRecheckOptions(
+                            context: context,
+                            inv: inv,
+                            event: event,
+                            eventsMap: eventsMap,
+                            strings: strings,
+                            colorScheme: colorScheme,
+                            activeCountry: activeCountry,
+                            isAr: isAr,
+                          ),
+                        ),
+                        if (isAdmin) ...[
+                          M3ActionMenu.divider(),
+                          M3ActionMenu.item(
+                            context: context,
+                            label: isAr ? 'إلغاء وحذف الفاتورة' : 'Cancel & Delete Invoice',
+                            icon: Icons.delete_outline_rounded,
+                            isDestructive: true,
+                            onPressed: () => _confirmAndDeleteInvoice(
+                              context: context,
+                              docId: docId,
+                              receiptNumber: receiptNumber,
+                              totalValue: totalValue,
+                              currencySymbol: activeCountry.currencySymbol,
+                              storagePath: inv['storage_path']?.toString(),
+                              imageUrl: imageUrl,
+                              strings: strings,
+                              colorScheme: colorScheme,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ],
                 ),
               );
@@ -5333,8 +8025,8 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                   columnSpacing: 18,
                   horizontalMargin: 12,
                   headingRowHeight: 38,
-                  dataRowMinHeight: 42,
-                  dataRowMaxHeight: 52,
+                  dataRowMinHeight: 40,
+                  dataRowMaxHeight: 46,
                   columns: [
                     DataColumn(label: Text('#', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                     DataColumn(label: Text(strings.productNameCol, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
@@ -5476,4 +8168,20 @@ class _StickyInvoicesFilterDelegate extends SliverPersistentHeaderDelegate {
   bool shouldRebuild(covariant _StickyInvoicesFilterDelegate oldDelegate) {
     return oldDelegate.height != height || oldDelegate.child != child;
   }
+}
+
+class _BranchStat {
+  final String branchName;
+  final int invoicesCount;
+  final double promoSales;
+  final int extractedItems;
+  final double percentage;
+
+  const _BranchStat({
+    required this.branchName,
+    required this.invoicesCount,
+    required this.promoSales,
+    required this.extractedItems,
+    required this.percentage,
+  });
 }

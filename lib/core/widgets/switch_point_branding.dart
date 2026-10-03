@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../constants/country_currency_config.dart';
 import '../constants/app_version_config.dart';
 import '../localization/locale_provider.dart';
+import 'm3_action_menu.dart';
 
 /// Company constants & metadata for Switch Point & Tashil Gift System
 class SwitchPointInfo {
@@ -105,73 +106,69 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
 
               // 1. Natural START: Brand Logo + Platform Name + Subtitle (على إيدك اليمين في العربي)
               Expanded(
-                child: InkWell(
-                  onTap: () => SwitchPointInfo.launchLink(SwitchPointInfo.websiteUrl),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _buildMobileLogo(context, colorScheme),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      SwitchPointInfo.platformName,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.cairo(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: colorScheme.primary,
-                                        letterSpacing: 0.3,
-                                      ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildMobileLogo(context, colorScheme),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    SwitchPointInfo.platformName,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                      color: colorScheme.primary,
+                                      letterSpacing: 0.3,
                                     ),
                                   ),
-                                  const SizedBox(width: 5),
-                                  Tooltip(
-                                    message: AppVersionConfig.tooltipText,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                      decoration: BoxDecoration(
-                                        color: colorScheme.primaryContainer,
-                                        borderRadius: BorderRadius.circular(5),
-                                      ),
-                                      child: Text(
-                                        AppVersionConfig.versionDisplay,
-                                        style: GoogleFonts.cairo(
-                                          fontSize: 9.5,
-                                          fontWeight: FontWeight.bold,
-                                          color: colorScheme.onPrimaryContainer,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Text(
-                                subtitle ?? (isAr ? SwitchPointInfo.companyNameAr : SwitchPointInfo.companyName),
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                                style: GoogleFonts.cairo(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: colorScheme.onSurfaceVariant,
                                 ),
+                                const SizedBox(width: 5),
+                                Tooltip(
+                                  message: AppVersionConfig.tooltipText,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: colorScheme.primaryContainer,
+                                      borderRadius: BorderRadius.circular(5),
+                                    ),
+                                    child: Text(
+                                      AppVersionConfig.versionDisplay,
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: colorScheme.onPrimaryContainer,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Text(
+                              subtitle ?? (isAr ? SwitchPointInfo.companyNameAr : SwitchPointInfo.companyName),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                              style: GoogleFonts.cairo(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                                color: colorScheme.onSurfaceVariant,
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -246,101 +243,97 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
             const SizedBox(width: 8),
           ],
 
-          // Switch Point Brand Logo & Title with click-to-website
+          // Switch Point Brand Logo & Title (Static, no redirect)
           Expanded(
-            child: InkWell(
-              onTap: () => SwitchPointInfo.launchLink(SwitchPointInfo.websiteUrl),
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            colorScheme.primary,
-                            colorScheme.tertiary,
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          colorScheme.primary,
+                          colorScheme.tertiary,
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: colorScheme.primary.withValues(alpha: 0.2),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
                         ),
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: colorScheme.primary.withValues(alpha: 0.2),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.hub_rounded,
-                        color: Colors.white,
-                        size: 22,
-                      ),
+                      ],
                     ),
-                    const SizedBox(width: 10),
-                    Flexible(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  SwitchPointInfo.platformName,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.cairo(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: colorScheme.primary,
-                                    letterSpacing: 0.5,
-                                  ),
+                    child: const Icon(
+                      Icons.hub_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                SwitchPointInfo.platformName,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.cairo(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: colorScheme.primary,
+                                  letterSpacing: 0.5,
                                 ),
                               ),
-                              const SizedBox(width: 5),
-                              Tooltip(
-                                message: AppVersionConfig.tooltipText,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                  decoration: BoxDecoration(
-                                    color: colorScheme.primaryContainer,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    AppVersionConfig.versionDisplay,
-                                    style: GoogleFonts.cairo(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: colorScheme.onPrimaryContainer,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          Text(
-                            subtitle ?? (isAr ? 'حلول الترويج والتحقق الذكي متعدد الشركات' : (ref.isHindi ? 'स्मार्ट मल्टी-कंपनी प्रचार और एआई सत्यापन' : 'Smart Multi-Company Promotion & AI Verification')),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                            style: GoogleFonts.cairo(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: colorScheme.onSurfaceVariant,
                             ),
+                            const SizedBox(width: 5),
+                            Tooltip(
+                              message: AppVersionConfig.tooltipText,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.primaryContainer,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  AppVersionConfig.versionDisplay,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: colorScheme.onPrimaryContainer,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          subtitle ?? (isAr ? 'حلول الترويج والتحقق الذكي متعدد الشركات' : (ref.isHindi ? 'स्मार्ट मल्टी-कंपनी प्रचार और एआई सत्यापन' : 'Smart Multi-Company Promotion & AI Verification')),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                          style: GoogleFonts.cairo(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: colorScheme.onSurfaceVariant,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -370,36 +363,32 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
   Widget _buildMobileLogo(BuildContext context, ColorScheme colorScheme) {
     return Tooltip(
       message: AppVersionConfig.tooltipText,
-      child: InkWell(
-        onTap: () => SwitchPointInfo.launchLink(SwitchPointInfo.websiteUrl),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
-          child: Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  colorScheme.primary,
-                  colorScheme.tertiary,
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(10),
-              boxShadow: [
-                BoxShadow(
-                  color: colorScheme.primary.withValues(alpha: 0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+        child: Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                colorScheme.primary,
+                colorScheme.tertiary,
               ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-            child: const Icon(
-              Icons.hub_rounded,
-              color: Colors.white,
-              size: 18,
-            ),
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.primary.withValues(alpha: 0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.hub_rounded,
+            color: Colors.white,
+            size: 18,
           ),
         ),
       ),
@@ -437,87 +426,78 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
     bool isMobile,
     bool isAr,
   ) {
-    return PopupMenuButton<String>(
+    return M3ActionMenu(
       tooltip: isAr
           ? 'تغيير لغة النظام'
           : (ref.isHindi ? 'भाषा बदलें' : 'Change System Language'),
-      position: PopupMenuPosition.under,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
-      ),
-      color: colorScheme.surfaceContainerHigh,
-      elevation: 6,
-      onSelected: (String code) {
-        ref.setLocale(code);
-      },
-      itemBuilder: (BuildContext context) {
-        return AppLanguage.values.map((lang) {
-          final isSelected = ref.watch(localeProvider).languageCode == lang.code;
-          return PopupMenuItem<String>(
-            value: lang.code,
+      anchorBuilder: (context, controller, child) {
+        return InkWell(
+          onTap: () {
+            if (controller.isOpen) {
+              controller.close();
+            } else {
+              controller.open();
+            }
+          },
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 6 : 10,
+              vertical: isMobile ? 4 : 6,
+            ),
+            decoration: BoxDecoration(
+              color: colorScheme.primaryContainer.withValues(alpha: 0.45),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: colorScheme.primary.withValues(alpha: 0.35),
+              ),
+            ),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(lang.flagEmoji, style: const TextStyle(fontSize: 18)),
-                const SizedBox(width: 10),
                 Text(
-                  lang.label,
-                  style: GoogleFonts.cairo(
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    color: isSelected ? colorScheme.primary : colorScheme.onSurface,
-                  ),
+                  ref.currentAppLanguage.flagEmoji,
+                  style: TextStyle(fontSize: isMobile ? 14 : 16),
                 ),
-                if (isSelected) ...[
-                  const Spacer(),
-                  Icon(
-                    Icons.check_rounded,
-                    color: colorScheme.primary,
-                    size: 18,
+                if (!isMobile) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    ref.currentAppLanguage.shortLabel,
+                    style: GoogleFonts.cairo(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.primary,
+                    ),
                   ),
                 ],
-              ],
-            ),
-          );
-        }).toList();
-      },
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: isMobile ? 6 : 10,
-          vertical: isMobile ? 4 : 6,
-        ),
-        decoration: BoxDecoration(
-          color: colorScheme.primaryContainer.withValues(alpha: 0.45),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: colorScheme.primary.withValues(alpha: 0.35),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              ref.currentAppLanguage.flagEmoji,
-              style: TextStyle(fontSize: isMobile ? 14 : 16),
-            ),
-            if (!isMobile) ...[
-              const SizedBox(width: 4),
-              Text(
-                ref.currentAppLanguage.shortLabel,
-                style: GoogleFonts.cairo(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
+                Icon(
+                  Icons.arrow_drop_down_rounded,
+                  size: isMobile ? 16 : 18,
                   color: colorScheme.primary,
                 ),
-              ),
-            ],
-            Icon(
-              Icons.arrow_drop_down_rounded,
-              size: isMobile ? 16 : 18,
-              color: colorScheme.primary,
+              ],
             ),
-          ],
+          ),
+        );
+      },
+      children: [
+        M3ActionMenu.header(
+          context: context,
+          title: isAr ? 'اللغة / Language' : 'Select Language',
         ),
-      ),
+        ...AppLanguage.values.map((lang) {
+          final isSelected = ref.watch(localeProvider).languageCode == lang.code;
+          return M3ActionMenu.item(
+            context: context,
+            label: lang.label,
+            leading: Text(lang.flagEmoji, style: const TextStyle(fontSize: 18)),
+            isSelected: isSelected,
+            onPressed: () {
+              ref.setLocale(lang.code);
+            },
+          );
+        }),
+      ],
     );
   }
 
@@ -535,121 +515,92 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
             ? 'सक्रिय देश और मुद्रा: ${activeCountry.fullName(lang)} (${activeCountry.currencySymbolFor(lang)})'
             : 'Active Country & Currency: ${activeCountry.fullName(lang)} (${activeCountry.currencySymbolFor(lang)})');
 
-    return PopupMenuButton<CountryCurrency>(
+    return M3ActionMenu(
       tooltip: countryTooltip,
-      initialValue: activeCountry,
-      position: PopupMenuPosition.under,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
-      ),
-      color: colorScheme.surfaceContainerHigh,
-      elevation: 6,
-      onSelected: (CountryCurrency selected) {
-        ref.read(activeCountryProvider.notifier).state = selected;
-      },
-      itemBuilder: (BuildContext context) {
-        return CountryCurrencyConfig.supportedCountries.map((country) {
-          final isCurrent = country.code == activeCountry.code;
-          return PopupMenuItem<CountryCurrency>(
-            value: country,
+      anchorBuilder: (context, controller, child) {
+        return InkWell(
+          onTap: () {
+            if (controller.isOpen) {
+              controller.close();
+            } else {
+              controller.open();
+            }
+          },
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 5 : 12,
+              vertical: isMobile ? 4 : 6,
+            ),
+            decoration: BoxDecoration(
+              color: colorScheme.secondaryContainer.withValues(alpha: 0.45),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: colorScheme.primary.withValues(alpha: 0.35),
+              ),
+            ),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  country.flagEmoji,
-                  style: const TextStyle(fontSize: 20),
+                  activeCountry.flagEmoji,
+                  style: TextStyle(fontSize: isMobile ? 14 : 16),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        country.fullName(lang),
-                        style: GoogleFonts.cairo(
-                          fontWeight: isCurrent ? FontWeight.bold : FontWeight.w600,
-                          fontSize: 13,
-                          color: isCurrent ? colorScheme.primary : colorScheme.onSurface,
-                        ),
-                      ),
-                      Text(
-                        '${country.currencyName(lang)} (${country.currencySymbolFor(lang)})',
-                        style: GoogleFonts.cairo(
-                          fontSize: 11,
-                          color: isCurrent ? colorScheme.primary : colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
+                SizedBox(width: isMobile ? 3 : 6),
+                if (!isMobile) ...[
+                  Text(
+                    activeCountry.name(lang),
+                    style: GoogleFonts.cairo(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.onSurface,
+                    ),
                   ),
-                ),
-                if (isCurrent) ...[
-                  const SizedBox(width: 8),
-                  Icon(
-                    Icons.check_circle_rounded,
-                    color: colorScheme.primary,
-                    size: 18,
-                  ),
+                  const SizedBox(width: 6),
                 ],
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: isMobile ? 4 : 6, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    activeCountry.currencySymbolFor(lang),
+                    style: GoogleFonts.cairo(
+                      fontSize: isMobile ? 10 : 11,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_drop_down_rounded,
+                  size: isMobile ? 16 : 18,
+                  color: colorScheme.onSurfaceVariant,
+                ),
               ],
             ),
-          );
-        }).toList();
-      },
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: isMobile ? 5 : 12,
-          vertical: isMobile ? 4 : 6,
-        ),
-        decoration: BoxDecoration(
-          color: colorScheme.secondaryContainer.withValues(alpha: 0.45),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: colorScheme.primary.withValues(alpha: 0.35),
           ),
+        );
+      },
+      children: [
+        M3ActionMenu.header(
+          context: context,
+          title: lang == 'ar' ? 'الدولة والعملة' : 'Country & Currency',
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              activeCountry.flagEmoji,
-              style: TextStyle(fontSize: isMobile ? 14 : 16),
-            ),
-            SizedBox(width: isMobile ? 3 : 6),
-            if (!isMobile) ...[
-              Text(
-                activeCountry.name(lang),
-                style: GoogleFonts.cairo(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(width: 6),
-            ],
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: isMobile ? 4 : 6, vertical: 1),
-              decoration: BoxDecoration(
-                color: colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                activeCountry.currencySymbolFor(lang),
-                style: GoogleFonts.cairo(
-                  fontSize: isMobile ? 10 : 11,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.onPrimaryContainer,
-                ),
-              ),
-            ),
-            Icon(
-              Icons.arrow_drop_down_rounded,
-              size: isMobile ? 16 : 18,
-              color: colorScheme.onSurfaceVariant,
-            ),
-          ],
-        ),
-      ),
+        ...CountryCurrencyConfig.supportedCountries.map((country) {
+          final isCurrent = country.code == activeCountry.code;
+          return M3ActionMenu.item(
+            context: context,
+            label: '${country.fullName(lang)} (${country.currencySymbolFor(lang)})',
+            leading: Text(country.flagEmoji, style: const TextStyle(fontSize: 18)),
+            isSelected: isCurrent,
+            onPressed: () {
+              ref.read(activeCountryProvider.notifier).state = country;
+            },
+          );
+        }),
+      ],
     );
   }
 }
@@ -1282,25 +1233,44 @@ class SwitchPointMobileMenuSheet extends ConsumerWidget {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 6,
-                          children: AppLanguage.values.map((lang) {
-                            final isSelected = currentLangCode == lang.code;
-                            return ChoiceChip(
-                              avatar: Text(lang.flagEmoji, style: const TextStyle(fontSize: 14)),
-                              label: Text(
-                                lang.label,
-                                style: GoogleFonts.cairo(
-                                  fontSize: 11.5,
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                ),
+                        Container(
+                          height: 42,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: currentLangCode,
+                              isExpanded: true,
+                              icon: Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: colorScheme.onSurfaceVariant),
+                              dropdownColor: colorScheme.surfaceContainerHigh,
+                              borderRadius: BorderRadius.circular(12),
+                              style: GoogleFonts.cairo(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: colorScheme.onSurface,
                               ),
-                              selected: isSelected,
-                              onSelected: (val) {
-                                if (val) ref.setLocale(lang.code);
+                              items: AppLanguage.values.map((lang) {
+                                return DropdownMenuItem<String>(
+                                  value: lang.code,
+                                  child: Text(
+                                    lang.label,
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: colorScheme.onSurface,
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                if (val != null) ref.setLocale(val);
                               },
-                            );
-                          }).toList(),
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 14),
 
@@ -1316,25 +1286,47 @@ class SwitchPointMobileMenuSheet extends ConsumerWidget {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 6,
-                          children: CountryCurrencyConfig.supportedCountries.map((country) {
-                            final isSelected = activeCountry.code == country.code;
-                            return ChoiceChip(
-                              avatar: Text(country.flagEmoji, style: const TextStyle(fontSize: 14)),
-                              label: Text(
-                                '${country.name(currentLangCode)} (${country.currencySymbolFor(currentLangCode)})',
-                                style: GoogleFonts.cairo(
-                                  fontSize: 11.5,
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                ),
+                        Container(
+                          height: 42,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: activeCountry.code,
+                              isExpanded: true,
+                              icon: Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: colorScheme.onSurfaceVariant),
+                              dropdownColor: colorScheme.surfaceContainerHigh,
+                              borderRadius: BorderRadius.circular(12),
+                              style: GoogleFonts.cairo(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: colorScheme.onSurface,
                               ),
-                              selected: isSelected,
-                              onSelected: (val) {
-                                if (val) ref.read(activeCountryProvider.notifier).state = country;
+                              items: CountryCurrencyConfig.supportedCountries.map((country) {
+                                return DropdownMenuItem<String>(
+                                  value: country.code,
+                                  child: Text(
+                                    '${country.name(currentLangCode)} (${country.currencySymbolFor(currentLangCode)})',
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: colorScheme.onSurface,
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  final country = CountryCurrencyConfig.findByCode(val);
+                                  ref.read(activeCountryProvider.notifier).state = country;
+                                }
                               },
-                            );
-                          }).toList(),
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 14),
 

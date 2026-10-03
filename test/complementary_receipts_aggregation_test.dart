@@ -211,5 +211,104 @@ void main() {
 
       expect(analysisResult.targetCompanyTotal, equals(806.0));
     });
+
+    test('Strict Single-Receipt Integrity (AIR-61) rejects dual-receipt merging when allowComplementaryReceipts is false', () {
+      final jsonWithMergedReceipts = {
+        'isValid': true,
+        'receiptNumber': '64/6/241/250926 + 109/8/241/250926',
+        'targetCompanyTotal': 806.0,
+        'receiptDate': '25/09/2026',
+        'storeChainDetected': 'أسواق فتح الله للجملة',
+        'branchDetected': 'المحلة الكبرى',
+        'isThermalPosReceipt': true,
+        'isHandwritten': false,
+        'message': 'تم فحص البونين المدمجين بنجاح وتجميع القيمة.',
+        'chancesEarned': 2,
+        'unfulfilledConditions': <String>[],
+        'extractedProducts': [
+          {
+            'name': 'كادبوري ديري ميلك',
+            'price': 751.0,
+            'quantity': 1,
+            'isTargetCompany': true,
+          },
+          {
+            'name': 'كادبوري ديري ميلك تكملة',
+            'price': 55.0,
+            'quantity': 1,
+            'isTargetCompany': true,
+          },
+        ],
+      };
+
+      var result = AiReceiptAnalysisResult.fromJson(jsonWithMergedReceipts);
+
+      // Simulate Dart Gatekeeper under allowComplementaryReceipts = false (Default Security Standard)
+      const bool allowComplementaryReceipts = false;
+      if (!allowComplementaryReceipts) {
+        final rawReceiptNum = result.receiptNumber.trim();
+        final hasMultiReceiptDelimiter = rawReceiptNum.contains('+') ||
+            rawReceiptNum.contains(' + ') ||
+            rawReceiptNum.contains(' و ') ||
+            rawReceiptNum.contains(' AND ') ||
+            rawReceiptNum.contains(' and ');
+
+        final hasMultiReceiptInMessage = result.message.contains('بونين') ||
+            result.message.contains('بونات مدمجة') ||
+            result.message.contains('فاتورتين') ||
+            result.message.contains('بون تكميلي') ||
+            result.message.contains('تكملة الفاتورة');
+
+        final hasMultiReceiptViolation = result.unfulfilledConditions.any(
+          (c) => c.contains('دمج بونات') || c.contains('بونات شراء منفصلة') || c.contains('فاتورة واحدة مستقلة'),
+        );
+
+        if (hasMultiReceiptDelimiter || (hasMultiReceiptInMessage && result.isValid) || hasMultiReceiptViolation) {
+          final List<String> reasons = List<String>.from(result.unfulfilledConditions);
+          const violationReason = 'مخالفة معايير الأهلية: تم رصد محاولة دمج بونات شراء منفصلة ذات أرقام أو توقيتات مختلفة في معاملة واحدة. يشترط النظام استيفاء شروط العرض في فاتورة شراء واحدة مستقلة.';
+          if (!reasons.contains(violationReason)) {
+            reasons.insert(0, violationReason);
+          }
+
+          result = result.copyWith(
+            isValid: false,
+            chancesEarned: 0,
+            message: 'عذراً، تم رفض العملية: غير مسموح بدمج أو تجميع أكثر من بون شراء منفصل لاستيفاء قيمة العرض. يشترط النظام استيفاء شروط العرض في فاتورة شراء واحدة مستقلة.',
+            unfulfilledConditions: reasons,
+          );
+        }
+      }
+
+      expect(result.isValid, isFalse);
+      expect(result.chancesEarned, equals(0));
+      expect(result.unfulfilledConditions, isNotEmpty);
+      expect(result.unfulfilledConditions.first, contains('دمج بونات شراء منفصلة'));
+      expect(result.message, contains('غير مسموح بدمج أو تجميع أكثر من بون شراء منفصل'));
+    });
+
+    test('EventModel defaults allowComplementaryReceipts to false and serializes accurately', () {
+      final defaultEvent = EventModel(
+        id: 'camp_1',
+        eventName: 'حملة كادبوري',
+        targetCompany: 'كادبوري',
+        minimumSpend: 400.0,
+      );
+
+      expect(defaultEvent.allowComplementaryReceipts, isFalse);
+
+      final map = defaultEvent.toFirestore();
+      expect(map['allowComplementaryReceipts'], isFalse);
+
+      final restored = EventModel.fromFirestoreMap('camp_1', map);
+      expect(restored.allowComplementaryReceipts, isFalse);
+
+      // Opt-in campaign mode
+      final optInEvent = defaultEvent.copyWith(allowComplementaryReceipts: true);
+      expect(optInEvent.allowComplementaryReceipts, isTrue);
+      final optInMap = optInEvent.toFirestore();
+      expect(optInMap['allowComplementaryReceipts'], isTrue);
+      final optInRestored = EventModel.fromFirestoreMap('camp_1', optInMap);
+      expect(optInRestored.allowComplementaryReceipts, isTrue);
+    });
   });
 }

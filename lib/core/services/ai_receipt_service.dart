@@ -7,9 +7,12 @@ import 'package:al_mraay/features/admin/domain/event_model.dart';
 import 'package:al_mraay/features/admin/domain/retail_chain_model.dart';
 import '../config/ai_config.dart';
 import '../utils/arabic_numbers_utils.dart';
+import 'campaign_ai_assistant_service.dart';
+import 'ai_model_config_service.dart';
 
 final aiReceiptServiceProvider = Provider<AiReceiptService>((ref) {
-  return AiReceiptService();
+  final config = ref.watch(aiModelConfigStreamProvider).value;
+  return AiReceiptService(modelName: config?.effectivePrimaryModel ?? AiConfig.primaryModel);
 });
 
 class ExtractedProductItem {
@@ -569,9 +572,10 @@ class AiReceiptService {
   late final GenerativeModel _fallbackModel2;
   final String modelName;
 
-  AiReceiptService({this.modelName = 'gemini-3.7-flash'}) {
-    _model = _createModel(modelName);
-    _fallbackModel1 = _createModel('gemini-3.6-flash');
+  AiReceiptService({String? modelName})
+      : modelName = (modelName != null && modelName.isNotEmpty) ? modelName : AiConfig.primaryModel {
+    _model = _createModel(this.modelName);
+    _fallbackModel1 = _createModel(AiConfig.fallbackModel);
     _fallbackModel2 = _createModel('gemini-3.6-flash');
   }
 
@@ -613,7 +617,15 @@ class AiReceiptService {
         '   * [سلة المنتجات المجمعة]: اجمع كافة أصناف الشركة الراعية المؤهلة من كلا البونين في قائمة (extractedProducts) دون إسقاط أي صنف.\n'
         '   * [إجمالي الإنفاق التراكمي]: احسب (targetCompanyTotal) بجمع إجمالي منتجات الشركة المؤهلة من كلا البونين معاً (مثال: 751.00 + 55.00 = 806.00 ج.م).\n'
         '   * [استحقاق الجوائز]: طبّق القواعد الترويجية ومضاعفات الهدايا والفرص على الإجمالي التراكمي للبونين معاً.\n'
-        '   * [الملاحظات اليدوية في الهوامش]: العبارات التوضيحية مثل "تكملة الفاتورة" أو "تم استلام 2 فوتشر" هي هوامش توضيحية تنظيمية معتمدة من البروموتر، وتؤكد صحة البونين ولا تُعد تشويهاً أو تحريراً يدوياً للفاتورة الأصلية طالما أن أصل البونين مطبوع إلكترونياً من الكاشير.',
+        '   * [الملاحظات اليدوية في الهوامش]: العبارات التوضيحية مثل "تكملة الفاتورة" أو "تم استلام 2 فوتشر" هي هوامش توضيحية تنظيمية معتمدة من البروموتر، وتؤكد صحة البونين ولا تُعد تشويهاً أو تحريراً يدوياً للفاتورة الأصلية طالما أن أصل البونين مطبوع إلكترونياً من الكاشير.\n\n'
+        '🛑 قاعدة معالجة أسماء الماركات المحرفة أو المقصوصة في طابعات الكاشير (POS Dropped Character Rule - AIR-70):\n'
+        'في بونات الكاشير لبعض السلاسل التجارية، قد تحدث أخطاء طباعية أو إسقاط حروف من أسماء العلامات الفرعية:\n'
+        '- شركة أدكو (ADCO): تشمل منتجات النظافة والأرضيات والتواليت علامة "سبيد (Speed)"؛ وتطبعها بعض ماكينات الكاشير بحذف حرف الباء مثل: "سيد منظف ارضيات" أو "سيد باودر" أو "سيد 28.00" - يجب احتسابها صنفاً أصيلاً ومعتمداً لشركة أدكو (isTargetCompany = true) وإدراجها في قائمة extractedProducts وجمع قيمتها في targetCompanyTotal.\n'
+        '- علامة "كلوريل (Clorel)" و "فلفيتا (Velveta)" و "ماكسيل ماجيك (Maxel Magic)" و "فيبا (Feba)" و "ديفا (Diva)" هي علامات تابعة لشركة أدكو ويجب استخراج كافة بنودها بعناية دون إسقاط أي صنف منها.\n\n'
+        '🛑 معيار الحظر الصارم لاحتساب أصناف الشوكولاتة والمالتي باك العامة دون علامة تجارية صريحة (AIR-71):\n'
+        '- يُمنع منعاً باتاً افتراض أو تخمين تبعية أي صنف عام مطبوع على بون الكاشير تحت مسمى مبهم أو عام مثل: "مالتي باك شوكولات" أو "مالتي باك شوكولاتة" أو "شوكولاتة مشكلة" أو "بسكويت ويفر" لشركة كادبوري (Cadbury) أو مونديليز (Mondelez) ما لم يُذكر في سطر البون صراحة اسم العلامة المعتمدة التابعة للشركة (مثل: كادبوري، ديري ميلك، مورو، بابلي، أوريو، ماندولين، فليك، سي دي ام، CDM).\n'
+        '- يُحظر كلياً الاستناد إلى وجود أصناف كادبوري أخرى بالفاتورة لاعتبار الصنف العام تابعاً لكادبري.\n'
+        '- أي صنف عام يخلو من اسم العلامة الصريح يجب فوراً تعيينه: isTargetCompany = false واستبعاده كلياً من targetCompanyTotal ومن أي احتساب للجوائز أو مضاعفات الفواتشر.',
       ),
       generationConfig: GenerationConfig(
         responseMimeType: 'application/json',
@@ -824,6 +836,7 @@ class AiReceiptService {
     String multiplierBasis = 'both',
     int maxChancesPerReceipt = 0,
     List<PromotionalRuleItem> promotionalRules = const [],
+    bool allowComplementaryReceipts = false,
   }) async {
     final stopwatch = Stopwatch()..start();
     try {
@@ -851,9 +864,24 @@ class AiReceiptService {
       String multiPartInstructions = '';
       if (additionalImagesBytes.isNotEmpty) {
         final totalParts = allImageParts.length;
-        multiPartInstructions = '''
+        if (!allowComplementaryReceipts) {
+          multiPartInstructions = '''
 
-🧩 تعليمات دمج وتدقيق الفواتير المقسمة أو بونات التكملة المتعددة (Multi-Part & Complementary Receipts Stitching - AIR-58):
+🧩 تعليمات دمج وتدقيق الفاتورة الطويلة متعددة الأجزاء وحظر دمج الفواتير المنفصلة (Strict Single Long Receipt Stitching & Anti-Merging Policy - AIR-61):
+- المرفق يحتوي على ($totalParts) صور متتالية:
+  * [معيار الفاتورة الواحدة الطويلة حصراً]: يُسمح بتعدد الصور حصراً إذا كانت تمثل فاتورة فيزيائية واحدة طويلة (Single Continuous Receipt) تم تصويرها على أجزاء متتابعة من الأعلى إلى الأسفل نظراً لطولها (الجزء الأول يحتوي الترويسة والفرع ورقم الفاتورة، والجزء التالي لباقي الأصناف، والجزء الأخير يحتوي الإجمالي النهائي والباركود).
+  * [مطابقة هوية الفاتورة الواحدة]: يجب أن تتطابق في كافة الأجزاء هوية الفاتورة (نفس رقم الفاتورة، نفس الفرع، نفس ماكينة الـ POS، نفس التاريخ والتوقيت، نفس نوع ورق الكاشير).
+  * [منع تكرار الأسطر المتداخلة (Cross-Seam Deduplication)]: عند التقاط أجزاء متتابعة، قد يظهر السطر الأخير من الصورة الأولى في بداية الصورة الثانية نتيجة تداخل الكاميرا؛ يجب حتماً عد الصنف مرة واحدة فقط وعدم تكرار كميته أو قيمته مطلقاً.
+  * [حظر دمج بونات منفصلة (Zero Tolerance for Multi-Receipt Splicing)]: إذا كانت الصور تمثل فواتير أو بونات مختلفة بأرقام بونات مختلفة أو توقيتات مختلفة أو ترويسات متعددة، فهذه مخالفة جسيمة وتزوير؛ عيّن فوراً:
+    isValid = false
+    status = "rejected"
+    واكتب في (unfulfilledConditions): ["مخالفة معايير الأهلية: تم رصد محاولة دمج بونات شراء منفصلة ذات أرقام أو توقيتات مختلفة في معاملة واحدة. يشترط النظام استيفاء شروط العرض في فاتورة شراء واحدة مستقلة."]
+    ولا تدمج أرقام الفواتير برابط "+" ولا تجمع إجماليات بونات منفصلة مطلقاً.
+''';
+        } else {
+          multiPartInstructions = '''
+
+🧩 تعليمات دمج وتدقيق الفواتير المقسمة أو بونات التكملة المتعددة (Multi-Part & Complementary Receipts Stitching):
 - المرفق يحتوي على ($totalParts) صور متتالية:
   * [النمط 1: أجزاء فاتورة واحدة طويلة]: تم التقاطها على أجزاء متتابعة من الأعلى إلى الأسفل. قم بدمج الأجزاء ومنع تكرار الأسطر المتداخلة عند فواصل الصور (Cross-Seam Deduplication).
   * [النمط 2: بونات مشتريات متعددة / بون مكمل لنفس العميل لتكملة القيمة (Complementary Receipts)]: إذا كانت الصور تمثل بونات كاشير مطبوعة لنفس السلسلة والفرع في نفس اليوم (أحدها بون أساسي والآخر بون تكميلي مثل "تكملة الفاتورة" لزيادة القيمة والوصول للحد الأدنى للعرض):
@@ -862,6 +890,7 @@ class AiReceiptService {
     - احسب إجمالي (targetCompanyTotal) التراكمي المشترك لكافة البونات بدقة، وطبّق عليه قواعد الجوائز ومضاعفات الفرص.
     - الملاحظات اليدوية مثل "تكملة الفاتورة" أو "تم استلام 2 فوتشر" هي هوامش توضيحية تنظيمية معتمدة من البروموتر وليست تزويراً.
 ''';
+        }
       }
 
       final productsCondition = resolvedRequiredProducts.isNotEmpty
@@ -879,6 +908,21 @@ class AiReceiptService {
           catalogCondition =
               'العرض يشمل كافة منتجات وباركودات شركة "$targetCompany" المعتمدة (إجمالي ${registeredBarcodes.length} صنف مسجل بالكتالوج). ابحث عن أي منتج تابع للعلامة التجارية.';
         }
+      }
+
+      final resolvedSubBrands = CampaignAiAssistantService.resolveCompanySubBrands(
+        targetCompany,
+        productNames: resolvedRequiredProducts,
+      );
+      String subBrandsCondition = '';
+      if (resolvedSubBrands.isNotEmpty) {
+        subBrandsCondition = '''
+🏷️ حوكمة تفكيك وتوريث العلامات التجارية الفرعية للشركة الراعية (Umbrella Sub-Brands Inheritance - AIR-59):
+- نظراً لأن أنظمة الكاشير (POS) في السوبرماركت تطبع أسماء الماركات والعلامات الفرعية فقط دون اسم الشركة القابضة "$targetCompany":
+- العلامات والماركات التجارية المعتمدة التابعة لشركة "$targetCompany" في هذه الحملة تشمل صراحةً:
+  [${resolvedSubBrands.join("، ")}]
+- ⚠️ إلزام قطعي لنموذج الذكاء الاصطناعي: أي صنف بالفاتورة يتبع أياً من هذه العلامات المعتمدة (مثال: صابون أو سائل أو شامبو أو مسحوق أو مناديل يحمل اسماً من القائمة أعلاه مثل: ${resolvedSubBrands.take(3).join("، ")}) هو صنف شرعي وأصيل ومعتمد لشركة "$targetCompany" بنسبة 100% (عيّن: isTargetCompany = true)، ويجب إدراجه فوراً في (extractedProducts) وجمع قيمته في (targetCompanyTotal) وتطبيق قواعد العروض الترويجية والجوائز ومضاعفات الفرص عليه دون أي استبعاد.
+''';
       }
 
       String promotionalRulesCondition = '';
@@ -951,6 +995,7 @@ class AiReceiptService {
    - **الشامبو والبلسم (400 مل و 360 مل)**: عبوات تريزيمي 400 مل تطابق حصراً عروض تريزيمي (2 قطعة -> هدية 250 مل). عبوات كلير 360 مل تطابق حصراً عروض كلير (1 قطعة -> هدية 90 مل).
    - **معجون الأسنان والمنتجات المستبعدة**: أي منتج معجون أسنان (مثل سنسوداين أو سيجنال غير مشروط) أو منظفات (مثل كلوركس) يُستبعد كلياً ولا يُمنح أي هدايا.
    - **حزم البندل المزدوجة والشرنك (Twin Bundles)**: إذا احتوت الفاتورة على صنف حزمة مزدوجة أو شرنك (مثل عبوة أكس 2 قطعة أو سعر 335 ج.م بصافي 270 ج.م، أو ريكسونا 150 مل 275 ج.م، أو تريزيمي شامبو+بلسم 400 مل كود 6221155612182، أو صانسيلك شامبو+بلسم 350 مل كود 6221155611154 بسعر 184 ج.م، أو أي صنف يتضمن شامبو + بلسم معاً في نفس السطر)، يُعامل الصنف كـ (2 قطعة فيزيائية) ويطابق فوراً قاعدة الـ 2 قطعة وتمنح الجائزة المقررة مباشرة حتى لو طُبعت الكمية = 1 في بون الكاشير.
+   - **حظر مضاعفة العبوات الفردية الكبيرة (Single Large Bottle Invariant - AIR-63)**: العبوات الفردية الكبيرة (بحجم 600 مل، 700 مل، 900 مل، 1 لتر، مثل "تريزيمي شامبو 600مل" أو "كلير 600مل" أو "صانسيلك 700مل") هي عبوات فردية عادية تباع بسعر مرتفع بطبيعتها (200-350 ج.م للعبوة الواحدة). يُحظر تماماً معاملتها كحزم مزدوجة أو مضاعفة كميتها (quantity) بناءً على سعرها المرتفع طالما لم يذكر في سطر الصنف صراحة أنه عرض مزدوج (مثل "شامبو + بلسم" أو "عرض 2ق" أو "باندل"). شراء 1 عبوة 600 مل = 1 قطعة فقط وتمنح فرصة/هدية واحدة فقط.
 ''';
         } else {
           categoryPackagingGuard = '''
@@ -1065,6 +1110,14 @@ $branchSignaturesText
         }
       }
 
+      final String antiFraudMultiReceiptRule = allowComplementaryReceipts
+          ? '- [بونات التكملة المتعددة في كادر واحد جنباً إلى جنب]: إذا احتوت الصورة على بونين كاشير مطبوعين إلكترونياً جنباً إلى جنب لنفس السوبرماركت واليوم لتكملة القيمة (أحدهما بون أساسي والآخر بون تكميلي مثل مدون عليه "تكملة الفاتورة"): استخرج رقمي البونين مدمجين بفاصل " + " في (receiptNumber) (مثال: "64/6/241/250926 + 109/8/241/250926")، واجمع كافة أصناف الشركة الراعية المؤهلة من كلا البونين في (extractedProducts)، واحسب إجمالي مجموع قيمتهما المشترك في (targetCompanyTotal) (مثال: 751.00 + 55.00 = 806.00 ج.م)، وطبّق العرض ومضاعفات الجوائز على الإجمالي التراكمي.'
+          : '''- [معيار نزاهة واستقلالية الفاتورة الواحدة وحظر دمج البونات المنفصلة - AIR-61]:
+  * يُحظر تماماً دمج أو جمع أكثر من بون كاشير منفصل (سواء تم تصويرهما جنباً إلى جنب في كادر واحد أو تم رفعهما كأجزاء منفصلة) لتجميع القيمة أو الوصول للحد الأدنى للإنفاق.
+  * كل مطالبة أو معاملة يجب أن تستند إلى [فاتورة كاشير واحدة مستقلة بذاتها] برأس واحدة ورقم فاتورة واحد وتاريخ وتوقيت واحد وإجمالي واحد.
+  * إذا ظهر في الصورة أو المرفقات أكثر من بون كاشير بأرقام مختلفة أو توقيتات مختلفة: عيّن فوراً isValid = false، ولا تجمع قيمهما، ولا تضع فاصل "+" في رقم الفاتورة، واكتب في (unfulfilledConditions): ["مخالفة معايير الأهلية: تم رصد محاولة دمج بونات شراء منفصلة ذات أرقام أو توقيتات مختلفة في معاملة واحدة. يشترط النظام استيفاء شروط العرض في فاتورة شراء واحدة مستقلة."]
+  * الاستثناء الوحيد للصور المتعددة هو: التقاط [أجزاء متتابعة لنفس الفاتورة الفيزيائية الواحدة الطويلة] التي لا يتسع لها كادر الكاميرا، مع التطابق التام لرقم الفاتورة والفرع والتوقيت ومنع تكرار السطور المتداخلة (Cross-Seam Deduplication).''';
+
       String finalPromptText;
       if (customPrompt.trim().isNotEmpty) {
         String processedPrompt = customPrompt
@@ -1104,19 +1157,21 @@ $productsCondition
 $promotionalRulesCondition
 $chancesCondition$multiPartInstructions
 
-🛑 حوكمة العزل الحصري لعلامات الشركة الراعية (Strict Tenant Brand Isolation):
+$subBrandsCondition
+🛑 حوكمة العزل الحصري لعلامات الشركة الراعية والمالتي باك العام (AIR-71 & Strict Tenant Brand Isolation):
 - الفاتورة يتم تدقيقها حصرياً لصالح شركة: "$targetCompany".
 - أي منتج بالفاتورة يتبع علامة تجارية أو شركة منافسة أو غير تابعة لـ "$targetCompany" (مثلاً: إذا كانت الشركة الراعية المراعي، فلا تحتسب منتجات جهينة أو لمار أو بيتي أو دانون أو يونيليفر؛ وإذا كانت الشركة الراعية يونيليفر، فلا تحتسب منتجات لوريال أو نيفيا أو بروكتر أند غامبل أو المراعي) يجب فوراً تعيينه: isTargetCompany = false واستبعاده كلياً من targetCompanyTotal ومن أي عرض ترويجي.
+- 🛑 قاعدة أصناف المالتي باك والشوكولاتة العامة (AIR-71): إذا كان الصنف يحمل اسماً عاماً مثل "مالتي باك شوكولات" أو "مالتي باك شوكولاتة" أو "شوكولاتة مشكلة" دون ذكر صريح لماركة معتمدة تابعة لـ "$targetCompany" (مثل كادبوري، مورو، بابلي، أوريو، ماندولين، فليك)، يُحظر كلياً اعتباره تابعاً للشركة الراعية لمجرد وجود أصناف أخرى تابعة لها بالفاتورة، ويجب حتماً تعيين isTargetCompany = false واستبعاده كلياً من قيمة العرض.
 - الأصناف المشروعة في (extractedProducts) مع (isTargetCompany = true) هي فقط الأصناف التابعة لشركة "$targetCompany".
 
 🛑 استراتيجية الفلترة الموجهة والمسح السريع الفائق (Targeted Fast-Scan Strategy):
 - ركز فورياً على رأس الفاتورة (Header) لاستخراج السلسلة والفرع وتاريخ الشراء ورقم الفاتورة.
-- عند قراءة أسطر المشتريات: ركز حصراً على أسطر منتجات وعلامات شركة "$targetCompany" المشروطة، وتجاهل أي أسطر عامة أخرى (كاللحوم والخضار والفاكهة والمخبوزات والمنظفات غير التابعة) ولا تدرجها في extractedProducts، وذلك لتسريع الاستجابة والتركيز على منتجات العرض فقط.
+- عند قراءة أسطر المشتريات: ركز حصراً على أسطر منتجات وععلامات شركة "$targetCompany" المشروطة، وتجاهل أي أسطر عامة أخرى (كاللحوم والخضار والفاكهة والمخبوزات والمنظفات غير التابعة) ولا تدرجها في extractedProducts، وذلك لتسريع الاستجابة والتركيز على منتجات العرض فقط.
 
 🛑 تعليمات مكافحة التزوير والرفض الأمني (Anti-Fraud & Genuine Receipt Policy):
 - [بون الكاشير الإلكتروني]: الفواتير المقبولة فقط (isValid = true) هي بونات الكاشير الحرارية أو الإلكترونية المطبوعة آلياً من أنظمة ونقاط البيع المعتمدة (Thermal POS Receipts).
 - [ملاحظات وهوامش البروموتر/الكاشير]: إذا كان أصل الفاتورة بون كاشير مطبوع إلكترونياً، وتوجد عليه كتابة يدوية في الهوامش أو الرأس مثل "تم تسليم الهدية" أو "تكملة الفاتورة" أو "تم استلام 2 فوتشر" أو توقيع أو علامة استلام أو رقم تليفون أو علامات صح، فهذا بون كاشير أصلي معتمد وسليم (isThermalPosReceipt = true و isHandwritten = false و isTampered = false) ويجب قبوله.
-- [بونات التكملة المتعددة في كادر واحد جنباً إلى جنب - AIR-58]: إذا احتوت الصورة على بونين كاشير مطبوعين إلكترونياً جنباً إلى جنب لنفس السوبرماركت واليوم لتكملة القيمة (أحدهما بون أساسي والآخر بون تكميلي مثل مدون عليه "تكملة الفاتورة"): استخرج رقمي البونين مدمجين بفاصل " + " في (receiptNumber) (مثال: "64/6/241/250926 + 109/8/241/250926")، واجمع كافة أصناف الشركة الراعية المؤهلة من كلا البونين في (extractedProducts)، واحسب إجمالي مجموع قيمتهما المشترك في (targetCompanyTotal) (مثال: 751.00 + 55.00 = 806.00 ج.م)، وطبّق العرض ومضاعفات الجوائز على الإجمالي التراكمي.
+$antiFraudMultiReceiptRule
 - [كشف الفواتير المحررة يدوياً]: إذا كانت الفاتورة نفسها مسودة أو محررة بالكامل في دفتر يدوي وبنودها وأسعارها مكتوبة باليد، عيّن isHandwritten = true و isThermalPosReceipt = false و isValid = false واكتب رسالة رفض واضحة: "عذراً، تم رفض الفاتورة لأنها محررة بخط اليد. العرض يشترط بون كاشير مطبوع إلكترونياً من ماكينة السوبرماركت."
 - [كشف الشطب والتلاعب في الأرقام]: إذا وجد شطب أو تلاعب وتعديل يدوي في أرقام وأسعار الأصناف المطبوعة لتغيير قيمتها، عيّن isTampered = true و isValid = false.
 - [كشف تصوير الشاشات]: إذا كانت الصورة ملتقطة لشاشة هاتف أو حاسوب، عيّن isScreenCapture = true و isValid = false.
@@ -1149,6 +1204,7 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         7. احسب الإجمالي المؤهل للحملة في حقل (targetCompanyTotal).
         8. $chancesCondition$multiPartInstructions
         
+        $subBrandsCondition
         🛑 حوكمة العزل الحصري لعلامات الشركة الراعية (Strict Tenant Brand Isolation):
         - الفاتورة يتم تدقيقها حصرياً لصالح شركة: "$targetCompany".
         - أي منتج بالفاتورة يتبع علامة تجارية أو شركة منافسة أو غير تابعة لـ "$targetCompany" (مثلاً: إذا كانت الشركة الراعية المراعي، فلا تحتسب منتجات جهينة أو لمار أو بيتي أو دانون أو يونيليفر؛ وإذا كانت الشركة الراعية يونيليفر، فلا تحتسب منتجات لوريال أو نيفيا أو بروكتر أند غامبل أو المراعي) يجب فوراً تعيينه: isTargetCompany = false واستبعاده كلياً من targetCompanyTotal ومن أي عرض ترويجي.
@@ -1161,7 +1217,7 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         🛑 تعليمات مكافحة التزوير والرفض الأمني (Anti-Fraud & Genuine Receipt Policy):
         - [بون الكاشير الإلكتروني]: الفواتير المقبولة فقط (isValid = true) هي بونات الكاشير الحرارية أو الإلكترونية المطبوعة آلياً من أنظمة ونقاط البيع المعتمدة (Thermal POS Receipts).
         - [ملاحظات وهوامش البروموتر/الكاشير]: إذا كان أصل الفاتورة بون كاشير مطبوع إلكترونياً، وتوجد عليه كتابة يدوية في الهوامش أو الرأس مثل "تم تسليم الهدية" أو "تكملة الفاتورة" أو "تم استلام 2 فوتشر" أو توقيع أو علامة استلام أو رقم تليفون أو علامات صح، فهذا بون كاشير أصلي معتمد وسليم (isThermalPosReceipt = true و isHandwritten = false و isTampered = false) ويجب قبوله.
-        - [بونات التكملة المتعددة في كادر واحد جنباً إلى جنب - AIR-58]: إذا احتوت الصورة على بونين كاشير مطبوعين إلكترونياً جنباً إلى جنب لنفس السوبرماركت واليوم لتكملة القيمة (أحدهما بون أساسي والآخر بون تكميلي مثل مدون عليه "تكملة الفاتورة"): استخرج رقمي البونين مدمجين بفاصل " + " في (receiptNumber) (مثال: "64/6/241/250926 + 109/8/241/250926")، واجمع كافة أصناف الشركة الراعية المؤهلة من كلا البونين في (extractedProducts)، واحسب إجمالي مجموع قيمتهما المشترك في (targetCompanyTotal) (مثال: 751.00 + 55.00 = 806.00 ج.م)، وطبّق العرض ومضاعفات الجوائز على الإجمالي التراكمي.
+        $antiFraudMultiReceiptRule
         - [كشف الفواتير المحررة يدوياً]: إذا كانت الفاتورة نفسها مسودة أو محررة بالكامل في دفتر يدوي وبنودها وأسعارها مكتوبة باليد، عيّن isHandwritten = true و isThermalPosReceipt = false و isValid = false واكتب رسالة رفض واضحة: "عذراً، تم رفض الفاتورة لأنها محررة بخط اليد. العرض يشترط بون كاشير مطبوع إلكترونياً من ماكينة السوبرماركت."
         - [كشف الشطب والتلاعب في الأرقام]: إذا وجد شطب أو تلاعب وتعديل يدوي في أرقام وأسعار الأصناف المطبوعة لتغيير قيمتها، عيّن isTampered = true و isValid = false.
         - [كشف تصوير الشاشات]: إذا كانت الصورة ملتقطة لشاشة هاتف أو حاسوب، عيّن isScreenCapture = true و isValid = false.
@@ -1278,11 +1334,97 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           );
         }
 
+        // 🛑 Strict Dart Anti-Fraud & Single-Receipt Integrity Gatekeeper (AIR-61)
+        if (!allowComplementaryReceipts) {
+          final rawReceiptNum = result.receiptNumber.trim();
+          final hasMultiReceiptDelimiter = rawReceiptNum.contains('+') ||
+              rawReceiptNum.contains(' + ') ||
+              rawReceiptNum.contains(' و ') ||
+              rawReceiptNum.contains(' AND ') ||
+              rawReceiptNum.contains(' and ');
+
+          final hasMultiReceiptInMessage = result.message.contains('بونين') ||
+              result.message.contains('بونات مدمجة') ||
+              result.message.contains('فاتورتين') ||
+              result.message.contains('بون تكميلي') ||
+              result.message.contains('تكملة الفاتورة');
+
+          final hasMultiReceiptViolation = result.unfulfilledConditions.any(
+            (c) => c.contains('دمج بونات') || c.contains('بونات شراء منفصلة') || c.contains('فاتورة واحدة مستقلة'),
+          );
+
+          if (hasMultiReceiptDelimiter || (hasMultiReceiptInMessage && result.isValid) || hasMultiReceiptViolation) {
+            final List<String> reasons = List<String>.from(result.unfulfilledConditions);
+            const violationReason = 'مخالفة معايير الأهلية: تم رصد محاولة دمج بونات شراء منفصلة ذات أرقام أو توقيتات مختلفة في معاملة واحدة. يشترط النظام استيفاء شروط العرض في فاتورة شراء واحدة مستقلة.';
+            if (!reasons.contains(violationReason)) {
+              reasons.insert(0, violationReason);
+            }
+
+            result = result.copyWith(
+              isValid: false,
+              chancesEarned: 0,
+              message: 'عذراً، تم رفض العملية: غير مسموح بدمج أو تجميع أكثر من بون شراء منفصل لاستيفاء قيمة العرض. يشترط النظام استيفاء شروط العرض في فاتورة شراء واحدة مستقلة.',
+              unfulfilledConditions: reasons,
+            );
+          }
+        }
+
+        // Cross-seam line deduplication for genuine multi-part long receipts (AIR-39 & AIR-61)
+        if (additionalImagesBytes.isNotEmpty && result.extractedProducts.isNotEmpty) {
+          result = result.copyWith(
+            extractedProducts: deduplicateCrossSeamProducts(result.extractedProducts),
+          );
+        }
+
+        // AIR-71: Generic Multipack Brand Isolation Guard
+        // If target company is Cadbury / Mondelez, generic multipacks (like "مالتي باك شوكولات")
+        // without an explicit brand token must be disqualified (isTargetCompany = false).
+        final isMondelezTenant = targetCompany.contains('كادبري') ||
+            targetCompany.contains('كدبري') ||
+            targetCompany.toLowerCase().contains('cadbury') ||
+            targetCompany.contains('مونديليز') ||
+            targetCompany.toLowerCase().contains('mondelez');
+
+        if (isMondelezTenant && result.extractedProducts.isNotEmpty) {
+          const mondelezTokens = [
+            'كادبوري', 'كدبوري', 'cadbury',
+            'ديري ميلك', 'ديرى ميلك', 'dairy milk',
+            'مورو', 'moro',
+            'بابلي', 'بابلى', 'bubbly',
+            'اوريو', 'أوريو', 'oreo',
+            'بوريو',
+            'ماندولين', 'مندولين', 'mandolin',
+            'فليك', 'flake',
+            'سي دي ام', 'سى دى ام', 'cdm',
+            'توك', 'tuc',
+            'ترايدنت', 'trident',
+            'كلورتس', 'clorets',
+            'هولز', 'halls',
+            'تانج', 'tang',
+          ];
+
+          final sanitizedProducts = result.extractedProducts.map((p) {
+            final nameLower = p.name.toLowerCase();
+            final isGenericMultipack = (nameLower.contains('مالتي باك') || nameLower.contains('مالتى باك')) &&
+                (nameLower.contains('شوكول') || nameLower.contains('شكول') || nameLower.contains('choc'));
+
+            if (isGenericMultipack && p.isTargetCompany) {
+              final hasExplicitBrand = mondelezTokens.any((token) => nameLower.contains(token));
+              if (!hasExplicitBrand) {
+                return p.copyWith(isTargetCompany: false);
+              }
+            }
+            return p;
+          }).toList();
+
+          result = result.copyWith(extractedProducts: sanitizedProducts);
+        }
+
         // Auto-heal targetCompanyTotal if sum of extracted target products exceeds it (AIR-58)
         final double sumOfExtractedTarget = result.extractedProducts
             .where((p) => p.isTargetCompany)
             .fold<double>(0.0, (sum, p) => sum + (p.price * p.quantity));
-        if (sumOfExtractedTarget > result.targetCompanyTotal) {
+        if (sumOfExtractedTarget > result.targetCompanyTotal || (isMondelezTenant && sumOfExtractedTarget != result.targetCompanyTotal)) {
           result = result.copyWith(targetCompanyTotal: sumOfExtractedTarget);
         }
 
@@ -1803,6 +1945,39 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
       }
       throw Exception(e.toString());
     }
+  }
+
+  /// Performs cross-seam line deduplication for genuine multi-part long receipts (AIR-39 & AIR-61).
+  /// If an item appears consecutively across the seam boundary of adjacent photos with identical
+  /// name, price, and barcode, it is counted once only to prevent double counting.
+  static List<ExtractedProductItem> deduplicateCrossSeamProducts(
+    List<ExtractedProductItem> products,
+  ) {
+    if (products.length <= 1) return products;
+    final List<ExtractedProductItem> deduplicated = [];
+    for (int i = 0; i < products.length; i++) {
+      final current = products[i];
+      if (deduplicated.isNotEmpty) {
+        final prev = deduplicated.last;
+        final isSameName = current.name.trim().toLowerCase() ==
+            prev.name.trim().toLowerCase();
+        final isSamePrice = (current.price - prev.price).abs() < 0.01;
+        final isSameBarcode = current.barcode.isNotEmpty &&
+            current.barcode == prev.barcode;
+        final isSameQuantity = current.quantity == prev.quantity;
+
+        // If consecutive duplicate item on seam boundary, avoid double counting
+        if (isSameName &&
+            isSamePrice &&
+            (isSameBarcode ||
+                (current.barcode.isEmpty && prev.barcode.isEmpty)) &&
+            isSameQuantity) {
+          continue;
+        }
+      }
+      deduplicated.add(current);
+    }
+    return deduplicated;
   }
 
   static Map<String, dynamic> _cleanAndParseJson(String raw) {
@@ -2515,7 +2690,9 @@ class PromotionalRuleMatcher {
               count = 1;
             } else if (rule.allowMultipliers || allowCampaignMultipliers) {
               final divisor = rule.minSpend > 0 ? rule.minSpend : effectiveMin;
-              count = divisor > 0 ? (totalEligibleSpend ~/ divisor) : 1;
+              final effectiveSpendForMultiplier = totalEligibleSpend +
+                  (rule.discountTolerance > 0 ? rule.discountTolerance : 0.0);
+              count = divisor > 0 ? (effectiveSpendForMultiplier ~/ divisor) : 1;
               if (count < 1) count = 1;
             }
 
@@ -2770,14 +2947,25 @@ class PromotionalRuleMatcher {
     return reasons;
   }
 
-  /// Verified promo twin bundle barcodes that represent a 2-piece combo pack (Shampoo + Conditioner or Dual Sprays)
-  static const Set<String> _knownTwinBundleBarcodes = {
+  /// Verified Sunsilk promo twin bundle barcodes (Shampoo 350ml + Conditioner 350ml)
+  static const Set<String> _knownSunsilkTwinBundleBarcodes = {
     '6221155611154', // صانسيلك شامبو نعومة الحرير 350 مل + بلسم (حزمة ترويجية مزدوجة 2 قطعة)
+    '6221155611093', // صانسيلك شامبو أسود 350 مل + بلسم 350 مل
+  };
+
+  /// Verified Tresemme promo twin bundle barcodes (Shampoo 400ml + Conditioner 400ml)
+  static const Set<String> _knownTresemmeTwinBundleBarcodes = {
     '6221155612182', // تريزيمي شامبو + بلسم 400 مل جوز الهند والصبار (حزمة ترويجية مزدوجة 2 قطعة)
     '6221155612199', // تريزيمي شامبو + بلسم 400 مل بوتنكس زبدة الشيا والكركديه (حزمة ترويجية مزدوجة 2 قطعة)
     '6221155612168', // تريزيمي شامبو + بلسم 400 مل كيراتين سموث (حزمة ترويجية مزدوجة 2 قطعة)
     '6221155612175', // تريزيمي شامبو + بلسم 400 مل إصلاح وحماية (حزمة ترويجية مزدوجة 2 قطعة)
     '6221155612144', // تريزيمي شامبو 400 مل + بلسم 400 مل
+  };
+
+  /// Unified set of all known twin bundle barcodes across brands
+  static const Set<String> _knownTwinBundleBarcodes = {
+    ..._knownSunsilkTwinBundleBarcodes,
+    ..._knownTresemmeTwinBundleBarcodes,
   };
 
   /// Resolves the effective physical piece count of an item, taking into account twin bundles / shrink packs
@@ -2804,7 +2992,25 @@ class PromotionalRuleMatcher {
         (nameLower.contains('شامبو') || nameLower.contains('shampoo')) &&
         (nameLower.contains('بلسم') || nameLower.contains('conditioner'));
 
-    // 4. Price heuristic for hair care / Tresemme twin bundles (400ml promo boxes)
+    // If item has explicit bundle name or combo in title, it is legitimately 2 pieces
+    if (hasBundleName || isShampooAndConditionerCombo) {
+      return qty * 2;
+    }
+
+    // 4. Single large individual bottle guard (AIR-63):
+    // Large individual bottles (600ml, 700ml, 900ml, 1000ml, 1L) inherently cost 200-350+ EGP as a single piece.
+    // Unless explicitly stated in item title as a combo/twin pack above,
+    // they must NEVER be inflated to 2 pieces based on price heuristics alone!
+    final bool isSingleLargeBottle = RegExp(
+      r'(600\s*م[ل|لي]|700\s*م[ل|لي]|900\s*م[ل|لي]|1000\s*م[ل|لي]|1\s*لت?ر|600\s*ml|700\s*ml|900\s*ml|1000\s*ml|1\s*l|٦٠٠\s*مل|٧٠٠\s*مل|٩٠٠\s*مل|٦٠٠\s*م|٧٠٠\s*م|٩٠٠\s*م)',
+      caseSensitive: false,
+    ).hasMatch(nameLower);
+
+    if (isSingleLargeBottle) {
+      return qty;
+    }
+
+    // 5. Price heuristic for hair care / Tresemme twin bundles (400ml promo boxes)
     // In Egyptian retail, a single standalone bottle of Tresemme 400ml is ~140-165 EGP.
     // A twin bundle / promo box is 240+ EGP (e.g. 295 EGP in Gomla Market, 299 EGP in Fathalla, 378 EGP gross).
     final bool isTresemmeHairCare =
@@ -2816,19 +3022,19 @@ class PromotionalRuleMatcher {
             p.price >= 240.0 ||
             (p.price >= 220.0 && p.discountAmount >= 30.0));
 
-    // 5. Price heuristic for Sunsilk twin bundles (350ml combo packs e.g. 184 EGP in Gomla Market)
+    // 6. Price heuristic for Sunsilk twin bundles (350ml combo packs e.g. 184 EGP in Fathalla / Gomla Market)
     final bool isSunsilkHairCare =
+        nameLower.contains('صنسيلك') ||
         nameLower.contains('صانسيلك') ||
         nameLower.contains('صنسلك') ||
         nameLower.contains('sunsilk');
     final bool hasSunsilkBundlePrice =
         isSunsilkHairCare &&
-        (isShampooAndConditionerCombo ||
-            grossPrice >= 170.0 ||
+        (grossPrice >= 170.0 ||
             p.price >= 170.0 ||
             (p.price >= 160.0 && p.discountAmount >= 20.0));
 
-    // 6. Price heuristic for deodorant bodyspray twin bundles (Axe / Rexona)
+    // 7. Price heuristic for deodorant bodyspray twin bundles (Axe / Rexona)
     // In retail, a single 150ml can is ~140-150 EGP. A twin bundle is 240+ EGP (e.g. 275 EGP in Fathalla, 335 EGP gross in Gomla Market).
     final bool isSpray =
         nameLower.contains('اسبراي') ||
@@ -2840,11 +3046,9 @@ class PromotionalRuleMatcher {
             p.price >= 240.0 ||
             (p.price >= 220.0 && p.discountAmount >= 30.0));
 
-    if (hasBundleName ||
-        hasSprayBundlePrice ||
+    if (hasSprayBundlePrice ||
         hasTresemmeBundlePrice ||
-        hasSunsilkBundlePrice ||
-        isShampooAndConditionerCombo) {
+        hasSunsilkBundlePrice) {
       return qty * 2;
     }
 
@@ -2929,9 +3133,84 @@ class PromotionalRuleMatcher {
     'almarai',
   };
 
+  static final RegExp _explicitSizeRegex = RegExp(
+    r'(\d{2,4})\s*(ملل|ملى|ملي|مل|ml|جرام|g|لتر|l)\b',
+  );
+
+  static final RegExp _standaloneFmcgVolumeRegex = RegExp(
+    r'\b(1000|900|750|700|650|600|550|450|400|360|350|250|220|200|190|180|150)\b',
+  );
+
   static int? _extractSizeMl(String text) {
+    var norm = _normalize(text);
+    // Strip voucher amounts and currency numbers to prevent voucher/price collisions with product sizes
+    norm = norm.replaceAll(
+      RegExp(r'(?:فوتشر|فاوتشر|فواتشر|فاوشر|قسيمة|قسيمه|كوبون|خصم|مبلغ|voucher|كاش باك|كاش)\s*\d+'),
+      '',
+    );
+    norm = norm.replaceAll(
+      RegExp(r'\d+\s*(?:ج\.م|ج\s*\.\s*م|جنيه|جنيها|ج|egp|le)\b'),
+      '',
+    );
+
+    final match = _explicitSizeRegex.firstMatch(norm);
+    if (match != null) {
+      return int.tryParse(match.group(1)!);
+    }
+    final standaloneMatch = _standaloneFmcgVolumeRegex.firstMatch(norm);
+    if (standaloneMatch != null) {
+      return int.tryParse(standaloneMatch.group(1)!);
+    }
+    return null;
+  }
+
+  /// Extracts the required purchase volume from a promotional rule's trigger or condition clause.
+  /// Isolates the trigger condition (e.g. "اشترى قطعة كلير 600") from the reward clause
+  /// (e.g. "واحصل على قطعة كلير 360"), preventing reward volumes from leaking into trigger matching.
+  static int? _extractRuleRequiredSize(PromotionalRuleItem? rule, String triggerProduct) {
+    // 0. Spend rules (by_spend or minSpend > 0) never have bottle size requirements!
+    if (rule != null && (rule.conditionType == 'by_spend' || rule.minSpend > 0)) {
+      return null;
+    }
+
+    // 1. Check clean triggerProduct (excluding catalog counts like "(52 صنف)")
+    final cleanTrigger = triggerProduct.replaceAll(
+      RegExp(r'\(\s*\d+\s*(?:صنف|أصناف|اصناف|باركود|منتج|منتجات)[^\)]*\)'),
+      '',
+    );
+    final triggerSize = _extractSizeMl(cleanTrigger);
+    if (triggerSize != null) return triggerSize;
+
+    // 2. If trigger doesn't have size, extract strictly from the condition clause of ruleTitle
+    if (rule != null && rule.ruleTitle.isNotEmpty) {
+      // Split raw title first before normalization so arrows (->, =>, →) are not stripped by regex
+      final rawParts = rule.ruleTitle.split(
+        RegExp(r'(?:->|=>|→|احصل|واحصل|اكسب|واكسب|هديه|هدية|مجانا|مجاناً|قسيمة|قسيمه|فوتشر|فاوتشر|فواتشر|فاوشر|كوبون|voucher)'),
+      );
+      final rawCondition = rawParts.first;
+
+      final titleNorm = _normalize(rawCondition);
+
+      // Ensure condition clause doesn't confuse excluded sizes with required sizes
+      final conditionWithoutExclusion = titleNorm.replaceAll(
+        RegExp(
+          r'(?:ماعدا|ما\s*عدا|معادا|مع\s*عدا|باستثناء|استثناء|بدون|غير|except|excluding)\s*(?:الـ|ال)?\s*\d{2,4}\s*(?:ملل|ملى|ملي|مل|ml)?',
+        ),
+        '',
+      );
+      return _extractSizeMl(conditionWithoutExclusion);
+    }
+
+    return null;
+  }
+
+  /// Extracts explicitly excluded sizes from a rule (e.g. "ما عدا 180 مل", "معادا الـ 180 ملل")
+  static int? _extractRuleExcludedSize(PromotionalRuleItem? rule, String triggerProduct) {
+    final text = '${rule?.ruleTitle ?? ''} $triggerProduct';
     final norm = _normalize(text);
-    final match = RegExp(r'(\d{2,4})\s*(مل|ml)\b').firstMatch(norm);
+    final match = RegExp(
+      r'(?:ماعدا|ما\s*عدا|معادا|مع\s*عدا|باستثناء|استثناء|بدون|غير|except|excluding)\s*(?:الـ|ال)?\s*(\d{2,4})\s*(?:ملل|ملى|ملي|مل|ml)?',
+    ).firstMatch(norm);
     if (match != null) {
       return int.tryParse(match.group(1)!);
     }
@@ -2966,7 +3245,11 @@ class PromotionalRuleMatcher {
     PromotionalRuleItem? rule,
     Iterable<String>? dynamicBrands,
   ]) {
-    if (triggerProduct.trim().isEmpty &&
+    final bool isCompanySpendRule =
+        (rule != null && (rule.isSpendBased || rule.conditionType == 'by_spend') && product.isTargetCompany);
+
+    if (!isCompanySpendRule &&
+        triggerProduct.trim().isEmpty &&
         (rule == null ||
             (rule.selectedBarcodes.isEmpty &&
                 rule.selectedProductNames.isEmpty &&
@@ -3024,11 +3307,14 @@ class PromotionalRuleMatcher {
       if (cleanBarcode.length >= 6 && triggerProduct.contains(cleanBarcode)) {
         return true;
       }
-      if (_knownTwinBundleBarcodes.contains(cleanBarcode) &&
+      if (_knownSunsilkTwinBundleBarcodes.contains(cleanBarcode) &&
           (_normalize(triggerProduct).contains('صنسيلك') ||
               _normalize(triggerProduct).contains('صانسيلك') ||
-              _normalize(triggerProduct).contains('sunsilk') ||
-              _normalize(triggerProduct).contains('تريزيم') ||
+              _normalize(triggerProduct).contains('sunsilk'))) {
+        return true;
+      }
+      if (_knownTresemmeTwinBundleBarcodes.contains(cleanBarcode) &&
+          (_normalize(triggerProduct).contains('تريزيم') ||
               _normalize(triggerProduct).contains('tresemme'))) {
         return true;
       }
@@ -3069,6 +3355,21 @@ class PromotionalRuleMatcher {
       if (!hasMatchingBrand && !isCompanySpendAnchor) {
         return false;
       }
+    }
+
+    final int? pSize = _extractSizeMl(pNorm);
+
+    // 0.045 Strict Volume & Pack-Size Segregation Guard (AIR-55):
+    // 1. Explicit Size Exclusion (e.g. "ما عدا 180 مل", "معادا الـ 180 ملل"):
+    final int? ruleExSize = _extractRuleExcludedSize(rule, triggerProduct);
+    if (ruleExSize != null && pSize != null && ruleExSize == pSize) {
+      return false;
+    }
+
+    // 2. Strict Required Bottle Volume Guard (e.g. 600ml vs 550ml):
+    final int? ruleReqSize = _extractRuleRequiredSize(rule, triggerProduct);
+    if (ruleReqSize != null && pSize != null && ruleReqSize != pSize) {
+      return false;
     }
 
     // 0.05 Strict Product Form & Physical Category Collision Guard (حارس التصنيف الفيزيائي للمنتج):
@@ -3228,16 +3529,17 @@ class PromotionalRuleMatcher {
       effectiveRuleBrands.addAll(_getBrandRootsInText(triggerProduct, allDynamicBrands));
     }
 
-    if (effectiveRuleBrands.isNotEmpty) {
-      final Set<String> productBrands = _getBrandRootsInText(pNorm, effectiveRuleBrands);
-      final bool hasRuleBrand = effectiveRuleBrands.any((rb) {
-        final rbNorm = _normalize(rb);
-        return productBrands.contains(rbNorm) || pNorm.contains(rbNorm);
-      });
+    final bool isCompanyProductSpendRule =
+        (rule?.conditionType == 'by_spend') && product.isTargetCompany;
 
-      // Also allow if product is flagged as target company and belongs to the same company scope in spend rules
-      final bool isCompanyProductSpendRule = (rule?.conditionType == 'by_spend') &&
-          product.isTargetCompany;
+    if (effectiveRuleBrands.isNotEmpty || isCompanyProductSpendRule) {
+      final Set<String> productBrands =
+          _getBrandRootsInText(pNorm, effectiveRuleBrands);
+      final bool hasRuleBrand = effectiveRuleBrands.isEmpty ||
+          effectiveRuleBrands.any((rb) {
+            final rbNorm = _normalize(rb);
+            return productBrands.contains(rbNorm) || pNorm.contains(rbNorm);
+          });
 
       if (hasRuleBrand || isCompanyProductSpendRule) {
         // Form & category validation
@@ -3252,9 +3554,9 @@ class PromotionalRuleMatcher {
         } else {
           // Volume/size conflict guard for brand-level rules:
           // If the rule specifies a volume (e.g. 600ml or 550ml), and the product specifies a different volume, skip!
-          final int? ruleSize = _extractSizeMl(fullRuleContext);
-          final int? pSize = _extractSizeMl(pNorm);
-          if (ruleSize != null && pSize != null && ruleSize != pSize) {
+          if (ruleExSize != null && pSize != null && ruleExSize == pSize) {
+            // Skip due to size exclusion
+          } else if (ruleReqSize != null && pSize != null && ruleReqSize != pSize) {
             // Skip due to size mismatch
           } else {
             return true;
@@ -3267,11 +3569,14 @@ class PromotionalRuleMatcher {
     if (product.barcode.isNotEmpty) {
       final cleanBarcode = product.barcode.trim();
       if (triggerProduct.contains(cleanBarcode)) return true;
-      if (_knownTwinBundleBarcodes.contains(cleanBarcode) &&
+      if (_knownSunsilkTwinBundleBarcodes.contains(cleanBarcode) &&
           (triggerNorm.contains('صنسيلك') ||
               triggerNorm.contains('صانسيلك') ||
-              triggerNorm.contains('sunsilk') ||
-              triggerNorm.contains('تريزيم') ||
+              triggerNorm.contains('sunsilk'))) {
+        return true;
+      }
+      if (_knownTresemmeTwinBundleBarcodes.contains(cleanBarcode) &&
+          (triggerNorm.contains('تريزيم') ||
               triggerNorm.contains('tresemme'))) {
         return true;
       }
@@ -3318,10 +3623,8 @@ class PromotionalRuleMatcher {
       }
       // If the trigger explicitly specifies a volume (e.g. 400ml) anywhere in the rule, but the product has a conflicting volume (e.g. 600ml), reject generic parts
       if (partSize == null && productSize != null) {
-        final int? triggerTotalSize = _extractSizeMl(
-          _normalize(triggerProduct),
-        );
-        if (triggerTotalSize != null && triggerTotalSize != productSize) {
+        final int? triggerReqSize = _extractRuleRequiredSize(rule, triggerProduct);
+        if (triggerReqSize != null && triggerReqSize != productSize) {
           continue;
         }
       }
@@ -3417,7 +3720,7 @@ class PromotionalRuleMatcher {
   }
 
   static String _normalize(String s) {
-    var str = s.toLowerCase().trim();
+    var str = s.toEnglishDigits(convertDecimal: false).toLowerCase().trim();
     // Normalize Arabic diacritics / tatweel
     str = str.replaceAll(RegExp(r'[\u064B-\u0652\u0640]'), '');
     str = str.replaceAll(RegExp(r'[أإآ]'), 'ا');
@@ -3426,9 +3729,9 @@ class PromotionalRuleMatcher {
     str = str.replaceAll('ؤ', 'و');
     str = str.replaceAll('ئ', 'ي');
 
-    // Separate number from unit size (e.g. 400مل -> 400 مل, 150ml -> 150 ml)
+    // Separate number from unit size (e.g. 400مل -> 400 مل, 150ml -> 150 ml, 400ملل -> 400 ملل)
     str = str.replaceAllMapped(
-      RegExp(r'(\d+)\s*(ملى|مل|جرام|جم|لتر|كجم|g|ml|kg|l)'),
+      RegExp(r'(\d+)\s*(ملى|ملي|ملل|مل|جرام|جم|لتر|كجم|g|ml|kg|l)'),
       (m) => '${m.group(1)} ${m.group(2)}',
     );
 
@@ -3468,6 +3771,12 @@ class PromotionalRuleMatcher {
     str = str.replaceAllMapped(
       RegExp(r'\bارز\b'),
       (_) => 'رز',
+    );
+
+    // Speed (سبيد) cleaner / detergent alias when POS printer drops 'ب' (e.g. "سيد منظف", "سيد باودر", "سيد ارضيات" -> "سبيد منظف", "سبيد باودر")
+    str = str.replaceAllMapped(
+      RegExp(r'(^|\s)سيد\s+(منظف|باودر|بودر|ارضيات|حمام|سائل|تواليت)'),
+      (m) => '${m.group(1)}سبيد ${m.group(2)}',
     );
 
     // POS & transliteration dictionary normalization
@@ -3615,23 +3924,27 @@ class PromotionalRuleMatcher {
         (triggerNorm.contains('اسبراي') && !triggerNorm.contains('رول'))) {
       return 'spray_family';
     }
+    String? baseFamily;
     if (combined.contains('كلير') || combined.contains('clear')) {
-      return 'clear_family';
+      baseFamily = 'clear_family';
+    } else if (combined.contains('تريزيمي') || combined.contains('tresemme')) {
+      baseFamily = 'tresemme_family';
+    } else if (combined.contains('صنسيلك') || combined.contains('sunsilk')) {
+      baseFamily = 'sunsilk_family';
+    } else if (combined.contains('دوف') || combined.contains('dove')) {
+      baseFamily = 'dove_family';
+    } else if (combined.contains('سيجنال') || combined.contains('signal')) {
+      baseFamily = 'signal_family';
+    } else if (combined.contains('ريكسونا') || combined.contains('اكس')) {
+      baseFamily = 'deodorant_general_family';
     }
-    if (combined.contains('تريزيمي') || combined.contains('tresemme')) {
-      return 'tresemme_family';
-    }
-    if (combined.contains('صنسيلك') || combined.contains('sunsilk')) {
-      return 'sunsilk_family';
-    }
-    if (combined.contains('دوف') || combined.contains('dove')) {
-      return 'dove_family';
-    }
-    if (combined.contains('سيجنال') || combined.contains('signal')) {
-      return 'signal_family';
-    }
-    if (combined.contains('ريكسونا') || combined.contains('اكس')) {
-      return 'deodorant_general_family';
+
+    if (baseFamily != null) {
+      final int? reqSize = _extractRuleRequiredSize(rule, rule.triggerProduct);
+      if (reqSize != null) {
+        return '${baseFamily}_size_$reqSize';
+      }
+      return baseFamily;
     }
 
     final tokens = _extractTokens(

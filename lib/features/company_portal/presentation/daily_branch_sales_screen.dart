@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -9,15 +8,17 @@ import 'package:excel/excel.dart' as xl;
 import '../../../core/services/firebase_service.dart';
 import '../../../core/services/daily_sales_aggregation_service.dart';
 import '../../../core/services/company_gifts_service.dart';
+import '../../../core/services/chain_products_intelligence_service.dart';
 import '../../../core/utils/error_handler.dart';
 import '../../../core/utils/file_download_helper.dart';
 import '../../../core/utils/slug_utils.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
-import '../../../core/widgets/m3_button_groups.dart';
 import '../../admin/domain/event_model.dart';
 import '../../admin/domain/company_gift_model.dart';
 import '../domain/daily_branch_sales_model.dart';
+import '../../../core/utils/responsive.dart';
+import '../../../core/widgets/m3_adaptive_scaffold.dart';
 
 /// Screen for tracking Daily Sales Revenue and Gift/Voucher Disbursals per Branch & Campaign Date.
 class DailyBranchSalesScreen extends ConsumerStatefulWidget {
@@ -43,7 +44,7 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
   late DateTime _selectedDate;
   bool _isAllDays = true;
   String _searchQuery = '';
-  bool _isBackfilling = false;
+  final TextEditingController _searchController = TextEditingController();
   bool _isExporting = false;
   // Golden Standard: Static Persistent In-Memory Caches for 0ms instant render across tab switches
   static final Map<String, List<DailyBranchSalesModel>> _persistentSalesCache = {};
@@ -91,10 +92,129 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
     _selectedEventId = (widget.initialEventId != null && widget.initialEventId!.isNotEmpty)
         ? widget.initialEventId
         : 'all';
+    _searchController.addListener(() {
+      if (_searchQuery != _searchController.text) {
+        setState(() {
+          _searchQuery = _searchController.text;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  /// Normalizes Arabic strings for deterministic comparison
+  static String _normalizeGiftStatic(String name) {
+    if (name.isEmpty) return '';
+    var s = name.trim().toLowerCase();
+    s = s.replaceAll(RegExp(r'[\u064B-\u065F\u0670]'), '');
+    s = s.replaceAll(RegExp(r'[أإآٱ]'), 'ا');
+    s = s.replaceAll('ة', 'ه');
+    s = s.replaceAll('ى', 'ي');
+    s = s.replaceAll('ـ', '');
+    s = s.replaceAll(RegExp(r'[()\[\]{}،,.:\-_]'), ' ');
+    s = s.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return s;
+  }
+
+  /// Resolves disbursed gift quantity for a master gift from record.giftsDisbursed
+  /// Handles ID matches, name matches, normalized Arabic comparisons, containment, and single-gift fallback.
+  int _resolveDisbursedGiftQty(
+    DailyBranchSalesModel record,
+    CompanyGiftModel gift,
+    List<CompanyGiftModel> allMasterGifts,
+  ) {
+    if (record.giftsDisbursed.isEmpty) {
+      if (allMasterGifts.length == 1 && record.totalGiftsCount > 0) {
+        return record.totalGiftsCount;
+      }
+      return 0;
+    }
+
+    int totalQty = 0;
+    final Set<String> matchedKeys = {};
+
+    // 1. Direct ID match
+    if (gift.id.isNotEmpty && record.giftsDisbursed.containsKey(gift.id)) {
+      totalQty += record.giftsDisbursed[gift.id]!.quantity;
+      matchedKeys.add(gift.id);
+    }
+
+    // 2. Direct Name match
+    if (gift.giftName.isNotEmpty && record.giftsDisbursed.containsKey(gift.giftName)) {
+      if (!matchedKeys.contains(gift.giftName)) {
+        totalQty += record.giftsDisbursed[gift.giftName]!.quantity;
+        matchedKeys.add(gift.giftName);
+      }
+    }
+
+    // 3. Normalized comparison across all disbursed entries in record
+    final normMaster = _normalizeGiftStatic(gift.giftName);
+    for (final entry in record.giftsDisbursed.entries) {
+      if (matchedKeys.contains(entry.key)) continue;
+
+      final item = entry.value;
+      final normKey = _normalizeGiftStatic(entry.key);
+      final normName = _normalizeGiftStatic(item.giftName);
+
+      // Exact normalized equality
+      if (normMaster.isNotEmpty && (normKey == normMaster || normName == normMaster)) {
+        totalQty += item.quantity;
+        matchedKeys.add(entry.key);
+        continue;
+      }
+
+      // Fuzzy containment: e.g. "لانش بوكس" inside "لانش بوكس كادبوري"
+      if (normMaster.isNotEmpty &&
+          (normName.contains(normMaster) ||
+           normMaster.contains(normName) ||
+           normKey.contains(normMaster))) {
+        bool moreSpecificMatchExists = false;
+        for (final otherGift in allMasterGifts) {
+          if (otherGift.id == gift.id) continue;
+          final normOther = _normalizeGiftStatic(otherGift.giftName);
+          if (normOther.isNotEmpty &&
+              normOther.length > normMaster.length &&
+              (normName.contains(normOther) || normKey.contains(normOther))) {
+            moreSpecificMatchExists = true;
+            break;
+          }
+        }
+        if (!moreSpecificMatchExists) {
+          totalQty += item.quantity;
+          matchedKeys.add(entry.key);
+          continue;
+        }
+      }
+
+      // Voucher denomination matching
+      if (gift.isVoucher && item.isVoucher) {
+        if (gift.unitValue > 0 && (gift.unitValue - item.unitValue).abs() < 0.01) {
+          totalQty += item.quantity;
+          matchedKeys.add(entry.key);
+          continue;
+        }
+      }
+    }
+
+    // 4. Single Master Gift fallback:
+    if (allMasterGifts.length == 1 && totalQty == 0 && record.totalGiftsCount > 0) {
+      return record.totalGiftsCount;
+    }
+
+    return totalQty;
   }
 
   String _formatDateStr(DateTime dt) {
     return "${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
   String _formatDisplayDate(DateTime dt, bool isAr) {
@@ -136,67 +256,7 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
     }
   }
 
-  Future<void> _triggerBackfill(String effectiveSlug) async {
-    final isAr = ref.isArabic;
-    final colorScheme = Theme.of(context).colorScheme;
 
-    setState(() {
-      _isBackfilling = true;
-    });
-
-    try {
-      final service = ref.read(dailySalesAggregationServiceProvider);
-      final count = await service.backfillDailySalesFromTransactions(
-        companySlug: effectiveSlug,
-        campaignId: _selectedEventId == 'all' ? null : _selectedEventId,
-      );
-
-      HapticFeedback.mediumImpact();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 22),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    isAr
-                        ? 'تمت مزامنة وترميم سجلات المبيعات اليومية بنجاح ($count سجلاً)'
-                        : 'Daily sales records synchronized and backfilled successfully ($count records)',
-                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: Colors.white),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: const Color(0xFF006C50),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '${isAr ? 'خطأ أثناء المزامنة:' : 'Sync error:'} ${AppErrorHandler.getFriendlyMessage(e)}',
-              style: GoogleFonts.cairo(),
-            ),
-            backgroundColor: colorScheme.error,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isBackfilling = false;
-        });
-      }
-    }
-  }
 
   Future<void> _exportExcelReport({
     required List<DailyBranchSalesModel> salesRecords,
@@ -250,15 +310,52 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
         sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.DoubleCellValue(rec.totalSalesAmount);
 
         for (final gift in masterGifts) {
-          final giftKey = gift.id.isNotEmpty ? gift.id : gift.giftName;
-          final disbursedItem = rec.giftsDisbursed[giftKey];
-          final qty = disbursedItem?.quantity ?? 0;
+          final qty = _resolveDisbursedGiftQty(rec, gift, masterGifts);
           sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.IntCellValue(qty);
         }
 
         sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.IntCellValue(rec.totalGiftsCount);
         sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: colIndex++, rowIndex: rowIndex)).value = xl.DoubleCellValue(rec.totalVouchersValue);
         rowIndex++;
+      }
+
+      // Grand Totals Summary Row in Excel
+      if (salesRecords.isNotEmpty) {
+        int totCol = 0;
+        final totInvoices = salesRecords.fold<int>(0, (s, r) => s + r.invoicesCount);
+        final totSales = salesRecords.fold<double>(0.0, (s, r) => s + r.totalSalesAmount);
+        final totGifts = salesRecords.fold<int>(0, (s, r) => s + r.totalGiftsCount);
+        final totVouchers = salesRecords.fold<double>(0.0, (s, r) => s + r.totalVouchersValue);
+
+        final totalCellLabel = sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: totCol++, rowIndex: rowIndex));
+        totalCellLabel.value = xl.TextCellValue(isAr ? 'الإجمالي العام' : 'Grand Total');
+        totalCellLabel.cellStyle = xl.CellStyle(bold: true);
+
+        final totalBranchCell = sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: totCol++, rowIndex: rowIndex));
+        totalBranchCell.value = xl.TextCellValue('-');
+
+        final totalInvCell = sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: totCol++, rowIndex: rowIndex));
+        totalInvCell.value = xl.IntCellValue(totInvoices);
+        totalInvCell.cellStyle = xl.CellStyle(bold: true);
+
+        final totalSalesCell = sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: totCol++, rowIndex: rowIndex));
+        totalSalesCell.value = xl.DoubleCellValue(totSales);
+        totalSalesCell.cellStyle = xl.CellStyle(bold: true);
+
+        for (final gift in masterGifts) {
+          final giftTot = salesRecords.fold<int>(0, (s, r) => s + _resolveDisbursedGiftQty(r, gift, masterGifts));
+          final gCell = sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: totCol++, rowIndex: rowIndex));
+          gCell.value = xl.IntCellValue(giftTot);
+          gCell.cellStyle = xl.CellStyle(bold: true);
+        }
+
+        final totGiftsCell = sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: totCol++, rowIndex: rowIndex));
+        totGiftsCell.value = xl.IntCellValue(totGifts);
+        totGiftsCell.cellStyle = xl.CellStyle(bold: true);
+
+        final totVouchersCell = sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: totCol++, rowIndex: rowIndex));
+        totVouchersCell.value = xl.DoubleCellValue(totVouchers);
+        totVouchersCell.cellStyle = xl.CellStyle(bold: true);
       }
 
       final fileBytes = excel.save();
@@ -461,6 +558,44 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
     final mediaQuery = MediaQuery.of(context);
     final isDesktop = mediaQuery.size.width >= 900;
 
+    // Synthesize comprehensive master gifts list:
+    // Retains master gifts from configuration and auto-enriches any disbursed gifts present in records
+    // so no gift column is ever missed or shows zero when gifts were disbursed.
+    final List<CompanyGiftModel> effectiveMasterGifts = List.from(masterGifts);
+    final Set<String> knownGiftKeysAndNames = {};
+    for (final g in effectiveMasterGifts) {
+      if (g.id.isNotEmpty) knownGiftKeysAndNames.add(g.id);
+      if (g.giftName.isNotEmpty) {
+        knownGiftKeysAndNames.add(g.giftName);
+        knownGiftKeysAndNames.add(_normalizeGiftStatic(g.giftName));
+      }
+    }
+
+    for (final r in records) {
+      for (final gEntry in r.giftsDisbursed.entries) {
+        final gItem = gEntry.value;
+        final normName = _normalizeGiftStatic(gItem.giftName);
+        if (!knownGiftKeysAndNames.contains(gEntry.key) &&
+            !knownGiftKeysAndNames.contains(gItem.giftName) &&
+            !knownGiftKeysAndNames.contains(normName)) {
+          effectiveMasterGifts.add(
+            CompanyGiftModel(
+              id: gItem.giftKey.isNotEmpty ? gItem.giftKey : gItem.giftName,
+              companySlug: effectiveSlug,
+              giftName: gItem.giftName,
+              totalQuantity: gItem.quantity,
+              availableQuantity: 0,
+              giftType: gItem.isVoucher ? 'voucher' : 'product',
+              unitValue: gItem.unitValue,
+            ),
+          );
+          knownGiftKeysAndNames.add(gEntry.key);
+          knownGiftKeysAndNames.add(gItem.giftName);
+          knownGiftKeysAndNames.add(normName);
+        }
+      }
+    }
+
     // Filter by search query (branches already normalized canonically with zero dropping)
     final filteredRecords = records.where((r) {
       if (_searchQuery.trim().isEmpty) return true;
@@ -518,543 +653,705 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
       totalVouchers += r.totalVouchersValue;
     }
 
+    final mainBody = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Clean Title Header
+        _buildHeaderTitle(
+          colorScheme: colorScheme,
+          strings: strings,
+          isDesktop: isDesktop,
+        ),
+
+        const SizedBox(height: 12),
+
+        // 1. The 4 KPI Cards (at the top across mobile, tablet, and desktop)
+        _buildKpiGrid(
+          context: context,
+          colorScheme: colorScheme,
+          strings: strings,
+          isDesktop: isDesktop,
+          totalInvoices: totalInvoices,
+          totalSales: totalSales,
+          totalGifts: totalGifts,
+          totalVouchers: totalVouchers,
+        ),
+
+        const SizedBox(height: 12),
+
+        // 2. Campaign Selector Dropdown (مهرجان ادكو)
+        _buildCampaignSelectorDropdown(
+          colorScheme: colorScheme,
+          strings: strings,
+          events: events,
+        ),
+
+        const SizedBox(height: 10),
+
+        // 3. Unified Single-Row Button Group: [ اليوم ] [ الإجمالي ] [ التاريخ ] [ إكسل ]
+        _buildUnifiedControlsButtonGroup(
+          context: context,
+          colorScheme: colorScheme,
+          strings: strings,
+          isAr: isAr,
+          isDesktop: isDesktop,
+          records: consolidatedRecords,
+          masterGifts: effectiveMasterGifts,
+          currentEvent: currentEvent,
+        ),
+
+        const SizedBox(height: 14),
+
+        // 4. Search & Filter Bar (Unified M3 format with zero collision)
+        _buildSearchBar(
+          colorScheme: colorScheme,
+          strings: strings,
+          isAr: isAr,
+          totalBranchesCount: records.length,
+          matchingBranchesCount: filteredRecords.length,
+        ),
+
+        const SizedBox(height: 14),
+
+        // 5. Daily Matrix Table
+        _buildDailyMatrixTable(
+          context: context,
+          colorScheme: colorScheme,
+          strings: strings,
+          isAr: isAr,
+          isDesktop: isDesktop,
+          records: consolidatedRecords,
+          masterGifts: effectiveMasterGifts,
+          totalDaySales: totalSales,
+          currentEvent: currentEvent,
+        ),
+      ],
+    );
+
+    final supportingPane = _buildSupportingPaneWidget(
+      context: context,
+      colorScheme: colorScheme,
+      strings: strings,
+      isAr: isAr,
+      totalInvoices: totalInvoices,
+      totalSales: totalSales,
+      totalGifts: totalGifts,
+      totalVouchers: totalVouchers,
+      records: consolidatedRecords,
+      masterGifts: effectiveMasterGifts,
+    );
+
     return Scaffold(
       backgroundColor: colorScheme.surface,
       body: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
-          isDesktop ? 24 : 12,
+          0,
           isDesktop ? 20 : 12,
-          isDesktop ? 24 : 12,
+          0,
           isDesktop ? 32 : 96,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // 1. Executive Header Card
-            _buildHeaderCard(
-              context: context,
-              colorScheme: colorScheme,
-              strings: strings,
-              isAr: isAr,
-              isDesktop: isDesktop,
-              effectiveSlug: effectiveSlug,
-              events: events,
-              currentEvent: currentEvent,
-              records: consolidatedRecords,
-              masterGifts: masterGifts,
-            ),
-
-            const SizedBox(height: 14),
-
-            // 2. Timeline & Date Navigator
-            _buildTimelineNavigator(
-              context: context,
-              colorScheme: colorScheme,
-              strings: strings,
-              isAr: isAr,
-              isDesktop: isDesktop,
-            ),
-
-            const SizedBox(height: 14),
-
-            // 3. Hero KPI Summary Grid
-            _buildKpiGrid(
-              context: context,
-              colorScheme: colorScheme,
-              strings: strings,
-              isDesktop: isDesktop,
-              totalInvoices: totalInvoices,
-              totalSales: totalSales,
-              totalGifts: totalGifts,
-              totalVouchers: totalVouchers,
-            ),
-
-            const SizedBox(height: 16),
-
-            // 4. Search & Filter Bar
-            _buildSearchBar(
-              colorScheme: colorScheme,
-              strings: strings,
-              isAr: isAr,
-            ),
-
-            const SizedBox(height: 14),
-
-            // 5. Daily Matrix Table
-            _buildDailyMatrixTable(
-              context: context,
-              colorScheme: colorScheme,
-              strings: strings,
-              isAr: isAr,
-              isDesktop: isDesktop,
-              records: consolidatedRecords,
-              masterGifts: masterGifts,
-              totalDaySales: totalSales,
-            ),
-          ],
+        child: M3ContentBoundary(
+          maxWidth: 1440.0,
+          child: M3SupportingPaneLayout(
+            body: mainBody,
+            supportingPane: supportingPane,
+            supportingPaneWidth: 320.0,
+            showDivider: true,
+            crossAxisAlignment: CrossAxisAlignment.start,
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildHeaderCard({
+  /// Supporting Pane Widget displaying real-time KPI metrics, leaderboards, and instant insights
+  Widget _buildSupportingPaneWidget({
     required BuildContext context,
     required ColorScheme colorScheme,
     required AppStrings strings,
     required bool isAr,
-    required bool isDesktop,
-    required String effectiveSlug,
-    required List<EventModel> events,
-    required EventModel? currentEvent,
+    required int totalInvoices,
+    required double totalSales,
+    required int totalGifts,
+    required double totalVouchers,
     required List<DailyBranchSalesModel> records,
     required List<CompanyGiftModel> masterGifts,
   }) {
+    final currencyFormatter = intl.NumberFormat('#,##0.00', 'ar');
+
+    // Identify top performing branch by sales volume
+    DailyBranchSalesModel? topBranch;
+    for (final r in records) {
+      if (topBranch == null || r.totalSalesAmount > topBranch.totalSalesAmount) {
+        topBranch = r;
+      }
+    }
+
     return Container(
-      padding: EdgeInsets.all(isDesktop ? 20 : 16),
+      margin: const EdgeInsetsDirectional.only(start: 16),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withValues(alpha: 0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
+          // Inspector Header
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [const Color(0xFF2563EB), colorScheme.primary],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF2563EB).withValues(alpha: 0.3),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
+                  color: colorScheme.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.point_of_sale_rounded, color: Colors.white, size: 24),
+                child: Icon(Icons.analytics_rounded, size: 20, color: colorScheme.primary),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      strings.dailyBranchSalesNavTitle,
+                      isAr ? 'لوح المؤشرات والرقابة' : 'Executive Insights',
                       style: GoogleFonts.cairo(
-                        fontSize: isDesktop ? 20 : 17,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color: colorScheme.onSurface,
                       ),
                     ),
                     Text(
-                      strings.dailyBranchSalesNavSubtitle,
+                      isAr ? 'ملخص تحليلي فوري' : 'Live summary pane',
                       style: GoogleFonts.cairo(
-                        fontSize: isDesktop ? 13 : 11.5,
+                        fontSize: 11,
                         color: colorScheme.onSurfaceVariant,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
-              if (isDesktop) ...[
-                // Excel Export Button
-                OutlinedButton.icon(
-                  onPressed: _isExporting
-                      ? null
-                      : () => _exportExcelReport(
-                            salesRecords: records,
-                            masterGifts: masterGifts,
-                            campaignName: currentEvent?.eventName ?? 'Daily Sales',
-                            isAr: isAr,
-                          ),
-                  icon: _isExporting
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.table_view_rounded, size: 18),
-                  label: Text(strings.exportExcelBtn, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF006C50),
-                    side: const BorderSide(color: Color(0xFF006C50), width: 1.2),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                // Sync & Backfill Button
-                FilledButton.icon(
-                  onPressed: _isBackfilling ? null : () => _triggerBackfill(effectiveSlug),
-                  icon: _isBackfilling
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.sync_rounded, size: 18),
-                  label: Text(strings.syncAndBackfillDailySalesBtn, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF2563EB),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-              ],
             ],
           ),
+          const SizedBox(height: 16),
 
-          if (!isDesktop) ...[
-            const SizedBox(height: 14),
+          // Mini KPI Cards
+          _buildSupportingMiniKpi(
+            title: isAr ? 'المبيعات الإجمالية' : 'Total Revenue',
+            value: '${currencyFormatter.format(totalSales)} ج.م',
+            icon: Icons.payments_rounded,
+            color: colorScheme.primary,
+            colorScheme: colorScheme,
+          ),
+          const SizedBox(height: 8),
+          _buildSupportingMiniKpi(
+            title: isAr ? 'الفواتير المنفذة' : 'Total Invoices',
+            value: '$totalInvoices فاتورة',
+            icon: Icons.receipt_long_rounded,
+            color: colorScheme.secondary,
+            colorScheme: colorScheme,
+          ),
+          const SizedBox(height: 8),
+          _buildSupportingMiniKpi(
+            title: isAr ? 'الهدايا المنصرفة' : 'Gifts Claimed',
+            value: '$totalGifts قطعة',
+            icon: Icons.inventory_2_rounded,
+            color: colorScheme.tertiary,
+            colorScheme: colorScheme,
+          ),
+          const SizedBox(height: 8),
+          _buildSupportingMiniKpi(
+            title: isAr ? 'قيمة الفواتشرات' : 'Vouchers Value',
+            value: '${currencyFormatter.format(totalVouchers)} ج.م',
+            icon: Icons.confirmation_number_rounded,
+            color: colorScheme.primary.withValues(alpha: 0.85),
+            colorScheme: colorScheme,
+          ),
+
+          if (topBranch != null && topBranch.totalSalesAmount > 0) ...[
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
             Row(
               children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: _isBackfilling ? null : () => _triggerBackfill(effectiveSlug),
-                    icon: _isBackfilling
-                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Icon(Icons.sync_rounded, size: 16),
-                    label: Text(
-                      isAr ? 'مزامنة السجلات' : 'Sync & Backfill',
-                      style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
-                    ),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF2563EB),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
+                Icon(Icons.emoji_events_rounded, color: colorScheme.tertiary, size: 18),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _isExporting
-                        ? null
-                        : () => _exportExcelReport(
-                              salesRecords: records,
-                              masterGifts: masterGifts,
-                              campaignName: currentEvent?.eventName ?? 'Daily Sales',
-                              isAr: isAr,
-                            ),
-                    icon: _isExporting
-                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.table_view_rounded, size: 16),
-                    label: Text(
-                      strings.exportExcelBtn,
-                      style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF006C50),
-                      side: const BorderSide(color: Color(0xFF006C50), width: 1.2),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  child: Text(
+                    isAr ? 'الفرع الأعلى مبيعاً' : 'Top Branch',
+                    style: GoogleFonts.cairo(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.onSurface,
                     ),
                   ),
                 ),
               ],
             ),
-          ],
-
-          // Campaign Selector Dropdown with "All Campaigns" option
-          const SizedBox(height: 14),
-          Builder(
-            builder: (context) {
-              final availableEventIds = ['all', ...events.map((e) => e.id)];
-              final effectiveDropdownValue = availableEventIds.contains(_selectedEventId) ? _selectedEventId : 'all';
-
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                decoration: BoxDecoration(
-                  color: colorScheme.surface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: effectiveDropdownValue,
-                    isExpanded: true,
-                    icon: const Icon(Icons.arrow_drop_down_rounded),
-                    items: [
-                      DropdownMenuItem<String>(
-                        value: 'all',
-                        child: Row(
-                          children: [
-                            Icon(Icons.all_inclusive_rounded, size: 18, color: colorScheme.primary),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                strings.companyAllCampaigns,
-                                style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      ...events.map((e) {
-                        return DropdownMenuItem<String>(
-                          value: e.id,
-                          child: Row(
-                            children: [
-                              Icon(Icons.campaign_rounded, size: 18, color: colorScheme.primary),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  '${e.eventName} (${e.retailChainName})',
-                                  style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                    ],
-                    onChanged: (val) {
-                      setState(() {
-                        _selectedEventId = val;
-                      });
-                    },
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    topBranch.branchName,
+                    style: GoogleFonts.cairo(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: colorScheme.onSurface,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${currencyFormatter.format(topBranch.totalSalesAmount)} ج.م • ${topBranch.invoicesCount} فاتورة',
+                    style: GoogleFonts.cairo(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSupportingMiniKpi({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+    required ColorScheme colorScheme,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 16, color: color),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.cairo(
+                    fontSize: 10.5,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              );
-            },
+                Text(
+                  value,
+                  style: GoogleFonts.cairo(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDatePickerPill(
-    BuildContext context,
-    ColorScheme colorScheme,
-    AppStrings strings,
-    bool isAr,
-    bool isDesktop,
-  ) {
-    return InkWell(
-      onTap: () => _pickDate(context),
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: _isAllDays ? colorScheme.surface : colorScheme.primaryContainer.withValues(alpha: 0.4),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: _isAllDays ? colorScheme.outlineVariant : colorScheme.primary.withValues(alpha: 0.5),
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.calendar_month_rounded,
-              size: 18,
-              color: _isAllDays ? colorScheme.onSurfaceVariant : colorScheme.primary,
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                _isAllDays ? strings.allCampaignDaysBtn : _formatDisplayDate(_selectedDate, isAr),
-                style: GoogleFonts.cairo(
-                  fontSize: isDesktop ? 14 : 12,
-                  fontWeight: FontWeight.bold,
-                  color: _isAllDays ? colorScheme.onSurface : colorScheme.primary,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTimelineNavigator({
-    required BuildContext context,
+  Widget _buildHeaderTitle({
     required ColorScheme colorScheme,
     required AppStrings strings,
-    required bool isAr,
     required bool isDesktop,
   }) {
-    if (isDesktop) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: colorScheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-        ),
-        child: Row(
-          children: [
-            // Previous Day Button
-            IconButton(
-              onPressed: () {
-                setState(() {
-                  _selectedDate = _selectedDate.subtract(const Duration(days: 1));
-                  _isAllDays = false;
-                });
-              },
-              icon: Icon(isAr ? Icons.chevron_right_rounded : Icons.chevron_left_rounded),
-              tooltip: strings.prevDayBtn,
-              style: IconButton.styleFrom(
-                backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
-
-            const SizedBox(width: 8),
-
-            // Date Picker Pill
-            Expanded(
-              child: _buildDatePickerPill(context, colorScheme, strings, isAr, isDesktop),
-            ),
-
-            const SizedBox(width: 8),
-
-            // Next Day Button
-            IconButton(
-              onPressed: () {
-                setState(() {
-                  _selectedDate = _selectedDate.add(const Duration(days: 1));
-                  _isAllDays = false;
-                });
-              },
-              icon: Icon(isAr ? Icons.chevron_left_rounded : Icons.chevron_right_rounded),
-              tooltip: strings.nextDayBtn,
-              style: IconButton.styleFrom(
-                backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
-
-            const SizedBox(width: 14),
-
-            // M3 Connected Button Group for Timeline Mode Switcher
-            M3ConnectedButtonGroup<bool>(
-              height: 40,
-              borderRadius: 12,
-              selectedValue: _isAllDays,
-              onSelected: (val) {
-                setState(() {
-                  _isAllDays = val;
-                  if (!_isAllDays) {
-                    final now = DateTime.now();
-                    _selectedDate = DateTime(now.year, now.month, now.day);
-                  }
-                });
-              },
-              segments: [
-                M3ButtonSegment<bool>(
-                  value: false,
-                  label: strings.todayBtn,
-                  icon: Icons.today_rounded,
-                ),
-                M3ButtonSegment<bool>(
-                  value: true,
-                  label: strings.allCampaignDaysBtn,
-                  icon: Icons.calendar_month_rounded,
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Mobile View: 2 structured rows with M3 Connected Button Group
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 18 : 14,
+        vertical: isDesktop ? 14 : 10,
+      ),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Row(
         children: [
-          // Row 1: Date Navigation Controls
-          Row(
-            children: [
-              IconButton(
-                onPressed: () {
-                  setState(() {
-                    _selectedDate = _selectedDate.subtract(const Duration(days: 1));
-                    _isAllDays = false;
-                  });
-                },
-                icon: Icon(isAr ? Icons.chevron_right_rounded : Icons.chevron_left_rounded),
-                tooltip: strings.prevDayBtn,
-                style: IconButton.styleFrom(
-                  backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: _buildDatePickerPill(context, colorScheme, strings, isAr, isDesktop),
-              ),
-              const SizedBox(width: 6),
-              IconButton(
-                onPressed: () {
-                  setState(() {
-                    _selectedDate = _selectedDate.add(const Duration(days: 1));
-                    _isAllDays = false;
-                  });
-                },
-                icon: Icon(isAr ? Icons.chevron_left_rounded : Icons.chevron_right_rounded),
-                tooltip: strings.nextDayBtn,
-                style: IconButton.styleFrom(
-                  backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-            ],
+          Container(
+            padding: const EdgeInsets.all(9),
+            decoration: BoxDecoration(
+              color: colorScheme.primary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(Icons.point_of_sale_rounded, color: colorScheme.primary, size: 22),
           ),
-          const SizedBox(height: 10),
-
-          // Row 2: Full-Width M3 Connected Button Group
-          SizedBox(
-            width: double.infinity,
-            child: M3ConnectedButtonGroup<bool>(
-              height: 40,
-              borderRadius: 12,
-              selectedValue: _isAllDays,
-              onSelected: (val) {
-                setState(() {
-                  _isAllDays = val;
-                  if (!_isAllDays) {
-                    final now = DateTime.now();
-                    _selectedDate = DateTime(now.year, now.month, now.day);
-                  }
-                });
-              },
-              segments: [
-                M3ButtonSegment<bool>(
-                  value: false,
-                  label: strings.todayBtn,
-                  icon: Icons.today_rounded,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  strings.dailyBranchSalesNavTitle,
+                  style: GoogleFonts.cairo(
+                    fontSize: isDesktop ? 18 : 15.5,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
                 ),
-                M3ButtonSegment<bool>(
-                  value: true,
-                  label: strings.allCampaignDaysBtn,
-                  icon: Icons.calendar_month_rounded,
+                Text(
+                  strings.dailyBranchSalesNavSubtitle,
+                  style: GoogleFonts.cairo(
+                    fontSize: isDesktop ? 12.5 : 11,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildCampaignSelectorDropdown({
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required List<EventModel> events,
+  }) {
+    final availableEventIds = ['all', ...events.map((e) => e.id)];
+    final effectiveDropdownValue = availableEventIds.contains(_selectedEventId) ? _selectedEventId : 'all';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: effectiveDropdownValue,
+          isExpanded: true,
+          icon: Icon(Icons.arrow_drop_down_rounded, color: colorScheme.primary),
+          items: [
+            DropdownMenuItem<String>(
+              value: 'all',
+              child: Row(
+                children: [
+                  Icon(Icons.all_inclusive_rounded, size: 18, color: colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      strings.companyAllCampaigns,
+                      style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ...events.map((e) {
+              return DropdownMenuItem<String>(
+                value: e.id,
+                child: Row(
+                  children: [
+                    Icon(Icons.campaign_rounded, size: 18, color: colorScheme.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${e.eventName} (${e.retailChainName})',
+                        style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600, color: colorScheme.onSurface),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+          onChanged: (val) {
+            setState(() {
+              _selectedEventId = val;
+            });
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUnifiedControlsButtonGroup({
+    required BuildContext context,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+    required bool isDesktop,
+    required List<DailyBranchSalesModel> records,
+    required List<CompanyGiftModel> masterGifts,
+    required EventModel? currentEvent,
+  }) {
+    final now = DateTime.now();
+    final isTodaySelected = !_isAllDays && _isSameDay(_selectedDate, now);
+    final isAllDaysSelected = _isAllDays;
+    final isCustomDateSelected = !_isAllDays && !_isSameDay(_selectedDate, now);
+
+    Widget buildSegmentItem({
+      required bool isSelected,
+      required IconData icon,
+      required String label,
+      required VoidCallback onTap,
+      String? tooltip,
+      bool isLoading = false,
+      bool isFirst = false,
+      bool isLast = false,
+    }) {
+      final itemBorderRadius = BorderRadius.horizontal(
+        right: (isAr ? isFirst : isLast) ? const Radius.circular(12) : Radius.zero,
+        left: (isAr ? isLast : isFirst) ? const Radius.circular(12) : Radius.zero,
+      );
+
+      final content = Material(
+        color: isSelected
+            ? colorScheme.primaryContainer
+            : colorScheme.surfaceContainerLow,
+        child: InkWell(
+          onTap: isLoading ? null : onTap,
+          borderRadius: itemBorderRadius,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            alignment: Alignment.center,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (isLoading)
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: colorScheme.primary,
+                    ),
+                  )
+                else
+                  Icon(
+                    icon,
+                    size: 16,
+                    color: isSelected
+                        ? colorScheme.onPrimaryContainer
+                        : colorScheme.onSurfaceVariant,
+                  ),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: GoogleFonts.cairo(
+                      fontSize: 11.5,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                      color: isSelected
+                          ? colorScheme.onPrimaryContainer
+                          : colorScheme.onSurfaceVariant,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      if (tooltip != null) {
+        return Tooltip(
+          message: tooltip,
+          waitDuration: const Duration(milliseconds: 300),
+          child: content,
+        );
+      }
+      return content;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          height: 42,
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: colorScheme.outlineVariant.withValues(alpha: 0.7),
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Row(
+            children: [
+              // 1. اليوم
+              Expanded(
+                child: buildSegmentItem(
+                  isSelected: isTodaySelected,
+                  icon: Icons.today_rounded,
+                  label: isAr ? 'اليوم' : 'Today',
+                  tooltip: isAr ? 'عرض مبيعات اليوم الحالي' : 'View today sales',
+                  isFirst: true,
+                  onTap: () {
+                    setState(() {
+                      _isAllDays = false;
+                      final t = DateTime.now();
+                      _selectedDate = DateTime(t.year, t.month, t.day);
+                    });
+                  },
+                ),
+              ),
+              VerticalDivider(
+                width: 1,
+                thickness: 1,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+              ),
+
+              // 2. الإجمالي
+              Expanded(
+                child: buildSegmentItem(
+                  isSelected: isAllDaysSelected,
+                  icon: Icons.all_inclusive_rounded,
+                  label: isAr ? 'الإجمالي' : 'Total',
+                  tooltip: isAr ? 'عرض إجمالي كافة أيام الحملة' : 'View all days total',
+                  onTap: () {
+                    setState(() {
+                      _isAllDays = true;
+                    });
+                  },
+                ),
+              ),
+              VerticalDivider(
+                width: 1,
+                thickness: 1,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+              ),
+
+              // 3. التاريخ
+              Expanded(
+                child: buildSegmentItem(
+                  isSelected: isCustomDateSelected,
+                  icon: Icons.event_rounded,
+                  label: isAr ? 'التاريخ' : 'Date',
+                  tooltip: isAr ? 'تحديد يوم مخصص من التقويم' : 'Pick a custom date',
+                  onTap: () => _pickDate(context),
+                ),
+              ),
+              VerticalDivider(
+                width: 1,
+                thickness: 1,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+              ),
+
+              // 4. إكسل
+              Expanded(
+                child: buildSegmentItem(
+                  isSelected: false,
+                  icon: Icons.table_chart_rounded,
+                  label: isAr ? 'إكسل' : 'Excel',
+                  tooltip: isAr ? 'تصدير البيانات إلى تقرير Excel' : 'Export to Excel report',
+                  isLoading: _isExporting,
+                  isLast: true,
+                  onTap: () {
+                    if (!_isExporting) {
+                      _exportExcelReport(
+                        salesRecords: records,
+                        masterGifts: masterGifts,
+                        campaignName: currentEvent?.eventName ?? (isAr ? 'كافة الحملات' : 'All Campaigns'),
+                        isAr: isAr,
+                      );
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Indicator when a custom date is selected
+        if (isCustomDateSelected) ...[
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: colorScheme.primaryContainer.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.event_available_rounded, size: 15, color: colorScheme.primary),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${isAr ? 'اليوم المحدد' : 'Selected Date'}: ${_formatDisplayDate(_selectedDate, isAr)}',
+                      style: GoogleFonts.cairo(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+                InkWell(
+                  onTap: () => setState(() => _isAllDays = true),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          isAr ? 'إلغاء والتراجع للإجمالي' : 'Reset to All',
+                          style: GoogleFonts.cairo(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(Icons.close_rounded, size: 14, color: colorScheme.primary),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -1079,14 +1376,17 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
         int crossAxisCount = 4;
         double childAspectRatio = 1.65;
         if (width < 600) {
-          crossAxisCount = 1;
-          childAspectRatio = 2.35;
-        } else if (width < 960) {
+          // Mobile: strictly 2x2 grid (اتنين مع بعض واتنين مع بعض)
           crossAxisCount = 2;
-          childAspectRatio = 1.85;
-        } else if (width < 1200) {
+          childAspectRatio = 1.32;
+        } else if (width < 840) {
+          // Tablet: strictly 2x2 grid
           crossAxisCount = 2;
-          childAspectRatio = 2.1;
+          childAspectRatio = 1.75;
+        } else {
+          // Desktop: 4 columns in one row
+          crossAxisCount = 4;
+          childAspectRatio = width >= 1200 ? 1.75 : 1.45;
         }
 
         final cards = [
@@ -1097,7 +1397,7 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
             value: '${currencyFormatter.format(totalSales)} ج.م',
             subtitle: isAr ? 'مبيعات منتجات العرض المعتمدة' : 'Verified promotional sales revenue',
             icon: Icons.payments_rounded,
-            accentColor: const Color(0xFF006C50),
+            accentColor: colorScheme.primary,
             badgeText: 'مصر 🇪🇬',
             colorScheme: colorScheme,
             tooltip: isAr ? 'إجمالي المبيعات المحققة لمنتجات الحملة بالعُملة المحلية' : 'Total sales revenue',
@@ -1108,7 +1408,7 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
             value: '$totalInvoices فاتورة',
             subtitle: isAr ? 'الفواتير المدققة والمقبولة' : 'Audited and verified receipts',
             icon: Icons.receipt_long_rounded,
-            accentColor: const Color(0xFF0284C7),
+            accentColor: colorScheme.secondary,
             badgeText: isAr ? 'فاتورة منفذة' : 'Invoices',
             colorScheme: colorScheme,
             tooltip: isAr ? 'إجمالي عدد الفواتير المنفذة في الفروع' : 'Total executed receipts',
@@ -1119,7 +1419,7 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
             value: '$totalGifts قطعة',
             subtitle: isAr ? 'الهدايا الفورية المستلمة بالفرع' : 'Instant gifts claimed at branches',
             icon: Icons.inventory_2_rounded,
-            accentColor: const Color(0xFFD97706),
+            accentColor: colorScheme.tertiary,
             badgeText: isAr ? 'هدايا فورية' : 'Gifts',
             colorScheme: colorScheme,
             tooltip: isAr ? 'إجمالي قطع الهدايا المنصرفة في الفروع' : 'Total instant gifts claimed',
@@ -1130,7 +1430,7 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
             value: '${currencyFormatter.format(totalVouchers)} ج.م',
             subtitle: isAr ? 'قسائم الشراء المصدرة للعملاء' : 'Purchase vouchers issued to customers',
             icon: Icons.confirmation_number_rounded,
-            accentColor: const Color(0xFF7C3AED),
+            accentColor: colorScheme.primary.withValues(alpha: 0.85),
             badgeText: isAr ? 'قسائم شراء' : 'Vouchers',
             colorScheme: colorScheme,
             tooltip: isAr ? 'إجمالي القيمة المالية لقسائم وفواتشرات الشراء' : 'Total vouchers monetary value',
@@ -1142,8 +1442,8 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
           crossAxisCount: crossAxisCount,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: isMobile ? 12 : 14,
-          mainAxisSpacing: isMobile ? 12 : 14,
+          crossAxisSpacing: isMobile ? 10 : 14,
+          mainAxisSpacing: isMobile ? 10 : 14,
           childAspectRatio: childAspectRatio,
           children: cards,
         );
@@ -1166,15 +1466,18 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
       message: tooltip,
       waitDuration: const Duration(milliseconds: 300),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 10 : 14,
+          vertical: isMobile ? 9 : 12,
+        ),
         decoration: BoxDecoration(
           color: colorScheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
           boxShadow: [
             BoxShadow(
               color: colorScheme.shadow.withValues(alpha: 0.02),
-              blurRadius: 10,
+              blurRadius: 8,
               offset: const Offset(0, 2),
             ),
           ],
@@ -1187,23 +1490,26 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(7),
+                  padding: EdgeInsets.all(isMobile ? 5 : 7),
                   decoration: BoxDecoration(
-                    color: accentColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(10),
+                    color: accentColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(icon, size: 18, color: accentColor),
+                  child: Icon(icon, size: isMobile ? 16 : 18, color: accentColor),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isMobile ? 6 : 8,
+                    vertical: isMobile ? 2 : 2.5,
+                  ),
                   decoration: BoxDecoration(
                     color: colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     badgeText,
                     style: GoogleFonts.cairo(
-                      fontSize: 10,
+                      fontSize: isMobile ? 9.5 : 10,
                       fontWeight: FontWeight.bold,
                       color: accentColor,
                     ),
@@ -1213,14 +1519,14 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             FittedBox(
               fit: BoxFit.scaleDown,
               alignment: AlignmentDirectional.centerStart,
               child: Text(
                 value,
                 style: GoogleFonts.cairo(
-                  fontSize: 18,
+                  fontSize: isMobile ? 15.5 : 18,
                   fontWeight: FontWeight.w900,
                   color: colorScheme.onSurface,
                   letterSpacing: -0.3,
@@ -1228,11 +1534,10 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
                 maxLines: 1,
               ),
             ),
-            const SizedBox(height: 1),
             Text(
               title,
               style: GoogleFonts.cairo(
-                fontSize: 12,
+                fontSize: isMobile ? 11 : 12,
                 fontWeight: FontWeight.bold,
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -1242,7 +1547,7 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
             Text(
               subtitle,
               style: GoogleFonts.cairo(
-                fontSize: 9.5,
+                fontSize: isMobile ? 9.5 : 10.5,
                 color: colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
               ),
               maxLines: 1,
@@ -1258,39 +1563,59 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
     required ColorScheme colorScheme,
     required AppStrings strings,
     required bool isAr,
+    required int totalBranchesCount,
+    required int matchingBranchesCount,
   }) {
     return Container(
-      height: 44,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(12),
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
       ),
       child: TextField(
-        onChanged: (val) {
-          setState(() {
-            _searchQuery = val;
-          });
-        },
-        style: GoogleFonts.cairo(fontSize: 13.5),
+        controller: _searchController,
+        style: GoogleFonts.cairo(fontSize: 13.5, fontWeight: FontWeight.w600),
         decoration: InputDecoration(
-          icon: Icon(Icons.search_rounded, color: colorScheme.primary, size: 20),
+          prefixIcon: Icon(Icons.search_rounded, color: colorScheme.primary, size: 20),
+          prefixIconConstraints: const BoxConstraints(minWidth: 44, minHeight: 44),
           hintText: isAr ? 'البحث عن فرع محدد...' : 'Search specific branch...',
           hintStyle: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant, fontSize: 13),
           border: InputBorder.none,
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(vertical: 10),
-          suffixIcon: _searchQuery.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.clear_rounded, size: 16),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          suffixIcon: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_searchQuery.isNotEmpty)
+                IconButton(
+                  icon: const Icon(Icons.clear_rounded, size: 18),
+                  tooltip: isAr ? 'مسح البحث' : 'Clear search',
                   onPressed: () {
                     setState(() {
+                      _searchController.clear();
                       _searchQuery = '';
                     });
                   },
-                )
-              : null,
+                ),
+              Container(
+                margin: const EdgeInsetsDirectional.only(end: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _searchQuery.isNotEmpty
+                      ? '$matchingBranchesCount / $totalBranchesCount ${isAr ? 'فرع' : 'branches'}'
+                      : '$totalBranchesCount ${isAr ? 'فرع' : 'branches'}',
+                  style: GoogleFonts.cairo(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onPrimaryContainer,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1305,6 +1630,7 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
     required List<DailyBranchSalesModel> records,
     required List<CompanyGiftModel> masterGifts,
     required double totalDaySales,
+    EventModel? currentEvent,
   }) {
     if (records.isEmpty) {
       return Container(
@@ -1341,14 +1667,14 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
       builder: (context, constraints) {
         final availableWidth = constraints.maxWidth;
 
-        // Base column widths
-        const branchColWidth = 190.0;
-        const invoicesColWidth = 100.0;
-        const salesColWidth = 130.0;
-        final giftColWidth = masterGifts.isEmpty ? 110.0 : 110.0;
-        const totalGiftsColWidth = 110.0;
-        const totalVouchersColWidth = 120.0;
-        const shareColWidth = 130.0;
+        // Base column widths - compact and responsive
+        const branchColWidth = 175.0;
+        const invoicesColWidth = 82.0;
+        const salesColWidth = 105.0;
+        final giftColWidth = masterGifts.isEmpty ? 100.0 : 100.0;
+        const totalGiftsColWidth = 85.0;
+        const totalVouchersColWidth = 105.0;
+        const shareColWidth = 80.0;
 
         final baseTotalWidth = branchColWidth +
             invoicesColWidth +
@@ -1411,38 +1737,46 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
                       ),
                       children: [
                         _buildHeaderCell(
-                          title: strings.receiptStoreCol,
+                          title: isAr ? 'الفرع / المتجر' : 'Branch / Store',
                           icon: Icons.store_rounded,
                           colorScheme: colorScheme,
+                          isStart: true,
                         ),
                         _buildHeaderCell(
-                          title: strings.dailyInvoicesCountKpi,
+                          title: isAr ? 'الفواتير' : 'Invoices',
                           icon: Icons.receipt_long_rounded,
                           colorScheme: colorScheme,
                         ),
                         _buildHeaderCell(
-                          title: isAr ? 'المبيعات (ج.م)' : 'Sales (EGP)',
+                          title: isAr ? 'المبيعات' : 'Sales',
                           icon: Icons.monetization_on_rounded,
                           colorScheme: colorScheme,
                         ),
-                        ...masterGifts.map((g) => _buildHeaderCell(
-                              title: g.giftName,
-                              subtitle: g.isVoucher ? '(قسيمة)' : '(هدية)',
-                              icon: g.isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
-                              colorScheme: colorScheme,
-                            )),
+                        ...masterGifts.map((g) {
+                          final voucherSubtitle = g.isVoucher
+                              ? (g.giftName.isNotEmpty
+                                  ? g.giftName
+                                  : (g.unitValue > 0 ? '${g.unitValue.toInt()} جنيه قسيمة مشتريات' : 'قسيمة مشتريات'))
+                              : (isAr ? '(هدية)' : '(Gift)');
+                          return _buildHeaderCell(
+                            title: g.isVoucher ? (isAr ? 'الفاتشر' : 'Voucher') : g.giftName,
+                            subtitle: voucherSubtitle,
+                            icon: g.isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
+                            colorScheme: colorScheme,
+                          );
+                        }),
                         _buildHeaderCell(
-                          title: strings.dailyGiftsDisbursedKpi,
+                          title: isAr ? 'الهدايا' : 'Gifts',
                           icon: Icons.redeem_rounded,
                           colorScheme: colorScheme,
                         ),
                         _buildHeaderCell(
-                          title: strings.dailyVouchersValueKpi,
+                          title: isAr ? 'قيمة الفاتشر' : 'Voucher Value',
                           icon: Icons.confirmation_number_rounded,
                           colorScheme: colorScheme,
                         ),
                         _buildHeaderCell(
-                          title: strings.branchSalesShareCol,
+                          title: isAr ? 'النسبة' : 'Share',
                           icon: Icons.pie_chart_rounded,
                           colorScheme: colorScheme,
                         ),
@@ -1454,6 +1788,17 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
                       _buildDailyDataRow(
                         rowIndex: rIdx,
                         record: records[rIdx],
+                        masterGifts: masterGifts,
+                        totalDaySales: totalDaySales,
+                        isAr: isAr,
+                        colorScheme: colorScheme,
+                        currentEvent: currentEvent,
+                      ),
+
+                    // Totals Summary Row
+                    if (records.isNotEmpty)
+                      _buildDailyTotalsRow(
+                        records: records,
                         masterGifts: masterGifts,
                         totalDaySales: totalDaySales,
                         isAr: isAr,
@@ -1474,20 +1819,27 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
     String? subtitle,
     required IconData icon,
     required ColorScheme colorScheme,
+    bool isStart = false,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-      child: Center(
+      padding: EdgeInsetsDirectional.only(
+        start: isStart ? 12 : 6,
+        end: 6,
+        top: 12,
+        bottom: 12,
+      ),
+      child: Align(
+        alignment: isStart ? AlignmentDirectional.centerStart : Alignment.center,
         child: Row(
           mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment: isStart ? MainAxisAlignment.start : MainAxisAlignment.center,
           children: [
             Icon(icon, size: 16, color: colorScheme.primary),
-            const SizedBox(width: 6),
+            const SizedBox(width: 5),
             Flexible(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
+                crossAxisAlignment: isStart ? CrossAxisAlignment.start : CrossAxisAlignment.center,
                 children: [
                   Text(
                     title,
@@ -1496,7 +1848,7 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
                       fontSize: 12.5,
                       color: colorScheme.onSurface,
                     ),
-                    textAlign: TextAlign.center,
+                    textAlign: isStart ? TextAlign.start : TextAlign.center,
                     overflow: TextOverflow.ellipsis,
                   ),
                   if (subtitle != null)
@@ -1507,7 +1859,7 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
                         fontWeight: FontWeight.w600,
                         color: colorScheme.onSurfaceVariant,
                       ),
-                      textAlign: TextAlign.center,
+                      textAlign: isStart ? TextAlign.start : TextAlign.center,
                       overflow: TextOverflow.ellipsis,
                     ),
                 ],
@@ -1526,6 +1878,7 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
     required double totalDaySales,
     required bool isAr,
     required ColorScheme colorScheme,
+    EventModel? currentEvent,
   }) {
     final isEven = rowIndex % 2 == 0;
     final rowBg = isEven ? colorScheme.surface : colorScheme.surfaceContainerLow.withValues(alpha: 0.5);
@@ -1534,10 +1887,45 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
     final shareRate = totalDaySales > 0 ? (record.totalSalesAmount / totalDaySales).clamp(0.0, 1.0) : 0.0;
     final sharePercent = (shareRate * 100).toStringAsFixed(1);
 
+    // Extract clean branch name without parenthetical governorate, and build area/chain subtitle
+    final rawBranch = record.branchName.trim();
+    String cleanBranch = rawBranch;
+    String area = '';
+
+    final parenMatch = RegExp(r'\(([^)]+)\)').firstMatch(rawBranch);
+    if (parenMatch != null) {
+      area = parenMatch.group(1)?.trim() ?? '';
+      final candidate = rawBranch.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim();
+      if (candidate.isNotEmpty) {
+        cleanBranch = candidate;
+      }
+    }
+
+    String chain = '';
+    final rawChain = record.retailChain.trim();
+    if (rawChain.isNotEmpty && rawChain != '-' && rawChain != 'غير محدد') {
+      final normalized = ChainProductsIntelligenceService.normalizeRetailChain(rawChain);
+      if (normalized != 'سلسلة تجارية عامة') {
+        chain = normalized;
+      }
+    } else if (currentEvent != null && currentEvent.retailChainName.trim().isNotEmpty) {
+      final normalized = ChainProductsIntelligenceService.normalizeRetailChain(currentEvent.retailChainName);
+      if (normalized != 'سلسلة تجارية عامة') {
+        chain = normalized;
+      }
+    }
+
+    final subtitleParts = <String>[];
+    if (area.isNotEmpty) subtitleParts.add(area);
+    if (chain.isNotEmpty && chain != area && !cleanBranch.contains(chain)) {
+      subtitleParts.add(chain);
+    }
+    final subtitle = subtitleParts.join(' • ');
+
     final cells = <Widget>[
-      // 1. Branch Name
+      // 1. Branch Name + Area & Chain Subtitle
       Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1549,12 +1937,37 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
               ),
               child: Icon(Icons.store_rounded, size: 16, color: colorScheme.primary),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                record.branchName,
-                style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: colorScheme.onSurface),
-                overflow: TextOverflow.ellipsis,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    cleanBranch,
+                    style: GoogleFonts.cairo(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: colorScheme.onSurface,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.cairo(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: colorScheme.onSurfaceVariant,
+                        height: 1.15,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
               ),
             ),
           ],
@@ -1568,12 +1981,16 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFF0284C7).withValues(alpha: 0.12),
+              color: colorScheme.secondaryContainer.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               '${record.invoicesCount}',
-              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF0369A1)),
+              style: GoogleFonts.cairo(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: colorScheme.onSecondaryContainer,
+              ),
             ),
           ),
         ),
@@ -1585,7 +2002,11 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
         child: Center(
           child: Text(
             '${currencyFormatter.format(record.totalSalesAmount)} ج.م',
-            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF006C50)),
+            style: GoogleFonts.cairo(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              color: colorScheme.primary,
+            ),
           ),
         ),
       ),
@@ -1593,9 +2014,7 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
 
     // 4. Dynamic Gifts Disbursed Cells
     for (final gift in masterGifts) {
-      final giftKey = gift.id.isNotEmpty ? gift.id : gift.giftName;
-      final disbursedItem = record.giftsDisbursed[giftKey];
-      final qty = disbursedItem?.quantity ?? 0;
+      final qty = _resolveDisbursedGiftQty(record, gift, masterGifts);
 
       cells.add(
         Padding(
@@ -1606,8 +2025,8 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
               decoration: BoxDecoration(
                 color: qty > 0
                     ? (gift.isVoucher
-                        ? const Color(0xFF7C3AED).withValues(alpha: 0.12)
-                        : const Color(0xFFD97706).withValues(alpha: 0.12))
+                        ? colorScheme.tertiaryContainer.withValues(alpha: 0.5)
+                        : colorScheme.secondaryContainer.withValues(alpha: 0.5))
                     : colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -1617,7 +2036,7 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
                   color: qty > 0
-                      ? (gift.isVoucher ? const Color(0xFF6D28D9) : const Color(0xFFB45309))
+                      ? (gift.isVoucher ? colorScheme.onTertiaryContainer : colorScheme.onSecondaryContainer)
                       : colorScheme.onSurfaceVariant,
                 ),
               ),
@@ -1635,12 +2054,16 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFFD97706).withValues(alpha: 0.15),
+              color: colorScheme.secondaryContainer.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               '${record.totalGiftsCount}',
-              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: const Color(0xFFB45309), fontSize: 13),
+              style: GoogleFonts.cairo(
+                fontWeight: FontWeight.bold,
+                color: colorScheme.onSecondaryContainer,
+                fontSize: 13,
+              ),
             ),
           ),
         ),
@@ -1654,7 +2077,11 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
         child: Center(
           child: Text(
             '${currencyFormatter.format(record.totalVouchersValue)} ج.م',
-            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: const Color(0xFF7C3AED), fontSize: 13),
+            style: GoogleFonts.cairo(
+              fontWeight: FontWeight.bold,
+              color: colorScheme.tertiary,
+              fontSize: 13,
+            ),
           ),
         ),
       ),
@@ -1691,6 +2118,184 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
       decoration: BoxDecoration(
         color: rowBg,
         border: Border(bottom: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.3))),
+      ),
+      children: cells,
+    );
+  }
+
+  /// Totals Summary Row for Matrix Table
+  TableRow _buildDailyTotalsRow({
+    required List<DailyBranchSalesModel> records,
+    required List<CompanyGiftModel> masterGifts,
+    required double totalDaySales,
+    required bool isAr,
+    required ColorScheme colorScheme,
+  }) {
+    final currencyFormatter = intl.NumberFormat('#,##0.00', 'ar');
+    final totalInvoices = records.fold<int>(0, (acc, r) => acc + r.invoicesCount);
+    final totalGifts = records.fold<int>(0, (acc, r) => acc + r.totalGiftsCount);
+    final totalVouchers = records.fold<double>(0.0, (acc, r) => acc + r.totalVouchersValue);
+
+    final List<Widget> cells = [
+      // 1. Branch Column: "الإجمالي"
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: colorScheme.primary.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(Icons.summarize_rounded, size: 16, color: colorScheme.primary),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              isAr ? 'الإجمالي العام' : 'Grand Total',
+              style: GoogleFonts.cairo(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: colorScheme.primary,
+              ),
+            ),
+          ],
+        ),
+      ),
+
+      // 2. Invoices Count
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        child: Center(
+          child: Text(
+            '$totalInvoices',
+            style: GoogleFonts.cairo(
+              fontWeight: FontWeight.bold,
+              fontSize: 13.5,
+              color: colorScheme.onSurface,
+            ),
+          ),
+        ),
+      ),
+
+      // 3. Total Sales Amount
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        child: Center(
+          child: Text(
+            '${currencyFormatter.format(totalDaySales)} ج.م',
+            style: GoogleFonts.cairo(
+              fontWeight: FontWeight.bold,
+              fontSize: 13.5,
+              color: colorScheme.primary,
+            ),
+          ),
+        ),
+      ),
+    ];
+
+    // 4. Totals for each Master Gift
+    for (final gift in masterGifts) {
+      final giftColTotal = records.fold<int>(
+        0,
+        (acc, r) => acc + _resolveDisbursedGiftQty(r, gift, masterGifts),
+      );
+
+      cells.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: giftColTotal > 0
+                    ? (gift.isVoucher
+                        ? colorScheme.tertiaryContainer.withValues(alpha: 0.6)
+                        : colorScheme.secondaryContainer.withValues(alpha: 0.6))
+                    : colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '$giftColTotal',
+                style: GoogleFonts.cairo(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13.5,
+                  color: giftColTotal > 0
+                      ? (gift.isVoucher ? colorScheme.onTertiaryContainer : colorScheme.onSecondaryContainer)
+                      : colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // 5. Total Gifts
+    cells.add(
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: colorScheme.secondaryContainer.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              '$totalGifts',
+              style: GoogleFonts.cairo(
+                fontWeight: FontWeight.w900,
+                fontSize: 13.5,
+                color: colorScheme.onSecondaryContainer,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // 6. Total Vouchers Value
+    cells.add(
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        child: Center(
+          child: Text(
+            '${currencyFormatter.format(totalVouchers)} ج.م',
+            style: GoogleFonts.cairo(
+              fontWeight: FontWeight.w900,
+              color: colorScheme.tertiary,
+              fontSize: 13.5,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // 7. Share (100%)
+    cells.add(
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        child: Center(
+          child: Text(
+            '100%',
+            style: GoogleFonts.cairo(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: colorScheme.primary,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    return TableRow(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        border: Border(
+          top: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.8), width: 1.5),
+        ),
       ),
       children: cells,
     );
@@ -1740,9 +2345,22 @@ class _ConsolidatedBranchAccumulator {
       totalVouchersValue += totalValue;
     }
 
-    final existing = giftsDisbursed[giftKey];
+    final normNew = _DailyBranchSalesScreenState._normalizeGiftStatic(giftName);
+    String targetKey = giftKey;
+    DailyGiftDisbursalItem? existing = giftsDisbursed[giftKey];
+    if (existing == null && normNew.isNotEmpty) {
+      for (final e in giftsDisbursed.entries) {
+        if (_DailyBranchSalesScreenState._normalizeGiftStatic(e.value.giftName) == normNew ||
+            _DailyBranchSalesScreenState._normalizeGiftStatic(e.key) == normNew) {
+          existing = e.value;
+          targetKey = e.key;
+          break;
+        }
+      }
+    }
+
     if (existing != null) {
-      giftsDisbursed[giftKey] = existing.copyWith(
+      giftsDisbursed[targetKey] = existing.copyWith(
         quantity: existing.quantity + quantity,
         totalValue: existing.totalValue + totalValue,
       );

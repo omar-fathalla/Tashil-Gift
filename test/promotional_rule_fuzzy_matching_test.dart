@@ -991,6 +991,348 @@ void main() {
       );
       expect(unfulfilled, isEmpty);
     });
+
+    test('AIR-68: Single Tresemme 600ml shampoo bottle (6221155611369 @ 210 EGP net, 255 EGP gross) remains strictly 1 single piece (effectiveQty = 1) and awards EXACTLY 1 gift piece, never inflating to 2', () {
+      final singleTresemmeItem = ExtractedProductItem(
+        name: 'تريزيمى شامبو كيراتين وزيت الارجان 600مل',
+        barcode: '6221155611369',
+        price: 210.0,
+        originalPrice: 255.0,
+        discountAmount: 45.0,
+        quantity: 1,
+        isTargetCompany: true,
+      );
+
+      // 1. Verify that PromotionalRuleMatcher.getEffectiveProductQuantity respects AIR-68 Single Large Bottle Guard
+      // Prior to AIR-68, grossPrice 255.0 >= 240.0 falsely triggered twin-bundle price inflation and returned 2.
+      final effectiveQty = PromotionalRuleMatcher.getEffectiveProductQuantity(singleTresemmeItem);
+      expect(effectiveQty, 1, reason: 'AIR-68 Invariant: 600ml single bottle must NOT be inflated to 2 pieces based on price >= 240 EGP');
+
+      // 2. Verify promotional rule matching for "Hair back to school" campaign rule:
+      // "اشترى قطعة شامبو تريزيمي ٦٠٠ واحصل على قطعة تريزيمي ٤٠٠ ملل"
+      final campaignRules = [
+        PromotionalRuleItem(
+          id: 'rule_tresemme_600',
+          ruleTitle: 'اشترى قطعة شامبو تريزيمي ٦٠٠ واحصل على قطعة تريزيمي ٤٠٠ ملل',
+          triggerProduct: 'شامبو تريزيمي 600، تريزيمي 600 مل، تريزيمى شامبو كيراتين وزيت الارجان 600مل',
+          minQuantity: 1,
+          rewardType: 'free_product',
+          rewardValue: 'قطعة تريزيمي 400 ملل',
+          rewardAmount: 0.0,
+          allowMultipliers: true,
+          linkedGifts: [
+            LinkedGiftAllocation(
+              giftId: 'g_tresemme_400',
+              giftName: 'Tresemme Cond Botanix Curl 400Ml',
+              quantity: 1,
+              unitValue: 0.0,
+              giftType: 'product',
+            ),
+          ],
+        ),
+      ];
+
+      final matchedResults = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: [singleTresemmeItem],
+        promotionalRules: campaignRules,
+        allowCampaignMultipliers: true,
+      );
+
+      expect(matchedResults.length, 1);
+      final match = matchedResults.first;
+      expect(match.rule.id, 'rule_tresemme_600');
+      expect(match.multiplier, 1, reason: 'Customer bought 1 bottle of 600ml, so multiplier must be strictly 1');
+
+      // 3. Verify CompositePromotionalBundle allocates EXACTLY 1 gift piece
+      final bundle = CompositePromotionalBundle.fromMatchedRules(matchedResults);
+      expect(bundle.combinedLinkedGifts.length, 1);
+      final gift = bundle.combinedLinkedGifts.first;
+      expect(gift.giftName, 'Tresemme Cond Botanix Curl 400Ml');
+      expect(gift.quantity, 1, reason: 'AIR-68 Invariant: must disburse exactly 1 piece, NEVER 2 pieces');
+
+      // 4. Contrast with an explicit twin bundle item which MUST still resolve to qty * 2
+      final explicitTwinItem = ExtractedProductItem(
+        name: 'تريزيمى شامبو + بلسم 600مل عرض خاص',
+        price: 310.0,
+        originalPrice: 350.0,
+        discountAmount: 40.0,
+        quantity: 1,
+        isTargetCompany: true,
+      );
+      final explicitTwinEffectiveQty = PromotionalRuleMatcher.getEffectiveProductQuantity(explicitTwinItem);
+      expect(explicitTwinEffectiveQty, 2, reason: 'Explicit twin items containing "شامبو + بلسم" must still resolve to 2 pieces');
+    });
+
+    test('AIR-69: Fathalla Market receipt (127/4/241/011026) with "صنسيلك شامبو 350 م" @ 184 EGP is recognized as 2-piece twin bundle (effectiveQty = 2) and awards 50 EGP voucher', () {
+      final fathallaSunsilkItem = ExtractedProductItem(
+        name: 'صنسيلك شامبو 350 م',
+        price: 184.0,
+        originalPrice: 184.0,
+        quantity: 1,
+        isTargetCompany: true,
+      );
+
+      // 1. Verify that 184 EGP Sunsilk 350ml triggers hasSunsilkBundlePrice and resolves to 2 physical pieces
+      final effectiveQty = PromotionalRuleMatcher.getEffectiveProductQuantity(fathallaSunsilkItem);
+      expect(effectiveQty, 2, reason: 'Sunsilk 350ml @ 184 EGP in Fathalla Market is a 2-piece twin bundle');
+
+      // 2. Campaign rules including Tresemme Rule 1 and Sunsilk Rule 3
+      final campaignRules = [
+        PromotionalRuleItem(
+          id: 'rule_1',
+          ruleTitle: 'اشترى قطعة شامبو تريزيمي ٦٠٠ واحصل على قطعة تريزيمي ٤٠٠ ملل',
+          triggerProduct: 'منتجات تريزيمي (17 صنف)',
+          requiredBrands: ['تريزيمي'],
+          minQuantity: 1,
+          rewardType: 'free_product',
+          rewardValue: 'قطعة تريزيمي ٤٠٠ ملل',
+          linkedGifts: [
+            LinkedGiftAllocation(giftId: 'g_tresemme', giftName: 'Tresemme Cond Botanix Curl 400Ml', quantity: 1, unitValue: 0.0, giftType: 'product'),
+          ],
+        ),
+        PromotionalRuleItem(
+          id: 'rule_3',
+          ruleTitle: 'اشترى 2 قطعة صانسيلك اى حجم ماعدا 180 ملل واحصل على فوتشر بقيمة 50 جنيه',
+          triggerProduct: 'منتجات صانسيلك',
+          requiredBrands: ['صنسيلك'],
+          minQuantity: 2,
+          rewardType: 'voucher',
+          rewardValue: 'فوتشر 50 جنيه',
+          rewardAmount: 50.0,
+          allowMultipliers: true,
+          linkedGifts: [
+            LinkedGiftAllocation(giftId: 'g_50', giftName: 'فواتشر 50 جنيه', quantity: 1, unitValue: 50.0, giftType: 'voucher'),
+          ],
+        ),
+      ];
+
+      final matchedResults = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: [fathallaSunsilkItem],
+        promotionalRules: campaignRules,
+        allowCampaignMultipliers: true,
+      );
+
+      // Verify that it matched Rule 3 (Sunsilk Voucher 50 EGP) and NEVER Rule 1 (Tresemme)
+      expect(matchedResults.length, 1);
+      final match = matchedResults.first;
+      expect(match.rule.id, 'rule_3', reason: 'Must match Sunsilk rule, never Tresemme');
+      expect(match.multiplier, 1, reason: '2 physical pieces / 2 minQuantity = 1');
+      expect(match.totalRewardAmount, 50.0);
+
+      final bundle = CompositePromotionalBundle.fromMatchedRules(matchedResults);
+      expect(bundle.totalVoucherValue, 50.0);
+      expect(bundle.combinedLinkedGifts.first.giftName, 'فواتشر 50 جنيه');
+      expect(bundle.combinedLinkedGifts.first.quantity, 1);
+
+      // Verify zero unfulfilled conditions (receipt is 100% accepted)
+      final unfulfilled = PromotionalRuleMatcher.getUnfulfilledPromotionReasons(
+        extractedProducts: [fathallaSunsilkItem],
+        promotionalRules: campaignRules,
+      );
+      expect(unfulfilled, isEmpty, reason: 'Must not reject with "تم رصد 1 قطعة والمطلوب 2"');
+    });
+
+    test('Brand Segregation Invariant: Sunsilk twin bundle barcode (6221155611154) matches Sunsilk voucher rule and NEVER matches Tresemme rule', () {
+      final sunsilkBarcodeItem = ExtractedProductItem(
+        name: 'صانسيلك شامبو نعومه الحرير 350 مل + بلسم',
+        barcode: '6221155611154',
+        price: 184.0,
+        originalPrice: 184.0,
+        quantity: 1,
+        isTargetCompany: true,
+      );
+
+      final campaignRules = [
+        PromotionalRuleItem(
+          id: 'rule_1',
+          ruleTitle: 'اشترى قطعة شامبو تريزيمي ٦٠٠ واحصل على قطعة تريزيمي ٤٠٠ ملل',
+          triggerProduct: 'منتجات تريزيمي (17 صنف)',
+          requiredBrands: ['تريزيمي'],
+          minQuantity: 1,
+          rewardType: 'free_product',
+          rewardValue: 'قطعة تريزيمي ٤٠٠ ملل',
+          linkedGifts: [
+            LinkedGiftAllocation(giftId: 'g_tresemme', giftName: 'Tresemme Cond Botanix Curl 400Ml', quantity: 1, unitValue: 0.0, giftType: 'product'),
+          ],
+        ),
+        PromotionalRuleItem(
+          id: 'rule_3',
+          ruleTitle: 'اشترى 2 قطعة صانسيلك اى حجم ماعدا 180 ملل واحصل على فوتشر بقيمة 50 جنيه',
+          triggerProduct: 'منتجات صانسيلك',
+          requiredBrands: ['صنسيلك'],
+          minQuantity: 2,
+          rewardType: 'voucher',
+          rewardValue: 'فوتشر 50 جنيه',
+          rewardAmount: 50.0,
+          allowMultipliers: true,
+          linkedGifts: [
+            LinkedGiftAllocation(giftId: 'g_50', giftName: 'فواتشر 50 جنيه', quantity: 1, unitValue: 50.0, giftType: 'voucher'),
+          ],
+        ),
+      ];
+
+      final matchedResults = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: [sunsilkBarcodeItem],
+        promotionalRules: campaignRules,
+        allowCampaignMultipliers: true,
+      );
+
+      // Must match Rule 3 (Sunsilk) and NEVER Rule 1 (Tresemme)
+      expect(matchedResults.length, 1);
+      expect(matchedResults.first.rule.id, 'rule_3');
+      expect(matchedResults.first.rule.linkedGifts.first.giftName, 'فواتشر 50 جنيه');
+      expect(matchedResults.any((m) => m.rule.id == 'rule_1'), isFalse, reason: 'Sunsilk barcode must NEVER match Tresemme rule');
+    });
+
+    test('AIR-70: ADCO Spend Campaign (263/2/243/021026) with Speed (سيد) floor cleaner earns 2 cards (100 EGP)', () {
+      final adcoRule = PromotionalRuleItem(
+        id: 'adco_rule_1',
+        ruleTitle: 'شراء العميل الشركه ب 350 جنيه سيقوم باستلام كوبون مشتريات بقيمة 50 جنيه',
+        triggerProduct: 'منتجات ادكو',
+        conditionType: 'by_spend',
+        minSpend: 340.0,
+        discountTolerance: 10.0,
+        allowMultipliers: true,
+        rewardType: 'voucher',
+        rewardValue: 'كوبون مشتريات بقيمة 50 جنيه',
+        rewardAmount: 50.0,
+        linkedGifts: [
+          LinkedGiftAllocation(
+            giftId: '5M0mtn831FdvZX7GHQWb',
+            giftName: 'فواتشر 50 جنيه',
+            quantity: 1,
+            unitValue: 50.0,
+            giftType: 'voucher',
+          ),
+        ],
+      );
+
+      final receiptProducts = [
+        ExtractedProductItem(
+          name: 'كلوريل ليمون 1كجم',
+          price: 22.0,
+          originalPrice: 27.0,
+          discountAmount: 5.0,
+          quantity: 1,
+          isTargetCompany: true,
+        ),
+        ExtractedProductItem(
+          name: 'ماكسيل ماجيك منظف',
+          price: 90.0,
+          originalPrice: 105.0,
+          discountAmount: 15.0,
+          quantity: 1,
+          isTargetCompany: true,
+        ),
+        ExtractedProductItem(
+          name: 'فلفيتا 1 لتر منعم',
+          price: 73.0,
+          originalPrice: 84.0,
+          discountAmount: 11.0,
+          quantity: 1,
+          isTargetCompany: true,
+        ),
+        ExtractedProductItem(
+          name: 'فيبا صابون سائل ل',
+          price: 38.0,
+          originalPrice: 42.0,
+          discountAmount: 4.0,
+          quantity: 1,
+          isTargetCompany: true,
+        ),
+        ExtractedProductItem(
+          name: 'فيبا صابون سائل ل',
+          price: 170.0,
+          originalPrice: 196.0,
+          discountAmount: 26.0,
+          quantity: 1,
+          isTargetCompany: true,
+        ),
+        ExtractedProductItem(
+          name: 'كلوريل الوان 2ك+كلور ا',
+          price: 137.0,
+          originalPrice: 165.0,
+          discountAmount: 28.0,
+          quantity: 1,
+          isTargetCompany: true,
+        ),
+        ExtractedProductItem(
+          name: 'فلفيتا مسحوق مزيل بقع',
+          price: 128.0,
+          originalPrice: 163.0,
+          discountAmount: 35.0,
+          quantity: 1,
+          isTargetCompany: true,
+        ),
+        // Item 18: Cashier dropped 'ب' in Speed floor cleaner
+        ExtractedProductItem(
+          name: 'سيد منظف ارضيات',
+          price: 28.0,
+          originalPrice: 28.0,
+          discountAmount: 0.0,
+          quantity: 2,
+          isTargetCompany: true,
+        ),
+      ];
+
+      final matchedResults = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: receiptProducts,
+        promotionalRules: [adcoRule],
+        allowCampaignMultipliers: true,
+      );
+
+      expect(matchedResults.length, 1);
+      final res = matchedResults.first;
+      expect(res.multiplier, 2, reason: 'Spend 714 EGP (with Speed/Sayed 56 EGP) must yield 2 vouchers on minSpend 340 EGP');
+      expect(res.multipliedLinkedGifts.first.quantity, 2);
+      expect(res.multipliedLinkedGifts.first.totalMonetaryValue, 100.0);
+    });
+
+    test('AIR-70: Spend Multiplier incorporates discountTolerance near 2x threshold', () {
+      final adcoRule = PromotionalRuleItem(
+        id: 'adco_rule_1',
+        ruleTitle: 'شراء العميل الشركه ب 350 جنيه',
+        triggerProduct: 'منتجات ادكو',
+        conditionType: 'by_spend',
+        minSpend: 340.0,
+        discountTolerance: 15.0,
+        allowMultipliers: true,
+        rewardType: 'voucher',
+        rewardValue: 'كوبون مشتريات بقيمة 50 جنيه',
+        rewardAmount: 50.0,
+        linkedGifts: [
+          LinkedGiftAllocation(
+            giftId: '5M0mtn831FdvZX7GHQWb',
+            giftName: 'فواتشر 50 جنيه',
+            quantity: 1,
+            unitValue: 50.0,
+            giftType: 'voucher',
+          ),
+        ],
+      );
+
+      // Customer spent 670 EGP (10 EGP short of 680 EGP, but within 15 EGP discount tolerance)
+      final items = [
+        ExtractedProductItem(
+          name: 'فيبا صابون سائل',
+          price: 335.0,
+          quantity: 2,
+          isTargetCompany: true,
+        ),
+      ];
+
+      final matchedResults = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: items,
+        promotionalRules: [adcoRule],
+        allowCampaignMultipliers: true,
+      );
+
+      expect(matchedResults.length, 1);
+      expect(matchedResults.first.multiplier, 2, reason: '670 EGP + 15 EGP tolerance = 685 EGP >= 680 EGP, yielding 2 cards');
+      expect(matchedResults.first.multipliedLinkedGifts.first.quantity, 2);
+    });
   });
 }
+
+
 

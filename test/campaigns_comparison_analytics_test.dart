@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:al_mraay/features/company_portal/presentation/campaigns_comparison_analytics_screen.dart';
+import 'package:al_mraay/features/admin/domain/event_model.dart';
 import 'package:al_mraay/core/localization/app_strings.dart';
 
 void main() {
@@ -313,12 +314,12 @@ void main() {
       final enStrings = AppStrings('en');
       final hiStrings = AppStrings('hi');
 
-      expect(arStrings.intraCampaignWeekendTab, contains('ويك إندات'));
-      expect(arStrings.periodComparisonModeAuto, contains('المكتشفة تلقائياً'));
-      expect(arStrings.periodComparisonModeCustom, contains('مخصصة'));
+      expect(arStrings.intraCampaignWeekendTab, contains('ويك إند'));
+      expect(arStrings.periodComparisonModeAuto, contains('دورات الويك إند'));
+      expect(arStrings.periodComparisonModeCustom, contains('تحديد فترة'));
       expect(arStrings.weekendPeriodA, contains('A'));
       expect(arStrings.weekendPeriodB, contains('B'));
-      expect(arStrings.allWeekendsProgressionView, contains('جميع الويك إندات'));
+      expect(arStrings.allWeekendsProgressionView, contains('مسار الويك إند'));
       expect(arStrings.dailySalesVelocityLabel, contains('كثافة المبيعات اليومية'));
       expect(arStrings.peakWeekendBadge, contains('الذهبي'));
 
@@ -375,6 +376,75 @@ void main() {
         expect(end.difference(start).inDays, lessThanOrEqualTo(3));
       }
     });
+
+    test('exportComparisonCsv string returns concise "CSV" label in AR, EN, and HI', () {
+      final arStrings = AppStrings('ar');
+      final enStrings = AppStrings('en');
+      final hiStrings = AppStrings('hi');
+
+      expect(arStrings.exportComparisonCsv, equals('CSV'));
+      expect(enStrings.exportComparisonCsv, equals('CSV'));
+      expect(hiStrings.exportComparisonCsv, equals('CSV'));
+    });
+
+    testWidgets('CampaignsComparisonAnalyticsScreen defaults to Portfolio Matrix mode on mobile with zero overflow', (tester) async {
+      // Narrow mobile screen (360 x 740)
+      tester.view.physicalSize = const Size(360, 740);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final dummyEvent = EventModel(
+        id: 'camp_test_1',
+        eventName: 'مهرجان ادكو',
+        companySlug: '512',
+        targetCompany: 'ادكو',
+        minimumSpend: 100.0,
+        isActive: true,
+        startDate: DateTime(2026, 1, 1),
+        endDate: DateTime(2026, 12, 31),
+      );
+
+      FlutterError.onError = (FlutterErrorDetails details) {
+        debugPrint('OVERFLOW OCCURRED: ${details.exceptionAsString()}');
+        if (details.informationCollector != null) {
+          for (final node in details.informationCollector!()) {
+            debugPrint(node.toStringDeep());
+          }
+        }
+      };
+
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            locale: const Locale('ar'),
+            home: Scaffold(
+              body: CampaignsComparisonAnalyticsScreen(
+                lockedCompanySlug: '512',
+                lockedCompanyName: 'ادكو',
+                isEmbedded: true,
+                companyEvents: [dummyEvent],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      // Ensure the screen rendered
+      expect(find.byType(CampaignsComparisonAnalyticsScreen), findsOneWidget);
+
+      // Verify "المصفوفة" tab is present and selected
+      expect(find.text('المصفوفة'), findsOneWidget);
+
+      // Verify CSV export button is present with text 'CSV'
+      expect(find.text('CSV'), findsOneWidget);
+
+      // Verify no exceptions or overflows were thrown
+      expect(tester.takeException(), isNull);
+    });
   });
 }
+
 

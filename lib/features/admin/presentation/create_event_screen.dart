@@ -743,10 +743,11 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     // Diacritics
     str = str.replaceAll(RegExp(r'[\u064B-\u0652\u0640]'), '');
     str = str.replaceAll(RegExp(r'[أإآ]'), 'ا');
-    str = str.replaceAll('ى', 'ي');
-    str = str.replaceAll('ة', 'ه');
+    str = str.replaceAll(RegExp(r'[ىيیئ]'), 'ي');
+    str = str.replaceAll(RegExp(r'[ةه]'), 'ه');
     str = str.replaceAll('ؤ', 'و');
-    str = str.replaceAll('ئ', 'ي');
+    str = str.replaceAll('ك', 'ك');
+    str = str.replaceAll('ک', 'ك');
 
     // Phonetic & POS Brand Aliases
     str = str.replaceAll(RegExp(r'\b(سيج|سجنال|signal)\b'), 'سيجنال');
@@ -766,93 +767,201 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     return str;
   }
 
-  /// Checks whether a product name matches a specific brand name or alias
-  bool _productMatchesBrandName(String productName, String brand) {
+  /// Checks whether a product name contains a standalone Axe word (not wax or XL size)
+  bool _hasStandaloneAxeWord(List<String> tokens, String rawLower) {
+    if (RegExp(r'\baxe\b', caseSensitive: false).hasMatch(rawLower)) return true;
+    for (int i = 0; i < tokens.length; i++) {
+      final t = tokens[i];
+      if (t == 'اكس' || t == 'أكس' || t == 'آكس') {
+        if (i + 1 < tokens.length) {
+          final next = tokens[i + 1].toLowerCase();
+          if (next == 'لارج' || next == 'large') {
+            continue; // Extra Large size, not Axe deodorant
+          }
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Checks whether a product name contains a standalone Lux word (not deluxe)
+  bool _hasStandaloneLuxWord(List<String> tokens, String rawLower) {
+    if (rawLower.contains('deluxe') || tokens.contains('ديلوكس')) return false;
+    if (RegExp(r'\blux\b', caseSensitive: false).hasMatch(rawLower)) return true;
+    return tokens.contains('لوكس');
+  }
+
+  /// Returns known sub-brands for a specific company slug
+  List<String> _getCompanyBrands({String? companySlug}) {
+    final slug = (companySlug ?? _companySlugController.text).trim().toLowerCase();
+    final pNames = _companyProducts.map((p) => p.productName).toList();
+    final dynamicBrands = CampaignAiAssistantService.resolveCompanySubBrands(slug, productNames: pNames);
+    if (dynamicBrands.isNotEmpty) return dynamicBrands;
+    if (slug == 'fine' || slug == 'فاين' || slug.contains('fine')) {
+      return ['فاين', 'إيزي', 'سندريلا'];
+    } else if (slug == 'unilever' || slug == '512' || slug == 'يونيليفر' || slug.contains('unilever')) {
+      return ['دوف', 'ريكسونا', 'سيجنال', 'كلوس اب', 'تريزيمي', 'كلير', 'لوكس', 'أكس', 'صنسيلك', 'فازلين', 'لايفبوي', 'كاماي', 'كنور', 'ليبتون'];
+    } else if (slug == 'almarai' || slug == 'المراعي' || slug.contains('marai')) {
+      return ['المراعي', 'اليوم', 'لوزين', 'سفن دايز'];
+    } else if (slug == 'pg' || slug == 'بي اند جي' || slug == 'procter') {
+      return ['بامبرز', 'تايد', 'اريال', 'بانتين', 'هيد اند شولدرز', 'داوني', 'اولويز', 'اورال بي', 'جيليت', 'فيري'];
+    }
+    return [];
+  }
+
+  /// Generates dynamic contextual search placeholder based on the active company
+  String _getSearchHintText({String? companySlug}) {
+    final slug = (companySlug ?? _companySlugController.text).trim().toLowerCase();
+    if (slug == 'fine' || slug == 'فاين' || slug.contains('fine')) {
+      return 'ابحث باسم المنتج أو الماركة (فاين، إيزي، سندريلا) أو الباركود...';
+    } else if (slug == 'unilever' || slug == '512' || slug == 'يونيليفر' || slug.contains('unilever')) {
+      return 'ابحث باسم المنتج أو الماركة (سيجنال، كلوس اب، دوف) أو الباركود...';
+    } else if (slug == 'almarai' || slug == 'المراعي' || slug.contains('marai')) {
+      return 'ابحث باسم المنتج أو الماركة (المراعي، اليوم، لوزين) أو الباركود...';
+    }
+    return 'ابحث باسم المنتج أو الماركة أو الباركود...';
+  }
+
+  /// Checks whether a product name matches a specific brand name or alias with word-boundary safety
+  bool _productMatchesBrandName(String productName, String brand, {String? companySlug}) {
     final pNorm = _normalizeCatalogSearchText(productName);
     final rawLower = productName.toLowerCase();
     final bNorm = _normalizeCatalogSearchText(brand);
+    final tokens = pNorm.split(RegExp(r'[\s,\-_/\\+*().:]+')).where((t) => t.isNotEmpty).toList();
 
+    // 1. Fine Brands
+    if (brand == 'فاين' || bNorm == 'فاين') {
+      return tokens.contains('فاين') ||
+          rawLower.contains(RegExp(r'\bfine\b')) ||
+          pNorm.startsWith('حفاضات فاين') ||
+          pNorm.startsWith('مناديل فاين');
+    }
+    if (brand == 'إيزي' || brand == 'ايزي' || bNorm == 'ايزي') {
+      return tokens.contains('ايزي') ||
+          tokens.contains('ايزى') ||
+          tokens.contains('إيزي') ||
+          rawLower.contains(RegExp(r'\beasy\b')) ||
+          tokens.contains('سويت') ||
+          pNorm.startsWith('عرض سويت') ||
+          pNorm.startsWith('عرض 3ق سويت');
+    }
+    if (brand == 'سندريلا' || bNorm == 'سندريلا') {
+      return tokens.contains('سندريلا') || rawLower.contains(RegExp(r'\bcinderella\b'));
+    }
+
+    // 2. Unilever Brands (with strict word boundaries)
     if (bNorm == 'سيجنال' || brand == 'سيجنال') {
-      return pNorm.contains('سيجنال') || productName.contains('سجنال') || rawLower.contains('signal');
+      return tokens.contains('سيجنال') || tokens.contains('سجنال') || rawLower.contains(RegExp(r'\bsignal\b'));
     }
     if (bNorm.contains('كلوس') || brand == 'كلوس اب') {
-      return pNorm.contains('كلوس اب') || productName.contains('كلوس') || rawLower.contains('closeup') || rawLower.contains('close-up');
+      return tokens.contains('كلوس') || tokens.contains('كلوس اب') || rawLower.contains(RegExp(r'\bclose\s*up\b|\bcloseup\b'));
     }
     if (bNorm.contains('تريزيم') || brand == 'تريزيمي') {
-      return pNorm.contains('تريزيمي') || productName.contains('تريزم') || rawLower.contains('tresemme') || rawLower.contains('treseme');
+      return tokens.contains('تريزيمي') || tokens.contains('تريزم') || tokens.contains('تريزمي') || rawLower.contains(RegExp(r'\btresemme\b|\btreseme\b'));
     }
     if (bNorm.contains('ريكسون') || brand == 'ريكسونا') {
-      return pNorm.contains('ريكسونا') || productName.contains('ركسونا') || rawLower.contains('rexona');
+      return tokens.contains('ريكسونا') || tokens.contains('ركسونا') || rawLower.contains(RegExp(r'\brexona\b'));
     }
     if (bNorm == 'دوف' || brand == 'دوف') {
-      return pNorm.contains('دوف') || rawLower.contains('dove');
+      return tokens.contains('دوف') || rawLower.contains(RegExp(r'\bdove\b'));
     }
     if (bNorm == 'كلير' || brand == 'كلير') {
-      return pNorm.contains('كلير') || rawLower.contains('clear');
+      return tokens.contains('كلير') || rawLower.contains(RegExp(r'\bclear\b'));
     }
     if (bNorm == 'لوكس' || brand == 'لوكس') {
-      return pNorm.contains('لوكس') || rawLower.contains('lux');
+      return _hasStandaloneLuxWord(tokens, rawLower);
     }
     if (bNorm == 'اكس' || brand == 'أكس' || brand == 'اكس') {
-      return pNorm.contains('اكس') || pNorm.contains('أكس') || rawLower.contains('axe');
+      return _hasStandaloneAxeWord(tokens, rawLower);
     }
     if (bNorm.contains('صنسيلك') || brand == 'صنسيلك') {
-      return pNorm.contains('صنسيلك') || productName.contains('صانسيلك') || productName.contains('صنسلك') || rawLower.contains('sunsilk');
+      return tokens.contains('صنسيلك') || tokens.contains('صانسيلك') || tokens.contains('صنسلك') || rawLower.contains(RegExp(r'\bsunsilk\b'));
     }
     if (bNorm.contains('كاما') || brand == 'كاماي') {
-      return pNorm.contains('كاماي') || productName.contains('كامي') || rawLower.contains('camay');
+      return tokens.contains('كاماي') || tokens.contains('كامي') || rawLower.contains(RegExp(r'\bcamay\b'));
     }
     if (bNorm == 'فازلين' || brand == 'فازلين') {
-      return pNorm.contains('فازلين') || rawLower.contains('vaseline');
+      return tokens.contains('فازلين') || rawLower.contains(RegExp(r'\bvaseline\b'));
     }
     if (bNorm.contains('لايفبو') || brand == 'لايفبوي') {
-      return pNorm.contains('لايفبوي') || productName.contains('لايف بوي') || rawLower.contains('lifebuoy');
+      return tokens.contains('لايفبوي') || tokens.contains('لايف بوي') || rawLower.contains(RegExp(r'\blifebuoy\b'));
     }
-    return pNorm.contains(bNorm) || rawLower.contains(brand.toLowerCase());
+    if (bNorm == 'كنور' || brand == 'كنور') {
+      return tokens.contains('كنور') || rawLower.contains(RegExp(r'\bknorr\b'));
+    }
+    if (bNorm == 'ليبتون' || brand == 'ليبتون') {
+      return tokens.contains('ليبتون') || rawLower.contains(RegExp(r'\blipton\b'));
+    }
+
+    // 3. Almarai Brands
+    if (bNorm == 'المراعي' || brand == 'المراعي') {
+      return tokens.contains('المراعي') || rawLower.contains(RegExp(r'\balmarai\b'));
+    }
+    if (bNorm == 'اليوم' || brand == 'اليوم') {
+      return tokens.contains('اليوم') || rawLower.contains(RegExp(r'\balyoum\b'));
+    }
+    if (bNorm == 'لوزين' || brand == 'لوزين') {
+      return tokens.contains('لوزين') || rawLower.contains(RegExp(r'\blusine\b'));
+    }
+    if (bNorm == 'سفن دايز' || brand == 'سفن دايز') {
+      return tokens.contains('سفن دايز') || rawLower.contains(RegExp(r'\b7days\b'));
+    }
+
+    // Dynamic brand or fallback token check
+    return tokens.contains(bNorm) || rawLower.contains(RegExp(r'\b' + RegExp.escape(brand.toLowerCase()) + r'\b'));
   }
 
-  /// Extracts major brand clusters with counts from the loaded company products catalog
-  Map<String, int> _extractBrandCountsFromProducts(List<CompanyProductItem> products) {
+  /// Extracts brand clusters with counts from the loaded company products catalog
+  Map<String, int> _extractBrandCountsFromProducts(
+    List<CompanyProductItem> products, {
+    String? companySlug,
+  }) {
     final Map<String, int> counts = {};
-    for (final p in products) {
-      final norm = _normalizeCatalogSearchText(p.productName);
-      if (norm.contains('سيجنال') || p.productName.contains('سجنال') || p.productName.toLowerCase().contains('signal')) {
-        counts['سيجنال'] = (counts['سيجنال'] ?? 0) + 1;
+    if (products.isEmpty) return counts;
+
+    final effectiveSlug = (companySlug ?? (products.firstOrNull?.companySlug ?? _companySlugController.text))
+        .trim()
+        .toLowerCase();
+    final knownBrands = _getCompanyBrands(companySlug: effectiveSlug);
+
+    if (knownBrands.isNotEmpty) {
+      for (final brand in knownBrands) {
+        int qty = 0;
+        for (final p in products) {
+          if (_productMatchesBrandName(p.productName, brand, companySlug: effectiveSlug)) {
+            qty++;
+          }
+        }
+        if (qty > 0) {
+          counts[brand] = qty;
+        }
       }
-      if (norm.contains('كلوس اب') || p.productName.contains('كلوس') || p.productName.toLowerCase().contains('closeup')) {
-        counts['كلوس اب'] = (counts['كلوس اب'] ?? 0) + 1;
+    } else {
+      // Dynamic Brand Auto-Discovery for arbitrary companies:
+      // Group products by their first significant Arabic/English word
+      final Map<String, int> wordFrequencies = {};
+      for (final p in products) {
+        final norm = _normalizeCatalogSearchText(p.productName);
+        final tokens = norm.split(RegExp(r'[\s,\-_/\\+*().:]+')).where((t) => t.length >= 3).toList();
+        if (tokens.isNotEmpty) {
+          final firstWord = tokens.first;
+          if (!['عرض', 'كرتونة', 'علبة', 'باكو', 'قطعة', 'طقم', 'كيس'].contains(firstWord)) {
+            wordFrequencies[firstWord] = (wordFrequencies[firstWord] ?? 0) + 1;
+          }
+        }
       }
-      if (norm.contains('تريزيمي') || p.productName.contains('تريزم') || p.productName.toLowerCase().contains('tresemme')) {
-        counts['تريزيمي'] = (counts['تريزيمي'] ?? 0) + 1;
-      }
-      if (norm.contains('ريكسونا') || p.productName.contains('ركسونا') || p.productName.toLowerCase().contains('rexona')) {
-        counts['ريكسونا'] = (counts['ريكسونا'] ?? 0) + 1;
-      }
-      if (norm.contains('دوف') || p.productName.toLowerCase().contains('dove')) {
-        counts['دوف'] = (counts['دوف'] ?? 0) + 1;
-      }
-      if (norm.contains('كلير') || p.productName.toLowerCase().contains('clear')) {
-        counts['كلير'] = (counts['كلير'] ?? 0) + 1;
-      }
-      if (norm.contains('لوكس') || p.productName.toLowerCase().contains('lux')) {
-        counts['لوكس'] = (counts['لوكس'] ?? 0) + 1;
-      }
-      if (norm.contains('اكس') || p.productName.toLowerCase().contains('axe')) {
-        counts['اكس'] = (counts['اكس'] ?? 0) + 1;
-      }
-      if (norm.contains('صنسيلك') || p.productName.contains('صنسلك') || p.productName.toLowerCase().contains('sunsilk')) {
-        counts['صنسيلك'] = (counts['صنسيلك'] ?? 0) + 1;
-      }
-      if (norm.contains('كاماي') || p.productName.contains('كامي') || p.productName.toLowerCase().contains('camay')) {
-        counts['كاماي'] = (counts['كاماي'] ?? 0) + 1;
-      }
-      if (norm.contains('فازلين') || p.productName.toLowerCase().contains('vaseline')) {
-        counts['فازلين'] = (counts['فازلين'] ?? 0) + 1;
-      }
-      if (norm.contains('لايفبوي') || p.productName.contains('لايف بوي') || p.productName.toLowerCase().contains('lifebuoy')) {
-        counts['لايفبوي'] = (counts['لايفبوي'] ?? 0) + 1;
+
+      final candidateBrands = wordFrequencies.entries
+          .where((e) => e.value >= 2)
+          .toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+
+      for (final candidate in candidateBrands.take(8)) {
+        counts[candidate.key] = candidate.value;
       }
     }
+
     return counts;
   }
 
@@ -861,6 +970,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     required List<CompanyProductItem> products,
     required String searchQuery,
     String? selectedBrand,
+    String? companySlug,
   }) {
     final cleanQuery = searchQuery.trim();
     final normQuery = _normalizeCatalogSearchText(cleanQuery);
@@ -872,18 +982,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
       // 1. Brand filter chip check
       if (selectedBrand != null && selectedBrand.isNotEmpty) {
-        if (selectedBrand == 'سيجنال' && !pNorm.contains('سيجنال') && !p.productName.contains('سجنال') && !rawLower.contains('signal')) return false;
-        if (selectedBrand == 'كلوس اب' && !pNorm.contains('كلوس اب') && !p.productName.contains('كلوس') && !rawLower.contains('closeup')) return false;
-        if (selectedBrand == 'تريزيمي' && !pNorm.contains('تريزيمي') && !p.productName.contains('تريزم') && !rawLower.contains('tresemme')) return false;
-        if (selectedBrand == 'ريكسونا' && !pNorm.contains('ريكسونا') && !p.productName.contains('ركسونا') && !rawLower.contains('rexona')) return false;
-        if (selectedBrand == 'دوف' && !pNorm.contains('دوف') && !rawLower.contains('dove')) return false;
-        if (selectedBrand == 'كلير' && !pNorm.contains('كلير') && !rawLower.contains('clear')) return false;
-        if (selectedBrand == 'لوكس' && !pNorm.contains('لوكس') && !rawLower.contains('lux')) return false;
-        if (selectedBrand == 'اكس' && !pNorm.contains('اكس') && !rawLower.contains('axe')) return false;
-        if (selectedBrand == 'صنسيلك' && !pNorm.contains('صنسيلك') && !p.productName.contains('صنسلك') && !rawLower.contains('sunsilk')) return false;
-        if (selectedBrand == 'كاماي' && !pNorm.contains('كاماي') && !p.productName.contains('كامي') && !rawLower.contains('camay')) return false;
-        if (selectedBrand == 'فازلين' && !pNorm.contains('فازلين') && !rawLower.contains('vaseline')) return false;
-        if (selectedBrand == 'لايفبوي' && !pNorm.contains('لايفبوي') && !p.productName.contains('لايف بوي') && !rawLower.contains('lifebuoy')) return false;
+        if (!_productMatchesBrandName(p.productName, selectedBrand, companySlug: companySlug)) {
+          return false;
+        }
       }
 
       // 2. Query filter
@@ -904,6 +1005,27 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       // Special shorthand for "كلوس" -> matches "كلوس اب" or "closeup"
       if (cleanQuery == 'كلوس' || cleanQuery == 'كلوس اب') {
         if (pNorm.contains('كلوس اب') || p.productName.contains('كلوس') || rawLower.contains('closeup')) {
+          return true;
+        }
+      }
+
+      // Shorthand for "فاي" or "فاين"
+      if (cleanQuery == 'فاي' || cleanQuery == 'فاين') {
+        if (pNorm.contains('فاين') || rawLower.contains('fine')) {
+          return true;
+        }
+      }
+
+      // Shorthand for "ايز" or "ايزي"
+      if (cleanQuery == 'ايز' || cleanQuery == 'ايزي' || cleanQuery == 'إيزي') {
+        if (pNorm.contains('ايزي') || pNorm.contains('ايزى') || rawLower.contains('easy')) {
+          return true;
+        }
+      }
+
+      // Shorthand for "سندر" or "سندريلا"
+      if (cleanQuery == 'سندر' || cleanQuery == 'سندريلا') {
+        if (pNorm.contains('سندريلا') || rawLower.contains('cinderella')) {
           return true;
         }
       }
@@ -941,6 +1063,10 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     ];
 
     final iconMap = {
+      'فاين': '🧻',
+      'إيزي': '🍯',
+      'ايزي': '🍯',
+      'سندريلا': '🌸',
       'سيجنال': '🦷',
       'كلوس اب': '💎',
       'تريزيمي': '✨',
@@ -948,11 +1074,22 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       'دوف': '🕊️',
       'كلير': '❄️',
       'لوكس': '🌸',
+      'أكس': '⚡',
       'اكس': '⚡',
       'كاماي': '🧼',
       'فازلين': '🧴',
       'صنسيلك': '💆',
       'لايفبوي': '🛡️',
+      'كنور': '🍲',
+      'ليبتون': '🍵',
+      'المراعي': '🥛',
+      'اليوم': '🍗',
+      'لوزين': '🥐',
+      'سفن دايز': '🥐',
+      'بامبرز': '👶',
+      'تايد': '🧺',
+      'اريال': '🧺',
+      'بانتين': '💆',
     };
 
     brandCounts.forEach((brand, qty) {
@@ -1012,7 +1149,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     final selectedSet = Set<String>.from(_selectedProductNames);
     String searchQuery = '';
     String selectedBrand = '';
-    final brandCounts = _extractBrandCountsFromProducts(_companyProducts);
+    final effectiveSlug = _companySlugController.text.trim().toLowerCase();
+    final brandCounts = _extractBrandCountsFromProducts(_companyProducts, companySlug: effectiveSlug);
 
     await showDialog(
       context: context,
@@ -1023,6 +1161,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               products: _companyProducts,
               searchQuery: searchQuery,
               selectedBrand: selectedBrand,
+              companySlug: effectiveSlug,
             );
 
             final allFilteredSelected = filteredProducts.isNotEmpty &&
@@ -1078,7 +1217,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     TextFormField(
                       style: GoogleFonts.cairo(fontSize: 14),
                       decoration: InputDecoration(
-                        hintText: 'ابحث باسم المنتج أو الماركة (سيجنال، كلوس اب) أو الباركود...',
+                        hintText: _getSearchHintText(companySlug: effectiveSlug),
                         hintStyle: GoogleFonts.cairo(fontSize: 12.5),
                         prefixIcon: const Icon(Icons.search_rounded, size: 20),
                         suffixIcon: searchQuery.isNotEmpty
@@ -1999,7 +2138,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     final Set<String> selectedIds = Set<String>.from(initialSelectedIds);
     String searchQuery = '';
     String selectedBrand = '';
-    final brandCounts = _extractBrandCountsFromProducts(_companyProducts);
+    final effectiveSlug = _companySlugController.text.trim().toLowerCase();
+    final brandCounts = _extractBrandCountsFromProducts(_companyProducts, companySlug: effectiveSlug);
 
     await showDialog(
       context: context,
@@ -2010,6 +2150,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               products: _companyProducts,
               searchQuery: searchQuery,
               selectedBrand: selectedBrand,
+              companySlug: effectiveSlug,
             );
 
             return AlertDialog(
@@ -2033,7 +2174,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   TextField(
                     onChanged: (val) => setDialogState(() => searchQuery = val),
                     decoration: InputDecoration(
-                      hintText: 'ابحث باسم المنتج أو الماركة (سيجنال، كلوس اب) أو الباركود...',
+                      hintText: _getSearchHintText(companySlug: effectiveSlug),
                       hintStyle: GoogleFonts.cairo(fontSize: 12.5),
                       prefixIcon: const Icon(Icons.search_rounded, size: 20),
                       isDense: true,
@@ -2232,31 +2373,17 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
     // Extract brand clusters from matched items
     final Map<String, int> brandBreakdown = {};
+    final effectiveSlug = _companySlugController.text.trim().toLowerCase();
+    final candidateBrands = _getCompanyBrands(companySlug: effectiveSlug).isNotEmpty
+        ? _getCompanyBrands(companySlug: effectiveSlug)
+        : ['فاين', 'إيزي', 'سندريلا', 'دوف', 'ريكسونا', 'سيجنال', 'كلوس اب', 'تريزيمي', 'كلير', 'لوكس', 'أكس', 'صنسيلك', 'فازلين', 'لايفبوي', 'المراعي'];
+
     for (final it in displayItems) {
-      final norm = _normalizeCatalogSearchText(it['name'] ?? '');
-      if (norm.contains('سيجنال') || (it['name'] ?? '').contains('سجنال')) {
-        brandBreakdown['سيجنال'] = (brandBreakdown['سيجنال'] ?? 0) + 1;
-      }
-      if (norm.contains('كلوس اب') || (it['name'] ?? '').contains('كلوس')) {
-        brandBreakdown['كلوس اب'] = (brandBreakdown['كلوس اب'] ?? 0) + 1;
-      }
-      if (norm.contains('تريزيمي') || (it['name'] ?? '').contains('تريزم')) {
-        brandBreakdown['تريزيمي'] = (brandBreakdown['تريزيمي'] ?? 0) + 1;
-      }
-      if (norm.contains('ريكسونا') || (it['name'] ?? '').contains('ركسونا')) {
-        brandBreakdown['ريكسونا'] = (brandBreakdown['ريكسونا'] ?? 0) + 1;
-      }
-      if (norm.contains('دوف')) {
-        brandBreakdown['دوف'] = (brandBreakdown['دوف'] ?? 0) + 1;
-      }
-      if (norm.contains('كلير')) {
-        brandBreakdown['كلير'] = (brandBreakdown['كلير'] ?? 0) + 1;
-      }
-      if (norm.contains('لوكس')) {
-        brandBreakdown['لوكس'] = (brandBreakdown['لوكس'] ?? 0) + 1;
-      }
-      if (norm.contains('اكس')) {
-        brandBreakdown['اكس'] = (brandBreakdown['اكس'] ?? 0) + 1;
+      final name = it['name'] ?? '';
+      for (final brand in candidateBrands) {
+        if (_productMatchesBrandName(name, brand, companySlug: effectiveSlug)) {
+          brandBreakdown[brand] = (brandBreakdown[brand] ?? 0) + 1;
+        }
       }
     }
 
@@ -2274,14 +2401,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               final norm = _normalizeCatalogSearchText(name);
 
               if (localBrand.isNotEmpty) {
-                if (localBrand == 'سيجنال' && !norm.contains('سيجنال') && !name.contains('سجنال')) return false;
-                if (localBrand == 'كلوس اب' && !norm.contains('كلوس اب') && !name.contains('كلوس')) return false;
-                if (localBrand == 'تريزيمي' && !norm.contains('تريزيمي') && !name.contains('تريزم')) return false;
-                if (localBrand == 'ريكسونا' && !norm.contains('ريكسونا') && !name.contains('ركسونا')) return false;
-                if (localBrand == 'دوف' && !norm.contains('دوف')) return false;
-                if (localBrand == 'كلير' && !norm.contains('كلير')) return false;
-                if (localBrand == 'لوكس' && !norm.contains('لوكس')) return false;
-                if (localBrand == 'اكس' && !norm.contains('اكس')) return false;
+                if (!_productMatchesBrandName(name, localBrand, companySlug: effectiveSlug)) return false;
               }
 
               if (localSearch.trim().isEmpty) return true;
@@ -2800,17 +2920,17 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                             selectedProductNames = items.map((e) => e.productName).toList();
                                             // Auto-detect brands
                                             final Set<String> detectedBrands = {};
+                                            final effectiveSlug = _companySlugController.text.trim().toLowerCase();
+                                            final brandsToCheck = _getCompanyBrands(companySlug: effectiveSlug).isNotEmpty
+                                                ? _getCompanyBrands(companySlug: effectiveSlug)
+                                                : ['فاين', 'إيزي', 'سندريلا', 'دوف', 'ريكسونا', 'سيجنال', 'كلوس اب', 'تريزيمي', 'كلير', 'لوكس', 'أكس', 'صنسيلك', 'فازلين', 'لايفبوي', 'كاماي', 'المراعي'];
+
                                             for (final item in items) {
-                                              final norm = _normalizeCatalogSearchText(item.productName);
-                                              if (norm.contains('سيجنال') || item.productName.contains('سجنال')) detectedBrands.add('سيجنال');
-                                              if (norm.contains('كلوس اب') || item.productName.contains('كلوس')) detectedBrands.add('كلوس اب');
-                                              if (norm.contains('تريزيمي') || item.productName.contains('تريزم')) detectedBrands.add('تريزيمي');
-                                              if (norm.contains('ريكسونا') || item.productName.contains('ركسونا')) detectedBrands.add('ريكسونا');
-                                              if (norm.contains('دوف')) detectedBrands.add('دوف');
-                                              if (norm.contains('كلير')) detectedBrands.add('كلير');
-                                              if (norm.contains('لوكس')) detectedBrands.add('لوكس');
-                                              if (norm.contains('اكس')) detectedBrands.add('أكس');
-                                              if (norm.contains('صنسيلك')) detectedBrands.add('صنسيلك');
+                                              for (final brand in brandsToCheck) {
+                                                if (_productMatchesBrandName(item.productName, brand, companySlug: effectiveSlug)) {
+                                                  detectedBrands.add(brand);
+                                                }
+                                              }
                                             }
                                             if (detectedBrands.isNotEmpty) {
                                               requiredBrands = detectedBrands.toList();
@@ -2890,9 +3010,14 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
                                                     // 3. Re-detect brands from the remaining products
                                                     final Set<String> remainingDetectedBrands = {};
+                                                    final effectiveSlug = _companySlugController.text.trim().toLowerCase();
+                                                    final candidateBrands = _getCompanyBrands(companySlug: effectiveSlug).isNotEmpty
+                                                        ? _getCompanyBrands(companySlug: effectiveSlug)
+                                                        : ['فاين', 'إيزي', 'سندريلا', 'دوف', 'ريكسونا', 'سيجنال', 'كلوس اب', 'تريزيمي', 'كلير', 'لوكس', 'أكس', 'صنسيلك', 'فازلين', 'لايفبوي', 'كاماي', 'المراعي'];
+
                                                     for (final name in selectedProductNames) {
-                                                      for (final candidate in ['دوف', 'ريكسونا', 'سيجنال', 'كلوس اب', 'تريزيمي', 'كلير', 'لوكس', 'أكس', 'صنسيلك', 'فازلين', 'لايفبوي', 'كاماي']) {
-                                                        if (_productMatchesBrandName(name, candidate) && candidate != b) {
+                                                      for (final candidate in candidateBrands) {
+                                                        if (_productMatchesBrandName(name, candidate, companySlug: effectiveSlug) && candidate != b) {
                                                           remainingDetectedBrands.add(candidate);
                                                         }
                                                       }

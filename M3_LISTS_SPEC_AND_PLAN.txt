@@ -1,0 +1,328 @@
+================================================================================
+وثيقة المواصفات الفنية: تطبيق معايير قوائم Material Design 3 (M3 Lists Architecture)
+المشروع المستهدف: Tashil Gift Dashboard (Flutter Web & Mobile)
+المرجعية الهندسية: Material Design 3 (M3) Official Specifications:
+  - Lists Overview      : https://m3.material.io/components/lists/overview
+  - Lists Specs         : https://m3.material.io/components/lists/specs
+  - Lists Guidelines    : https://m3.material.io/components/lists/guidelines
+  - Lists Accessibility : https://m3.material.io/components/lists/accessibility
+================================================================================
+
+1. الرؤية الهندسية وأهمية القوائم في الداشبورد (Architectural Vision)
+--------------------------------------------------------------------------------
+القوائم (Lists) هي المكون الأكثر استخداماً وتكراراً في لوحات التحكم (سجل الفواتير،
+كتالوج الهدايا، شاشات التحقق، فروع الحملات، الإشعارات، وسجل العمليات).
+
+الهدف من هذه الخطة:
+الارتقاء بجميع القوائم في مشروع Tashil Gift من مجرد ListView و ListTile عشوائية
+إلى نظام قوائم هندسي معتمد وفقاً لمقاييس Material Design 3 الرسمية، مما يضمن:
+1. دقة الأبعاد والارتفاعات القياسية (56dp / 72dp / 88dp).
+2. فواصل إزاحة احترافية (Inset Dividers بمسافة 72dp) تمنع تقطيع الأيقونات بصرياً.
+3. كثافة تكيفية لشاشات الديسكتوب لمضاعفة عدد العناصر المعروضة في الشاشة الواحدة.
+4. توافق كامل مع معايير إمكانية الوصول (Accessibility a11y) بمساحات لمس >= 48dp.
+5. انعكاس تلقائي مع الاتجاهية الثلاثية (عربي RTL مقابل إنجليزي وهندي LTR).
+
+
+================================================================================
+2. التشريح الهندسي والأبعاد الرسمية (M3 Lists Anatomy & Exact Specs)
+================================================================================
+
+التشريح الداخلي لعنصر القائمة (List Item Anatomy):
+-------------------------------------------------
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ [Leading]  ←16dp→  [ Headline Text ]           ←16dp→  [ Trailing Element ]  │
+│  Avatar            [ Overline / Badge ]                Metadata (Timestamp)   │
+│  or Icon           [ Supporting Text ]                 or Switch / Checkbox   │
+│ (24-40dp)          [ Supporting Text Line 2 ]          or Icon Button         │
+└──────────────────────────────────────────────────────────────────────────────┘
+←─ 16dp ─→                                                             ←─ 16dp ─→
+(Start Padding)                                                       (End Padding)
+
+الارتفاعات الرسمية (Heights by Content Lines):
+----------------------------------------------
+1. قائمة بسطر واحد (One-line item):
+   - الارتفاع القياسي: 56dp (الديسكتوب عالي الكثافة: 40dp - 48dp).
+   - المحتوى: عنوان رئيسي فقط (Headline) + عنصر Leading و/أو Trailing.
+
+2. قائمة بسطرين (Two-line item):
+   - الارتفاع القياسي: 72dp (الديسكتوب عالي الكثافة: 56dp - 64dp).
+   - المحتوى: عنوان رئيسي (Headline) + سطر وصفي (Supporting text).
+
+3. قائمة بثلاثة أسطر (Three-line item):
+   - الارتفاع القياسي: 88dp (الديسكتوب عالي الكثافة: 72dp - 80dp).
+   - المحتوى: عنوان رئيسي + سطرين وصفيين أو Overline في الأعلى.
+
+المسافات والفواصل الهندسية (Internal Spacing & Inset Rules):
+------------------------------------------------------------
+- هوامش البداية والنهاية (Start & End Insets): 16dp دائماً.
+- المسافة بين عنصر البداية (Leading) والنص: 16dp ثابتة.
+- المسافة بين النص وعنصر النهاية (Trailing): 16dp ثابتة.
+- الحشو الرأسي (Top & Bottom Padding): 8dp إلى 12dp.
+- قاعدة الفاصل المزاح (Inset Divider Rule):
+  * عند وضع خط فاصل (Divider) بين عناصر القائمة، يجب ألا يمتد بعرض الشاشة بالكامل.
+  * يجب أن يبدأ الفاصل بعد مسافة 72dp من حافة البداية (16dp هامش + 40dp أيقونة + 16dp فراغ).
+  * هذا يحاذي بداية الفاصل بدقة مع بداية النصوص، مما يعطي مظهراً فائق الأناقة.
+
+
+================================================================================
+3. سلوك التفاعل وحالات التحديد (States, Hover & Selection)
+================================================================================
+
+1. طبقات الحالة (M3 State Layers):
+   - Hover (الماوس على الديسكتوب): تراكب لوني بنسبة 8% من لون OnSurface.
+   - Focus (التنقل بالكيبورد): تراكب لوني بنسبة 10% مع حدود بارزة (Focus Ring).
+   - Pressed (الضغط باللمس أو النقر): تراكب لوني بنسبة 12%.
+
+2. حالة العنصر المحدد (Selected Item Styling):
+   - عند تحديد عنصر (في شاشات List-Detail مثل فاتورة محددة):
+     * خلفية العنصر تأخذ لون: Theme.colorScheme.secondaryContainer أو primaryContainer بشفافية 15%.
+     * لون النص والأيقونة يتحول إلى لون الـ Primary المميز.
+     * حواف العنصر تكون مستديرة بارتفاع BorderRadius.circular(12dp) بدلاً من الحواف الحادة.
+
+3. القوائم المجمعة ذات العناوين الفرعية (Grouped Lists & Subheaders):
+   - عنوان المجموعة (Subheader):
+     * الارتفاع: 48dp.
+     * التيبوغرافي: textTheme.titleSmall أو labelLarge بلون onSurfaceVariant.
+     * الحشو الأفقي: 16dp محاذاة لنصوص القائمة.
+
+
+================================================================================
+4. إمكانية الوصول والتنقل الصوتي (Accessibility & a11y Standards)
+================================================================================
+
+1. حماية مساحات اللمس (Minimum Touch Target Invariant):
+   - أيقونات الإجراءات في نهاية القائمة (Trailing IconButtons مثل: تعديل، حذف، نسخ)
+     يجب أن تحتفظ بمساحة لمس لا تقل عن 48dp x 48dp، حتى لو كانت الأيقونة نفسها 24dp.
+
+2. دلالات قارئات الشاشة (Semantics & Screen Readers):
+   - تغليف عنصر القائمة بـ Semantics:
+     * توضيح ما إذا كان العنصر قابلاً للنقر (button: true).
+     * توضيح حالة التحديد (selected: isSelected).
+     * دمج نصوص السطرين في تتابع منطقي ليقرأها الهاتف بصوت واحد مفهوم.
+
+3. دعم تكبير النصوص (Dynamic Type & Text Scaling):
+   - عدم قفل الارتفاع (height) بشكل جامد إذا تجاوز تكبير الخط معيار 1.0 (textScaler).
+   - يجب السماح للـ List Item بالتمدد الرأسي بمرونة دون حدوث أخطاء Overflow (الخط الأصفر والأسود).
+
+4. التباين البصري (Color Contrast):
+   - العناوين الرئيسية تحقق نسبة تباين لا تقل عن 4.5:1 ضد خلفية السطح.
+   - النصوص الوصفية (Supporting Text) تستخدم OnSurfaceVariant بنسبة تباين واضحة.
+
+
+================================================================================
+5. التوافق مع الاتجاهية الثلاثية (Trilingual Directionality RTL/LTR)
+================================================================================
+
+- في اللغة العربية (RTL):
+  * عنصر البداية (Leading: Avatar / Checkbox) يقع على اليمين تماماً.
+  * عنصر النهاية (Trailing: Time / Arrow / Actions) يقع على اليسار.
+  * الفاصل المزاح (Inset Divider) يبدأ من بعد 72dp من جهة اليمين.
+- في اللغتين الإنجليزية والهندية (LTR):
+  * ينعكس التوزيع تلقائياً ليصبح الـ Leading على اليسار والـ Trailing على اليمين.
+- الإلزام البرمجي:
+  * استخدام EdgeInsetsDirectional.only(start: 16, end: 16).
+  * استخدام Divider(indent: 72, endIndent: 0) داخل Directionality المنضبط.
+
+
+================================================================================
+6. المكون البرمجي الموحد الجاهز للاستخدام (M3ListTile Component)
+================================================================================
+
+الملف المقترح إنشاؤه: `lib/core/widgets/m3_list_tile.dart`
+
+```dart
+import 'package:flutter/material.dart';
+import '../theme/m3_spacing_tokens.dart';
+
+enum M3ListLines { one, two, three }
+
+class M3ListTile extends StatelessWidget {
+  final Widget? leading;
+  final Widget title;
+  final Widget? subtitle;
+  final Widget? overline;
+  final Widget? trailing;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final bool isSelected;
+  final bool enabled;
+  final M3ListLines lines;
+  final EdgeInsetsDirectional? contentPadding;
+
+  const M3ListTile({
+    super.key,
+    this.leading,
+    required this.title,
+    this.subtitle,
+    this.overline,
+    this.trailing,
+    this.onTap,
+    this.onLongPress,
+    this.isSelected = false,
+    this.enabled = true,
+    this.lines = M3ListLines.two,
+    this.contentPadding,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDesktop = MediaQuery.sizeOf(context).width >= 840;
+
+    // الارتفاعات التكيفية حسب عدد الأسطر والكثافة
+    final minHeight = switch (lines) {
+      M3ListLines.one => isDesktop ? 44.0 : 56.0,
+      M3ListLines.two => isDesktop ? 60.0 : 72.0,
+      M3ListLines.three => isDesktop ? 76.0 : 88.0,
+    };
+
+    final effectiveBgColor = isSelected
+        ? colorScheme.secondaryContainer.withValues(alpha: 0.8)
+        : Colors.transparent;
+
+    return Semantics(
+      button: onTap != null,
+      selected: isSelected,
+      enabled: enabled,
+      child: Material(
+        color: effectiveBgColor,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          onLongPress: enabled ? onLongPress : null,
+          borderRadius: BorderRadius.circular(12),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: minHeight),
+            child: Padding(
+              padding: contentPadding ??
+                  const EdgeInsetsDirectional.only(
+                    start: M3SpacingTokens.space4, // 16dp
+                    end: M3SpacingTokens.space4,   // 16dp
+                    top: M3SpacingTokens.space2,   // 8dp
+                    bottom: M3SpacingTokens.space2,// 8dp
+                  ),
+              child: Row(
+                crossAxisAlignment: lines == M3ListLines.three
+                    ? CrossAxisAlignment.start
+                    : CrossAxisAlignment.center,
+                children: [
+                  if (leading != null) ...[
+                    leading!,
+                    const SizedBox(width: M3SpacingTokens.space4), // 16dp
+                  ],
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (overline != null) ...[
+                          DefaultTextStyle(
+                            style: theme.textTheme.labelSmall!.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                            child: overline!,
+                          ),
+                          const SizedBox(height: 2),
+                        ],
+                        DefaultTextStyle(
+                          style: theme.textTheme.bodyLarge!.copyWith(
+                            color: isSelected
+                                ? colorScheme.onSecondaryContainer
+                                : colorScheme.onSurface,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          child: title,
+                        ),
+                        if (subtitle != null) ...[
+                          const SizedBox(height: 4),
+                          DefaultTextStyle(
+                            style: theme.textTheme.bodyMedium!.copyWith(
+                              color: isSelected
+                                  ? colorScheme.onSecondaryContainer.withValues(alpha: 0.8)
+                                  : colorScheme.onSurfaceVariant,
+                            ),
+                            maxLines: lines == M3ListLines.three ? 2 : 1,
+                            overflow: TextOverflow.ellipsis,
+                            child: subtitle!,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (trailing != null) ...[
+                    const SizedBox(width: M3SpacingTokens.space4), // 16dp
+                    trailing!,
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+```
+
+
+================================================================================
+7. أمر التكليف الجاهز للإرسال للـ AI Agent (Prompt for the Agent)
+================================================================================
+
+يمكنك نسخ هذا الأمر كما هو وإرساله للأجنت:
+
+\"\"\"
+### مأمورية التطوير: ترقية وتوحيد القوائم وفقاً لمعايير Material Design 3 (M3 Lists)
+
+يرجى تنفيذ الترقية المعمارية الكاملة لجميع القوائم وعناصر العرض في مشروع Tashil Gift
+وفقاً لمواصفات M3 Lists الرسمية:
+
+1. الخطوة 1: بناء المكون الأساسي الموحد (M3ListTile & Inset Divider)
+   - أنشئ ملف `lib/core/widgets/m3_list_tile.dart` المرفق في وثيقة المواصفات.
+   - تأكد من دعمه للارتفاعات القياسية (56dp للسطر الواحد، 72dp للسطرين، 88dp لثلاثة أسطر).
+   - وفّر ويدجت `M3InsetDivider` التي تبدأ بإزاحة 72dp اتجاهية (indent: 72) لمحاذاة النص تلقائياً مع مراعاة الـ RTL.
+
+2. الخطوة 2: تحديث شاشات الداشبورد الرئيسية
+   - شاشة سجل الفواتير (`InvoicesLogScreen`):
+     * استبدل عناصر قائمة الفواتير بـ `M3ListTile` مع تفعيل نمط التحديد `isSelected` باللون المميز وحواف 12dp.
+     * أظهر رمز المتجر أو الـ Avatar في الـ Leading (40dp)، ورقم الفاتورة والتاريخ والفرع في الـ Headline والـ Subtitle، وقيمة الفاتورة والحالة في الـ Trailing.
+   - شاشة فحص الجوائز وتوزيع الهدايا (`DirectGiftClaimScreen` / `ValidationScreen`):
+     * استخدم `M3ListTile` لعرض المنتجات المؤهلة والجوائز المستحقة مع صور المنتجات المربعة (40x40dp).
+   - شاشات التقارير والفروع (`CompanyReportsScreen`):
+     * نظّم القوائم باستخدام `Subheaders` بارتفاع 48dp مع فواصل Inset Dividers بين الفروع.
+
+3. الخطوة 3: حوكمة إمكانية الوصول والتنقل اللمسي (Accessibility a11y)
+   - تأكد من أن أزرار الإجراءات في الـ Trailing (مثل زر عرض الفاتورة، زر الحذف، أو زر الطباعة) لا تقل مساحة لمسها عن 48x48dp.
+   - أضف وسوم `Semantics` المناسبة لتسهيل قراءة الفواتير والجوائز بواسطة قارئات الشاشة.
+
+4. الخطوة 4: التحقق والاختبار الصارم
+   - شغّل `flutter analyze` وتأكد من خلو المشروع تماماً من أي أخطاء أو تحذيرات.
+   - تأكد من السلاسة الفائقة (60 FPS) وعدم حدوث أي Text Overflows عند تغيير مقاسات الشاشة.
+   - تذكير إلزامي: ممنوع عمل git push أو firebase deploy بدون موافقة صريحة من المستخدم.
+\"\"\"
+
+
+================================================================================
+8. مصفوفة التحقق والقبول (Acceptance Criteria Matrix)
+================================================================================
+
+1. الارتفاعات القياسية (Heights Accuracy):
+   - سطر واحد: 56dp (موبايل) / 44-48dp (ديسكتوب).
+   - سطرين: 72dp (موبايل) / 60dp (ديسكتوب).
+   - ثلاثة أسطر: 88dp (موبايل) / 76dp (ديسكتوب).
+
+2. الفاصل المزاح (Inset Divider):
+   - الفواصل بين العناصر تبدأ بدقة بعد 72dp من جهة البداية (يمين في العربي، يسار في الإنجليزي).
+
+3. مساحات اللمس (Touch Targets):
+   - جميع أزرار الـ Trailing تحقق 48dp x 48dp كحد أدنى لمنع صعوبة النقر بالهاتف.
+
+4. التحديد المرئي (Selected Visuals):
+   - العنصر المحدد يكتسب خلفية secondaryContainer وزوايا مستديرة (12dp) واضحة في 0ms.
+
+5. الأداء وسلاسة التمرير (60 FPS Scrolling):
+   - القوائم الطويلة في سجل الفواتير تمرر بنعومة تامة دون تهنيج أو إعادة بناء غير ضرورية.
+================================================================================

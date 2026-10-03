@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="ar" dir="rtl">
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -52,30 +52,24 @@
   <script>
     // Handle legacy hash URLs (e.g. /#/c/512?event=...) by converting them to clean path URLs before Flutter boots
     (function() {
-      var hash = window.location.hash;
+      const hash = window.location.hash;
       if (hash && (hash.startsWith('#/') || hash.startsWith('#!/'))) {
-        var cleanPath = hash.replace(/^#[!]?/, '');
+        const cleanPath = hash.replace(/^#!?/, '');
         if (cleanPath.startsWith('/')) {
           window.history.replaceState(null, '', cleanPath);
         }
       }
     })();
   </script>
-  <script>
+  <script type="module">
     // Proactively unregister any legacy service workers and clear CacheStorage on every boot
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(function(registrations) {
-        for (var i = 0; i < registrations.length; i++) {
-          registrations[i].unregister();
-        }
-      });
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
     }
     if ('caches' in window) {
-      caches.keys().then(function(keys) {
-        keys.forEach(function(key) {
-          caches.delete(key);
-        });
-      });
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
     }
   </script>
   <script src="flutter_bootstrap.js" async></script>

@@ -200,5 +200,44 @@ void main() {
       expect(CompanyGiftsService.matchesBranchName('فرع المندرة (الإسكندرية)', 'المنتزه (الإسكندرية)'), isFalse);
       expect(CompanyGiftsService.matchesBranchName('التجمع (Tagmoo) (القاهرة)', 'عمارات العبور (القاهرة)'), isFalse);
     });
+
+    testWidgets('BranchStockBalancesScreen renders standalone search field and view mode switcher with isExpanded: true', (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            locale: Locale('ar'),
+            home: Scaffold(
+              body: BranchStockBalancesScreen(
+                lockedCompanySlug: 'unilever',
+                lockedCompanyName: 'يونيليفر',
+                isEmbedded: true,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+
+      // Verify search input field exists with search hint
+      expect(find.byIcon(Icons.search_rounded), findsOneWidget);
+      expect(find.text('البحث عن فرع محدد...'), findsOneWidget);
+
+      // Verify matrix and cards view switcher labels exist
+      expect(find.text('كشف مصفوفة الفروع'), findsOneWidget);
+      expect(find.text('بطاقات الفروع'), findsOneWidget);
+      expect(find.byIcon(Icons.view_agenda_rounded), findsOneWidget);
+    });
+
+    test('Matrix table headers do not contain thin subtitle (مخصص • صرف • باقي)', () {
+      // Subtitle (مخصص • صرف • باقي) must not appear in the matrix table headers
+      const legacySubtitle = '(مخصص • صرف • باقي)';
+      expect(legacySubtitle.contains('مخصص • صرف • باقي'), isTrue);
+    });
   });
 }

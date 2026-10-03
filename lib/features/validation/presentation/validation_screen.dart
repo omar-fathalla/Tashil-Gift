@@ -28,7 +28,10 @@ import 'widgets/receipt_validation_dialog.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/widgets/switch_point_branding.dart';
 import '../../../core/constants/country_currency_config.dart';
+import '../../../core/widgets/m3_adaptive_scaffold.dart';
 import '../../../core/localization/app_strings.dart';
+import '../../../core/localization/locale_provider.dart';
+import '../../../core/widgets/m3_action_menu.dart';
 
 class ValidationScreen extends ConsumerStatefulWidget {
   const ValidationScreen({super.key});
@@ -336,6 +339,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         multiplierBasis: activeEvent.multiplierBasis,
         maxChancesPerReceipt: activeEvent.maxChancesPerReceipt,
         promotionalRules: activeEvent.promotionalRules,
+        allowComplementaryReceipts: activeEvent.allowComplementaryReceipts,
       );
 
       final previewImgUrl = 'data:$mimeType;base64,${base64Encode(bytes)}';
@@ -1097,8 +1101,11 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       body: Column(
         children: [
           Expanded(
-            child: Center(
-              child: SingleChildScrollView(
+            child: M3SupportingPaneLayout(
+              supportingPaneWidth: 380.0,
+              showDivider: true,
+              body: Center(
+                child: SingleChildScrollView(
                 padding: EdgeInsets.only(
                   left: isMobile ? 12 : 24,
                   right: isMobile ? 12 : 24,
@@ -1188,77 +1195,64 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
                               ),
                               if (_activeEvents.length > 1) ...[
                                 const SizedBox(width: 8),
-                                PopupMenuButton<EventModel>(
+                                M3ActionMenu(
                                   tooltip: 'تبديل الحملة النشطة',
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: colorScheme.primaryContainer.withValues(alpha: 0.6),
+                                  anchorBuilder: (context, controller, child) {
+                                    return InkWell(
+                                      onTap: () {
+                                        if (controller.isOpen) {
+                                          controller.close();
+                                        } else {
+                                          controller.open();
+                                        }
+                                      },
                                       borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3)),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.swap_horiz_rounded, size: 18, color: colorScheme.primary),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          'تبديل الحملة (${_activeEvents.length})',
-                                          style: GoogleFonts.cairo(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: colorScheme.primary,
-                                          ),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: colorScheme.primaryContainer.withValues(alpha: 0.6),
+                                          borderRadius: BorderRadius.circular(20),
+                                          border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3)),
                                         ),
-                                      ],
-                                    ),
-                                  ),
-                                  onSelected: (event) {
-                                    setState(() => _activeEvent = event);
-                                  },
-                                  itemBuilder: (ctx) => _activeEvents.map((e) {
-                                    final isSelected = e.id == _activeEvent?.id;
-                                    return PopupMenuItem<EventModel>(
-                                      value: e,
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-                                            color: isSelected ? colorScheme.primary : colorScheme.outline,
-                                            size: 18,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Text(
-                                                  e.eventName,
-                                                  style: GoogleFonts.cairo(
-                                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                                    fontSize: 13,
-                                                  ),
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                                Text(
-                                                  '${e.targetCompany} • ${e.retailChainName}',
-                                                  style: GoogleFonts.cairo(
-                                                    fontSize: 11,
-                                                    color: colorScheme.outline,
-                                                  ),
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ],
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.swap_horiz_rounded, size: 18, color: colorScheme.primary),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'تبديل الحملة (${_activeEvents.length})',
+                                              style: GoogleFonts.cairo(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                                color: colorScheme.primary,
+                                              ),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
                                     );
-                                  }).toList(),
+                                  },
+                                  children: [
+                                    M3ActionMenu.header(
+                                      context: context,
+                                      title: 'الحملات الترويجية المتاحة',
+                                      icon: Icons.campaign_rounded,
+                                    ),
+                                    for (final e in _activeEvents)
+                                      () {
+                                        final isSelected = e.id == _activeEvent?.id;
+                                        return M3ActionMenu.item(
+                                          context: context,
+                                          label: e.eventName,
+                                          icon: isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                                          isSelected: isSelected,
+                                          shortcutText: '${e.targetCompany} • ${e.retailChainName}',
+                                          onPressed: () {
+                                            setState(() => _activeEvent = e);
+                                          },
+                                        );
+                                      }(),
+                                  ],
                                 ),
                               ],
                             ],
@@ -1579,8 +1573,321 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
                 ),
               ),
             ),
+            supportingPane: _buildValidationSupportingPane(
+              context: context,
+              event: _activeEvent,
+              strings: strings,
+              isAr: ref.isArabic,
+              colorScheme: colorScheme,
+            ),
           ),
-          if (!isMobile) const SwitchPointFooter(),
+        ),
+        if (!isMobile) const SwitchPointFooter(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildValidationSupportingPane({
+    required BuildContext context,
+    required EventModel? event,
+    required AppStrings strings,
+    required bool isAr,
+    required ColorScheme colorScheme,
+  }) {
+    if (event == null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Text(
+            isAr ? 'يرجى اختيار حملة ترويجية لعرض القواعد' : 'Select a campaign to view guidelines',
+            style: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant),
+          ),
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 1. Header Card
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.verified_user_rounded, color: colorScheme.primary, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isAr ? 'حوكمة وتدقيق البونات' : 'Receipt Verification',
+                            style: GoogleFonts.cairo(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          Text(
+                            isAr ? 'معايير التحقق ورصيد الهدايا' : 'Audit criteria & prize balances',
+                            style: GoogleFonts.cairo(
+                              fontSize: 11,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                // Quick Dialog Launchers
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => CampaignBriefDialog.show(context, event),
+                        icon: const Icon(Icons.campaign_rounded, size: 16),
+                        label: Text(
+                          isAr ? 'الشروط' : 'Rules',
+                          style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => CampaignGiftBalanceDialog.show(context, event),
+                        icon: const Icon(Icons.card_giftcard_rounded, size: 16),
+                        label: Text(
+                          isAr ? 'الهدايا' : 'Prizes',
+                          style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (context) => const InvoicesLogScreen()),
+                          );
+                        },
+                        icon: const Icon(Icons.receipt_long_rounded, size: 16),
+                        label: Text(
+                          isAr ? 'السجل' : 'Log',
+                          style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // 2. Minimum Spend & Campaign Identity Card
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.monetization_on_outlined, size: 18, color: Colors.teal.shade700),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        isAr ? 'الحد الأدنى للشراء:' : 'Minimum Spend:',
+                        style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.teal.shade200),
+                      ),
+                      child: Text(
+                        event.minimumSpend > 0 ? '${event.minimumSpend} ج.م' : (isAr ? 'بدون حد أدنى' : 'No Minimum'),
+                        style: GoogleFonts.cairo(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal.shade800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (event.branchNames.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Icon(Icons.storefront_rounded, size: 18, color: colorScheme.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          isAr ? 'عدد الفروع المعتمدة:' : 'Active Branches:',
+                          style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${event.branchNames.length} ${isAr ? 'فرع' : 'branches'}',
+                        style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // 3. Promotional Rules Summary (if any)
+          if (event.promotionalRules.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerLowest,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.rule_rounded, size: 18, color: colorScheme.secondary),
+                      const SizedBox(width: 8),
+                      Text(
+                        isAr ? 'قواعد العروض الترويجية (${event.promotionalRules.length})' : 'Promotional Rules (${event.promotionalRules.length})',
+                        style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  ...event.promotionalRules.take(4).map((rule) {
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHigh.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            rule.ruleTitle,
+                            style: GoogleFonts.cairo(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '🎁 ${isAr ? 'الهدية المستحقة:' : 'Reward:'} ${rule.rewardValue.isNotEmpty ? rule.rewardValue : (rule.linkedGifts.isNotEmpty ? rule.linkedGifts.map((g) => "${g.quantity}x ${g.giftName}").join(", ") : (rule.linkedGiftName ?? ''))}',
+                            style: GoogleFonts.cairo(
+                              fontSize: 11,
+                              color: Colors.teal.shade700,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // 4. Photography Guidelines for Faster AI Processing
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.amber.shade50.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.amber.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.tips_and_updates_rounded, size: 18, color: Colors.amber.shade800),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        isAr ? 'معايير التدقيق بالذكاء الاصطناعي:' : 'AI Validation Standards:',
+                        style: GoogleFonts.cairo(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.amber.shade900,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  isAr
+                      ? '• التأكد من وضوح اسم السلسلة وتاريخ الفاتورة بدقة.\n• التحقق من مطابقة أصناف الفاتورة لقواعد الحملة.\n• عدم قبول صور الفواتير المشوهة أو غير المقروءة.'
+                      : '• Ensure retail chain name and date are sharp and legible.\n• Verify items comply strictly with campaign offer rules.\n• Reject blurred or cropped receipt images automatically.',
+                  style: GoogleFonts.cairo(
+                    fontSize: 11.5,
+                    height: 1.5,
+                    color: Colors.brown.shade800,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

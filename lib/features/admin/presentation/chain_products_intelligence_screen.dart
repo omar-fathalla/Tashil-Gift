@@ -8,6 +8,7 @@ import '../../../core/localization/locale_provider.dart';
 import '../../../core/constants/country_currency_config.dart';
 import '../../../core/services/chain_products_intelligence_service.dart';
 import '../../../core/widgets/m3_progress_indicators.dart';
+import '../../../core/widgets/m3_action_menu.dart';
 import '../../../core/animations/m3_motion.dart';
 import '../../../core/utils/file_download_helper.dart';
 import '../../admin/domain/chain_product_model.dart';
@@ -1514,77 +1515,71 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
               const SizedBox(width: 10),
 
               // Export Excel & CSV Menu Button
-              PopupMenuButton<String>(
+              M3ActionMenu(
                 tooltip: isAr ? 'تصدير تقرير الأسعار (Excel / CSV)' : 'Export Price Matrix Report',
-                onSelected: (choice) {
-                  if (choice == 'EXCEL') {
-                    _exportToExcel(filteredProducts, distinctChains, currency);
-                  } else if (choice == 'CSV') {
-                    _exportToCsv(filteredProducts, distinctChains, currency);
-                  }
+                anchorBuilder: (context, controller, child) {
+                  return AnimatedPressable(
+                    onTap: () {
+                      if (!_isExporting) {
+                        if (controller.isOpen) {
+                          controller.close();
+                        } else {
+                          controller.open();
+                        }
+                      }
+                    },
+                    child: Container(
+                      height: 38,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: cs.primaryContainer.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: cs.primary.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _isExporting
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.file_download_outlined, size: 18),
+                          const SizedBox(width: 6),
+                          Text(
+                            isAr ? 'تصدير التقرير' : 'Export',
+                            style: GoogleFonts.cairo(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: cs.onPrimaryContainer,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(Icons.arrow_drop_down_rounded, size: 18, color: cs.onPrimaryContainer),
+                        ],
+                      ),
+                    ),
+                  );
                 },
-                itemBuilder: (ctx) => [
-                  PopupMenuItem(
-                    value: 'EXCEL',
-                    child: Row(
-                      children: [
-                        Icon(Icons.table_chart_rounded, color: cs.primary, size: 20),
-                        const SizedBox(width: 10),
-                        Text(
-                          isAr ? 'تصدير تقرير إكسيل كامل (.xlsx)' : 'Export Excel Workbook (.xlsx)',
-                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12.5),
-                        ),
-                      ],
-                    ),
+                children: [
+                  M3ActionMenu.header(
+                    context: context,
+                    title: isAr ? 'تنسيق الملف' : 'File Format',
                   ),
-                  PopupMenuItem(
-                    value: 'CSV',
-                    child: Row(
-                      children: [
-                        Icon(Icons.description_outlined, color: cs.primary, size: 20),
-                        const SizedBox(width: 10),
-                        Text(
-                          isAr ? 'تصدير ملف بيانات (.csv)' : 'Export CSV Data (.csv)',
-                          style: GoogleFonts.cairo(fontSize: 12.5),
-                        ),
-                      ],
-                    ),
+                  M3ActionMenu.item(
+                    context: context,
+                    label: isAr ? 'تصدير تقرير إكسيل كامل (.xlsx)' : 'Export Excel Workbook (.xlsx)',
+                    icon: Icons.table_chart_rounded,
+                    onPressed: () => _exportToExcel(filteredProducts, distinctChains, currency),
+                  ),
+                  M3ActionMenu.item(
+                    context: context,
+                    label: isAr ? 'تصدير ملف بيانات (.csv)' : 'Export CSV Data (.csv)',
+                    icon: Icons.description_outlined,
+                    onPressed: () => _exportToCsv(filteredProducts, distinctChains, currency),
                   ),
                 ],
-                child: AnimatedPressable(
-                  child: Container(
-                    height: 38,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: cs.primaryContainer.withValues(alpha: 0.6),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: cs.primary.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _isExporting
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.file_download_outlined, size: 18),
-                        const SizedBox(width: 6),
-                        Text(
-                          isAr ? 'تصدير التقرير' : 'Export',
-                          style: GoogleFonts.cairo(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: cs.onPrimaryContainer,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Icon(Icons.arrow_drop_down_rounded, size: 18, color: cs.onPrimaryContainer),
-                      ],
-                    ),
-                  ),
-                ),
               ),
             ],
           ),

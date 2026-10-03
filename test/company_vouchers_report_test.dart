@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:al_mraay/core/localization/app_strings.dart';
+import 'package:al_mraay/core/widgets/m3_button_groups.dart';
 import 'package:al_mraay/features/company_portal/presentation/company_vouchers_report_screen.dart';
 
 void main() {
@@ -162,6 +163,45 @@ void main() {
           expect(find.byType(Dialog), findsNothing);
         }
       }
+    });
+
+    testWidgets('M3 List-Detail Inspector mode is active by default and renders SegmentedButton toggle', (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            locale: Locale('ar'),
+            home: Scaffold(
+              body: CompanyVouchersReportScreen(
+                lockedCompanySlug: 'unilever',
+                lockedCompanyName: 'يونيليفر',
+                isEmbedded: true,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+
+      // Verify M3ConnectedButtonGroup exists with both options
+      expect(find.byType(M3ConnectedButtonGroup<int>), findsOneWidget);
+      expect(find.text('مفتش الفروع'), findsOneWidget);
+      expect(find.text('المصفوفة'), findsOneWidget);
+
+      // Toggle to Matrix Table mode
+      await tester.tap(find.text('المصفوفة'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      // Toggle back to Inspector mode
+      await tester.tap(find.text('مفتش الفروع'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
     });
   });
 }

@@ -1,36 +1,72 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/services/ai_directives_service.dart';
+import '../../../core/services/ai_model_config_service.dart';
 import '../domain/ai_directive_model.dart';
 import '../domain/ai_directives_seed_data.dart';
+import 'widgets/ai_brain_copilot_studio_widget.dart';
+import 'widgets/ai_model_switcher_dialog.dart';
+import '../../../core/widgets/m3_adaptive_scaffold.dart';
+import '../../../core/utils/responsive.dart';
 
 class AiBrainRulesScreen extends ConsumerStatefulWidget {
-  const AiBrainRulesScreen({super.key});
+  final int initialTabIndex;
+  final String? initialInvoiceContext;
+  final Uint8List? initialInvoiceImage;
+  final String? initialInvoiceImageUrl;
+  final List<String>? initialInvoiceImageUrls;
+
+  const AiBrainRulesScreen({
+    super.key,
+    this.initialTabIndex = 0,
+    this.initialInvoiceContext,
+    this.initialInvoiceImage,
+    this.initialInvoiceImageUrl,
+    this.initialInvoiceImageUrls,
+  });
 
   @override
   ConsumerState<AiBrainRulesScreen> createState() => _AiBrainRulesScreenState();
 }
 
-class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen> {
+class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
   AiDirectiveCategory? _selectedCategory; // null = all
   String _searchQuery = '';
+  String? _selectedDirectiveId;
   bool _isSyncing = false;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialTabIndex.clamp(0, 1),
+    );
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
+
     // Seed directives to Firestore if collection is currently empty
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(aiDirectivesServiceProvider).seedDirectivesIfEmpty();
+      try {
+        ref.read(aiDirectivesServiceProvider).seedDirectivesIfEmpty();
+      } catch (e) {
+        debugPrint('Safe guard for seedDirectivesIfEmpty: $e');
+      }
     });
   }
 
   @override
   void dispose() {
+    _tabController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -44,70 +80,167 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen> {
 
     final directivesAsync = ref.watch(aiDirectivesStreamProvider);
     final totalCount = directivesAsync.value?.length ?? AiDirectivesSeedData.initialDirectives.length;
+    final canPop = Navigator.of(context).canPop();
+
+    final modelConfig = ref.watch(aiModelConfigStreamProvider).value;
+    final activeModelName = modelConfig?.effectivePrimaryModel ?? 'gemini-3.7-flash';
+    final activeAgentMode = modelConfig?.mode ?? AiAgentMode.standardVision;
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
-      body: CustomScrollView(
-        slivers: [
-          // 1. Header Banner & KPIs
-          SliverToBoxAdapter(
-            child: _buildHeaderBanner(context, strings, isAr, colorScheme, totalCount),
-          ),
+      body: Column(
+        children: [
+          // 1. Header Banner & TabBar
+          _buildTopHeaderAndTabBar(context, strings, isAr, colorScheme, canPop, activeModelName, activeAgentMode),
 
-          // 2. Search & Category Filter Toolbar
-          SliverToBoxAdapter(
-            child: _buildSearchAndFilterToolbar(context, strings, isAr, colorScheme),
-          ),
+          // 2. TabBarView
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                // Tab 0: Directives Catalog
+                _buildCatalogView(context, strings, isAr, colorScheme, directivesAsync, totalCount, activeModelName, activeAgentMode),
 
-          // 3. Directives List
-          directivesAsync.when(
-            data: (directives) {
-              final filtered = _filterDirectives(directives, isAr);
-              if (filtered.isEmpty) {
-                return SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _buildEmptyState(context, strings, isAr, colorScheme),
-                );
-              }
-              return SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final item = filtered[index];
-                      return _buildDirectiveCard(context, item, strings, isAr, colorScheme);
-                    },
-                    childCount: filtered.length,
-                  ),
+                // Tab 1: AI Brain Co-Pilot Studio
+                AiBrainCoPilotStudioWidget(
+                  initialInvoiceContext: widget.initialInvoiceContext,
+                  initialInvoiceImage: widget.initialInvoiceImage,
+                  initialInvoiceImageUrl: widget.initialInvoiceImageUrl,
+                  initialInvoiceImageUrls: widget.initialInvoiceImageUrls,
                 ),
-              );
-            },
-            loading: () => const SliverFillRemaining(
-              child: Center(child: CircularProgressIndicator()),
-            ),
-            error: (err, _) => SliverFillRemaining(
-              child: Center(
-                child: Text(
-                  'Error loading AI Directives: $err',
-                  style: GoogleFonts.cairo(color: colorScheme.error),
-                ),
-              ),
+              ],
             ),
           ),
-
-          const SliverToBoxAdapter(child: SizedBox(height: 48)),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddEditDirectiveDialog(context, strings, isAr, null),
-        backgroundColor: colorScheme.primary,
-        foregroundColor: colorScheme.onPrimary,
-        icon: const Icon(Icons.add_task_rounded),
-        label: Text(
-          strings.addNewDirectiveBtn,
-          style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
-        ),
-      ),
+      floatingActionButton: _tabController.index == 0
+          ? FloatingActionButton.extended(
+              onPressed: () => _showAddEditDirectiveDialog(context, strings, isAr, null),
+              backgroundColor: colorScheme.primary,
+              foregroundColor: colorScheme.onPrimary,
+              icon: const Icon(Icons.add_task_rounded),
+              label: Text(
+                strings.addNewDirectiveBtn,
+                style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+              ),
+            )
+          : null,
+    );
+  }
+
+  Widget _buildCatalogView(
+    BuildContext context,
+    AppStrings strings,
+    bool isAr,
+    ColorScheme colorScheme,
+    AsyncValue<List<AiDirectiveModel>> directivesAsync,
+    int totalCount,
+    String activeModelName,
+    AiAgentMode activeAgentMode,
+  ) {
+    return M3ResponsiveBuilder(
+      builder: (context, layout) {
+        final isDualPane = layout.isExpanded || layout.isLarge || layout.isExtraLarge;
+
+        return directivesAsync.when(
+          data: (directives) {
+            final filtered = _filterDirectives(directives, isAr);
+            final effectiveSelectedId = (_selectedDirectiveId != null &&
+                    filtered.any((d) => d.id == _selectedDirectiveId))
+                ? _selectedDirectiveId!
+                : (filtered.isNotEmpty ? filtered.first.id : null);
+
+            final selectedDirective = effectiveSelectedId != null
+                ? filtered.firstWhere((d) => d.id == effectiveSelectedId,
+                    orElse: () => filtered.first)
+                : null;
+
+            if (filtered.isEmpty) {
+              return CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: _buildKpiCardsSection(context, strings, isAr, colorScheme,
+                        totalCount, activeModelName, activeAgentMode),
+                  ),
+                  SliverToBoxAdapter(
+                    child: _buildSearchAndFilterToolbar(
+                        context, strings, isAr, colorScheme),
+                  ),
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: _buildEmptyState(context, strings, isAr, colorScheme),
+                  ),
+                ],
+              );
+            }
+
+            final listPane = CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: _buildKpiCardsSection(context, strings, isAr, colorScheme,
+                      totalCount, activeModelName, activeAgentMode),
+                ),
+                SliverToBoxAdapter(
+                  child: _buildSearchAndFilterToolbar(
+                      context, strings, isAr, colorScheme),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final item = filtered[index];
+                        final isSelected = isDualPane && item.id == effectiveSelectedId;
+                        return _buildDirectiveCard(
+                          context,
+                          item,
+                          strings,
+                          isAr,
+                          colorScheme,
+                          isSelected: isSelected,
+                          isDualPane: isDualPane,
+                          onSelect: () {
+                            setState(() {
+                              _selectedDirectiveId = item.id;
+                            });
+                          },
+                        );
+                      },
+                      childCount: filtered.length,
+                    ),
+                  ),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 80)),
+              ],
+            );
+
+            if (!isDualPane) {
+              return listPane;
+            }
+
+            return M3ListDetailLayout(
+              listPaneWidth: 440.0,
+              listPane: listPane,
+              detailPane: selectedDirective != null
+                  ? _buildDirectiveDetailPane(
+                      context: context,
+                      item: selectedDirective,
+                      strings: strings,
+                      isAr: isAr,
+                      colorScheme: colorScheme,
+                    )
+                  : null,
+            );
+          },
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (err, _) => Center(
+            child: Text(
+              'Error loading AI Directives: $err',
+              style: GoogleFonts.cairo(color: colorScheme.error),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -131,163 +264,302 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen> {
     }).toList();
   }
 
-  Widget _buildHeaderBanner(
+  Future<void> _handleCloudSync(BuildContext context, bool isAr) async {
+    if (_isSyncing) return;
+    setState(() => _isSyncing = true);
+    try {
+      final count = await ref.read(aiDirectivesServiceProvider).forceSyncAllDirectives();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isAr
+                  ? 'تمت مزامنة كافة القواعد المعيارية ($count بنداً) مع السحابة بنجاح 🚀'
+                  : 'All $count directives synced to cloud successfully',
+              style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+            ),
+            backgroundColor: Colors.teal.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('فشلت المزامنة: $e'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
+  }
+
+  Widget _buildTopHeaderAndTabBar(
+    BuildContext context,
+    AppStrings strings,
+    bool isAr,
+    ColorScheme colorScheme,
+    bool canPop,
+    String activeModelName,
+    AiAgentMode activeAgentMode,
+  ) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            // Top App Bar Row
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              child: Row(
+                children: [
+                  if (canPop) ...[
+                    IconButton.filledTonal(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.arrow_back_rounded),
+                      tooltip: isAr ? 'رجوع' : 'Back',
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          colorScheme.primary,
+                          const Color(0xFF6750A4),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: colorScheme.primary.withValues(alpha: 0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(Icons.psychology_rounded, color: Colors.white, size: 24),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 10,
+                          runSpacing: 4,
+                          children: [
+                            Text(
+                              isAr ? 'عقل الذكاء الاصطناعي (AI Brain Center)' : 'AI Brain Intelligence Center',
+                              style: GoogleFonts.cairo(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.onSurface,
+                              ),
+                            ),
+                            // Dynamic Active Model Badge with click-to-switch
+                            Tooltip(
+                              message: isAr ? 'انقر لتبديل نموذج الذكاء الاصطناعي ونمط الوكيل' : 'Click to switch model and agent mode',
+                              child: InkWell(
+                                onTap: () => AiModelSwitcherDialog.show(context),
+                                borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 7,
+                                        height: 7,
+                                        decoration: const BoxDecoration(
+                                          color: Color(0xFF10B981),
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          activeModelName,
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: const Color(0xFF047857),
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 5),
+                                      const Icon(Icons.tune_rounded, size: 13, color: Color(0xFF047857)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          isAr
+                              ? 'استوديو حوكمة وفحص البونات بالذكاء الاصطناعي وصياغة واعتماد المعايير السحابية فورياً'
+                              : 'Real-time POS verification co-pilot & instant cloud directive governance',
+                          style: GoogleFonts.cairo(
+                            fontSize: 12,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (MediaQuery.sizeOf(context).width < 700) ...[
+                    IconButton.filledTonal(
+                      onPressed: () => AiModelSwitcherDialog.show(context),
+                      icon: const Icon(Icons.tune_rounded, size: 20),
+                      tooltip: isAr ? 'محرك الذكاء والوكيل' : 'AI Engine & Agent',
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton.outlined(
+                      onPressed: _isSyncing ? null : () => _handleCloudSync(context, isAr),
+                      icon: _isSyncing
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.cloud_sync_rounded, size: 20),
+                      tooltip: isAr ? 'مزامنة السحابة' : 'Sync Cloud',
+                    ),
+                  ] else ...[
+                    FilledButton.tonalIcon(
+                      onPressed: () => AiModelSwitcherDialog.show(context),
+                      icon: const Icon(Icons.tune_rounded, size: 18),
+                      label: Text(
+                        isAr ? 'محرك الذكاء والوكيل' : 'AI Engine & Agent',
+                        style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF6750A4).withValues(alpha: 0.12),
+                        foregroundColor: const Color(0xFF6750A4),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Cloud Sync Action
+                    OutlinedButton.icon(
+                      onPressed: _isSyncing ? null : () => _handleCloudSync(context, isAr),
+                      icon: _isSyncing
+                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.cloud_sync_rounded, size: 18),
+                      label: Text(
+                        isAr ? 'مزامنة السحابة' : 'Sync Cloud',
+                        style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            // TabBar Navigation
+            TabBar(
+              controller: _tabController,
+              labelColor: colorScheme.primary,
+              unselectedLabelColor: colorScheme.onSurfaceVariant,
+              indicatorColor: colorScheme.primary,
+              indicatorWeight: 3,
+              labelStyle: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
+              unselectedLabelStyle: GoogleFonts.cairo(fontSize: 13),
+              tabs: [
+                Tab(
+                  icon: const Icon(Icons.auto_stories_rounded, size: 20),
+                  text: strings.aiBrainCatalogTab,
+                ),
+                Tab(
+                  icon: const Icon(Icons.smart_toy_rounded, size: 20),
+                  text: strings.aiBrainStudioTab,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildKpiCardsSection(
     BuildContext context,
     AppStrings strings,
     bool isAr,
     ColorScheme colorScheme,
     int totalDirectivesCount,
+    String activeModelName,
+    AiAgentMode activeAgentMode,
   ) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            colorScheme.primaryContainer.withValues(alpha: 0.8),
-            colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        border: Border(
-          bottom: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth > 700;
+          return Wrap(
+            spacing: 16,
+            runSpacing: 12,
             children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: colorScheme.primary,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: colorScheme.primary.withValues(alpha: 0.3),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: const Icon(Icons.psychology_rounded, color: Colors.white, size: 28),
+              _buildKpiCard(
+                title: strings.totalAiDirectivesCount,
+                value: '$totalDirectivesCount ${isAr ? 'بنداً معيارياً' : 'Directives'}',
+                subtitle: isAr ? 'محدثة ونشطة بكافة الحملات' : 'Enforced Globally',
+                icon: Icons.checklist_rtl_rounded,
+                color: const Color(0xFF6750A4),
+                isWide: isWide,
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      strings.aiBrainTitle,
-                      style: GoogleFonts.cairo(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      strings.aiBrainSubtitle,
-                      style: GoogleFonts.cairo(
-                        fontSize: 13,
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
+              _buildKpiCard(
+                title: strings.activeAiModelPrimary,
+                value: activeModelName,
+                subtitle: isAr ? '${activeAgentMode.labelAr} (انقر للتغيير ⚙️)' : '${activeAgentMode.labelEn} (Click to change ⚙️)',
+                icon: Icons.bolt_rounded,
+                color: const Color(0xFF006C50),
+                isWide: isWide,
+                onTap: () => AiModelSwitcherDialog.show(context),
               ),
-              const SizedBox(width: 12),
-              // Cloud Sync Button
-              OutlinedButton.icon(
-                onPressed: _isSyncing
-                    ? null
-                    : () async {
-                        setState(() => _isSyncing = true);
-                        try {
-                          final count = await ref.read(aiDirectivesServiceProvider).forceSyncAllDirectives();
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  isAr
-                                      ? 'تمت مزامنة كافة القواعد المعيارية ($count بنداً) مع السحابة بنجاح 🚀'
-                                      : 'All $count directives synced to cloud successfully',
-                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
-                                ),
-                                backgroundColor: Colors.teal.shade700,
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('فشلت المزامنة: $e'),
-                                backgroundColor: Colors.red.shade700,
-                              ),
-                            );
-                          }
-                        } finally {
-                          if (mounted) setState(() => _isSyncing = false);
-                        }
-                      },
-                icon: _isSyncing
-                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.cloud_sync_rounded, size: 18),
-                label: Text(
-                  isAr ? 'مزامنة القواعد السحابية' : 'Sync Cloud Directives',
-                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
-                ),
-                style: OutlinedButton.styleFrom(
-                  backgroundColor: colorScheme.surface,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
+              _buildKpiCard(
+                title: strings.overallAiAccuracyScore,
+                value: '99.8%',
+                subtitle: isAr ? 'فحص بونات الكاشير' : 'POS Vision & Rules',
+                icon: Icons.verified_rounded,
+                color: const Color(0xFF00639B),
+                isWide: isWide,
               ),
             ],
-          ),
-          const SizedBox(height: 24),
-
-          // KPI Cards Grid
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isWide = constraints.maxWidth > 700;
-              return Wrap(
-                spacing: 16,
-                runSpacing: 12,
-                children: [
-                  _buildKpiCard(
-                    title: strings.totalAiDirectivesCount,
-                    value: '$totalDirectivesCount ${isAr ? 'بنداً معيارياً' : 'Directives'}',
-                    subtitle: isAr ? 'محدثة ونشطة بكافة الحملات' : 'Enforced Globally',
-                    icon: Icons.checklist_rtl_rounded,
-                    color: const Color(0xFF6750A4),
-                    isWide: isWide,
-                  ),
-                  _buildKpiCard(
-                    title: strings.activeAiModelPrimary,
-                    value: 'Gemini 3.7 Flash',
-                    subtitle: isAr ? 'النموذج القياسي الفائق' : 'Primary Tier-1 Engine',
-                    icon: Icons.bolt_rounded,
-                    color: const Color(0xFF006C50),
-                    isWide: isWide,
-                  ),
-                  _buildKpiCard(
-                    title: strings.overallAiAccuracyScore,
-                    value: '99.8%',
-                    subtitle: isAr ? 'فحص بونات الكاشير' : 'POS Vision & Rules',
-                    icon: Icons.verified_rounded,
-                    color: const Color(0xFF00639B),
-                    isWide: isWide,
-                  ),
-                ],
-              );
-            },
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -299,8 +571,9 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen> {
     required IconData icon,
     required Color color,
     required bool isWide,
+    VoidCallback? onTap,
   }) {
-    return Container(
+    final cardContent = Container(
       width: isWide ? 220 : double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
@@ -344,10 +617,12 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen> {
                 Text(
                   value,
                   style: GoogleFonts.cairo(
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.bold,
                     color: color,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   subtitle,
@@ -355,6 +630,8 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen> {
                     fontSize: 10,
                     color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -362,6 +639,19 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen> {
         ],
       ),
     );
+
+    if (onTap != null) {
+      return Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: cardContent,
+        ),
+      );
+    }
+    return cardContent;
   }
 
   Widget _buildSearchAndFilterToolbar(BuildContext context, AppStrings strings, bool isAr, ColorScheme colorScheme) {
@@ -469,206 +759,577 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen> {
     AiDirectiveModel item,
     AppStrings strings,
     bool isAr,
-    ColorScheme colorScheme,
-  ) {
+    ColorScheme colorScheme, {
+    bool isSelected = false,
+    bool isDualPane = false,
+    VoidCallback? onSelect,
+  }) {
     final catColor = item.category.color;
 
     return Card(
-      elevation: 0,
-      margin: const EdgeInsets.only(bottom: 16),
+      elevation: isSelected ? 2 : 0,
+      margin: const EdgeInsets.only(bottom: 14),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isSelected
+              ? colorScheme.primary
+              : colorScheme.outlineVariant.withValues(alpha: 0.6),
+          width: isSelected ? 2 : 1,
+        ),
       ),
-      color: colorScheme.surfaceContainerLowest,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Top Badges Row
-            Row(
-              children: [
-                // Directive ID Badge (e.g. [AIR-01])
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: catColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: catColor.withValues(alpha: 0.3)),
-                  ),
-                  child: Text(
-                    item.id,
-                    style: GoogleFonts.cairo(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: catColor,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-
-                // Category Badge
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHigh,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(item.category.icon, size: 13, color: catColor),
-                      const SizedBox(width: 5),
-                      Text(
-                        item.category.getLabel(isAr),
-                        style: GoogleFonts.cairo(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Spacer(),
-
-                // Active Status Chip
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: item.isGloballyActive
-                        ? const Color(0xFFE8F5E9)
-                        : colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: item.isGloballyActive
-                          ? const Color(0xFF2E7D32).withValues(alpha: 0.3)
-                          : colorScheme.outlineVariant,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        item.isGloballyActive ? Icons.check_circle_rounded : Icons.pause_circle_rounded,
-                        size: 13,
-                        color: item.isGloballyActive ? const Color(0xFF2E7D32) : colorScheme.onSurfaceVariant,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        item.isGloballyActive ? strings.directiveStatusActive : strings.directiveStatusInactive,
-                        style: GoogleFonts.cairo(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: item.isGloballyActive ? const Color(0xFF1B5E20) : colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Title
-            Text(
-              item.getTitle(isAr),
-              style: GoogleFonts.cairo(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 6),
-
-            // Description
-            Text(
-              item.getDescription(isAr),
-              style: GoogleFonts.cairo(
-                fontSize: 13,
-                height: 1.5,
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 14),
-
-            // Real-world POS Example Box
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: colorScheme.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      color: isSelected
+          ? colorScheme.primaryContainer.withValues(alpha: 0.3)
+          : colorScheme.surfaceContainerLowest,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          if (onSelect != null) onSelect();
+          if (!isDualPane) {
+            _showDirectiveDetailsDialog(context, item, strings, isAr, colorScheme);
+          }
+        },
+        child: Padding(
+          padding: EdgeInsets.all(isDualPane ? 14 : 18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top Badges Row
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Icon(Icons.lightbulb_rounded, size: 16, color: Colors.amber.shade700),
-                      const SizedBox(width: 6),
-                      Text(
-                        strings.directiveExampleHeader,
-                        style: GoogleFonts.cairo(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.onSurface,
-                        ),
+                  // Directive ID Badge (e.g. [AIR-01])
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                    decoration: BoxDecoration(
+                      color: catColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: catColor.withValues(alpha: 0.3)),
+                    ),
+                    child: Text(
+                      item.id,
+                      style: GoogleFonts.cairo(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: catColor,
                       ),
-                    ],
+                    ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '📥 ${isAr ? 'مدخلات البون:' : 'Input:'} ${item.exampleInput}',
-                    style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 6),
+
+                  // Category Badge (Flexible to prevent any overflow)
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(item.category.icon, size: 11, color: catColor),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              item.category.getLabel(isAr),
+                              style: GoogleFonts.cairo(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '🎁 ${isAr ? 'النتيجة والاستحقاق:' : 'Result:'} ${item.exampleOutput}',
-                    style: GoogleFonts.cairo(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: catColor,
+                  const SizedBox(width: 6),
+
+                  // Active Status Chip
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: item.isGloballyActive
+                          ? const Color(0xFFE8F5E9)
+                          : colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: item.isGloballyActive
+                            ? const Color(0xFF2E7D32).withValues(alpha: 0.3)
+                            : colorScheme.outlineVariant,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          item.isGloballyActive ? Icons.check_circle_rounded : Icons.pause_circle_rounded,
+                          size: 11,
+                          color: item.isGloballyActive ? const Color(0xFF2E7D32) : colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          item.isGloballyActive ? (isAr ? 'نشط' : 'Active') : (isAr ? 'معطل' : 'Off'),
+                          style: GoogleFonts.cairo(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.bold,
+                            color: item.isGloballyActive ? const Color(0xFF1B5E20) : colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 14),
+              const SizedBox(height: 10),
 
-            // Footer info & action buttons
-            Row(
-              children: [
-                Icon(Icons.code_rounded, size: 14, color: colorScheme.onSurfaceVariant),
-                const SizedBox(width: 5),
-                Text(
-                  item.code,
-                  style: GoogleFonts.firaCode(
-                    fontSize: 11,
-                    color: colorScheme.onSurfaceVariant,
+              // Title
+              Text(
+                item.getTitle(isAr),
+                style: GoogleFonts.cairo(
+                  fontSize: isDualPane ? 13.5 : 15,
+                  fontWeight: isSelected ? FontWeight.w900 : FontWeight.w700,
+                  color: isSelected ? colorScheme.primary : colorScheme.onSurface,
+                ),
+                maxLines: isDualPane ? 2 : 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+
+              // Description
+              Text(
+                item.getDescription(isAr),
+                style: GoogleFonts.cairo(
+                  fontSize: 11.5,
+                  height: 1.4,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+                maxLines: isDualPane ? 2 : 4,
+                overflow: TextOverflow.ellipsis,
+              ),
+
+              if (!isDualPane) ...[
+                const SizedBox(height: 12),
+                // Real-world POS Example Box
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.lightbulb_rounded, size: 15, color: Colors.amber.shade700),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              strings.directiveExampleHeader,
+                              style: GoogleFonts.cairo(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.onSurface,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '📥 ${isAr ? 'مدخلات البون:' : 'Input:'} ${item.exampleInput}',
+                        style: GoogleFonts.cairo(fontSize: 11.5, color: colorScheme.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '🎁 ${isAr ? 'النتيجة والاستحقاق:' : 'Result:'} ${item.exampleOutput}',
+                        style: GoogleFonts.cairo(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: catColor,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const Spacer(),
-                TextButton.icon(
-                  onPressed: () => _showDirectiveDetailsDialog(context, item, strings, isAr, colorScheme),
-                  icon: const Icon(Icons.menu_book_rounded, size: 16),
-                  label: Text(
-                    isAr ? 'عرض المنطق البرمجي' : 'View Full Logic',
-                    style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+              ],
+
+              const SizedBox(height: 10),
+
+              // Footer info & action buttons
+              Row(
+                children: [
+                  Icon(Icons.code_rounded, size: 13, color: colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      item.code,
+                      style: GoogleFonts.firaCode(
+                        fontSize: 10,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 6),
-                IconButton(
-                  tooltip: isAr ? 'تعديل البند' : 'Edit Directive',
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                  onPressed: () => _showAddEditDirectiveDialog(context, strings, isAr, item),
+                  if (!isDualPane) ...[
+                    TextButton.icon(
+                      onPressed: () => _showDirectiveDetailsDialog(context, item, strings, isAr, colorScheme),
+                      icon: const Icon(Icons.menu_book_rounded, size: 15),
+                      label: Text(
+                        isAr ? 'عرض المنطق' : 'View Logic',
+                        style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: isAr ? 'تعديل البند' : 'Edit Directive',
+                      icon: const Icon(Icons.edit_outlined, size: 17),
+                      onPressed: () => _showAddEditDirectiveDialog(context, strings, isAr, item),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Dedicated Directive Detail Pane Builder (M3 ListDetailLayout Inspector)
+  // ---------------------------------------------------------------------------
+  Widget _buildDirectiveDetailPane({
+    required BuildContext context,
+    required AiDirectiveModel item,
+    required AppStrings strings,
+    required bool isAr,
+    required ColorScheme colorScheme,
+  }) {
+    final catColor = item.category.color;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Card
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+              boxShadow: [
+                BoxShadow(
+                  color: colorScheme.shadow.withValues(alpha: 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: catColor.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(item.category.icon, color: catColor, size: 28),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: catColor.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: catColor.withValues(alpha: 0.3)),
+                                ),
+                                child: Text(
+                                  item.id,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: catColor,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.surfaceContainerHigh,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  item.category.getLabel(isAr),
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: item.isGloballyActive
+                                      ? const Color(0xFFE8F5E9)
+                                      : colorScheme.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: item.isGloballyActive
+                                        ? const Color(0xFF2E7D32).withValues(alpha: 0.3)
+                                        : colorScheme.outlineVariant,
+                                  ),
+                                ),
+                                child: Text(
+                                  item.isGloballyActive
+                                      ? (isAr ? 'نشط ومعتمد سحابياً' : 'Active & Enforced')
+                                      : (isAr ? 'معطل مؤقتاً' : 'Inactive'),
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: item.isGloballyActive
+                                        ? const Color(0xFF2E7D32)
+                                        : colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            item.getTitle(isAr),
+                            style: GoogleFonts.cairo(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            item.code,
+                            style: GoogleFonts.firaCode(
+                              fontSize: 12,
+                              color: colorScheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  item.getDescription(isAr),
+                  style: GoogleFonts.cairo(
+                    fontSize: 13,
+                    height: 1.5,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 18),
+
+          // Logic Card
+          Text(
+            strings.directiveLogicHeader,
+            style: GoogleFonts.cairo(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              color: colorScheme.primary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+            ),
+            child: Text(
+              item.getLogic(isAr),
+              style: GoogleFonts.cairo(
+                fontSize: 13,
+                height: 1.7,
+                color: colorScheme.onSurface,
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 18),
+
+          // Example Input / Output
+          Text(
+            strings.directiveExampleHeader,
+            style: GoogleFonts.cairo(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              color: Colors.amber.shade800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('📥 ', style: TextStyle(fontSize: 16)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isAr ? 'بيانات البون المدخلة / POS Input:' : 'POS Input:',
+                            style: GoogleFonts.cairo(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            item.exampleInput,
+                            style: GoogleFonts.cairo(fontSize: 12.5, color: colorScheme.onSurface),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Divider(height: 1),
+                ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('🎁 ', style: TextStyle(fontSize: 16)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isAr ? 'القرار الذكي الناتج / AI Evaluation Output:' : 'AI Evaluation Output:',
+                            style: GoogleFonts.cairo(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.bold,
+                              color: item.category.color,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            item.exampleOutput,
+                            style: GoogleFonts.cairo(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: item.category.color,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          if (item.tags.isNotEmpty) ...[
+            const SizedBox(height: 18),
+            Text(
+              isAr ? 'الوسوم البرمجية للنظام' : 'System Tags',
+              style: GoogleFonts.cairo(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: item.tags.map((tag) {
+                return Chip(
+                  label: Text('#$tag', style: GoogleFonts.cairo(fontSize: 11)),
+                  backgroundColor: colorScheme.surfaceContainerHigh,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                );
+              }).toList(),
+            ),
           ],
-        ),
+
+          const SizedBox(height: 24),
+
+          // Action Toolbar
+          Wrap(
+            spacing: 12,
+            runSpacing: 10,
+            children: [
+              FilledButton.icon(
+                onPressed: () {
+                  _tabController.animateTo(1);
+                },
+                icon: const Icon(Icons.science_rounded, size: 18),
+                label: Text(
+                  isAr ? 'تجربة في استوديو الذكاء الاصطناعي' : 'Test in Co-Pilot Studio',
+                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _showAddEditDirectiveDialog(context, strings, isAr, item),
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                label: Text(
+                  isAr ? 'تعديل البند' : 'Edit Directive',
+                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

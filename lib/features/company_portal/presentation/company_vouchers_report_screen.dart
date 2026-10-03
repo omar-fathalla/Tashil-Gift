@@ -14,6 +14,8 @@ import '../../../core/utils/slug_utils.dart';
 import '../../admin/domain/retail_chain_model.dart';
 import '../../admin/domain/company_gift_model.dart';
 import '../../admin/domain/event_model.dart';
+import '../../../core/widgets/m3_adaptive_scaffold.dart';
+import '../../../core/widgets/m3_button_groups.dart';
 
 /// Data structure representing a single voucher denomination (e.g. 25 EGP, 50 EGP)
 class VoucherDenominationStats {
@@ -121,6 +123,8 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
   String? _selectedEventId;
   String? _selectedBranch;
   double? _selectedVoucherDenomFilter;
+  int _distributionViewMode = 0; // 0 = M3 List-Detail Inspector, 1 = Matrix Table
+  String? _inspectedBranchName;
   final TextEditingController _branchSearchController = TextEditingController();
 
   // Golden Standard: Static Persistent In-Memory Caches for 0ms instant render across tab switches
@@ -735,11 +739,30 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 1. Executive Top Header & Controls Card
-            _buildHeaderControlsCard(
+            // 1. Executive Top Header Title (Clean, Title only, No Subtitle)
+            _buildHeaderTitle(
+              colorScheme: colorScheme,
+              strings: strings,
+              isAr: isAr,
+              branchCount: distinctBranches.length,
+            ),
+            const SizedBox(height: 14),
+
+            // 2. Hero KPI Grid (2x2 on Mobile & Tablet, 4-across on Desktop, Pure Theme Colors)
+            _buildVoucherKpiGrid(
+              colorScheme: colorScheme,
+              strings: strings,
+              isAr: isAr,
+              isHi: isHi,
+              isMobile: isMobile,
+              voucherMetrics: voucherMetrics,
+            ),
+            const SizedBox(height: 14),
+
+            // 3. Dropdowns (Campaign & Branch) + Connected Action Buttons Group ("كشف الفروع" | "إكسل")
+            _buildDropdownFiltersCard(
               context: context,
               colorScheme: colorScheme,
-              textTheme: textTheme,
               strings: strings,
               isAr: isAr,
               isHi: isHi,
@@ -749,11 +772,11 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
               voucherMetrics: voucherMetrics,
               txDocs: txDocs,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
-            // 2. Denominations Tabs Selector (كافة الفئات، فئة 25، فئة 50...)
+            // 4. Denominations Button Group (كافة الفئات، فئة 25، فئة 50...)
             if (voucherMetrics.denominations.isNotEmpty) ...[
-              _buildDenominationTabs(
+              _buildDenominationButtonGroup(
                 colorScheme: colorScheme,
                 strings: strings,
                 isAr: isAr,
@@ -762,19 +785,7 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
               const SizedBox(height: 16),
             ],
 
-            // 3. Hero KPI Grid (4 Dedicated Cards: Units, Budget, Disbursed Value, Remaining Balance)
-            _buildVoucherKpiGrid(
-              colorScheme: colorScheme,
-              strings: strings,
-              isAr: isAr,
-              isHi: isHi,
-              isMobile: isMobile,
-              voucherMetrics: voucherMetrics,
-            ),
-
-            const SizedBox(height: 20),
-
-            // 4. On-page Branch Allocation Matrix Table & Breakdown
+            // 5. On-page Branch Allocation Matrix Table & Breakdown
             _buildBranchDistributionMatrixCard(
               colorScheme: colorScheme,
               strings: strings,
@@ -804,12 +815,83 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
   }
 
   // ---------------------------------------------------------------------------
-  // 1. Executive Top Header & Controls Card
+  // 1. Executive Top Header Title (Clean, Title only, No Subtitle)
   // ---------------------------------------------------------------------------
-  Widget _buildHeaderControlsCard({
+  Widget _buildHeaderTitle({
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+    required int branchCount,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: colorScheme.primaryContainer,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: colorScheme.primary.withValues(alpha: 0.2)),
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.primary.withValues(alpha: 0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Center(
+            child: Icon(
+              Icons.confirmation_number_rounded,
+              color: colorScheme.primary,
+              size: 22,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Row(
+            children: [
+              Flexible(
+                child: Text(
+                  strings.voucherIntelligenceTitle,
+                  style: GoogleFonts.cairo(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: colorScheme.onSurface,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer.withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '$branchCount ${isAr ? 'فرع معتمد' : 'Branches'}',
+                  style: GoogleFonts.cairo(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 2. Dropdown Filters (Campaign & Branch) & Connected Action Buttons Group
+  // ---------------------------------------------------------------------------
+  Widget _buildDropdownFiltersCard({
     required BuildContext context,
     required ColorScheme colorScheme,
-    required TextTheme textTheme,
     required AppStrings strings,
     required bool isAr,
     required bool isHi,
@@ -896,160 +978,30 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
       ),
     );
 
-    final viewMatrixBtn = FilledButton.tonalIcon(
-      onPressed: () => _showBranchVoucherMatrixDialog(
-        context: context,
-        colorScheme: colorScheme,
-        strings: strings,
-        isAr: isAr,
-        isHi: isHi,
-        isMobile: isMobile,
-        voucherMetrics: voucherMetrics,
-        distinctBranches: distinctBranches,
-      ),
-      icon: const Icon(Icons.table_chart_rounded, size: 16),
-      label: Text(
-        strings.viewBranchVoucherMatrix,
-        style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
-      ),
-      style: FilledButton.styleFrom(
-        backgroundColor: const Color(0xFFD97706).withValues(alpha: 0.12),
-        foregroundColor: const Color(0xFFB45309),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-
-    final exportExcelBtn = FilledButton.icon(
-      onPressed: () => _exportVouchersExcel(
-        context: context,
-        voucherMetrics: voucherMetrics,
-        distinctBranches: distinctBranches,
-        txDocs: txDocs,
-        isAr: isAr,
-      ),
-      icon: const Icon(Icons.file_download_rounded, size: 16),
-      label: Text(
-        isAr ? 'تصدير Excel' : 'Export Excel',
-        style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
-      ),
-      style: FilledButton.styleFrom(
-        backgroundColor: const Color(0xFF006C50),
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-
     return Container(
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: const Color(0xFFD97706).withValues(alpha: 0.35),
-          width: 1.2,
+          color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+          width: 1.0,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFD97706).withValues(alpha: 0.05),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
+            color: colorScheme.shadow.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
-      padding: EdgeInsets.all(isMobile ? 12 : 18),
+      padding: EdgeInsets.all(isMobile ? 12 : 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD97706).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Icon(
-                  Icons.confirmation_number_rounded,
-                  color: Color(0xFFD97706),
-                  size: 26,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 8,
-                      runSpacing: 4,
-                      children: [
-                        Text(
-                          strings.voucherIntelligenceTitle,
-                          style: GoogleFonts.cairo(
-                            fontSize: isMobile ? 15 : 18,
-                            fontWeight: FontWeight.w900,
-                            color: colorScheme.onSurface,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFD97706).withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            '${distinctBranches.length} ${isAr ? 'فرع معتمد' : 'Branches'}',
-                            style: GoogleFonts.cairo(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFFB45309),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      strings.voucherIntelligenceSubtitle,
-                      style: GoogleFonts.cairo(
-                        fontSize: isMobile ? 11 : 12.5,
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              if (!isMobile) ...[
-                const SizedBox(width: 12),
-                viewMatrixBtn,
-                const SizedBox(width: 8),
-                exportExcelBtn,
-              ],
-            ],
-          ),
-
-          const SizedBox(height: 12),
-          const Divider(height: 1),
-          const SizedBox(height: 12),
-
-          // Filters Row: Campaign Picker + Branch Picker + Mobile Action Buttons
           if (isMobile) ...[
             campaignDropdown,
             const SizedBox(height: 8),
             branchDropdown,
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(child: viewMatrixBtn),
-                const SizedBox(width: 8),
-                Expanded(child: exportExcelBtn),
-              ],
-            ),
           ] else ...[
             Row(
               children: [
@@ -1059,188 +1011,178 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
               ],
             ),
           ],
+          const SizedBox(height: 10),
+          _buildActionButtonsGroup(
+            context: context,
+            colorScheme: colorScheme,
+            strings: strings,
+            isAr: isAr,
+            isHi: isHi,
+            isMobile: isMobile,
+            voucherMetrics: voucherMetrics,
+            distinctBranches: distinctBranches,
+            txDocs: txDocs,
+          ),
         ],
       ),
     );
   }
 
+  Widget _buildActionButtonsGroup({
+    required BuildContext context,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+    required bool isHi,
+    required bool isMobile,
+    required AggregatedVoucherMetrics voucherMetrics,
+    required List<String> distinctBranches,
+    required List<QueryDocumentSnapshot> txDocs,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: IntrinsicHeight(
+          child: Row(
+            children: [
+              // 1. "كشف الفروع"
+              Expanded(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => _showBranchVoucherMatrixDialog(
+                      context: context,
+                      colorScheme: colorScheme,
+                      strings: strings,
+                      isAr: isAr,
+                      isHi: isHi,
+                      isMobile: isMobile,
+                      voucherMetrics: voucherMetrics,
+                      distinctBranches: distinctBranches,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.storefront_rounded, size: 18, color: colorScheme.primary),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              isAr ? 'كشف الفروع' : (isHi ? 'शाखा सूची' : 'Branches Matrix'),
+                              style: GoogleFonts.cairo(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12.5,
+                                color: colorScheme.onSurface,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              VerticalDivider(
+                width: 1,
+                thickness: 1,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+              ),
+              // 2. "إكسل"
+              Expanded(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => _exportVouchersExcel(
+                      context: context,
+                      voucherMetrics: voucherMetrics,
+                      distinctBranches: distinctBranches,
+                      txDocs: txDocs,
+                      isAr: isAr,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.table_chart_rounded, size: 18, color: colorScheme.primary),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              isAr ? 'إكسل' : 'Excel',
+                              style: GoogleFonts.cairo(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12.5,
+                                color: colorScheme.onSurface,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   // ---------------------------------------------------------------------------
-  // 2. Denominations Tabs Selector
+  // 3. Denominations Button Group (M3 Connected Button Group with Pure Theme Colors)
   // ---------------------------------------------------------------------------
-  Widget _buildDenominationTabs({
+  Widget _buildDenominationButtonGroup({
     required ColorScheme colorScheme,
     required AppStrings strings,
     required bool isAr,
     required AggregatedVoucherMetrics voucherMetrics,
   }) {
     final allCount = voucherMetrics.totalUnitsAllocated;
-    final isAllSelected = _selectedVoucherDenomFilter == null;
+    final double selectedVal = _selectedVoucherDenomFilter ?? -1.0;
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          // All Denominations Tab
-          InkWell(
-            onTap: () {
-              setState(() {
-                _selectedVoucherDenomFilter = null;
-              });
-            },
-            borderRadius: BorderRadius.circular(12),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: isAllSelected
-                    ? const Color(0xFFD97706)
-                    : const Color(0xFFD97706).withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: isAllSelected
-                      ? const Color(0xFFD97706)
-                      : const Color(0xFFD97706).withValues(alpha: 0.3),
-                  width: isAllSelected ? 1.5 : 1.0,
-                ),
-                boxShadow: isAllSelected
-                    ? [
-                        BoxShadow(
-                          color: const Color(0xFFD97706).withValues(alpha: 0.25),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.all_inclusive_rounded,
-                    size: 15,
-                    color: isAllSelected ? Colors.white : const Color(0xFFB45309),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    isAr ? 'كافة الفئات (إجمالي عام)' : 'All Denominations',
-                    style: GoogleFonts.cairo(
-                      fontSize: 12,
-                      fontWeight: isAllSelected ? FontWeight.w900 : FontWeight.bold,
-                      color: isAllSelected ? Colors.white : const Color(0xFFB45309),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: isAllSelected
-                          ? Colors.white.withValues(alpha: 0.25)
-                          : const Color(0xFFD97706).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      _formatCount(allCount),
-                      style: GoogleFonts.cairo(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: isAllSelected ? Colors.white : const Color(0xFFB45309),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-
-          // Individual Denomination Tabs
-          for (final denom in voucherMetrics.denominations) ...[
-            Builder(
-              builder: (context) {
-                final isSelected = _selectedVoucherDenomFilter == denom.denomination;
-                final count = denom.allocatedCount > 0 ? denom.allocatedCount : denom.masterTotalCount;
-
-                return InkWell(
-                  onTap: () {
-                    setState(() {
-                      _selectedVoucherDenomFilter = isSelected ? null : denom.denomination;
-                    });
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? const Color(0xFFD97706)
-                          : const Color(0xFFD97706).withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isSelected
-                            ? const Color(0xFFD97706)
-                            : const Color(0xFFD97706).withValues(alpha: 0.3),
-                        width: isSelected ? 1.5 : 1.0,
-                      ),
-                      boxShadow: isSelected
-                          ? [
-                              BoxShadow(
-                                color: const Color(0xFFD97706).withValues(alpha: 0.25),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              ),
-                            ]
-                          : null,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.confirmation_number_rounded,
-                          size: 15,
-                          color: isSelected ? Colors.white : const Color(0xFFB45309),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'فئة ${denom.label}',
-                          style: GoogleFonts.cairo(
-                            fontSize: 12,
-                            fontWeight: isSelected ? FontWeight.w900 : FontWeight.bold,
-                            color: isSelected ? Colors.white : const Color(0xFFB45309),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? Colors.white.withValues(alpha: 0.25)
-                                : const Color(0xFFD97706).withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            _formatCount(count),
-                            style: GoogleFonts.cairo(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: isSelected ? Colors.white : const Color(0xFFB45309),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(width: 8),
-          ],
-        ],
+    final segments = <M3ButtonSegment<double>>[
+      M3ButtonSegment<double>(
+        value: -1.0,
+        icon: Icons.all_inclusive_rounded,
+        label: isAr ? 'كافة الفئات (إجمالي عام)' : 'All Denominations',
+        badgeText: _formatCount(allCount),
       ),
+      ...voucherMetrics.denominations.map((denom) {
+        final count = denom.allocatedCount > 0 ? denom.allocatedCount : denom.masterTotalCount;
+        return M3ButtonSegment<double>(
+          value: denom.denomination,
+          icon: Icons.confirmation_number_rounded,
+          label: 'فئة ${denom.label}',
+          badgeText: _formatCount(count),
+        );
+      }),
+    ];
+
+    return M3ConnectedButtonGroup<double>(
+      segments: segments,
+      selectedValue: selectedVal,
+      onSelected: (val) {
+        setState(() {
+          _selectedVoucherDenomFilter = (val == -1.0 || val == _selectedVoucherDenomFilter) ? null : val;
+        });
+      },
+      showCheckmark: false,
+      height: 40,
+      borderRadius: 12,
     );
   }
 
   // ---------------------------------------------------------------------------
-  // 3. Hero KPI Grid (1 Column on Mobile, 2 on Tablet, 4 on Desktop)
+  // 4. Hero KPI Grid (2x2 on Mobile & Tablet, 4 on Desktop, Pure Theme Colors)
   // ---------------------------------------------------------------------------
   Widget _buildVoucherKpiGrid({
     required ColorScheme colorScheme,
@@ -1287,26 +1229,18 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
     return LayoutBuilder(
       builder: (context, constraints) {
         final double width = constraints.maxWidth;
+        final bool isDesktop = width >= 840;
         final bool isMobileWidth = width < 600;
 
-        int crossAxisCount = 4;
-        double childAspectRatio = 1.65;
-        if (width < 600) {
-          crossAxisCount = 1;
-          childAspectRatio = 2.35;
-        } else if (width < 960) {
-          crossAxisCount = 2;
-          childAspectRatio = 1.85;
-        } else if (width < 1200) {
-          crossAxisCount = 2;
-          childAspectRatio = 2.1;
-        }
+        // 2x2 grid on mobile & tablet, 4 in a row on desktop
+        final int crossAxisCount = isDesktop ? 4 : 2;
+        final double childAspectRatio = isDesktop ? 1.85 : (isMobileWidth ? 1.30 : 1.75);
 
         final cards = [
           _buildStatCard(
             colorScheme: colorScheme,
             icon: Icons.confirmation_number_rounded,
-            iconColor: const Color(0xFFD97706),
+            iconColor: colorScheme.primary,
             title: isAr ? 'إجمالي قسائم المشتريات' : strings.totalVouchersAllocated,
             value: _formatCount(totalAllocated),
             badgeText: selectedDenom != null
@@ -1316,59 +1250,48 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                     : (voucherMetrics.denominations.isNotEmpty
                         ? 'فئة ${voucherMetrics.denominations.first.label}'
                         : (isAr ? 'قسائم مشتريات' : 'Vouchers'))),
-            badgeColor: const Color(0xFFD97706).withValues(alpha: 0.12),
-            badgeTextColor: const Color(0xFFB45309),
+            badgeTextColor: colorScheme.primary,
             subtitle: denomsText,
             tooltip: isAr ? 'إجمالي عدد قسائم وفواتشرات المشتريات المعتمدة للحملة' : 'Total purchase vouchers allocated',
-            isMobile: isMobileWidth,
+            isMobile: !isDesktop,
           ),
           _buildStatCard(
             colorScheme: colorScheme,
             icon: Icons.account_balance_wallet_rounded,
-            iconColor: const Color(0xFF006C50),
+            iconColor: colorScheme.secondary,
             title: isAr ? 'الميزانية المرصودة الإجمالية' : strings.totalVouchersBudget,
             value: _formatMoney(totalBudget, isAr: isAr),
             badgeText: isAr ? 'الميزانية المعتمدة' : 'Allocated Budget',
-            badgeColor: const Color(0xFF006C50).withValues(alpha: 0.12),
-            badgeTextColor: const Color(0xFF006C50),
+            badgeTextColor: colorScheme.secondary,
             subtitle: isAr ? 'التكلفة الإجمالية لكافة القسائم المعتمدة' : 'Total voucher financial backing',
             tooltip: isAr ? 'القيمة المالية الإجمالية لقسائم الشراء المعتمدة' : 'Total allocated voucher budget',
-            isMobile: isMobileWidth,
+            isMobile: !isDesktop,
           ),
           _buildStatCard(
             colorScheme: colorScheme,
             icon: Icons.shopping_bag_rounded,
-            iconColor: const Color(0xFF00639B),
+            iconColor: colorScheme.tertiary,
             title: isAr ? 'قيمة القسائم المصروفة' : strings.claimedVouchersValue,
             value: _formatMoney(totalClaimedVal, isAr: isAr),
             badgeText: '${(depletionRate * 100).toStringAsFixed(0)}% ${strings.depletionRateLabel}',
-            badgeColor: const Color(0xFF00639B).withValues(alpha: 0.12),
-            badgeTextColor: const Color(0xFF00639B),
+            badgeTextColor: colorScheme.tertiary,
             subtitle: '${_formatCount(totalClaimedCount)} ${isAr ? 'قسيمة تم تسليمها للفائزين' : 'claimed vouchers'}',
             tooltip: isAr ? 'القيمة المالية الإجمالية للقسائم المسلمة للمستهلكين' : 'Total disbursed voucher monetary value',
-            isMobile: isMobileWidth,
+            isMobile: !isDesktop,
           ),
           _buildStatCard(
             colorScheme: colorScheme,
             icon: Icons.savings_rounded,
-            iconColor: totalRemainingCount <= 0
-                ? const Color(0xFFB3261E)
-                : (totalRemainingCount < 50 ? const Color(0xFFD97706) : const Color(0xFF006874)),
+            iconColor: totalRemainingCount <= 0 ? colorScheme.error : colorScheme.primary,
             title: isAr ? 'الرصيد المالي المتبقي' : strings.remainingVouchersValue,
             value: _formatMoney(totalRemainingVal, isAr: isAr),
             badgeText: totalRemainingCount <= 0
                 ? strings.stockDepletedBadge
                 : (totalRemainingCount < 50 ? strings.stockLowBadge : strings.stockHealthyBadge),
-            badgeColor: (totalRemainingCount <= 0
-                    ? const Color(0xFFB3261E)
-                    : (totalRemainingCount < 50 ? const Color(0xFFD97706) : const Color(0xFF006874)))
-                .withValues(alpha: 0.12),
-            badgeTextColor: totalRemainingCount <= 0
-                ? const Color(0xFFB3261E)
-                : (totalRemainingCount < 50 ? const Color(0xFFD97706) : const Color(0xFF006874)),
+            badgeTextColor: totalRemainingCount <= 0 ? colorScheme.error : colorScheme.primary,
             subtitle: '${_formatCount(totalRemainingCount)} ${isAr ? 'قسيمة جاهزة ومتاحة للصرف' : 'ready for redemption'}',
             tooltip: isAr ? 'القيمة المالية المتبقية من قسائم الشراء المتاحة للصرف' : 'Remaining voucher financial budget in stock',
-            isMobile: isMobileWidth,
+            isMobile: !isDesktop,
           ),
         ];
 
@@ -1376,8 +1299,8 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
           crossAxisCount: crossAxisCount,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: isMobileWidth ? 12 : 14,
-          crossAxisSpacing: isMobileWidth ? 12 : 14,
+          mainAxisSpacing: isMobileWidth ? 10 : 12,
+          crossAxisSpacing: isMobileWidth ? 10 : 12,
           childAspectRatio: childAspectRatio,
           children: cards,
         );
@@ -1392,7 +1315,6 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
     required String title,
     required String value,
     required String badgeText,
-    required Color badgeColor,
     required Color badgeTextColor,
     required String subtitle,
     required String tooltip,
@@ -1402,9 +1324,12 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
       message: tooltip,
       waitDuration: const Duration(milliseconds: 300),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 10 : 14,
+          vertical: isMobile ? 10 : 12,
+        ),
         decoration: BoxDecoration(
-          color: colorScheme.surfaceContainerLow,
+          color: colorScheme.surface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
           boxShadow: [
@@ -1423,40 +1348,43 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(7),
+                  padding: EdgeInsets.all(isMobile ? 6 : 7),
                   decoration: BoxDecoration(
                     color: iconColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(icon, size: 18, color: iconColor),
+                  child: Icon(icon, size: isMobile ? 16 : 18, color: iconColor),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    badgeText,
-                    style: GoogleFonts.cairo(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: badgeTextColor,
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    child: Text(
+                      badgeText,
+                      style: GoogleFonts.cairo(
+                        fontSize: isMobile ? 9 : 10,
+                        fontWeight: FontWeight.bold,
+                        color: badgeTextColor,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 3),
             FittedBox(
               fit: BoxFit.scaleDown,
               alignment: AlignmentDirectional.centerStart,
               child: Text(
                 value,
                 style: GoogleFonts.cairo(
-                  fontSize: 18,
+                  fontSize: isMobile ? 16 : 18,
                   fontWeight: FontWeight.w900,
                   color: colorScheme.onSurface,
                   letterSpacing: -0.3,
@@ -1468,7 +1396,7 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
             Text(
               title,
               style: GoogleFonts.cairo(
-                fontSize: 12,
+                fontSize: isMobile ? 11 : 12,
                 fontWeight: FontWeight.bold,
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -1478,7 +1406,7 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
             Text(
               subtitle,
               style: GoogleFonts.cairo(
-                fontSize: 9.5,
+                fontSize: isMobile ? 9 : 9.5,
                 color: colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
               ),
               maxLines: 1,
@@ -1523,15 +1451,16 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header row with Icon, Title & Subtitle
           Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFD97706).withValues(alpha: 0.12),
+                  color: colorScheme.primary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.table_chart_rounded, size: 20, color: Color(0xFFD97706)),
+                child: Icon(Icons.table_chart_rounded, size: 20, color: colorScheme.primary),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -1558,7 +1487,41 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          // Actions row: Mode switcher (M3ConnectedButtonGroup) & Expand button ("عرض مكبر")
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            alignment: WrapAlignment.spaceBetween,
+            children: [
+              M3ConnectedButtonGroup<int>(
+                height: 38,
+                borderRadius: 12,
+                selectedValue: _distributionViewMode,
+                onSelected: (val) {
+                  setState(() {
+                    _distributionViewMode = val;
+                  });
+                },
+                showCheckmark: false,
+                segments: [
+                  M3ButtonSegment<int>(
+                    value: 0,
+                    icon: Icons.splitscreen_rounded,
+                    label: isAr ? 'مفتش الفروع' : (isHi ? 'शाखा निरीक्षक' : 'Inspector'),
+                  ),
+                  M3ButtonSegment<int>(
+                    value: 1,
+                    icon: Icons.table_chart_rounded,
+                    label: isAr ? 'المصفوفة' : (isHi ? 'मैट्रिक्स' : 'Matrix'),
+                  ),
+                ],
+              ),
               FilledButton.tonalIcon(
                 onPressed: () => _showBranchVoucherMatrixDialog(
                   context: context,
@@ -1572,12 +1535,14 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                 ),
                 icon: const Icon(Icons.fullscreen_rounded, size: 16),
                 label: Text(
-                  isAr ? 'عرض مكبر' : 'Expand',
+                  isAr ? 'عرض مكبر' : (isHi ? 'विस्तृत दृश्य' : 'Expand'),
                   style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
                 ),
                 style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  backgroundColor: colorScheme.secondaryContainer.withValues(alpha: 0.7),
+                  foregroundColor: colorScheme.onSecondaryContainer,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
             ],
@@ -1585,16 +1550,636 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
 
           const SizedBox(height: 16),
 
-          // Responsive Full-Width Matrix Table
-          _buildResponsiveVoucherMatrixTable(
-            colorScheme: colorScheme,
-            strings: strings,
-            isAr: isAr,
-            isHi: isHi,
-            isMobile: isMobile,
-            voucherMetrics: voucherMetrics,
-            sortedBranches: sortedBranches,
-            denoms: denoms,
+          // Either M3 List-Detail Inspector or Responsive Full-Width Matrix Table
+          if (_distributionViewMode == 0)
+            _buildBranchListDetailInspector(
+              colorScheme: colorScheme,
+              strings: strings,
+              isAr: isAr,
+              isHi: isHi,
+              isMobile: isMobile,
+              voucherMetrics: voucherMetrics,
+              sortedBranches: sortedBranches,
+            )
+          else
+            _buildResponsiveVoucherMatrixTable(
+              colorScheme: colorScheme,
+              strings: strings,
+              isAr: isAr,
+              isHi: isHi,
+              isMobile: isMobile,
+              voucherMetrics: voucherMetrics,
+              sortedBranches: sortedBranches,
+              denoms: denoms,
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // M3 List-Detail Branch Inspector (قائمة الفروع + لوحة التفاصيل العميقة)
+  // ---------------------------------------------------------------------------
+  Widget _buildBranchListDetailInspector({
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+    required bool isHi,
+    required bool isMobile,
+    required AggregatedVoucherMetrics voucherMetrics,
+    required List<String> sortedBranches,
+  }) {
+    if (sortedBranches.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Text(
+            isAr ? 'لا توجد فروع مسجلة لعرض التفاصيل' : (isHi ? 'विवरण प्रदर्शित करने के लिए कोई शाखा उपलब्ध नहीं है' : 'No branches available to display'),
+            style: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant),
+          ),
+        ),
+      );
+    }
+
+    final query = _branchSearchController.text.trim().toLowerCase();
+    final filteredBranches = query.isEmpty
+        ? sortedBranches
+        : sortedBranches.where((b) => b.toLowerCase().contains(query)).toList();
+
+    // Default inspected branch to the first one or maintain selection if valid
+    final currentInspectedBranch = (_inspectedBranchName != null && sortedBranches.contains(_inspectedBranchName))
+        ? _inspectedBranchName!
+        : sortedBranches.first;
+
+    // List Pane
+    final listPane = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Search bar
+        Container(
+          height: 38,
+          margin: const EdgeInsets.only(bottom: 12),
+          child: TextField(
+            controller: _branchSearchController,
+            onChanged: (_) => setState(() {}),
+            style: GoogleFonts.cairo(fontSize: 12),
+            decoration: InputDecoration(
+              hintText: isAr ? 'بحث عن فرع...' : (isHi ? 'शाखा खोजें...' : 'Search branch...'),
+              hintStyle: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant),
+              prefixIcon: const Icon(Icons.search_rounded, size: 18),
+              suffixIcon: _branchSearchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear_rounded, size: 16),
+                      onPressed: () {
+                        _branchSearchController.clear();
+                        setState(() {});
+                      },
+                    )
+                  : null,
+              contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 10),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
+              ),
+            ),
+          ),
+        ),
+
+        if (filteredBranches.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Text(
+                isAr ? 'لا توجد فروع مطابقة للبحث' : 'No matching branches',
+                style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
+              ),
+            ),
+          )
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: filteredBranches.length,
+            separatorBuilder: (context, index) => Divider(
+              height: 1,
+              color: colorScheme.outlineVariant.withValues(alpha: 0.25),
+            ),
+            itemBuilder: (context, index) {
+              final branch = filteredBranches[index];
+              final isSelected = branch == currentInspectedBranch;
+              final totalUnits = voucherMetrics.branchTotalVoucherUnits[branch] ?? 0;
+              final claimedUnits = voucherMetrics.branchClaimedVoucherUnits[branch] ?? 0;
+              final remainingUnits = voucherMetrics.branchRemainingVoucherUnits[branch] ?? 0;
+              final totalBudget = voucherMetrics.branchTotalVoucherBudget[branch] ?? 0.0;
+              final branchRate = totalUnits > 0 ? (claimedUnits / totalUnits).clamp(0.0, 1.0) : 0.0;
+
+              return Material(
+                color: isSelected
+                    ? colorScheme.primaryContainer.withValues(alpha: 0.35)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () {
+                    setState(() {
+                      _inspectedBranchName = branch;
+                    });
+                    if (isMobile) {
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: colorScheme.surface,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                        ),
+                        builder: (ctx) => DraggableScrollableSheet(
+                          initialChildSize: 0.75,
+                          minChildSize: 0.45,
+                          maxChildSize: 0.95,
+                          expand: false,
+                          builder: (sheetCtx, scrollController) => SingleChildScrollView(
+                            controller: scrollController,
+                            padding: const EdgeInsets.all(20),
+                            child: _buildBranchDetailPaneContent(
+                              branch: branch,
+                              colorScheme: colorScheme,
+                              strings: strings,
+                              isAr: isAr,
+                              isHi: isHi,
+                              voucherMetrics: voucherMetrics,
+                              isBottomSheet: true,
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? colorScheme.primary
+                                : colorScheme.surfaceContainerHighest,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.storefront_rounded,
+                            size: 16,
+                            color: isSelected
+                                ? colorScheme.onPrimary
+                                : colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                branch,
+                                style: GoogleFonts.cairo(
+                                  fontSize: 12,
+                                  fontWeight: isSelected ? FontWeight.w900 : FontWeight.w700,
+                                  color: isSelected ? colorScheme.primary : colorScheme.onSurface,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                '${_formatMoney(totalBudget, isAr: isAr)} • $totalUnits قسيمة',
+                                style: GoogleFonts.cairo(
+                                  fontSize: 10.5,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: branchRate >= 0.8
+                                    ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                                    : (branchRate >= 0.4
+                                        ? const Color(0xFFF59E0B).withValues(alpha: 0.15)
+                                        : colorScheme.outlineVariant.withValues(alpha: 0.3)),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                '${(branchRate * 100).toStringAsFixed(0)}%',
+                                style: GoogleFonts.cairo(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: branchRate >= 0.8
+                                      ? const Color(0xFF047857)
+                                      : (branchRate >= 0.4
+                                          ? const Color(0xFFB45309)
+                                          : colorScheme.onSurfaceVariant),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'متبقي $remainingUnits',
+                              style: GoogleFonts.cairo(
+                                fontSize: 9.5,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+      ],
+    );
+
+    return M3ListDetailLayout(
+      listPane: listPane,
+      detailPane: _buildBranchDetailPaneContent(
+        branch: currentInspectedBranch,
+        colorScheme: colorScheme,
+        strings: strings,
+        isAr: isAr,
+        isHi: isHi,
+        voucherMetrics: voucherMetrics,
+        isBottomSheet: false,
+      ),
+      listPaneWidth: 320.0,
+      crossAxisAlignment: CrossAxisAlignment.start,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Branch Detail Pane Content Builder (بطاقة الفحص التفصيلي للفئات والميزانية)
+  // ---------------------------------------------------------------------------
+  Widget _buildBranchDetailPaneContent({
+    required String branch,
+    required ColorScheme colorScheme,
+    required AppStrings strings,
+    required bool isAr,
+    required bool isHi,
+    required AggregatedVoucherMetrics voucherMetrics,
+    bool isBottomSheet = false,
+  }) {
+    final totalAllocated = voucherMetrics.branchTotalVoucherUnits[branch] ?? 0;
+    final totalClaimed = voucherMetrics.branchClaimedVoucherUnits[branch] ?? 0;
+    final totalRemaining = voucherMetrics.branchRemainingVoucherUnits[branch] ?? 0;
+    final totalBudget = voucherMetrics.branchTotalVoucherBudget[branch] ?? 0.0;
+    final claimedBudget = voucherMetrics.denominations.fold<double>(0.0, (acc, d) {
+      final stats = voucherMetrics.branchDenominationsMap[branch]?[d.denomination];
+      return acc + (stats != null ? (stats.claimedCount * d.denomination) : 0.0);
+    });
+    final remainingBudget = (totalBudget - claimedBudget).clamp(0.0, double.infinity);
+    final depletionRate = totalAllocated > 0 ? (totalClaimed / totalAllocated).clamp(0.0, 1.0) : 0.0;
+    final isBranchFiltered = _selectedBranch == branch;
+
+    return Container(
+      padding: EdgeInsets.all(isBottomSheet ? 0 : 16),
+      decoration: isBottomSheet
+          ? null
+          : BoxDecoration(
+              color: colorScheme.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+            ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header with Branch Name and Filter Action
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.store_rounded, size: 20, color: colorScheme.primary),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      branch,
+                      style: GoogleFonts.cairo(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    Text(
+                      isAr
+                          ? 'الفحص التفصيلي لميزانية وفئات القسائم'
+                          : (isHi ? 'वाउचर बजट और मूल्यवर्ग का विस्तृत निरीक्षण' : 'Voucher budget and denominations breakdown'),
+                      style: GoogleFonts.cairo(
+                        fontSize: 11,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (isBranchFiltered)
+                OutlinedButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _selectedBranch = null;
+                    });
+                    if (isBottomSheet) Navigator.of(context).pop();
+                  },
+                  icon: const Icon(Icons.filter_alt_off_rounded, size: 14),
+                  label: Text(
+                    isAr ? 'إلغاء التصفية' : (isHi ? 'फ़िल्टर हटाएं' : 'Clear Filter'),
+                    style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                )
+              else
+                FilledButton.tonalIcon(
+                  onPressed: () {
+                    setState(() {
+                      _selectedBranch = branch;
+                    });
+                    if (isBottomSheet) Navigator.of(context).pop();
+                  },
+                  icon: const Icon(Icons.filter_alt_rounded, size: 14),
+                  label: Text(
+                    isAr ? 'تصفية التقرير' : (isHi ? 'रिपोर्ट फ़िल्टर' : 'Filter Report'),
+                    style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          // 3 Executive KPI Cards Row
+          Row(
+            children: [
+              Expanded(
+                child: _buildBranchDetailKpiBox(
+                  title: isAr ? 'الميزانية الكلية' : 'Total Budget',
+                  value: _formatMoney(totalBudget, isAr: isAr),
+                  subvalue: isAr ? '$totalAllocated قسيمة' : '$totalAllocated vouchers',
+                  color: const Color(0xFF6366F1),
+                  colorScheme: colorScheme,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildBranchDetailKpiBox(
+                  title: isAr ? 'القيمة المصروفة' : 'Claimed Value',
+                  value: _formatMoney(claimedBudget, isAr: isAr),
+                  subvalue: isAr ? '$totalClaimed مصروفة' : '$totalClaimed claimed',
+                  color: const Color(0xFF10B981),
+                  colorScheme: colorScheme,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildBranchDetailKpiBox(
+                  title: isAr ? 'الرصيد المتبقي' : 'Remaining Value',
+                  value: _formatMoney(remainingBudget, isAr: isAr),
+                  subvalue: isAr ? '$totalRemaining متبقية' : '$totalRemaining left',
+                  color: const Color(0xFFF59E0B),
+                  colorScheme: colorScheme,
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          // Depletion Progress Bar
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      isAr ? 'معدل استهلاك قسائم الفرع' : 'Branch Voucher Depletion Rate',
+                      style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.w700),
+                    ),
+                    Text(
+                      '${(depletionRate * 100).toStringAsFixed(1)}%',
+                      style: GoogleFonts.cairo(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        color: depletionRate >= 0.8
+                            ? const Color(0xFF047857)
+                            : (depletionRate >= 0.4
+                                ? const Color(0xFFB45309)
+                                : colorScheme.primary),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: LinearProgressIndicator(
+                    value: depletionRate,
+                    minHeight: 8,
+                    backgroundColor: colorScheme.surfaceContainerHighest,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      depletionRate >= 0.8
+                          ? const Color(0xFF10B981)
+                          : (depletionRate >= 0.4
+                              ? const Color(0xFFF59E0B)
+                              : colorScheme.primary),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          // Denominations breakdown title
+          Text(
+            isAr ? 'توزيع الفئات النقدية بالفرع' : (isHi ? 'शाखा में मूल्यवर्ग का वितरण' : 'Denominations Breakdown'),
+            style: GoogleFonts.cairo(fontSize: 12.5, fontWeight: FontWeight.w800, color: colorScheme.onSurface),
+          ),
+          const SizedBox(height: 8),
+
+          // Denominations Cards
+          ...voucherMetrics.denominations.map((denom) {
+            final stats = voucherMetrics.branchDenominationsMap[branch]?[denom.denomination];
+            final allocated = stats?.allocatedCount ?? 0;
+            final claimed = stats?.claimedCount ?? 0;
+            final remaining = stats?.remainingCount ?? 0;
+            final rate = allocated > 0 ? (claimed / allocated).clamp(0.0, 1.0) : 0.0;
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: colorScheme.surface,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD97706).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      denom.label,
+                      style: GoogleFonts.cairo(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w900,
+                        color: const Color(0xFFD97706),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              isAr
+                                  ? 'مخصص: $allocated • صرف: $claimed • متبقي: $remaining'
+                                  : 'Alloc: $allocated • Claimed: $claimed • Rem: $remaining',
+                              style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600),
+                            ),
+                            Text(
+                              '${(rate * 100).toStringAsFixed(0)}%',
+                              style: GoogleFonts.cairo(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: rate >= 0.8
+                                    ? const Color(0xFF047857)
+                                    : (rate >= 0.4
+                                        ? const Color(0xFFB45309)
+                                        : colorScheme.primary),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: rate,
+                            minHeight: 5,
+                            backgroundColor: colorScheme.surfaceContainerHighest,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              rate >= 0.8
+                                  ? const Color(0xFF10B981)
+                                  : (rate >= 0.4
+                                      ? const Color(0xFFF59E0B)
+                                      : colorScheme.primary),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBranchDetailKpiBox({
+    required String title,
+    required String value,
+    required String subvalue,
+    required Color color,
+    required ColorScheme colorScheme,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.cairo(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: GoogleFonts.cairo(
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+              color: colorScheme.onSurface,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            subvalue,
+            style: GoogleFonts.cairo(
+              fontSize: 9.5,
+              color: colorScheme.onSurfaceVariant,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

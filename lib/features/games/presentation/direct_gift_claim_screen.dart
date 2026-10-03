@@ -14,6 +14,7 @@ import '../../../core/animations/m3_motion.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../core/widgets/switch_point_branding.dart';
+import '../../../core/widgets/m3_list_tile.dart';
 import '../../admin/domain/event_model.dart';
 import 'winner_celebration_dialog.dart';
 import 'game_demo_banner.dart';
@@ -890,19 +891,18 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                    ),
                                                  ],
 
-                                                 // Itemized Gift Cards
+                                                 // Itemized Gift Cards (M3ListTile Standard)
                                                  ListView.separated(
                                                    shrinkWrap: true,
                                                    physics: const NeverScrollableScrollPhysics(),
                                                    itemCount: linkedGifts.length,
-                                                   separatorBuilder: (context, index) => const SizedBox(height: 10),
+                                                   separatorBuilder: (context, index) => const M3InsetDivider(),
                                                    itemBuilder: (context, idx) {
                                                      final gift = linkedGifts[idx];
                                                      final totalCount = gift.quantity;
                                                      final isGiftVoucher = gift.isVoucher;
 
                                                      return Container(
-                                                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                                        decoration: BoxDecoration(
                                                          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
                                                          borderRadius: BorderRadius.circular(16),
@@ -913,37 +913,23 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                            width: isGiftVoucher ? 1.5 : 1.0,
                                                          ),
                                                        ),
-                                                       child: Row(
-                                                         children: [
-                                                           if (gift.imageUrl != null && gift.imageUrl!.trim().isNotEmpty)
-                                                             Container(
-                                                               width: 44,
-                                                               height: 44,
-                                                               decoration: BoxDecoration(
+                                                       child: M3ListTile.twoLine(
+                                                         leading: (gift.imageUrl != null && gift.imageUrl!.trim().isNotEmpty)
+                                                             ? ClipRRect(
                                                                  borderRadius: BorderRadius.circular(10),
-                                                                 border: Border.all(
-                                                                   color: isGiftVoucher ? Colors.amber.shade300 : colorScheme.outlineVariant.withValues(alpha: 0.5),
-                                                                   width: 1,
-                                                                 ),
-                                                                 boxShadow: [
-                                                                   BoxShadow(
-                                                                     color: Colors.black.withValues(alpha: 0.04),
-                                                                     blurRadius: 4,
-                                                                     offset: const Offset(0, 2),
-                                                                   ),
-                                                                 ],
-                                                               ),
-                                                               child: ClipRRect(
-                                                                 borderRadius: BorderRadius.circular(9),
                                                                  child: Image.network(
                                                                    gift.imageUrl!.trim(),
+                                                                   width: 40,
+                                                                   height: 40,
                                                                    fit: BoxFit.cover,
                                                                    errorBuilder: (context, error, stackTrace) => Container(
+                                                                     width: 40,
+                                                                     height: 40,
                                                                      decoration: BoxDecoration(
                                                                        color: isGiftVoucher
                                                                            ? Colors.amber.shade100
                                                                            : colorScheme.primary.withValues(alpha: 0.12),
-                                                                       shape: BoxShape.circle,
+                                                                       borderRadius: BorderRadius.circular(10),
                                                                      ),
                                                                      child: Icon(
                                                                        isGiftVoucher
@@ -952,66 +938,63 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                                        color: isGiftVoucher
                                                                            ? Colors.amber.shade900
                                                                            : colorScheme.primary,
-                                                                       size: 24,
+                                                                       size: 22,
                                                                      ),
                                                                    ),
                                                                  ),
-                                                               ),
-                                                             )
-                                                           else
-                                                             Container(
-                                                               width: 44,
-                                                               height: 44,
-                                                               decoration: BoxDecoration(
-                                                                 color: isGiftVoucher
-                                                                     ? Colors.amber.shade100
-                                                                     : colorScheme.primary.withValues(alpha: 0.12),
-                                                                 shape: BoxShape.circle,
-                                                               ),
-                                                               child: Icon(
-                                                                 isGiftVoucher
-                                                                     ? Icons.confirmation_number_rounded
-                                                                     : Icons.card_giftcard_rounded,
-                                                                 color: isGiftVoucher
-                                                                     ? Colors.amber.shade900
-                                                                     : colorScheme.primary,
-                                                                 size: 24,
-                                                               ),
-                                                             ),
-                                                           const SizedBox(width: 14),
-                                                           Expanded(
-                                                             child: Column(
-                                                               crossAxisAlignment: CrossAxisAlignment.start,
-                                                               children: [
-                                                                 Text(
-                                                                   gift.giftName,
-                                                                   style: GoogleFonts.cairo(
-                                                                     fontSize: 16,
-                                                                     fontWeight: FontWeight.bold,
-                                                                     color: colorScheme.onSurface,
-                                                                   ),
+                                                               )
+                                                             : Container(
+                                                                 width: 40,
+                                                                 height: 40,
+                                                                 decoration: BoxDecoration(
+                                                                   color: isGiftVoucher
+                                                                       ? Colors.amber.shade100
+                                                                       : colorScheme.primary.withValues(alpha: 0.12),
+                                                                   borderRadius: BorderRadius.circular(10),
                                                                  ),
-                                                                 if (isGiftVoucher && gift.unitValue > 0)
-                                                                   Text(
-                                                                     'فواتشر معتمد بقيمة ${gift.unitValue.toInt()} ج.م للقطعة',
-                                                                     style: GoogleFonts.cairo(
-                                                                       fontSize: 12,
-                                                                       fontWeight: FontWeight.w600,
-                                                                       color: Colors.amber.shade900,
-                                                                     ),
-                                                                   )
-                                                                 else
-                                                                   Text(
-                                                                     isAr ? 'هدية عينية فورية معتمدة' : 'Certified Physical Gift',
-                                                                     style: GoogleFonts.cairo(
-                                                                       fontSize: 12,
-                                                                       color: colorScheme.onSurfaceVariant,
-                                                                     ),
-                                                                   ),
-                                                               ],
-                                                             ),
+                                                                 child: Icon(
+                                                                   isGiftVoucher
+                                                                       ? Icons.confirmation_number_rounded
+                                                                       : Icons.card_giftcard_rounded,
+                                                                   color: isGiftVoucher
+                                                                       ? Colors.amber.shade900
+                                                                       : colorScheme.primary,
+                                                                   size: 22,
+                                                                 ),
+                                                               ),
+                                                         headline: Text(
+                                                           gift.giftName,
+                                                           style: GoogleFonts.cairo(
+                                                             fontSize: 15,
+                                                             fontWeight: FontWeight.bold,
+                                                             color: colorScheme.onSurface,
                                                            ),
-                                                           Container(
+                                                           maxLines: 1,
+                                                           overflow: TextOverflow.ellipsis,
+                                                         ),
+                                                         subtitle: (isGiftVoucher && gift.unitValue > 0)
+                                                             ? Text(
+                                                                 'فواتشر معتمد بقيمة ${gift.unitValue.toInt()} ج.م للقطعة',
+                                                                 style: GoogleFonts.cairo(
+                                                                   fontSize: 12,
+                                                                   fontWeight: FontWeight.w600,
+                                                                   color: Colors.amber.shade900,
+                                                                 ),
+                                                                 maxLines: 1,
+                                                                 overflow: TextOverflow.ellipsis,
+                                                               )
+                                                             : Text(
+                                                                 isAr ? 'هدية عينية فورية معتمدة' : 'Certified Physical Gift',
+                                                                 style: GoogleFonts.cairo(
+                                                                   fontSize: 12,
+                                                                   color: colorScheme.onSurfaceVariant,
+                                                                 ),
+                                                                 maxLines: 1,
+                                                                 overflow: TextOverflow.ellipsis,
+                                                               ),
+                                                         trailing: M3TouchTargetBoundary(
+                                                           minSize: 48,
+                                                           child: Container(
                                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                                              decoration: BoxDecoration(
                                                                color: isGiftVoucher
@@ -1028,7 +1011,8 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                                ),
                                                              ),
                                                            ),
-                                                         ],
+                                                         ),
+                                                         semanticsLabel: '${gift.giftName}, ${isGiftVoucher ? "فواتشر" : "هدية"}, الكمية $totalCount',
                                                        ),
                                                      );
                                                    },
