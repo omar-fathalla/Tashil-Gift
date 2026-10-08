@@ -336,23 +336,24 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(
                     isMobile ? 16 : 24,
+                    isMobile ? 12 : 16,
                     isMobile ? 16 : 24,
-                    isMobile ? 16 : 24,
-                    12,
+                    8,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 1. Executive M3 Header (Title, Baseline Tag, Live Pulse & Audit Actions)
+                      // 1. Unified Executive M3 Header (Title, Badges, Mode Switcher & Audit Actions)
                       _buildExecutiveHeader(
                         context: context,
                         cs: cs,
                         strings: strings,
                         isAr: isAr,
                         isMobile: isMobile,
+                        distinctChains: distinctChains,
                       ),
                       if (_isHealingData) ...[
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 8),
                         RepaintBoundary(
                           child: M3ProgressCard(
                             title: _healingStatus.isNotEmpty
@@ -368,20 +369,9 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                           ),
                         ),
                       ],
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 8),
 
-                      // 2. M3 Comparison Mode Switcher (Omni Radar vs Head-to-Head 1-on-1)
-                      _buildModeAndControlsBar(
-                        context: context,
-                        cs: cs,
-                        strings: strings,
-                        isAr: isAr,
-                        isMobile: isMobile,
-                        distinctChains: distinctChains,
-                      ),
-                      const SizedBox(height: 14),
-
-                      // 3. Interactive M3 Hero Metric Filter Group (Merges KPI numbers and filter selection into one elegant M3 row)
+                      // 2. Interactive M3 Hero Metric Filter Group (Compact 56dp KPIs)
                       _buildHeroMetricFilterGroup(
                         context: context,
                         cs: cs,
@@ -398,9 +388,9 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                         h2hChain2Promos: h2hChain2Promos,
                         h2hChain2PromoNotChain1: h2hChain2PromoNotChain1,
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 8),
 
-                      // 4. M3 Chain Tabs Switcher & Single-Chain Promo Filter (Omni Mode only)
+                      // 3. M3 Chain Tabs Switcher (Omni Mode only)
                       if (!_isHeadToHeadMode) ...[
                         _buildChainFilterBar(
                           context: context,
@@ -410,10 +400,10 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                           distinctChains: distinctChains,
                           allProducts: allProducts,
                         ),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 8),
                       ],
 
-                      // 5. M3 Search, Filters & View Mode Bar
+                      // 4. M3 Search, Filters & View Mode Bar (Unified 38dp Symmetrical Toolbar)
                       _buildSearchAndFiltersBar(
                         context: context,
                         cs: cs,
@@ -543,90 +533,70 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
     }
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: cs.errorContainer,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cs.error.withValues(alpha: 0.3), width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: cs.error.withValues(alpha: 0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: cs.errorContainer.withValues(alpha: 0.65),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: cs.error.withValues(alpha: 0.35)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: cs.error,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(Icons.shield_outlined, color: cs.onError, size: 20),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isAr ? 'رادار كسر الأسعار التنافسي (الأصناف الأرخص عند المنافسين)' : 'Competitor Price Undercut Radar',
-                      style: GoogleFonts.cairo(
-                        color: cs.onErrorContainer,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                    Text(
-                      isAr
-                          ? 'تم رصد ${threatItems.length} صنف يباع لدى المنافسين بسعر أقل من أسواق فتح الله (المرجع)'
-                          : 'Detected ${threatItems.length} SKUs priced below Fathalla baseline by competitors',
-                      style: GoogleFonts.cairo(
-                        color: cs.onErrorContainer.withValues(alpha: 0.85),
-                        fontSize: 11.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          Icon(Icons.gpp_maybe_rounded, color: cs.error, size: 18),
+          const SizedBox(width: 8),
+          Text(
+            isAr ? 'رادار كسر الأسعار:' : 'Price Threat Radar:',
+            style: GoogleFonts.cairo(
+              color: cs.error,
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            isAr
+                ? 'رصد ${threatItems.length} صنف أرخص لدى المنافسين'
+                : '${threatItems.length} SKUs cheaper at competitors',
+            style: GoogleFonts.cairo(
+              color: cs.onErrorContainer,
+              fontWeight: FontWeight.bold,
+              fontSize: 11.5,
+            ),
           ),
           if (competitorThreatCounts.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              children: competitorThreatCounts.entries.map((entry) {
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: cs.surface,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: cs.error.withValues(alpha: 0.25), width: 0.8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.storefront_rounded, size: 13, color: cs.error),
-                      const SizedBox(width: 5),
-                      Text(
-                        '${entry.key}: ${entry.value} ${isAr ? "صنف أرخص" : "cheaper"}',
-                        style: GoogleFonts.cairo(
-                          color: cs.onSurface,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: competitorThreatCounts.entries.map((entry) {
+                    return Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: cs.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: cs.error.withValues(alpha: 0.25)),
                       ),
-                    ],
-                  ),
-                );
-              }).toList(),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.storefront_rounded, size: 12, color: cs.error),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${entry.key}: ${entry.value}',
+                            style: GoogleFonts.cairo(
+                              color: cs.onSurface,
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
             ),
           ],
         ],
@@ -644,55 +614,38 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
     if (items.isEmpty) return const SizedBox.shrink();
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: cs.tertiaryContainer,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cs.tertiary.withValues(alpha: 0.3), width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: cs.tertiary.withValues(alpha: 0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: cs.tertiaryContainer.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: cs.tertiary.withValues(alpha: 0.35)),
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
+          Icon(Icons.lightbulb_outline_rounded, color: cs.tertiary, size: 18),
+          const SizedBox(width: 8),
+          Text(
+            isAr ? 'فرص جديدة:' : 'New Opportunities:',
+            style: GoogleFonts.cairo(
               color: cs.tertiary,
-              shape: BoxShape.circle,
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
             ),
-            child: Icon(Icons.lightbulb_outline_rounded, color: cs.onTertiary, size: 20),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 6),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isAr
-                      ? 'فرص استيراد وتوريد جديدة (عروض نشطة بالمنافسين غير مسجلة بفتح الله)'
-                      : 'Expansion Opportunities: Competitor Promos Missing from Fathalla',
-                  style: GoogleFonts.cairo(
-                    color: cs.onTertiaryContainer,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13.5,
-                  ),
-                ),
-                Text(
-                  isAr
-                      ? 'تم رصد ${items.length} صنف عليه تخفيضات وعروض عند المنافسين بينما لم يتم رصد سعر بيع مسجل بفتح الله. أضف هذه الأصناف لتوسيع سلة منتجاتك.'
-                      : 'Identified ${items.length} promotional items at competitors not currently sold at anchor.',
-                  style: GoogleFonts.cairo(
-                    color: cs.onTertiaryContainer.withValues(alpha: 0.85),
-                    fontSize: 11,
-                  ),
-                ),
-              ],
+            child: Text(
+              isAr
+                  ? 'رصد ${items.length} صنف عليه عروض لدى المنافسين غير مسجلة بالمرجع'
+                  : '${items.length} competitor promo SKUs missing from baseline',
+              style: GoogleFonts.cairo(
+                color: cs.onTertiaryContainer,
+                fontWeight: FontWeight.bold,
+                fontSize: 11.5,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -700,158 +653,8 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
     );
   }
 
-  // 1. Executive M3 Header (Title, Badges & Action Buttons)
+  // 1. Unified Executive M3 Header (Title, Badges, Mode Switcher & Audit Actions)
   Widget _buildExecutiveHeader({
-    required BuildContext context,
-    required ColorScheme cs,
-    required AppStrings strings,
-    required bool isAr,
-    required bool isMobile,
-  }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: cs.primaryContainer,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: cs.primary.withValues(alpha: 0.2)),
-          ),
-          child: Icon(Icons.shield_rounded, size: 28, color: cs.primary),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      strings.productsIntelligenceTitle,
-                      style: GoogleFonts.cairo(
-                        fontSize: isMobile ? 18 : 22,
-                        fontWeight: FontWeight.bold,
-                        color: cs.onSurface,
-                      ),
-                    ),
-                  ),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      // Fathalla Baseline Tag (M3 Tonal derivation)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: cs.surfaceContainerHigh,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.6), width: 1),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.account_balance_rounded, size: 14, color: cs.primary),
-                            const SizedBox(width: 5),
-                            Text(
-                              strings.fathallaBaselineTag,
-                              style: GoogleFonts.cairo(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                color: cs.onSurface,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Live AI Tracking Pill (M3 Tonal derivation)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: cs.primaryContainer.withValues(alpha: 0.4),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: cs.primary.withValues(alpha: 0.3), width: 0.8),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: cs.primary,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              isAr ? 'رصد فوري حي' : 'Live AI Tracking',
-                              style: GoogleFonts.cairo(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: cs.primary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              // Executive M3 Button Group
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  Tooltip(
-                    message: isAr
-                        ? 'فحص وتدقيق الفواتير الجديدة المضافة فقط لتوفير الوقت والبيانات'
-                        : 'Audit new/unscanned receipts only to save time',
-                    child: AnimatedPressable(
-                      child: FilledButton.tonalIcon(
-                        onPressed: _isHealingData
-                            ? null
-                            : () => _startHealingProcess(incrementalOnly: true),
-                        icon: const Icon(Icons.bolt_rounded, size: 16),
-                        label: Text(
-                          isAr ? 'تدقيق الجديد (سريع)' : 'Audit New (Fast)',
-                          style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Tooltip(
-                    message: isAr
-                        ? 'إعادة فحص كافة الفواتير من البداية وتصحيح أي أخطاء بالأسعار واقتصاديات القطعة'
-                        : 'Full recalculation and healing for all receipts in database',
-                    child: AnimatedPressable(
-                      child: OutlinedButton.icon(
-                        onPressed: _isHealingData
-                            ? null
-                            : () => _startHealingProcess(incrementalOnly: false),
-                        icon: const Icon(Icons.auto_fix_high_rounded, size: 16),
-                        label: Text(
-                          isAr ? 'إعادة تدقيق شامل لكافة الفواتير' : 'Full Deep Rescan',
-                          style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  // 2. M3 Comparison Mode Switcher & Controls Bar
-  Widget _buildModeAndControlsBar({
     required BuildContext context,
     required ColorScheme cs,
     required AppStrings strings,
@@ -859,129 +662,315 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
     required bool isMobile,
     required List<String> distinctChains,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
-      ),
-      child: Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 12,
-        runSpacing: 8,
-        children: [
-          SegmentedButton<bool>(
-            style: ButtonStyle(
-              shape: WidgetStatePropertyAll(
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              ),
-              padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 16, vertical: 10)),
-            ),
-            segments: [
-              ButtonSegment<bool>(
-                value: false,
-                icon: const Icon(Icons.radar_rounded, size: 18),
-                label: Text(
-                  strings.omniRadarModeLabel,
-                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
-                ),
-              ),
-              ButtonSegment<bool>(
-                value: true,
-                icon: const Icon(Icons.compare_arrows_rounded, size: 18),
-                label: Text(
-                  strings.headToHeadModeLabel,
-                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
-                ),
-              ),
-            ],
-            selected: {_isHeadToHeadMode},
-            onSelectionChanged: (val) {
-              setState(() {
-                _isHeadToHeadMode = val.first;
-                _viewFilterMode = 'THREATS_ONLY';
-              });
-            },
-          ),
-
-          // Head-to-Head Chain Selectors Toolbar
-          if (_isHeadToHeadMode)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: cs.surface,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.6)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.account_balance_rounded, size: 15, color: cs.primary),
-                  const SizedBox(width: 5),
-                  Text(
-                    isAr ? 'الأساس:' : 'Anchor:',
-                    style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: cs.primary),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 12,
+          runSpacing: 10,
+          children: [
+            // Start: Shield Icon + Title + Live Badges
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: cs.primaryContainer,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: cs.primary.withValues(alpha: 0.2)),
                   ),
-                  const SizedBox(width: 4),
-                  DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _headToHeadChain1,
-                      isDense: true,
-                      style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSurface),
-                      items: distinctChains.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                      onChanged: (val) {
-                        if (val != null && val != _headToHeadChain2) {
-                          setState(() => _headToHeadChain1 = val);
-                        }
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  AnimatedPressable(
-                    onTap: () {
-                      setState(() {
-                        final temp = _headToHeadChain1;
-                        _headToHeadChain1 = _headToHeadChain2;
-                        _headToHeadChain2 = temp;
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(5),
-                      decoration: BoxDecoration(
-                        color: cs.primaryContainer,
-                        shape: BoxShape.circle,
+                  child: Icon(Icons.shield_rounded, size: 20, color: cs.primary),
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      strings.productsIntelligenceTitle,
+                      style: GoogleFonts.cairo(
+                        fontSize: isMobile ? 15 : 17,
+                        fontWeight: FontWeight.bold,
+                        color: cs.onSurface,
                       ),
-                      child: Icon(Icons.swap_horiz_rounded, size: 16, color: cs.primary),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  Icon(Icons.storefront_rounded, size: 15, color: cs.error),
-                  const SizedBox(width: 5),
-                  Text(
-                    isAr ? 'المنافس:' : 'Vs:',
-                    style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: cs.error),
-                  ),
-                  const SizedBox(width: 4),
-                  DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _headToHeadChain2,
-                      isDense: true,
-                      style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSurface),
-                      items: distinctChains.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                      onChanged: (val) {
-                        if (val != null && val != _headToHeadChain1) {
-                          setState(() => _headToHeadChain2 = val);
-                        }
-                      },
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Fathalla Baseline Pill
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: cs.surfaceContainerHigh,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.6), width: 0.8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.account_balance_rounded, size: 11, color: cs.primary),
+                              const SizedBox(width: 4),
+                              Text(
+                                strings.fathallaBaselineTag,
+                                style: GoogleFonts.cairo(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: cs.onSurface,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        // Live AI Badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: cs.primaryContainer.withValues(alpha: 0.35),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: cs.primary.withValues(alpha: 0.25), width: 0.8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: cs.primary,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                isAr ? 'رصد فوري حي' : 'Live AI',
+                                style: GoogleFonts.cairo(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: cs.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+              ],
             ),
+
+            // End: Button Groups (Mode Switcher + Connected Audit Actions)
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                // Mode Switcher Button Group (SegmentedButton)
+                SegmentedButton<bool>(
+                  style: ButtonStyle(
+                    visualDensity: VisualDensity.compact,
+                    shape: WidgetStatePropertyAll(
+                      RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+                  ),
+                  segments: [
+                    ButtonSegment<bool>(
+                      value: false,
+                      icon: const Icon(Icons.radar_rounded, size: 16),
+                      label: Text(
+                        isAr ? 'رادار شامل' : 'Omni Radar',
+                        style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 11),
+                      ),
+                    ),
+                    ButtonSegment<bool>(
+                      value: true,
+                      icon: const Icon(Icons.compare_arrows_rounded, size: 16),
+                      label: Text(
+                        isAr ? 'مقارنة سلسلتين' : 'Head-to-Head',
+                        style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 11),
+                      ),
+                    ),
+                  ],
+                  selected: {_isHeadToHeadMode},
+                  onSelectionChanged: (val) {
+                    setState(() {
+                      _isHeadToHeadMode = val.first;
+                      _viewFilterMode = 'THREATS_ONLY';
+                    });
+                  },
+                ),
+
+                // Connected Audit Actions Button Group
+                Container(
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerHigh,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Tooltip(
+                        message: isAr
+                            ? 'فحص وتدقيق الفواتير الجديدة المضافة فقط لتوفير الوقت والبيانات'
+                            : 'Audit new receipts only (fast)',
+                        child: InkWell(
+                          borderRadius: const BorderRadius.horizontal(
+                            right: Radius.circular(9),
+                          ),
+                          onTap: _isHealingData
+                              ? null
+                              : () => _startHealingProcess(incrementalOnly: true),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.bolt_rounded, size: 16, color: cs.primary),
+                                const SizedBox(width: 4),
+                                Text(
+                                  isAr ? 'تدقيق جديد' : 'Quick Audit',
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: cs.onSurface,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      VerticalDivider(
+                        width: 1,
+                        thickness: 1,
+                        color: cs.outlineVariant.withValues(alpha: 0.5),
+                        indent: 6,
+                        endIndent: 6,
+                      ),
+                      Tooltip(
+                        message: isAr
+                            ? 'إعادة فحص كافة الفواتير من البداية وتصحيح أي أخطاء بالأسعار واقتصاديات القطعة'
+                            : 'Full recalculation and deep healing for all receipts',
+                        child: InkWell(
+                          borderRadius: const BorderRadius.horizontal(
+                            left: Radius.circular(9),
+                          ),
+                          onTap: _isHealingData
+                              ? null
+                              : () => _startHealingProcess(incrementalOnly: false),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.auto_fix_high_rounded, size: 15, color: cs.secondary),
+                                const SizedBox(width: 4),
+                                Text(
+                                  isAr ? 'تدقيق شامل' : 'Deep Rescan',
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+
+        // Head-to-Head Chain Selectors (only if active)
+        if (_isHeadToHeadMode) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.account_balance_rounded, size: 14, color: cs.primary),
+                const SizedBox(width: 4),
+                Text(
+                  isAr ? 'الأساس:' : 'Anchor:',
+                  style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: cs.primary),
+                ),
+                const SizedBox(width: 4),
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _headToHeadChain1,
+                    isDense: true,
+                    style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold, color: cs.onSurface),
+                    items: distinctChains.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                    onChanged: (val) {
+                      if (val != null && val != _headToHeadChain2) {
+                        setState(() => _headToHeadChain1 = val);
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 6),
+                AnimatedPressable(
+                  onTap: () {
+                    setState(() {
+                      final temp = _headToHeadChain1;
+                      _headToHeadChain1 = _headToHeadChain2;
+                      _headToHeadChain2 = temp;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: cs.primaryContainer,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.swap_horiz_rounded, size: 14, color: cs.primary),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Icon(Icons.storefront_rounded, size: 14, color: cs.error),
+                const SizedBox(width: 4),
+                Text(
+                  isAr ? 'المنافس:' : 'Vs:',
+                  style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: cs.error),
+                ),
+                const SizedBox(width: 4),
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _headToHeadChain2,
+                    isDense: true,
+                    style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold, color: cs.onSurface),
+                    items: distinctChains.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                    onChanged: (val) {
+                      if (val != null && val != _headToHeadChain1) {
+                        setState(() => _headToHeadChain2 = val);
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
-      ),
+      ],
     );
   }
 
@@ -1010,7 +999,7 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
           context: context,
           title: isAr ? '$_headToHeadChain2 أرخص' : '$_headToHeadChain2 Cheaper',
           value: '$h2hChain2Cheaper',
-          subtitle: isAr ? 'كسر سعر ضد $_headToHeadChain1' : 'Cheaper than $_headToHeadChain1',
+          subtitle: isAr ? 'كسر سعر' : 'Price threat',
           icon: Icons.gpp_maybe_rounded,
           color: cs.error,
           containerColor: cs.errorContainer,
@@ -1021,9 +1010,9 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
         ),
         _buildM3MetricCard(
           context: context,
-          title: isAr ? 'عروض غير متوفرة بـ $_headToHeadChain1' : 'Promos not in $_headToHeadChain1',
+          title: isAr ? 'فرص غائبة' : 'Missing Promos',
           value: '$h2hChain2PromoNotChain1',
-          subtitle: isAr ? 'فرص توريد وإضافة' : 'Expansion opportunities',
+          subtitle: isAr ? 'غير مسجلة بـ $_headToHeadChain1' : 'Not at $_headToHeadChain1',
           icon: Icons.lightbulb_outline_rounded,
           color: cs.tertiary,
           containerColor: cs.tertiaryContainer,
@@ -1034,9 +1023,9 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
         ),
         _buildM3MetricCard(
           context: context,
-          title: isAr ? 'كافة عروض $_headToHeadChain2' : 'All $_headToHeadChain2 Promos',
+          title: isAr ? 'عروض $_headToHeadChain2' : '$_headToHeadChain2 Promos',
           value: '$h2hChain2Promos',
-          subtitle: isAr ? 'خصومات نشطة بالسلسلة' : 'Active promotions',
+          subtitle: isAr ? 'خصومات نشطة' : 'Active promos',
           icon: Icons.local_offer_outlined,
           color: cs.secondary,
           containerColor: cs.secondaryContainer,
@@ -1049,7 +1038,7 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
           context: context,
           title: isAr ? '$_headToHeadChain1 أرخص' : '$_headToHeadChain1 Cheaper',
           value: '$h2hChain1Cheaper',
-          subtitle: isAr ? 'تفوق سعري لصالح $_headToHeadChain1' : '$_headToHeadChain1 advantage',
+          subtitle: isAr ? 'تفوق سعري' : 'Price advantage',
           icon: Icons.verified_outlined,
           color: cs.primary,
           containerColor: cs.primaryContainer,
@@ -1060,9 +1049,9 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
         ),
         _buildM3MetricCard(
           context: context,
-          title: strings.filterSegmentAllArchive,
+          title: isAr ? 'كافة الأصناف' : 'All SKUs',
           value: '$allArchivedCount',
-          subtitle: isAr ? 'كافة الأصناف المسجلة' : 'Complete SKU catalog',
+          subtitle: isAr ? 'إجمالي الأرشيف' : 'Total catalog',
           icon: Icons.inventory_2_outlined,
           color: cs.onSurfaceVariant,
           containerColor: cs.surfaceContainerHighest,
@@ -1076,9 +1065,9 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
       cards = [
         _buildM3MetricCard(
           context: context,
-          title: strings.metricPriceThreats,
+          title: isAr ? 'كسر الأسعار' : 'Price Threats',
           value: '$threatsCount',
-          subtitle: isAr ? 'المنافس أرخص من فتح الله' : 'Cheaper than Fathalla',
+          subtitle: isAr ? 'المنافس أرخص' : 'Competitor cheaper',
           icon: Icons.gpp_maybe_rounded,
           color: cs.error,
           containerColor: cs.errorContainer,
@@ -1089,9 +1078,9 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
         ),
         _buildM3MetricCard(
           context: context,
-          title: strings.metricCompetitorPromosNotAtFathalla,
+          title: isAr ? 'فرص جديدة' : 'Opportunities',
           value: '$competitorPromosNotAtFathallaCount',
-          subtitle: strings.metricCompetitorPromosNotAtFathallaSubtitle,
+          subtitle: isAr ? 'عروض غائبة' : 'Missing promos',
           icon: Icons.lightbulb_outline_rounded,
           color: cs.tertiary,
           containerColor: cs.tertiaryContainer,
@@ -1102,9 +1091,9 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
         ),
         _buildM3MetricCard(
           context: context,
-          title: strings.metricAllCompetitorPromotions,
+          title: isAr ? 'عروض المنافسين' : 'Competitor Promos',
           value: '$allCompetitorPromosCount',
-          subtitle: isAr ? 'عروض نشطة بالمنافسين' : 'Active competitor promos',
+          subtitle: isAr ? 'خصومات نشطة' : 'Active promos',
           icon: Icons.local_offer_outlined,
           color: cs.secondary,
           containerColor: cs.secondaryContainer,
@@ -1115,9 +1104,9 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
         ),
         _buildM3MetricCard(
           context: context,
-          title: strings.metricThreatsWithPromo,
+          title: isAr ? 'عروض كاسرة' : 'Threat Promos',
           value: '$threatsWithPromoCount',
-          subtitle: isAr ? 'عروض ترويجية كسرت سعرنا' : 'Promos undercutting us',
+          subtitle: isAr ? 'تخفيضات ترويجية' : 'Promos undercutting',
           icon: Icons.bolt_rounded,
           color: cs.primary,
           containerColor: cs.primaryContainer,
@@ -1128,9 +1117,9 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
         ),
         _buildM3MetricCard(
           context: context,
-          title: strings.filterSegmentAllArchive,
+          title: isAr ? 'كافة الأصناف' : 'All SKUs',
           value: '$allArchivedCount',
-          subtitle: isAr ? 'كافة الأصناف المسجلة' : 'Complete SKU catalog',
+          subtitle: isAr ? 'إجمالي الأرشيف' : 'Total catalog',
           icon: Icons.inventory_2_outlined,
           color: cs.onSurfaceVariant,
           containerColor: cs.surfaceContainerHighest,
@@ -1144,12 +1133,12 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
 
     if (isMobile) {
       return SizedBox(
-        height: 88,
+        height: 56,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           itemCount: cards.length,
-          separatorBuilder: (context, index) => const SizedBox(width: 8),
-          itemBuilder: (ctx, idx) => SizedBox(width: 215, child: cards[idx]),
+          separatorBuilder: (context, index) => const SizedBox(width: 6),
+          itemBuilder: (ctx, idx) => SizedBox(width: 175, child: cards[idx]),
         ),
       );
     }
@@ -1158,12 +1147,12 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
       builder: (context, constraints) {
         if (constraints.maxWidth < 1100) {
           return SizedBox(
-            height: 88,
+            height: 56,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: cards.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 8),
-              itemBuilder: (ctx, idx) => SizedBox(width: 220, child: cards[idx]),
+              separatorBuilder: (context, index) => const SizedBox(width: 6),
+              itemBuilder: (ctx, idx) => SizedBox(width: 180, child: cards[idx]),
             ),
           );
         }
@@ -1171,7 +1160,7 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
           children: cards
               .map((card) => Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
                       child: card,
                     ),
                   ))
@@ -1198,20 +1187,21 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        height: 56,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? containerColor.withValues(alpha: 0.65) : cs.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(16),
+          color: isSelected ? containerColor.withValues(alpha: 0.6) : cs.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isSelected ? color : cs.outlineVariant.withValues(alpha: 0.6),
-            width: isSelected ? 2 : 1,
+            width: isSelected ? 1.5 : 1,
           ),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: color.withValues(alpha: 0.22),
-                    blurRadius: 10,
-                    offset: const Offset(0, 3),
+                    color: color.withValues(alpha: 0.16),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
                   )
                 ]
               : null,
@@ -1219,14 +1209,15 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              width: 32,
+              height: 32,
               decoration: BoxDecoration(
                 color: isSelected ? color.withValues(alpha: 0.18) : containerColor.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(icon, color: color, size: 20),
+              child: Icon(icon, color: color, size: 17),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1239,7 +1230,7 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                         child: Text(
                           title,
                           style: GoogleFonts.cairo(
-                            fontSize: 11,
+                            fontSize: 10.5,
                             fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
                             color: isSelected ? cs.onSurface : cs.onSurfaceVariant,
                           ),
@@ -1247,50 +1238,47 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (isSelected)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: color,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            isAr ? 'نشط' : 'Active',
-                            style: GoogleFonts.cairo(
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                              color: cs.onPrimary,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
                       Text(
                         value,
                         style: GoogleFonts.cairo(
-                          fontSize: 17,
+                          fontSize: 14,
                           fontWeight: FontWeight.w900,
                           color: color,
                           fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
-                      const SizedBox(width: 6),
+                    ],
+                  ),
+                  Row(
+                    children: [
                       Expanded(
                         child: Text(
                           subtitle,
                           style: GoogleFonts.cairo(
-                            fontSize: 9.5,
-                            color: cs.onSurfaceVariant,
+                            fontSize: 9,
+                            color: isSelected ? color.withValues(alpha: 0.85) : cs.outline,
+                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      if (isSelected)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 0.5),
+                          decoration: BoxDecoration(
+                            color: color,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            isAr ? 'نشط' : 'Active',
+                            style: GoogleFonts.cairo(
+                              fontSize: 8,
+                              fontWeight: FontWeight.bold,
+                              color: cs.onPrimary,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ],
@@ -1302,7 +1290,7 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
     );
   }
 
-  // 4. M3 Chain Filter Bar & Tabs
+  // 3. M3 Chain Filter Bar & Tabs
   Widget _buildChainFilterBar({
     required BuildContext context,
     required ColorScheme cs,
@@ -1316,7 +1304,7 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
       child: Row(
         children: [
           _buildChainTabChip(
-            label: strings.allChainsTab,
+            label: isAr ? 'جميع السلاسل' : 'All Chains',
             count: allProducts.length,
             isSelected: _selectedChain == 'ALL',
             onSelected: () => setState(() {
@@ -1336,17 +1324,18 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
             );
           }),
           if (_selectedChain != 'ALL') ...[
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             FilterChip(
+              visualDensity: VisualDensity.compact,
               avatar: Icon(
                 Icons.local_offer_rounded,
-                size: 14,
+                size: 13,
                 color: _selectedChainPromoOnly ? cs.onPrimary : cs.primary,
               ),
               label: Text(
                 isAr ? 'عروض $_selectedChain فقط' : '$_selectedChain Promos Only',
                 style: GoogleFonts.cairo(
-                  fontSize: 11.5,
+                  fontSize: 11,
                   fontWeight: _selectedChainPromoOnly ? FontWeight.w800 : FontWeight.bold,
                   color: _selectedChainPromoOnly ? cs.onPrimary : cs.primary,
                 ),
@@ -1354,7 +1343,7 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
               selected: _selectedChainPromoOnly,
               selectedColor: cs.primary,
               backgroundColor: cs.primaryContainer.withValues(alpha: 0.4),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               side: BorderSide(
                 color: _selectedChainPromoOnly ? cs.primary : cs.primary.withValues(alpha: 0.3),
               ),
@@ -1379,19 +1368,19 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
         onTap: onSelected,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
             color: isSelected ? cs.primary : cs.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: isSelected ? cs.primary : cs.outlineVariant.withValues(alpha: 0.6),
-              width: isSelected ? 1.5 : 0.8,
+              color: isSelected ? cs.primary : cs.outlineVariant.withValues(alpha: 0.5),
+              width: isSelected ? 1.4 : 0.8,
             ),
             boxShadow: isSelected
                 ? [
                     BoxShadow(
-                      color: cs.primary.withValues(alpha: 0.25),
-                      blurRadius: 8,
+                      color: cs.primary.withValues(alpha: 0.2),
+                      blurRadius: 6,
                       offset: const Offset(0, 2),
                     )
                   ]
@@ -1404,21 +1393,21 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                 label,
                 style: GoogleFonts.cairo(
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                  fontSize: 12,
+                  fontSize: 11.5,
                   color: isSelected ? cs.onPrimary : cs.onSurface,
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 5),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                 decoration: BoxDecoration(
                   color: isSelected ? cs.onPrimary.withValues(alpha: 0.25) : cs.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   '$count',
                   style: GoogleFonts.cairo(
-                    fontSize: 10.5,
+                    fontSize: 10,
                     fontWeight: FontWeight.w700,
                     color: isSelected ? cs.onPrimary : cs.onSurfaceVariant,
                     fontFeatures: const [FontFeature.tabularFigures()],
@@ -1432,7 +1421,7 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
     );
   }
 
-  // 5. M3 Search, Filters & View Mode Bar
+  // 4. M3 Search, Filters & View Mode Bar (Unified 38dp Symmetrical Toolbar)
   Widget _buildSearchAndFiltersBar({
     required BuildContext context,
     required ColorScheme cs,
@@ -1445,246 +1434,406 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
     required int totalPromotionsCount,
     required int totalFluctuationsCount,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
+    // 1. Search Field Widget (Height 38dp, Radius 10dp)
+    final searchWidget = SizedBox(
+      height: 38,
+      child: TextField(
+        controller: _searchController,
+        onChanged: (val) => setState(() => _searchQuery = val),
+        style: GoogleFonts.cairo(fontSize: 12),
+        decoration: InputDecoration(
+          hintText: strings.searchProductPlaceholder,
+          hintStyle: GoogleFonts.cairo(fontSize: 11.5, color: cs.onSurfaceVariant),
+          prefixIcon: const Icon(Icons.search_rounded, size: 18),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear_rounded, size: 16),
+                  padding: EdgeInsets.zero,
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() => _searchQuery = '');
+                  },
+                )
+              : null,
+          filled: true,
+          fillColor: cs.surface,
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: cs.primary, width: 1.5),
+          ),
+        ),
+      ),
+    );
+
+    // 2. Brand Dropdown Widget (Height 38dp, Radius 10dp)
+    Widget? brandWidget;
+    if (distinctBrands.isNotEmpty) {
+      brandWidget = Container(
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.category_outlined, size: 15, color: cs.primary),
+            const SizedBox(width: 5),
+            DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedBrand,
+                isDense: true,
+                style: GoogleFonts.cairo(fontSize: 11.5, color: cs.onSurface),
+                items: [
+                  DropdownMenuItem(
+                    value: 'ALL',
+                    child: Text(isAr ? 'كافة الماركات' : 'All Brands'),
+                  ),
+                  ...distinctBrands.map((b) => DropdownMenuItem(value: b, child: Text(b))),
+                ],
+                onChanged: (val) {
+                  if (val != null) setState(() => _selectedBrand = val);
+                },
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 3. Sort Dropdown Widget (Height 38dp, Radius 10dp)
+    final sortWidget = Container(
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
       ),
-      child: Column(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              // Search Field
-              Expanded(
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: (val) => setState(() => _searchQuery = val),
-                  style: GoogleFonts.cairo(fontSize: 13),
-                  decoration: InputDecoration(
-                    hintText: strings.searchProductPlaceholder,
-                    hintStyle: GoogleFonts.cairo(fontSize: 13, color: cs.onSurfaceVariant),
-                    prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear_rounded, size: 18),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() => _searchQuery = '');
-                            },
-                          )
-                        : null,
-                    filled: true,
-                    fillColor: cs.surface,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
+          Icon(Icons.sort_rounded, size: 16, color: cs.onSurfaceVariant),
+          const SizedBox(width: 5),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: _sortBy,
+              isDense: true,
+              style: GoogleFonts.cairo(fontSize: 11.5, color: cs.onSurface),
+              items: [
+                DropdownMenuItem(
+                  value: 'LATEST',
+                  child: Text(isAr ? 'الأحدث' : 'Latest'),
                 ),
-              ),
-              const SizedBox(width: 10),
-
-              // View Mode Switcher
-              SegmentedButton<bool>(
-                style: ButtonStyle(
-                  shape: WidgetStatePropertyAll(
-                    RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
+                DropdownMenuItem(
+                  value: 'THREAT_DIFF',
+                  child: Text(isAr ? 'الأعلى كسر سعر' : 'Biggest Threat'),
                 ),
-                segments: [
-                  ButtonSegment<bool>(
-                    value: false,
-                    icon: const Icon(Icons.grid_view_rounded, size: 18),
-                    tooltip: strings.viewModeCards,
-                  ),
-                  ButtonSegment<bool>(
-                    value: true,
-                    icon: const Icon(Icons.table_chart_rounded, size: 18),
-                    tooltip: strings.viewModeMatrix,
-                  ),
-                ],
-                selected: {_isMatrixView},
-                onSelectionChanged: (val) {
-                  setState(() => _isMatrixView = val.first);
-                },
-              ),
-
-              const SizedBox(width: 10),
-
-              // Export Excel & CSV Menu Button
-              M3ActionMenu(
-                tooltip: isAr ? 'تصدير تقرير الأسعار (Excel / CSV)' : 'Export Price Matrix Report',
-                anchorBuilder: (context, controller, child) {
-                  return AnimatedPressable(
-                    onTap: () {
-                      if (!_isExporting) {
-                        if (controller.isOpen) {
-                          controller.close();
-                        } else {
-                          controller.open();
-                        }
-                      }
-                    },
-                    child: Container(
-                      height: 38,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: cs.primaryContainer.withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: cs.primary.withValues(alpha: 0.3)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _isExporting
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(Icons.file_download_outlined, size: 18),
-                          const SizedBox(width: 6),
-                          Text(
-                            isAr ? 'تصدير التقرير' : 'Export',
-                            style: GoogleFonts.cairo(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: cs.onPrimaryContainer,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Icon(Icons.arrow_drop_down_rounded, size: 18, color: cs.onPrimaryContainer),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-                children: [
-                  M3ActionMenu.header(
-                    context: context,
-                    title: isAr ? 'تنسيق الملف' : 'File Format',
-                  ),
-                  M3ActionMenu.item(
-                    context: context,
-                    label: isAr ? 'تصدير تقرير إكسيل كامل (.xlsx)' : 'Export Excel Workbook (.xlsx)',
-                    icon: Icons.table_chart_rounded,
-                    onPressed: () => _exportToExcel(filteredProducts, distinctChains, currency),
-                  ),
-                  M3ActionMenu.item(
-                    context: context,
-                    label: isAr ? 'تصدير ملف بيانات (.csv)' : 'Export CSV Data (.csv)',
-                    icon: Icons.description_outlined,
-                    onPressed: () => _exportToCsv(filteredProducts, distinctChains, currency),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Sub-Filters Row (Brand, Discounts, Sort)
-          Wrap(
-            spacing: 10,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              // Brand Filter Dropdown
-              if (distinctBrands.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  decoration: BoxDecoration(
-                    color: cs.surface,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _selectedBrand,
-                      isDense: true,
-                      style: GoogleFonts.cairo(fontSize: 12, color: cs.onSurface),
-                      items: [
-                        DropdownMenuItem(
-                          value: 'ALL',
-                          child: Text(isAr ? 'كافة العلامات التجارية' : 'All Brands'),
-                        ),
-                        ...distinctBrands.map((b) => DropdownMenuItem(value: b, child: Text(b))),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) setState(() => _selectedBrand = val);
-                      },
-                    ),
-                  ),
+                DropdownMenuItem(
+                  value: 'PRICE_ASC',
+                  child: Text(isAr ? 'الأقل سعراً' : 'Price: Low-High'),
                 ),
-
-              // Sort Dropdown
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                decoration: BoxDecoration(
-                  color: cs.surface,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                DropdownMenuItem(
+                  value: 'PRICE_DESC',
+                  child: Text(isAr ? 'الأعلى سعراً' : 'Price: High-Low'),
                 ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _sortBy,
-                    isDense: true,
-                    style: GoogleFonts.cairo(fontSize: 12, color: cs.onSurface),
-                    items: [
-                      DropdownMenuItem(
-                        value: 'LATEST',
-                        child: Text(strings.sortByLatest),
-                      ),
-                      DropdownMenuItem(
-                        value: 'THREAT_DIFF',
-                        child: Text(strings.sortByThreatDiff),
-                      ),
-                      DropdownMenuItem(
-                        value: 'PRICE_ASC',
-                        child: Text(strings.sortByPriceLow),
-                      ),
-                      DropdownMenuItem(
-                        value: 'PRICE_DESC',
-                        child: Text(strings.sortByPriceHigh),
-                      ),
-                      DropdownMenuItem(
-                        value: 'VARIANCE',
-                        child: Text(strings.sortByVariance),
-                      ),
-                    ],
-                    onChanged: (val) {
-                      if (val != null) setState(() => _sortBy = val);
-                    },
-                  ),
+                DropdownMenuItem(
+                  value: 'VARIANCE',
+                  child: Text(isAr ? 'أعلى تفاوت' : 'Max Variance'),
                 ),
-              ),
-              // Filter Promotions Chip
-              FilterChip(
-                label: Text(
-                  '${strings.filterByPromotionsOnly} ($totalPromotionsCount)',
-                  style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: _promotionsOnly ? FontWeight.w700 : FontWeight.normal),
-                ),
-                selected: _promotionsOnly,
-                onSelected: (val) => setState(() => _promotionsOnly = val),
-                avatar: Icon(Icons.local_offer_rounded, size: 14, color: _promotionsOnly ? cs.onPrimary : cs.primary),
-              ),
-
-              // Filter Fluctuations Chip
-              FilterChip(
-                label: Text(
-                  isAr ? 'تغيرات الأسعار ($totalFluctuationsCount)' : 'Price Shifts ($totalFluctuationsCount)',
-                  style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: _fluctuationsOnly ? FontWeight.w700 : FontWeight.normal),
-                ),
-                selected: _fluctuationsOnly,
-                onSelected: (val) => setState(() => _fluctuationsOnly = val),
-                avatar: Icon(Icons.change_circle_rounded, size: 14, color: _fluctuationsOnly ? cs.onPrimary : cs.tertiary),
-              ),
-            ],
+              ],
+              onChanged: (val) {
+                if (val != null) setState(() => _sortBy = val);
+              },
+            ),
           ),
         ],
       ),
+    );
+
+    // 4. Quick Filters Connected Button Group (Promos & Fluctuations) (Height 38dp, Radius 10dp)
+    final filterButtonGroup = Container(
+      height: 38,
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Promos Toggle
+          InkWell(
+            borderRadius: const BorderRadius.horizontal(right: Radius.circular(9)),
+            onTap: () => setState(() => _promotionsOnly = !_promotionsOnly),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(horizontal: 9),
+              color: _promotionsOnly ? cs.primaryContainer : Colors.transparent,
+              child: Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.local_offer_rounded,
+                      size: 13,
+                      color: _promotionsOnly ? cs.primary : cs.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      isAr ? 'عروض ($totalPromotionsCount)' : 'Promos ($totalPromotionsCount)',
+                      style: GoogleFonts.cairo(
+                        fontSize: 11,
+                        fontWeight: _promotionsOnly ? FontWeight.w800 : FontWeight.w600,
+                        color: _promotionsOnly ? cs.primary : cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          VerticalDivider(
+            width: 1,
+            thickness: 1,
+            color: cs.outlineVariant.withValues(alpha: 0.4),
+            indent: 6,
+            endIndent: 6,
+          ),
+          // Fluctuations Toggle
+          InkWell(
+            borderRadius: const BorderRadius.horizontal(left: Radius.circular(9)),
+            onTap: () => setState(() => _fluctuationsOnly = !_fluctuationsOnly),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(horizontal: 9),
+              color: _fluctuationsOnly ? cs.tertiaryContainer : Colors.transparent,
+              child: Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.change_circle_rounded,
+                      size: 14,
+                      color: _fluctuationsOnly ? cs.tertiary : cs.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      isAr ? 'تغيرات ($totalFluctuationsCount)' : 'Shifts ($totalFluctuationsCount)',
+                      style: GoogleFonts.cairo(
+                        fontSize: 11,
+                        fontWeight: _fluctuationsOnly ? FontWeight.w800 : FontWeight.w600,
+                        color: _fluctuationsOnly ? cs.tertiary : cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // 5. View Mode Switcher Button Group (Cards vs Matrix) (Height 38dp, Radius 10dp)
+    final viewModeButtonGroup = Container(
+      height: 38,
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Tooltip(
+            message: strings.viewModeMatrix,
+            child: InkWell(
+              borderRadius: const BorderRadius.horizontal(right: Radius.circular(9)),
+              onTap: () => setState(() => _isMatrixView = true),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                color: _isMatrixView ? cs.primaryContainer : Colors.transparent,
+                child: Center(
+                  child: Icon(
+                    Icons.table_chart_rounded,
+                    size: 17,
+                    color: _isMatrixView ? cs.primary : cs.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          VerticalDivider(
+            width: 1,
+            thickness: 1,
+            color: cs.outlineVariant.withValues(alpha: 0.4),
+            indent: 6,
+            endIndent: 6,
+          ),
+          Tooltip(
+            message: strings.viewModeCards,
+            child: InkWell(
+              borderRadius: const BorderRadius.horizontal(left: Radius.circular(9)),
+              onTap: () => setState(() => _isMatrixView = false),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                color: !_isMatrixView ? cs.primaryContainer : Colors.transparent,
+                child: Center(
+                  child: Icon(
+                    Icons.grid_view_rounded,
+                    size: 17,
+                    color: !_isMatrixView ? cs.primary : cs.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // 6. Export Menu Button (Height 38dp, Radius 10dp)
+    final exportButton = M3ActionMenu(
+      tooltip: isAr ? 'تصدير التقرير (Excel / CSV)' : 'Export Report',
+      anchorBuilder: (context, controller, child) {
+        return AnimatedPressable(
+          onTap: () {
+            if (!_isExporting) {
+              if (controller.isOpen) {
+                controller.close();
+              } else {
+                controller.open();
+              }
+            }
+          },
+          child: Container(
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: cs.primaryContainer.withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: cs.primary.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _isExporting
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(Icons.file_download_outlined, size: 16, color: cs.onPrimaryContainer),
+                const SizedBox(width: 4),
+                Text(
+                  isAr ? 'تصدير' : 'Export',
+                  style: GoogleFonts.cairo(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.bold,
+                    color: cs.onPrimaryContainer,
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Icon(Icons.arrow_drop_down_rounded, size: 16, color: cs.onPrimaryContainer),
+              ],
+            ),
+          ),
+        );
+      },
+      children: [
+        M3ActionMenu.header(
+          context: context,
+          title: isAr ? 'تنسيق الملف' : 'File Format',
+        ),
+        M3ActionMenu.item(
+          context: context,
+          label: isAr ? 'تصدير إكسيل (.xlsx)' : 'Export Excel (.xlsx)',
+          icon: Icons.table_chart_rounded,
+          onPressed: () => _exportToExcel(filteredProducts, distinctChains, currency),
+        ),
+        M3ActionMenu.item(
+          context: context,
+          label: isAr ? 'تصدير ملف بيانات (.csv)' : 'Export CSV (.csv)',
+          icon: Icons.description_outlined,
+          onPressed: () => _exportToCsv(filteredProducts, distinctChains, currency),
+        ),
+      ],
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktopWide = constraints.maxWidth >= 960;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+          ),
+          child: isDesktopWide
+              ? Row(
+                  children: [
+                    Expanded(child: searchWidget),
+                    const SizedBox(width: 8),
+                    if (brandWidget != null) ...[
+                      brandWidget,
+                      const SizedBox(width: 8),
+                    ],
+                    sortWidget,
+                    const SizedBox(width: 8),
+                    filterButtonGroup,
+                    const SizedBox(width: 8),
+                    viewModeButtonGroup,
+                    const SizedBox(width: 8),
+                    exportButton,
+                  ],
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: searchWidget),
+                        const SizedBox(width: 8),
+                        viewModeButtonGroup,
+                        const SizedBox(width: 8),
+                        exportButton,
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          if (brandWidget != null) ...[
+                            brandWidget,
+                            const SizedBox(width: 8),
+                          ],
+                          sortWidget,
+                          const SizedBox(width: 8),
+                          filterButtonGroup,
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+        );
+      },
     );
   }
 

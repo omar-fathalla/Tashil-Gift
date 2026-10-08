@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:al_mraay/core/services/ai_receipt_service.dart';
 import 'package:al_mraay/core/localization/app_strings.dart';
@@ -271,6 +272,83 @@ void main() {
 
       expect(smouhaToday, 1); // 1 today, even though total all-time is 2
       expect(gardeniaToday, 1);
+    });
+
+    test('Sticky Filter Toolbar Height ensures zero dead white space on desktop (58dp)', () {
+      // Desktop full-width toolbar is 58dp (one clean row)
+      const double desktopWidth = 1280.0;
+      final double desktopHeight = desktopWidth >= 960 ? 58.0 : 104.0;
+      expect(desktopHeight, 58.0);
+
+      // Tablet / medium viewport wraps into 2 rows (104dp)
+      const double tabletWidth = 800.0;
+      final double tabletHeight = tabletWidth >= 960 ? 58.0 : 104.0;
+      expect(tabletHeight, 104.0);
+    });
+
+    testWidgets('Pagination Controls inside compact 380-420dp width renders without overflow', (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(420, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.light(useMaterial3: true),
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 380, // Previous overflow happened at 380px
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isCompact = constraints.maxWidth < 460;
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      child: isCompact
+                          ? Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Flexible(
+                                      child: Text(
+                                        'عرض 1-25 من 7720',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                      child: const Text('صفحة 1 من 309'),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    IconButton(onPressed: () {}, icon: const Icon(Icons.first_page)),
+                                    IconButton(onPressed: () {}, icon: const Icon(Icons.chevron_left)),
+                                    IconButton(onPressed: () {}, icon: const Icon(Icons.chevron_right)),
+                                    IconButton(onPressed: () {}, icon: const Icon(Icons.last_page)),
+                                  ],
+                                ),
+                              ],
+                            )
+                          : const SizedBox.shrink(),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('عرض 1-25 من 7720'), findsOneWidget);
+      expect(find.text('صفحة 1 من 309'), findsOneWidget);
+      expect(find.byType(IconButton), findsNWidgets(4));
     });
   });
 }

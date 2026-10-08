@@ -80,6 +80,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   bool _allowMultipleChances = false;
   String _multiplierBasis = 'both';
   bool _requireVoucherSerials = false;
+  bool _allowComplementaryReceipts = false;
   
   DateTime? _startDate;
   DateTime? _endDate;
@@ -176,6 +177,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     _allowMultipleChances = e?.allowMultipleChances ?? false;
     _multiplierBasis = e?.multiplierBasis ?? 'both';
     _requireVoucherSerials = e?.requireVoucherSerials ?? false;
+    _allowComplementaryReceipts = e?.allowComplementaryReceipts ?? false;
     _maxChancesController = TextEditingController(
       text: (e?.maxChancesPerReceipt != null && e!.maxChancesPerReceipt > 0)
           ? e.maxChancesPerReceipt.toString()
@@ -4035,6 +4037,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           return rule;
         }).toList(),
         requireVoucherSerials: _requireVoucherSerials,
+        allowComplementaryReceipts: _allowComplementaryReceipts,
       );
 
       String createdEventId = widget.eventToEdit?.id ?? '';
@@ -4798,6 +4801,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     _buildProductSelectorSection(context, colorScheme, isMobile),
                     _buildMultipleChancesSection(context, colorScheme, isMobile, activeCountry),
                     _buildVoucherSerialsSettingSection(context, colorScheme, isMobile),
+                    _buildComplementaryReceiptsSettingSection(context, colorScheme, isMobile),
                   ],
                 ),
 
@@ -5919,6 +5923,113 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
             onChanged: (val) {
               setState(() {
                 _requireVoucherSerials = val;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComplementaryReceiptsSettingSection(
+    BuildContext context,
+    ColorScheme colorScheme,
+    bool isMobile,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _allowComplementaryReceipts
+            ? Colors.indigo.shade50.withValues(alpha: 0.55)
+            : colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _allowComplementaryReceipts
+              ? Colors.indigo.shade400
+              : colorScheme.outlineVariant.withValues(alpha: 0.4),
+          width: _allowComplementaryReceipts ? 1.5 : 1,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: _allowComplementaryReceipts
+                  ? Colors.indigo.shade700
+                  : colorScheme.surfaceContainerHighest,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.receipt_long_rounded,
+              size: 20,
+              color: _allowComplementaryReceipts
+                  ? Colors.white
+                  : colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    Text(
+                      'السماح بالبونات التكميلية (Complementary Receipts)',
+                      style: GoogleFonts.cairo(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _allowComplementaryReceipts
+                            ? Colors.green.shade100
+                            : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _allowComplementaryReceipts ? 'مفعل (يسمح بدمج البونات)' : 'معطل (فاتورة واحدة فقط)',
+                        style: GoogleFonts.cairo(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: _allowComplementaryReceipts
+                              ? Colors.green.shade900
+                              : Colors.grey.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _allowComplementaryReceipts
+                      ? 'يسمح للعميل برفع بونين منفصلين لنفس السوبرماركت والفرع في نفس اليوم (أحدهما بون أساسي والآخر بون تكميلي مثل "تكملة الفاتورة") ودمج إجمالي مشترياتهما لتأهيل العميل لمستويات الجوائز الأعلى.'
+                      : 'يلزم استيفاء شروط العرض في فاتورة كاشير واحدة مستقلة بذاتها، ويمنع دمج أو جمع أكثر من بون كاشير منفصل لنفس المعاملة.',
+                  style: GoogleFonts.cairo(
+                    fontSize: 12,
+                    color: colorScheme.onSurfaceVariant,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Switch.adaptive(
+            value: _allowComplementaryReceipts,
+            activeTrackColor: Colors.indigo.shade700,
+            onChanged: (val) {
+              setState(() {
+                _allowComplementaryReceipts = val;
               });
             },
           ),

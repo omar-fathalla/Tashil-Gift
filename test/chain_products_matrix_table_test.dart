@@ -121,14 +121,18 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Default has "كافة السلاسل المنافسة (16)" active
-      expect(find.text('كافة السلاسل المنافسة (16)'), findsOneWidget);
+      // Default has "كافة السلاسل" (16) and "النشطة فقط" buttons rendered
+      expect(find.text('كافة السلاسل'), findsOneWidget);
+      expect(find.text('16'), findsOneWidget);
+      expect(find.text('النشطة فقط'), findsOneWidget);
 
-      // Tap to toggle to "السلاسل النشطة فقط"
-      await tester.tap(find.text('كافة السلاسل المنافسة (16)'));
+      // Tap "النشطة فقط" segment to toggle to active only
+      await tester.tap(find.text('النشطة فقط'));
       await tester.pumpAndSettle();
 
-      expect(find.text('السلاسل النشطة فقط'), findsOneWidget);
+      // Verify buttons still present and interactive
+      expect(find.text('كافة السلاسل'), findsOneWidget);
+      expect(find.text('النشطة فقط'), findsOneWidget);
     });
 
     testWidgets('ChainProductsMatrixTable renders Head-to-Head 1-on-1 comparison correctly', (tester) async {
@@ -169,6 +173,45 @@ void main() {
 
       // Head-to-Head column header is rendered
       expect(find.text('المقارنة المباشرة'), findsOneWidget);
+    });
+
+    testWidgets('Top horizontal scrollbar control bar renders with pinned columns info and scroll buttons', (tester) async {
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: Directionality(
+                textDirection: TextDirection.rtl,
+                child: ChainProductsMatrixTable(
+                  products: mockProducts,
+                  distinctChains: distinctChains,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Verify Top Scroll Control Bar Pinned indicator
+      expect(find.text('الأعمدة المرجعية المثبتة'), findsOneWidget);
+      expect(find.text('3 أعمدة مثبتة'), findsOneWidget);
+
+      // Verify Top Scroll Control Bar next/previous buttons
+      expect(find.text('السابقة'), findsWidgets);
+      expect(find.text('التالية'), findsWidgets);
+
+      // Verify Drag indicator icon exists in the top track
+      expect(find.byIcon(Icons.drag_handle_rounded), findsOneWidget);
+
+      // Tap Next button to trigger scroll
+      await tester.tap(find.text('التالية').first);
+      await tester.pumpAndSettle();
     });
   });
 }

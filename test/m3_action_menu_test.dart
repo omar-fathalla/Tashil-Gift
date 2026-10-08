@@ -387,5 +387,82 @@ void main() {
 
       expect(itemTapped, isFalse);
     });
+
+    testWidgets('M3ActionMenu.header with badge renders title, icon, and badge cleanly', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: Scaffold(
+            body: Center(
+              child: M3ActionMenu(
+                minWidth: 460,
+                maxWidth: 460,
+                crossAxisUnconstrained: false,
+                children: [
+                  Builder(
+                    builder: (context) => M3ActionMenu.header(
+                      context: context,
+                      title: 'الفعاليات والمهرجانات',
+                      icon: Icons.campaign_rounded,
+                      badge: '13 حملة',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(IconButton));
+      await tester.pumpAndSettle();
+
+      expect(find.text('الفعاليات والمهرجانات'), findsOneWidget);
+      expect(find.byIcon(Icons.campaign_rounded), findsOneWidget);
+      expect(find.text('13 حملة'), findsOneWidget);
+    });
+
+    testWidgets('M3ActionMenu.item with subtitle and trailing widget renders without overflow', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: Scaffold(
+            body: Center(
+              child: M3ActionMenu(
+                minWidth: 480,
+                maxWidth: 480,
+                crossAxisUnconstrained: false,
+                children: [
+                  Builder(
+                    builder: (context) => M3ActionMenu.item(
+                      context: context,
+                      label: 'Back To School Heinz',
+                      subtitle: 'هاينز • كارفور مصر • هايبر وان • جملة ماركت • أوسكار ستورز',
+                      icon: Icons.campaign_rounded,
+                      isSelected: true,
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                        child: const Text('174 فاتورة'),
+                      ),
+                      onPressed: () {},
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(IconButton));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Back To School Heinz'), findsOneWidget);
+      expect(find.text('هاينز • كارفور مصر • هايبر وان • جملة ماركت • أوسكار ستورز'), findsOneWidget);
+      expect(find.text('174 فاتورة'), findsOneWidget);
+      expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+    });
   });
 }

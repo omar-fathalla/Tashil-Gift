@@ -32,6 +32,8 @@ class M3ConnectedButtonGroup<T> extends StatelessWidget {
   final double borderRadius;
   final bool isExpanded;
   final EdgeInsetsGeometry? padding;
+  final double? fontSize;
+  final double? iconSize;
 
   const M3ConnectedButtonGroup({
     super.key,
@@ -43,12 +45,16 @@ class M3ConnectedButtonGroup<T> extends StatelessWidget {
     this.borderRadius = 24,
     this.isExpanded = false,
     this.padding,
+    this.fontSize,
+    this.iconSize,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final effectiveFontSize = fontSize ?? (height <= 32 ? 11.5 : 13.0);
+    final effectiveIconSize = iconSize ?? (height <= 32 ? 15.0 : 18.0);
 
     Widget buildSegment(int index) {
       final segment = segments[index];
@@ -83,7 +89,7 @@ class M3ConnectedButtonGroup<T> extends StatelessWidget {
               color: isSelected ? colorScheme.primary : Colors.transparent,
               borderRadius: itemBorderRadius,
             ),
-            padding: EdgeInsets.symmetric(horizontal: isExpanded ? 6 : 14),
+            padding: padding ?? EdgeInsets.symmetric(horizontal: isExpanded ? 6 : (height <= 32 ? 8 : 14)),
             alignment: Alignment.center,
             child: Row(
               mainAxisSize: isExpanded ? MainAxisSize.max : MainAxisSize.min,
@@ -92,27 +98,27 @@ class M3ConnectedButtonGroup<T> extends StatelessWidget {
                 if (isSelected && showCheckmark) ...[
                   Icon(
                     Icons.check,
-                    size: 18,
+                    size: effectiveIconSize,
                     color: colorScheme.onPrimary,
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 5),
                 ] else if (segment.icon != null) ...[
                   Icon(
                     isSelected && segment.selectedIcon != null
                         ? segment.selectedIcon
                         : segment.icon,
-                    size: 18,
+                    size: effectiveIconSize,
                     color: isSelected
                         ? colorScheme.onPrimary
                         : colorScheme.onSurfaceVariant,
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 5),
                 ],
                 Flexible(
                   child: Text(
                     segment.label,
                     style: GoogleFonts.cairo(
-                      fontSize: 13,
+                      fontSize: effectiveFontSize,
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
                       color: isSelected
                           ? colorScheme.onPrimary

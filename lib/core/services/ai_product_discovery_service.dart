@@ -26,6 +26,8 @@ class DiscoveredProductDocument {
   final String status; // 'pending', 'approved', 'rejected'
   final double confidenceScore;
   final String relevanceReason;
+  final String rejectionReason;
+  final bool isCriteriaCompliant;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final bool isSelected;
@@ -46,6 +48,8 @@ class DiscoveredProductDocument {
     this.status = 'pending',
     this.confidenceScore = 0.95,
     this.relevanceReason = '',
+    this.rejectionReason = '',
+    this.isCriteriaCompliant = false,
     this.createdAt,
     this.updatedAt,
     this.isSelected = true,
@@ -72,6 +76,8 @@ class DiscoveredProductDocument {
       status: (data['status'] ?? 'pending').toString(),
       confidenceScore: (data['confidenceScore'] as num?)?.toDouble() ?? 0.95,
       relevanceReason: (data['relevanceReason'] ?? '').toString(),
+      rejectionReason: (data['rejectionReason'] ?? '').toString(),
+      isCriteriaCompliant: data['isCriteriaCompliant'] == true,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );
@@ -93,6 +99,8 @@ class DiscoveredProductDocument {
       'status': status,
       'confidenceScore': confidenceScore,
       'relevanceReason': relevanceReason,
+      'rejectionReason': rejectionReason,
+      'isCriteriaCompliant': isCriteriaCompliant,
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
@@ -105,6 +113,8 @@ class DiscoveredProductDocument {
     String? barcode,
     double? averagePrice,
     String? status,
+    String? rejectionReason,
+    bool? isCriteriaCompliant,
     bool? isSelected,
   }) {
     return DiscoveredProductDocument(
@@ -123,6 +133,8 @@ class DiscoveredProductDocument {
       status: status ?? this.status,
       confidenceScore: confidenceScore,
       relevanceReason: relevanceReason,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
+      isCriteriaCompliant: isCriteriaCompliant ?? this.isCriteriaCompliant,
       createdAt: createdAt,
       updatedAt: updatedAt,
       isSelected: isSelected ?? this.isSelected,
@@ -190,6 +202,50 @@ class DiscoveredProductItem {
       'confidence': confidence,
     };
   }
+}
+
+/// Model representing the evaluation of a product candidate against the 5 strict discovery criteria
+class DiscoveryCriteriaResult {
+  final bool isEligible;
+  final String rejectionReason;
+  final bool hasValidBarcode;
+  final bool meetsFrequency;
+  final bool isNotGeneric;
+  final bool hasValidPrice;
+  final bool matchesCompanyBrand;
+
+  const DiscoveryCriteriaResult({
+    required this.isEligible,
+    required this.rejectionReason,
+    required this.hasValidBarcode,
+    required this.meetsFrequency,
+    required this.isNotGeneric,
+    required this.hasValidPrice,
+    required this.matchesCompanyBrand,
+  });
+}
+
+/// Summary result of running retroactive cleanup on existing discovered products
+class DiscoveryCleanupSummary {
+  final int totalProcessed;
+  final int totalRejected;
+  final int totalRetained;
+  final int invalidBarcodeCount;
+  final int singleFrequencyCount;
+  final int genericItemCount;
+  final int invalidPriceCount;
+  final int unmatchedBrandCount;
+
+  const DiscoveryCleanupSummary({
+    required this.totalProcessed,
+    required this.totalRejected,
+    required this.totalRetained,
+    this.invalidBarcodeCount = 0,
+    this.singleFrequencyCount = 0,
+    this.genericItemCount = 0,
+    this.invalidPriceCount = 0,
+    this.unmatchedBrandCount = 0,
+  });
 }
 
 final aiProductDiscoveryServiceProvider = Provider<AiProductDiscoveryService>((ref) {
@@ -297,16 +353,27 @@ class AiProductDiscoveryService {
           .toSet();
 
       for (final p in extractedProducts) {
-        if (!p.isTargetCompany && !_isProbableCompanyProduct(p.name, slug)) continue;
-
         final rawName = p.name.trim();
         if (rawName.isEmpty) continue;
 
         final rawBarcode = p.barcode.trim().toEnglishDigits();
         final normName = _normalizeForComparison(rawName);
 
+        // --- ENFORCE 5 STRICT DISCOVERY CRITERIA (AIR-72) ---
+        // 1. Mandatory Valid Barcode Constraint (8 to 14 numeric digits)
+        if (!DiscoveryCriteriaEvaluator.isValidRetailBarcode(rawBarcode)) continue;
+
+        // 2. Generic & Service Items Exclusion (no bags, delivery, tips, discounts, generic placeholders)
+        if (DiscoveryCriteriaEvaluator.isGenericOrServiceItem(rawName)) continue;
+
+        // 3. Price Sanity Check (positive, realistic FMCG price)
+        if (!DiscoveryCriteriaEvaluator.hasValidPrice(p.price)) continue;
+
+        // 4. Company Brand Whitelist Match
+        if (!p.isTargetCompany && !DiscoveryCriteriaEvaluator.isProbableCompanyProduct(rawName, slug)) continue;
+
         // If already in catalog with barcode, auto-register raw POS string as chain alias
-        if (rawBarcode.isNotEmpty && registeredBarcodes.contains(rawBarcode)) {
+        if (registeredBarcodes.contains(rawBarcode)) {
           if (retailChain.isNotEmpty && rawName.isNotEmpty) {
             _effectiveProductsService.registerChainAlias(
               companySlug: slug,
@@ -332,7 +399,7 @@ class AiProductDiscoveryService {
 
         final bool isHighConfidence = rawBarcode.isNotEmpty &&
             rawBarcode.length >= 8 &&
-            _isProbableCompanyProduct(rawName, slug) &&
+            DiscoveryCriteriaEvaluator.isProbableCompanyProduct(rawName, slug) &&
             p.price > 0 &&
             p.price < 5000;
 
@@ -375,14 +442,22 @@ class AiProductDiscoveryService {
             if (p.price > 0) currentPrices.add(p.price);
             final avgPrice = currentPrices.isNotEmpty ? (currentPrices.reduce((a, b) => a + b) / currentPrices.length) : p.price;
 
+            final newFreq = currentFreq + 1;
+            // Upgrade status to 'pending' once frequency >= 2 or observed across multiple chains (Criteria 2)
+            final meetsFreq = DiscoveryCriteriaEvaluator.meetsFrequencyThreshold(newFreq, chains.toList());
+            final updatedStatus = (data['status'] == 'approved' || data['status'] == 'auto_approved')
+                ? data['status']
+                : (meetsFreq ? 'pending' : (data['status'] ?? 'pending'));
+
             tx.update(docRef, {
-              'invoiceFrequency': currentFreq + 1,
+              'invoiceFrequency': newFreq,
               'retailChains': chains.toList(),
               'observedPrices': currentPrices.take(10).toList(),
               'averagePrice': avgPrice,
               'latestPrice': p.price > 0 ? p.price : (data['latestPrice'] ?? 0.0),
-              'barcode': (rawBarcode.isNotEmpty) ? rawBarcode : (data['barcode'] ?? ''),
-              'status': isHighConfidence ? 'auto_approved' : (data['status'] ?? 'pending'),
+              'barcode': rawBarcode,
+              'status': isHighConfidence ? 'auto_approved' : updatedStatus,
+              'isCriteriaCompliant': true,
               'lastReceiptNumber': receiptNumber,
               'updatedAt': FieldValue.serverTimestamp(),
             });
@@ -401,11 +476,13 @@ class AiProductDiscoveryService {
               'observedPrices': [if (p.price > 0) p.price],
               'retailChains': [if (retailChain.isNotEmpty) retailChain],
               'invoiceFrequency': 1,
-              'status': isHighConfidence ? 'auto_approved' : 'pending',
+              // First observation marked as unverified until second observation confirms it (Criteria 2)
+              'status': isHighConfidence ? 'auto_approved' : 'unverified_first_hit',
+              'isCriteriaCompliant': true,
               'confidenceScore': isHighConfidence ? 0.99 : 0.96,
               'relevanceReason': isHighConfidence
                   ? 'تم اعتماده وحقنه تلقائياً في كتالوج الشركة (AIR-28)'
-                  : 'تم رصده في فاتورة معتمدة لشركة $companyName',
+                  : 'تم رصده لأول مرة في فاتورة معتمدة لشركة $companyName',
               'lastReceiptNumber': receiptNumber,
               'createdAt': FieldValue.serverTimestamp(),
               'updatedAt': FieldValue.serverTimestamp(),
@@ -473,16 +550,108 @@ class AiProductDiscoveryService {
   }
 
   /// Rejects/dismisses discovered items from the inbox
-  Future<void> rejectDiscoveredDocuments(List<String> docIds) async {
+  Future<void> rejectDiscoveredDocuments(List<String> docIds, {String reason = 'استبعاد يدوي من الإدارة'}) async {
     if (docIds.isEmpty) return;
     final batch = _effectiveFirestore.batch();
     for (final id in docIds) {
       batch.update(_inboxCollection.doc(id), {
         'status': 'rejected',
+        'rejectionReason': reason,
+        'rejectedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
     }
     await batch.commit();
+  }
+
+  /// Retroactive Cleanup: Audits all existing pending products against the 5 strict criteria
+  /// Automatically rejects non-compliant items and marks verified items (AIR-72)
+  Future<DiscoveryCleanupSummary> cleanupExistingPendingInbox({
+    String? companySlug,
+    void Function(int processed, int rejected, int retained)? onProgress,
+  }) async {
+    Query<Map<String, dynamic>> query = _inboxCollection.where('status', isEqualTo: 'pending');
+    if (companySlug != null && companySlug.trim().isNotEmpty && companySlug.trim() != 'all') {
+      query = query.where('companySlug', isEqualTo: companySlug.trim().toLowerCase());
+    }
+
+    final snapshot = await query.get();
+    int processed = 0;
+    int rejected = 0;
+    int retained = 0;
+    int invalidBarcodeCount = 0;
+    int singleFrequencyCount = 0;
+    int genericItemCount = 0;
+    int invalidPriceCount = 0;
+    int unmatchedBrandCount = 0;
+
+    WriteBatch batch = _effectiveFirestore.batch();
+    int batchOps = 0;
+
+    for (final doc in snapshot.docs) {
+      processed++;
+      final item = DiscoveredProductDocument.fromFirestore(doc);
+
+      final eval = DiscoveryCriteriaEvaluator.evaluateProduct(
+        productName: item.canonicalName.isNotEmpty ? item.canonicalName : item.rawProductName,
+        barcode: item.barcode,
+        price: item.averagePrice,
+        frequency: item.invoiceFrequency,
+        retailChains: item.retailChains,
+        companySlug: item.companySlug,
+        brand: item.brand,
+        enforceFrequency: true,
+      );
+
+      if (!eval.hasValidBarcode) invalidBarcodeCount++;
+      if (!eval.meetsFrequency) singleFrequencyCount++;
+      if (!eval.isNotGeneric) genericItemCount++;
+      if (!eval.hasValidPrice) invalidPriceCount++;
+      if (!eval.matchesCompanyBrand) unmatchedBrandCount++;
+
+      if (!eval.isEligible) {
+        rejected++;
+        batch.update(doc.reference, {
+          'status': 'rejected',
+          'rejectedAt': FieldValue.serverTimestamp(),
+          'rejectionReason': eval.rejectionReason,
+          'isCriteriaCompliant': false,
+        });
+        batchOps++;
+      } else {
+        retained++;
+        batch.update(doc.reference, {
+          'isCriteriaCompliant': true,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        batchOps++;
+      }
+
+      if (batchOps >= 400) {
+        await batch.commit();
+        batch = _effectiveFirestore.batch();
+        batchOps = 0;
+      }
+
+      if (onProgress != null) {
+        onProgress(processed, rejected, retained);
+      }
+    }
+
+    if (batchOps > 0) {
+      await batch.commit();
+    }
+
+    return DiscoveryCleanupSummary(
+      totalProcessed: processed,
+      totalRejected: rejected,
+      totalRetained: retained,
+      invalidBarcodeCount: invalidBarcodeCount,
+      singleFrequencyCount: singleFrequencyCount,
+      genericItemCount: genericItemCount,
+      invalidPriceCount: invalidPriceCount,
+      unmatchedBrandCount: unmatchedBrandCount,
+    );
   }
 
   /// Deep scans historical transactions in receipts_transactions to harvest all uncataloged products
@@ -818,38 +987,10 @@ $encodedCandidates
     return '${slug}_${clean.length > 40 ? clean.substring(0, 40) : clean}';
   }
 
-  static bool _isProbableCompanyProduct(String name, String slug) {
-    final lower = name.toLowerCase();
-    if (slug.contains('unilever') || slug.contains('يونيليفر')) {
-      return lower.contains('تريزيمي') ||
-          lower.contains('تريزمي') ||
-          lower.contains('tresemme') ||
-          lower.contains('كلير') ||
-          lower.contains('clear') ||
-          lower.contains('ريكسونا') ||
-          lower.contains('rexona') ||
-          lower.contains('أكس') ||
-          lower.contains('اكس') ||
-          lower.contains('axe') ||
-          lower.contains('دوف') ||
-          lower.contains('dove') ||
-          lower.contains('صنسيلك') ||
-          lower.contains('صنسلك') ||
-          lower.contains('sunsilk') ||
-          lower.contains('سيجنال') ||
-          lower.contains('signal') ||
-          lower.contains('لايفبوي') ||
-          lower.contains('لوكس') ||
-          lower.contains('lux') ||
-          lower.contains('كومفورت') ||
-          lower.contains('ليبتون') ||
-          lower.contains('كنور');
-    }
-    return false;
-  }
-
   static String _inferSubBrand(String name, String slug) {
     final lower = name.toLowerCase();
+
+    // Unilever Brands
     if (lower.contains('تريزيمي') || lower.contains('تريزمي') || lower.contains('tresemme')) return 'تريزيمي (TRESemmé)';
     if (lower.contains('كلير') || lower.contains('clear')) return 'كلير (Clear)';
     if (lower.contains('ريكسونا') || lower.contains('rexona')) return 'ريكسونا (Rexona)';
@@ -862,6 +1003,22 @@ $encodedCandidates
     if (lower.contains('كومفورت') || lower.contains('comfort')) return 'كومفورت (Comfort)';
     if (lower.contains('ليبتون') || lower.contains('lipton')) return 'ليبتون (Lipton)';
     if (lower.contains('كنور') || lower.contains('knorr')) return 'كنور (Knorr)';
+    if (lower.contains('فازلين') || lower.contains('vaseline')) return 'فازلين (Vaseline)';
+
+    // Cadbury / Mondelez Brands
+    if (lower.contains('ديري ميلك') || lower.contains('ديرى ميلك') || lower.contains('dairy milk')) return 'ديري ميلك (Dairy Milk)';
+    if (lower.contains('مورو') || lower.contains('moro')) return 'مورو (Moro)';
+    if (lower.contains('بابلي') || lower.contains('bubbly')) return 'بابلي (Bubbly)';
+    if (lower.contains('اوريو') || lower.contains('أوريو') || lower.contains('oreo') || lower.contains('بوريو')) return 'أوريو (Oreo)';
+    if (lower.contains('ماندولين') || lower.contains('مندولين')) return 'ماندولين (Mandolin)';
+    if (lower.contains('فليك') || lower.contains('flake')) return 'فليك (Flake)';
+    if (lower.contains('توك') || lower.contains('tuc')) return 'توك (TUC)';
+    if (lower.contains('ترايدنت') || lower.contains('trident')) return 'ترايدنت (Trident)';
+    if (lower.contains('كلورتس') || lower.contains('كلتس') || lower.contains('clorets')) return 'كلورتس (Clorets)';
+    if (lower.contains('هولز') || lower.contains('halls')) return 'هولز (Halls)';
+    if (lower.contains('تانج') || lower.contains('tang')) return 'تانج (Tang)';
+    if (lower.contains('كادبوري') || lower.contains('كدبوري') || lower.contains('cadbury')) return 'كادبوري (Cadbury)';
+
     return slug;
   }
 
@@ -873,6 +1030,7 @@ $encodedCandidates
     if (lower.contains('صابون') || lower.contains('شاور') || lower.contains('لوشن') || lower.contains('كريم')) return 'العناية بالبشرة والجسم (Skincare)';
     if (lower.contains('منظف') || lower.contains('منعم') || lower.contains('مسحوق')) return 'المنظفات المنزلية (Home Care)';
     if (lower.contains('شاي') || lower.contains('شوربة') || lower.contains('مرقة')) return 'الأغذية والمشروبات (Foods)';
+    if (lower.contains('شوكولات') || lower.contains('شيكولات') || lower.contains('chocolate') || lower.contains('بسكويت') || lower.contains('ويفر') || lower.contains('علك') || lower.contains('لبان')) return 'الحلويات والشوكولاتة (Confectionery)';
     return 'عام (General)';
   }
 
@@ -911,6 +1069,195 @@ $encodedCandidates
       text = text.substring(0, text.length - 3);
     }
     return text.trim();
+  }
+}
+
+/// Evaluator enforcing the 5 strict criteria for new product discovery & catalog enrichment (AIR-72)
+class DiscoveryCriteriaEvaluator {
+  /// Criterion 1: Barcode must be 8 to 14 English digits only
+  static bool isValidRetailBarcode(String barcode) {
+    final clean = barcode.trim().toEnglishDigits();
+    if (clean.length < 8 || clean.length > 14) return false;
+    return RegExp(r'^\d{8,14}$').hasMatch(clean);
+  }
+
+  /// Criterion 2: Frequency threshold (min 2 invoice occurrences or multi-chain)
+  static bool meetsFrequencyThreshold(int frequency, List<String> retailChains) {
+    return frequency >= 2 || retailChains.length >= 2;
+  }
+
+  /// Criterion 3: Ban generic, non-retail, or service lines
+  static bool isGenericOrServiceItem(String name) {
+    final trimmed = name.trim();
+    if (trimmed.length <= 2) return true;
+    if (RegExp(r'^[\d\s\-_.,/()#*]+$').hasMatch(trimmed)) return true;
+
+    final lower = normalizeForComparison(trimmed);
+    const genericTokens = [
+      'كيس', 'اكياس', 'شنطه', 'شنطة', 'bag', 'plastic',
+      'خدمه توصيل', 'خدمة توصيل', 'توصيل', 'دليفري', 'delivery',
+      'اكراميه', 'إكرامية', 'بقشيش', 'tip',
+      'خصم', 'مرتجع', 'تسوية', 'استرداد', 'refund', 'discount', 'بونص', 'voucher',
+      'ضريبه', 'ضريبة', 'دمغه', 'دمغة', 'رسوم', 'مصاريف',
+      'صنف عام', 'عام', 'مبيعات متنوعه', 'مبيعات متنوعة', 'بضاعه', 'بضاعة',
+      'خدمات', 'خدمه', 'خدمة', 'ميزان', 'وزن', 'باركود غير معرف', 'توالف', 'هالك',
+    ];
+
+    for (final t in genericTokens) {
+      if (lower == t || lower.startsWith('$t ') || lower.endsWith(' $t') || lower.contains(' $t ')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Criterion 4: Price sanity check (positive, within real retail FMCG range)
+  static bool hasValidPrice(double price) {
+    return price >= 1.0 && price <= 15000.0;
+  }
+
+  /// Criterion 5: Brand & Company Whitelist
+  static bool isProbableCompanyProduct(String name, String slug) {
+    final lower = normalizeForComparison(name);
+    final cleanSlug = slug.toLowerCase();
+
+    // Unilever Portfolio (doc_id: 512)
+    if (cleanSlug.contains('unilever') || cleanSlug.contains('يونيليفر') || cleanSlug == '512') {
+      const unileverBrands = [
+        'تريزيمي', 'تريزمي', 'tresemme',
+        'كلير', 'clear',
+        'ريكسونا', 'rexona',
+        'اكس', 'أكس', 'axe',
+        'دوف', 'dove',
+        'صنسيلك', 'صنسلك', 'sunsilk',
+        'سيجنال', 'signal',
+        'لايفبوي', 'lifebuoy',
+        'لوكس', 'lux',
+        'كومفورت', 'comfort',
+        'ليبتون', 'lipton',
+        'كنور', 'knorr',
+        'فازلين', 'vaseline',
+        'فير اند لفلي', 'جلو اند لفلي', 'glow & lovely',
+      ];
+      return unileverBrands.any((b) => lower.contains(b));
+    }
+
+    // Cadbury / Mondelez Portfolio (doc_id: 4)
+    if (cleanSlug.contains('cadbury') || cleanSlug.contains('كادبري') || cleanSlug.contains('كدبري') ||
+        cleanSlug.contains('mondelez') || cleanSlug.contains('مونديليز') || cleanSlug == '4') {
+      const mondelezBrands = [
+        'كادبوري', 'كدبوري', 'cadbury',
+        'ديري ميلك', 'ديرى ميلك', 'dairy milk',
+        'مورو', 'moro',
+        'بابلي', 'بابلى', 'bubbly',
+        'اوريو', 'أوريو', 'oreo',
+        'بوريو',
+        'ماندولين', 'مندولين', 'mandolin',
+        'فليك', 'flake',
+        'سي دي ام', 'سى دى ام', 'cdm',
+        'توك', 'tuc',
+        'ترايدنت', 'trident',
+        'كلورتس', 'كلتس', 'clorets',
+        'هولز', 'halls',
+        'تانج', 'tang',
+        'بسكويت وي', 'ويفر وي', 'وي',
+        'مارفلوس', 'marvellous',
+      ];
+      return mondelezBrands.any((b) => lower.contains(b));
+    }
+
+    // El Doha (doc_id: 1434)
+    if (cleanSlug.contains('doha') || cleanSlug.contains('الضحى') || cleanSlug.contains('الضحي') || cleanSlug == '1434') {
+      return lower.contains('ضحى') || lower.contains('الضحى') || lower.contains('الضحي') || lower.contains('doha');
+    }
+
+    // Adco (doc_id: 40)
+    if (cleanSlug.contains('adco') || cleanSlug.contains('ادكو') || cleanSlug == '40') {
+      return lower.contains('ادكو') || lower.contains('اوكسي') || lower.contains('اوكسى') || lower.contains('oxy') || lower.contains('adco');
+    }
+
+    // Almarai (doc_id: 2452)
+    if (cleanSlug.contains('almarai') || cleanSlug.contains('المراعي') || cleanSlug == '2452') {
+      return lower.contains('المراعي') || lower.contains('المراعى') || lower.contains('almarai');
+    }
+
+    // Heinz (doc_id: 2884)
+    if (cleanSlug.contains('heinz') || cleanSlug.contains('هاينز') || cleanSlug == '2884') {
+      return lower.contains('هاينز') || lower.contains('heinz');
+    }
+
+    // Fine (doc_id: 464)
+    if (cleanSlug.contains('fine') || cleanSlug.contains('فاين') || cleanSlug == '464') {
+      return lower.contains('فاين') || lower.contains('fine');
+    }
+
+    // Rich Bake (doc_id: 4543)
+    if (cleanSlug.contains('rich_bake') || cleanSlug.contains('ريتش بيك') || cleanSlug == '4543') {
+      return lower.contains('ريتش بيك') || lower.contains('ريتش') || lower.contains('rich');
+    }
+
+    // Arma (doc_id: 31)
+    if (cleanSlug.contains('arma') || cleanSlug.contains('ارما') || cleanSlug == '31') {
+      return lower.contains('ارما') || lower.contains('كريستال') || lower.contains('الهانم') || lower.contains('حلوة') || lower.contains('arma');
+    }
+
+    // Default: Check if the product name explicitly contains the company name / slug token
+    final cleanSlugToken = cleanSlug.replaceAll(RegExp(r'[^a-zA-Z\u0600-\u06FF]'), '');
+    if (cleanSlugToken.length >= 3 && lower.contains(cleanSlugToken)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /// Comprehensive evaluator of all 5 criteria
+  static DiscoveryCriteriaResult evaluateProduct({
+    required String productName,
+    required String barcode,
+    required double price,
+    required int frequency,
+    required List<String> retailChains,
+    required String companySlug,
+    String brand = '',
+    bool enforceFrequency = true,
+  }) {
+    final bool validBarcode = isValidRetailBarcode(barcode);
+    final bool meetsFreq = !enforceFrequency || meetsFrequencyThreshold(frequency, retailChains);
+    final bool notGeneric = !isGenericOrServiceItem(productName);
+    final bool validPrice = hasValidPrice(price);
+    final bool matchesBrand = isProbableCompanyProduct(productName, companySlug) ||
+        (brand.isNotEmpty && isProbableCompanyProduct(brand, companySlug));
+
+    final List<String> failures = [];
+    if (!validBarcode) failures.add('الباركود مفقود أو غير مطابق (8-14 رقم)');
+    if (!meetsFreq) failures.add('تكرار الرصد أقل من مرتين');
+    if (!notGeneric) failures.add('صنف عام أو خدمة غير سلعية');
+    if (!validPrice) failures.add('السعر غير منطقي أو 0.0 ج.م');
+    if (!matchesBrand) failures.add('لا يطابق العلامات المعتمدة للشركة');
+
+    final bool isEligible = validBarcode && meetsFreq && notGeneric && validPrice && matchesBrand;
+
+    return DiscoveryCriteriaResult(
+      isEligible: isEligible,
+      rejectionReason: failures.join(' • '),
+      hasValidBarcode: validBarcode,
+      meetsFrequency: meetsFreq,
+      isNotGeneric: notGeneric,
+      hasValidPrice: validPrice,
+      matchesCompanyBrand: matchesBrand,
+    );
+  }
+
+  static String normalizeForComparison(String text) {
+    return text
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\s\-_\/]+'), ' ')
+        .replaceAll('أ', 'ا')
+        .replaceAll('إ', 'ا')
+        .replaceAll('آ', 'ا')
+        .replaceAll('ة', 'ه')
+        .replaceAll('ى', 'ي');
   }
 }
 

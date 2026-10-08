@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +15,7 @@ import '../../../core/utils/arabic_numbers_utils.dart';
 import '../../../core/constants/country_currency_config.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../core/widgets/m3_button_groups.dart';
+import '../../../core/widgets/m3_action_menu.dart';
 import '../../../core/widgets/m3_progress_indicators.dart';
 import '../../../core/services/ai_product_discovery_service.dart';
 import 'widgets/ai_discovered_products_dialog.dart';
@@ -59,6 +61,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
   // Card 3: Global Catalog Browser
   final _globalSearchQueryController = TextEditingController();
   String _selectedGlobalFilter = 'ALL';
+  String _companiesSortBy = 'PRODUCTS_DESC'; // 'PRODUCTS_DESC', 'PRODUCTS_ASC', 'NAME_ASC', 'SLUG_ASC'
   int _catalogDisplayLimit = 20;
 
   List<CompanyModel> _existingCompanies = [];
@@ -1152,30 +1155,14 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                 final companies = snapshot.data?.docs.map((d) => CompanyModel.fromFirestore(d)).toList() ?? [];
                 _existingCompanies = companies;
 
-                // Auto-select first company if none selected and companies exist
-                if (_selectedProductCompanySlug == null && companies.isNotEmpty) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted && _selectedProductCompanySlug == null) {
-                      setState(() {
-                        _selectedProductCompanySlug = companies.first.slug;
-                      });
-                    }
-                  });
-                }
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     // ==========================================
-                    // 1. CARD 1: تسجيل وتكويد الشركات (Company Registration)
+                    // 1. UNIFIED CARD: تسجيل الشركات وإضافة المنتجات
                     // ==========================================
-                    _buildCompanyRegistrationCard(colorScheme),
-                    const SizedBox(height: 20),
-
-                    // ==========================================
-                    // 2. CARD 2: إضافة وتكويد منتجات الشركات (Add & Manage Products)
-                    // ==========================================
-                    _buildCompanyProductsCard(colorScheme, companies),
+                    _buildUnifiedCompanyAndProductsCard(colorScheme, companies),
                     const SizedBox(height: 20),
 
                     // ==========================================
@@ -1193,174 +1180,148 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // CARD 1: تسجيل شركة جديدة
+  // SECTION: تسجيل شركة جديدة (مبسط بدون حشو أو أمثلة مكررة)
   // ---------------------------------------------------------------------------
-  Widget _buildCompanyRegistrationCard(ColorScheme colorScheme) {
-    return Card(
-      elevation: 1,
-      color: colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Form(
-          key: _regFormKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildCompanyRegistrationSection(ColorScheme colorScheme) {
+    return Form(
+      key: _regFormKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(Icons.add_business_rounded, color: colorScheme.onPrimaryContainer, size: 20),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    '١. تسجيل وتكويد شركة جديدة (Company Registration)',
-                    style: GoogleFonts.cairo(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: colorScheme.onSurface,
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'خطوة 1: تعريف الشركة',
-                      style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600, color: colorScheme.primary),
-                    ),
-                  ),
-                ],
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.domain_add_rounded, color: colorScheme.onPrimaryContainer, size: 20),
               ),
-              const SizedBox(height: 16),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final isNarrow = constraints.maxWidth < 700;
-                  if (isNarrow) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        TextFormField(
-                          controller: _regCompanyNameController,
-                          focusNode: _regCompanyNameFocusNode,
-                          textInputAction: TextInputAction.next,
-                          onFieldSubmitted: (_) => _regCompanySlugFocusNode.requestFocus(),
-                          decoration: const InputDecoration(
-                            labelText: 'اسم الشركة (مثال: شركة جهينة)',
-                            hintText: 'شركة جهينة',
-                            prefixIcon: Icon(Icons.apartment_rounded),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: _regCompanySlugController,
-                          focusNode: _regCompanySlugFocusNode,
-                          keyboardType: TextInputType.number,
-                          textInputAction: TextInputAction.done,
-                          onFieldSubmitted: (_) => _isSavingCompany ? null : _saveCompanyOnlyToFirebase(),
-                          inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
-                          decoration: const InputDecoration(
-                            labelText: 'كود الشركة الرقمي الفريد (مثال: 2450)',
-                            hintText: '2450',
-                            prefixIcon: Icon(Icons.pin_rounded),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        FilledButton.tonalIcon(
-                          onPressed: _isSavingCompany ? null : _saveCompanyOnlyToFirebase,
-                          icon: _isSavingCompany
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(Icons.domain_add_rounded),
-                          label: Text(_isSavingCompany ? 'جاري التسجيل...' : 'تسجيل الشركة'),
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                        ),
-                      ],
-                    );
-                  }
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        flex: 3,
-                        child: TextFormField(
-                          controller: _regCompanyNameController,
-                          focusNode: _regCompanyNameFocusNode,
-                          textInputAction: TextInputAction.next,
-                          onFieldSubmitted: (_) => _regCompanySlugFocusNode.requestFocus(),
-                          decoration: const InputDecoration(
-                            labelText: 'اسم الشركة (مثال: شركة جهينة)',
-                            hintText: 'شركة جهينة',
-                            prefixIcon: Icon(Icons.apartment_rounded),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        flex: 2,
-                        child: TextFormField(
-                          controller: _regCompanySlugController,
-                          focusNode: _regCompanySlugFocusNode,
-                          keyboardType: TextInputType.number,
-                          textInputAction: TextInputAction.done,
-                          onFieldSubmitted: (_) => _isSavingCompany ? null : _saveCompanyOnlyToFirebase(),
-                          inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
-                          decoration: const InputDecoration(
-                            labelText: 'كود الشركة الرقمي الفريد (مثال: 2450)',
-                            hintText: '2450',
-                            prefixIcon: Icon(Icons.pin_rounded),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Tooltip(
-                        message: 'حفظ وتكويد الشركة في قاعدة البيانات مع إمكانية إضافة منتجاتها في أي وقت',
-                        child: FilledButton.tonalIcon(
-                          onPressed: _isSavingCompany ? null : _saveCompanyOnlyToFirebase,
-                          icon: _isSavingCompany
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(Icons.domain_add_rounded),
-                          label: Text(_isSavingCompany ? 'جاري التسجيل...' : 'تسجيل الشركة'),
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
+              const SizedBox(width: 10),
+              Text(
+                'تسجيل شركة',
+                style: GoogleFonts.cairo(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: colorScheme.onSurface,
+                ),
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isNarrow = constraints.maxWidth < 700;
+              if (isNarrow) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextFormField(
+                      controller: _regCompanyNameController,
+                      focusNode: _regCompanyNameFocusNode,
+                      textInputAction: TextInputAction.next,
+                      onFieldSubmitted: (_) => _regCompanySlugFocusNode.requestFocus(),
+                      decoration: const InputDecoration(
+                        labelText: 'اسم الشركة',
+                        hintText: 'اسم الشركة',
+                        prefixIcon: Icon(Icons.apartment_rounded),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _regCompanySlugController,
+                      focusNode: _regCompanySlugFocusNode,
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => _isSavingCompany ? null : _saveCompanyOnlyToFirebase(),
+                      inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
+                      decoration: const InputDecoration(
+                        labelText: 'كود الشركة',
+                        hintText: 'كود الشركة',
+                        prefixIcon: Icon(Icons.pin_rounded),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    FilledButton.tonalIcon(
+                      onPressed: _isSavingCompany ? null : _saveCompanyOnlyToFirebase,
+                      icon: _isSavingCompany
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.add_rounded),
+                      label: Text(_isSavingCompany ? 'جاري التسجيل...' : 'تسجيل الشركة'),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: TextFormField(
+                      controller: _regCompanyNameController,
+                      focusNode: _regCompanyNameFocusNode,
+                      textInputAction: TextInputAction.next,
+                      onFieldSubmitted: (_) => _regCompanySlugFocusNode.requestFocus(),
+                      decoration: const InputDecoration(
+                        labelText: 'اسم الشركة',
+                        hintText: 'اسم الشركة',
+                        prefixIcon: Icon(Icons.apartment_rounded),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    flex: 2,
+                    child: TextFormField(
+                      controller: _regCompanySlugController,
+                      focusNode: _regCompanySlugFocusNode,
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => _isSavingCompany ? null : _saveCompanyOnlyToFirebase(),
+                      inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
+                      decoration: const InputDecoration(
+                        labelText: 'كود الشركة',
+                        hintText: 'كود الشركة',
+                        prefixIcon: Icon(Icons.pin_rounded),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  FilledButton.tonalIcon(
+                    onPressed: _isSavingCompany ? null : _saveCompanyOnlyToFirebase,
+                    icon: _isSavingCompany
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.add_rounded),
+                    label: Text(_isSavingCompany ? 'جاري التسجيل...' : 'تسجيل الشركة'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
       ),
     );
   }
 
   // ---------------------------------------------------------------------------
-  // CARD 2: إضافة وتكويد منتجات الشركات (مع Dropdown + Search للشركة)
+  // UNIFIED CARD: تسجيل الشركات وإضافة المنتجات (كارت موحد ومختزل بدون حشو)
   // ---------------------------------------------------------------------------
-  Widget _buildCompanyProductsCard(ColorScheme colorScheme, List<CompanyModel> companies) {
+  Widget _buildUnifiedCompanyAndProductsCard(ColorScheme colorScheme, List<CompanyModel> companies) {
     final currentCompany = companies.where((c) => c.slug == _selectedProductCompanySlug).firstOrNull;
 
     // Filter companies by search query for selector
@@ -1382,7 +1343,17 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Card Header
+            // ==========================================
+            // 1. تسجيل شركة
+            // ==========================================
+            _buildCompanyRegistrationSection(colorScheme),
+            const SizedBox(height: 20),
+            Divider(color: colorScheme.outlineVariant.withValues(alpha: 0.5), height: 1),
+            const SizedBox(height: 20),
+
+            // ==========================================
+            // 2. إضافة منتجات شركة
+            // ==========================================
             Row(
               children: [
                 Container(
@@ -1394,31 +1365,17 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                   child: Icon(Icons.inventory_2_rounded, color: colorScheme.onPrimaryContainer, size: 20),
                 ),
                 const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '٢. إضافة وتكويد منتجات الشركة (Company Products)',
-                        style: GoogleFonts.cairo(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: colorScheme.onSurface,
-                        ),
-                      ),
-                      Text(
-                        'اختر الشركة المسجلة ثم أضف منتجاتها وباركوداتها سواء يدوياً أو عبر ملف Excel/CSV',
-                        style: GoogleFonts.cairo(
-                          fontSize: 12,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
+                Text(
+                  'إضافة منتجات شركة',
+                  style: GoogleFonts.cairo(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: colorScheme.onSurface,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 16),
 
             // Dropdown & Search for selecting company
             Container(
@@ -1436,7 +1393,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                       Icon(Icons.apartment_rounded, color: colorScheme.primary, size: 18),
                       const SizedBox(width: 8),
                       Text(
-                        'تحديد الشركة المراد إضافة المنتجات إليها:',
+                        'تحديد الشركة',
                         style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
                       ),
                     ],
@@ -1457,16 +1414,16 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                               key: ValueKey('catalog_company_drop_narrow_${effectiveSlug}_${filteredCompanies.length}'),
                               initialValue: effectiveSlug,
                               decoration: InputDecoration(
-                                labelText: 'قائمة الشركات المسجلة (${companies.length})',
                                 prefixIcon: const Icon(Icons.arrow_drop_down_circle_outlined),
                                 filled: true,
                                 fillColor: colorScheme.surface,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                               ),
                               items: filteredCompanies.map((c) {
                                 return DropdownMenuItem<String>(
                                   value: c.slug,
                                   child: Text(
-                                    '🏢 ${c.name} (كود: ${c.slug}) - ${c.productsCount} منتج',
+                                    '🏢 ${c.name} (${c.slug}) - ${c.productsCount} منتج',
                                     style: GoogleFonts.cairo(fontWeight: FontWeight.w600, fontSize: 13),
                                   ),
                                 );
@@ -1477,15 +1434,24 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                                   if (val != null) _selectedGlobalFilter = val;
                                 });
                               },
-                              hint: Text('اختر الشركة من القائمة', style: GoogleFonts.cairo()),
+                              hint: Text(
+                                'اختر الشركة',
+                                style: GoogleFonts.cairo(
+                                  fontSize: 12,
+                                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                                ),
+                              ),
                             ),
                             const SizedBox(height: 10),
                             // Quick search by code / name
                             TextField(
                               controller: _companySearchController,
                               decoration: InputDecoration(
-                                labelText: 'بحث سريع بكود أو اسم الشركة...',
-                                hintText: 'مثال: 2450 أو جهينة',
+                                hintText: 'بحث بالكود أو الاسم...',
+                                hintStyle: GoogleFonts.cairo(
+                                  fontSize: 12,
+                                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                                ),
                                 prefixIcon: const Icon(Icons.search_rounded),
                                 suffixIcon: _companySearchController.text.isNotEmpty
                                     ? IconButton(
@@ -1498,6 +1464,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                                     : null,
                                 filled: true,
                                 fillColor: colorScheme.surface,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                               ),
                               onChanged: (val) {
                                 final cleanVal = val.toEnglishDigits().trim().toLowerCase();
@@ -1523,16 +1490,16 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                               key: ValueKey('catalog_company_drop_wide_${effectiveSlug}_${filteredCompanies.length}'),
                               initialValue: effectiveSlug,
                               decoration: InputDecoration(
-                                labelText: 'قائمة الشركات المسجلة (${companies.length} شركة)',
                                 prefixIcon: const Icon(Icons.arrow_drop_down_circle_outlined),
                                 filled: true,
                                 fillColor: colorScheme.surface,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                               ),
                               items: filteredCompanies.map((c) {
                                 return DropdownMenuItem<String>(
                                   value: c.slug,
                                   child: Text(
-                                    '🏢 ${c.name} (كود: ${c.slug}) - ${c.productsCount} منتج',
+                                    '🏢 ${c.name} (${c.slug}) - ${c.productsCount} منتج',
                                     style: GoogleFonts.cairo(fontWeight: FontWeight.w600, fontSize: 13),
                                   ),
                                 );
@@ -1543,7 +1510,13 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                                   if (val != null) _selectedGlobalFilter = val;
                                 });
                               },
-                              hint: Text('اختر الشركة من القائمة المنسدلة', style: GoogleFonts.cairo()),
+                              hint: Text(
+                                'اختر الشركة',
+                                style: GoogleFonts.cairo(
+                                  fontSize: 12,
+                                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                                ),
+                              ),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -1552,8 +1525,11 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                             child: TextField(
                               controller: _companySearchController,
                               decoration: InputDecoration(
-                                labelText: 'بحث سريع بكود أو اسم الشركة...',
-                                hintText: 'مثال: 2450 أو جهينة',
+                                hintText: 'بحث بالكود أو الاسم...',
+                                hintStyle: GoogleFonts.cairo(
+                                  fontSize: 12,
+                                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                                ),
                                 prefixIcon: const Icon(Icons.search_rounded),
                                 suffixIcon: _companySearchController.text.isNotEmpty
                                     ? IconButton(
@@ -1566,6 +1542,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                                     : null,
                                 filled: true,
                                 fillColor: colorScheme.surface,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                               ),
                               onChanged: (val) {
                                 final cleanVal = val.toEnglishDigits().trim().toLowerCase();
@@ -1585,44 +1562,6 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                       );
                     },
                   ),
-
-                  // Prominent Active Company Pill
-                  if (currentCompany != null) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: colorScheme.primaryContainer.withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3)),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.check_circle_rounded, color: colorScheme.primary, size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            'الشركة المحددة لإضافة المنتجات: ',
-                            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
-                          ),
-                          Text(
-                            '${currentCompany.name} (كود: ${currentCompany.slug})',
-                            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: colorScheme.primary, fontSize: 13),
-                          ),
-                          const Spacer(),
-                          Badge(
-                            label: Text('${currentCompany.productsCount} منتج حالياً'),
-                            backgroundColor: colorScheme.primary,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ] else ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      'يرجى اختيار شركة من القائمة أعلاه أو تسجيل شركة جديدة في الكارت الأول لبدء إضافة منتجاتها.',
-                      style: GoogleFonts.cairo(fontSize: 12, color: Colors.orange.shade800),
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -1638,21 +1577,21 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                 segments: [
                   const M3ButtonSegment(
                     value: CatalogInputMode.manual,
-                    label: 'إدخال يدوي للمنتج',
+                    label: 'إدخال يدوي',
                     icon: Icons.edit_note_rounded,
                     tooltip: 'تسجيل وتكويد صنف جديد يدوياً بكتابة الاسم والباركود',
                   ),
                   const M3ButtonSegment(
                     value: CatalogInputMode.excelCsv,
-                    label: 'استيراد ملف Excel / CSV',
+                    label: 'استيراد Excel / CSV',
                     icon: Icons.file_upload_outlined,
-                    tooltip: 'رفع ملف إكسيل أو لصق أسطر CSV ليقوم الذكاء الاصطناعي باستخراج المنتجات وتصنيفها آلياً',
+                    tooltip: 'استيراد الأصناف عبر ملف أو نسخ ولصق بيانات CSV',
                   ),
                   M3ButtonSegment(
                     value: CatalogInputMode.liveCatalog,
-                    label: 'دليل منتجات الشركة المحفوظة',
+                    label: 'دليل المنتجات',
                     icon: Icons.inventory_2_outlined,
-                    tooltip: 'عرض الأصناف المسجلة والمحفوظة في قاعدة بيانات الشركة المحددة',
+                    tooltip: 'عرض الأصناف المسجلة في قاعدة بيانات الشركة',
                     badgeText: currentCompany != null ? '${currentCompany.productsCount}' : null,
                   ),
                 ],
@@ -1695,10 +1634,10 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                   children: [
                     TextField(
                       controller: _manualProductNameController,
-                      decoration: InputDecoration(
-                        labelText: 'اسم وصنف المنتج (المسمى)',
-                        hintText: currentCompany != null ? 'مثال: حليب ${currentCompany.name} 1 لتر' : 'اسم المنتج',
-                        prefixIcon: const Icon(Icons.shopping_bag_outlined),
+                      decoration: const InputDecoration(
+                        labelText: 'اسم المنتج',
+                        hintText: 'اسم المنتج',
+                        prefixIcon: Icon(Icons.shopping_bag_outlined),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -1707,8 +1646,8 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                       keyboardType: TextInputType.number,
                       inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
                       decoration: const InputDecoration(
-                        labelText: 'كود الباركود (Barcode / EAN)',
-                        hintText: '6281007001001',
+                        labelText: 'الباركود',
+                        hintText: 'الباركود',
                         prefixIcon: Icon(Icons.qr_code_2_rounded),
                       ),
                     ),
@@ -1721,10 +1660,10 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                     flex: 3,
                     child: TextField(
                       controller: _manualProductNameController,
-                      decoration: InputDecoration(
-                        labelText: 'اسم وصنف المنتج (المسمى)',
-                        hintText: currentCompany != null ? 'مثال: حليب ${currentCompany.name} 1 لتر' : 'اسم المنتج',
-                        prefixIcon: const Icon(Icons.shopping_bag_outlined),
+                      decoration: const InputDecoration(
+                        labelText: 'اسم المنتج',
+                        hintText: 'اسم المنتج',
+                        prefixIcon: Icon(Icons.shopping_bag_outlined),
                       ),
                     ),
                   ),
@@ -1736,8 +1675,8 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                       keyboardType: TextInputType.number,
                       inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
                       decoration: const InputDecoration(
-                        labelText: 'كود الباركود (Barcode / EAN)',
-                        hintText: '6281007001001',
+                        labelText: 'الباركود',
+                        hintText: 'الباركود',
                         prefixIcon: Icon(Icons.qr_code_2_rounded),
                       ),
                     ),
@@ -1753,9 +1692,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
               onPressed: _addManualProductToStaging,
               icon: const Icon(Icons.add_circle_outline_rounded),
               label: Text(
-                currentCompany != null
-                    ? 'إضافة إلى قائمة المعاينة لـ (${currentCompany.name})'
-                    : 'إضافة إلى قائمة المعاينة',
+                'إضافة لقائمة المعاينة',
                 style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
               ),
               style: FilledButton.styleFrom(
@@ -2293,7 +2230,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // MODE A: دليل الشركات المسجلة (Companies Directory Cards)
+  // MODE A: دليل الشركات المسجلة (Companies Enterprise Directory Table)
   // ---------------------------------------------------------------------------
   Widget _buildCompaniesDirectoryView(
     ColorScheme colorScheme,
@@ -2306,75 +2243,246 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
       return c.name.toLowerCase().contains(query) || c.slug.toLowerCase().contains(query);
     }).toList();
 
+    // Sorting according to selected criteria
+    final sortedCompanies = List<CompanyModel>.from(filteredCompanies);
+    switch (_companiesSortBy) {
+      case 'PRODUCTS_DESC':
+        sortedCompanies.sort((a, b) => b.productsCount.compareTo(a.productsCount));
+        break;
+      case 'PRODUCTS_ASC':
+        sortedCompanies.sort((a, b) => a.productsCount.compareTo(b.productsCount));
+        break;
+      case 'NAME_ASC':
+        sortedCompanies.sort((a, b) => a.name.compareTo(b.name));
+        break;
+      case 'SLUG_ASC':
+        sortedCompanies.sort((a, b) => a.slug.compareTo(b.slug));
+        break;
+    }
+
     final totalProducts = companies.fold<int>(0, (acc, c) => acc + c.productsCount);
+    final emptyCompanies = companies.where((c) => c.productsCount == 0).length;
+    final maxProducts = companies.fold<int>(0, (max, c) => c.productsCount > max ? c.productsCount : max);
+    final averageProducts = companies.isNotEmpty ? (totalProducts / companies.length).round() : 0;
+
+    Widget buildSearchField() {
+      return SizedBox(
+        height: 42,
+        child: TextField(
+          controller: _globalSearchQueryController,
+          style: GoogleFonts.cairo(fontSize: 12.5),
+          decoration: InputDecoration(
+            hintText: 'بحث في أسماء الشركات أو الأكواد الرقمية...',
+            hintStyle: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
+            prefixIcon: Icon(Icons.search_rounded, size: 20, color: colorScheme.primary),
+            suffixIcon: _globalSearchQueryController.text.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear_rounded, size: 16),
+                    onPressed: () {
+                      _globalSearchQueryController.clear();
+                      setState(() {});
+                    },
+                  )
+                : null,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+            filled: true,
+            fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.8), width: 1.0),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.8), width: 1.0),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: colorScheme.primary, width: 1.6),
+            ),
+          ),
+          onChanged: (_) => setState(() {}),
+        ),
+      );
+    }
+
+    Widget buildSortGroup() {
+      return M3ConnectedButtonGroup<String>(
+        height: 42,
+        borderRadius: 12,
+        isExpanded: false,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+        segments: const [
+          M3ButtonSegment<String>(
+            value: 'PRODUCTS_DESC',
+            label: 'الأعلى أصنافاً',
+            icon: Icons.trending_up_rounded,
+            tooltip: 'ترتيب تنازلي حسب عدد الأصناف الموثقة',
+          ),
+          M3ButtonSegment<String>(
+            value: 'PRODUCTS_ASC',
+            label: 'الأقل أصنافاً',
+            icon: Icons.trending_down_rounded,
+            tooltip: 'ترتيب تصاعدي حسب عدد الأصناف الموثقة',
+          ),
+          M3ButtonSegment<String>(
+            value: 'NAME_ASC',
+            label: 'أبجدياً',
+            icon: Icons.sort_by_alpha_rounded,
+            tooltip: 'ترتيب أبجدي حسب اسم الشركة',
+          ),
+          M3ButtonSegment<String>(
+            value: 'SLUG_ASC',
+            label: 'الكود',
+            icon: Icons.tag_rounded,
+            tooltip: 'ترتيب حسب الكود التعريفي للشركة',
+          ),
+        ],
+        selectedValue: _companiesSortBy,
+        onSelected: (val) => setState(() => _companiesSortBy = val),
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Search & Stats Bar
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _globalSearchQueryController,
-                decoration: InputDecoration(
-                  labelText: 'بحث في أسماء الشركات أو الأكواد الرقمية...',
-                  prefixIcon: const Icon(Icons.search_rounded),
-                  suffixIcon: _globalSearchQueryController.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear_rounded),
-                          onPressed: () {
-                            _globalSearchQueryController.clear();
-                            setState(() {});
-                          },
-                        )
-                      : null,
-                ),
-                onChanged: (_) => setState(() {}),
-              ),
-            ),
-          ],
+        // 1. Search & Sort Controls Bar
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth >= 820) {
+              return Row(
+                children: [
+                  Expanded(child: buildSearchField()),
+                  const SizedBox(width: 10),
+                  buildSortGroup(),
+                ],
+              );
+            } else {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  buildSearchField(),
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: buildSortGroup(),
+                  ),
+                ],
+              );
+            }
+          },
         ),
         const SizedBox(height: 12),
 
-        // Summary Info Banner
+        // 2. Summary Info & KPI Banner
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHigh,
+            color: colorScheme.surfaceContainerHigh.withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+            border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Wrap(
+            spacing: 16,
+            runSpacing: 8,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
+              // Metric 1: Registered Companies
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.domain_verification_rounded, size: 18, color: colorScheme.primary),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   Text(
                     'الشركات المسجلة: ${companies.length} شركة',
                     style: GoogleFonts.cairo(
                       fontWeight: FontWeight.bold,
-                      fontSize: 13,
+                      fontSize: 12.5,
                       color: colorScheme.onSurface,
                     ),
                   ),
                 ],
               ),
-              Text(
-                'إجمالي الأصناف الموثقة: $totalProducts صنف',
-                style: GoogleFonts.cairo(
-                  fontSize: 12,
-                  color: colorScheme.primary,
-                  fontWeight: FontWeight.w600,
-                ),
+              // Metric 2: Documented Items
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.inventory_2_rounded, size: 17, color: colorScheme.primary),
+                  const SizedBox(width: 6),
+                  Text(
+                    'إجمالي الأصناف: $totalProducts صنف',
+                    style: GoogleFonts.cairo(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12.5,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                ],
               ),
+              // Metric 3: Average per company
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.analytics_rounded, size: 17, color: colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 6),
+                  Text(
+                    'متوسط التوثيق: $averageProducts صنف/شركة',
+                    style: GoogleFonts.cairo(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+              // Metric 4: Companies Needing Items
+              if (emptyCompanies > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.amber.shade300),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.warning_amber_rounded, size: 14, color: Colors.amber.shade800),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$emptyCompanies شركة بدون أصناف',
+                        style: GoogleFonts.cairo(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.amber.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check_circle_rounded, size: 16, color: Colors.green.shade700),
+                    const SizedBox(width: 4),
+                    Text(
+                      'كافة الشركات موثقة بأصناف',
+                      style: GoogleFonts.cairo(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green.shade800,
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
         ),
         const SizedBox(height: 14),
 
+        // 3. Main Content: Empty State vs Enterprise Data Table
         if (companies.isEmpty) ...[
           Container(
             padding: const EdgeInsets.all(32),
@@ -2402,208 +2510,671 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
           ),
         ] else if (filteredCompanies.isEmpty) ...[
           Container(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(32),
             alignment: Alignment.center,
-            child: Text(
-              'لا توجد شركات مطابقة لبحثك.',
-              style: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.search_off_rounded, size: 40, color: colorScheme.onSurfaceVariant),
+                const SizedBox(height: 8),
+                Text(
+                  'لا توجد شركات مطابقة لبحثك ("${_globalSearchQueryController.text.trim()}").',
+                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+                ),
+                const SizedBox(height: 12),
+                FilledButton.tonalIcon(
+                  onPressed: () {
+                    _globalSearchQueryController.clear();
+                    setState(() {});
+                  },
+                  icon: const Icon(Icons.clear_all_rounded, size: 16),
+                  label: const Text('إلغاء الفلترة وعرض كافة الشركات'),
+                ),
+              ],
             ),
           ),
         ] else ...[
-          // Grid / List of Company Cards
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isWide = constraints.maxWidth > 720;
-              return GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: isWide ? 2 : 1,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  mainAxisExtent: 165,
+          // 4. Enterprise Companies Table
+          Container(
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+                width: 1.0,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
-                itemCount: filteredCompanies.length,
-                itemBuilder: (context, index) {
-                  final comp = filteredCompanies[index];
-                  return Card(
-                    elevation: 0,
-                    color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.55)),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(14),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(15),
+              child: LayoutBuilder(
+                builder: (context, tableConstraints) {
+                  final minTableWidth = math.max(tableConstraints.maxWidth, 920.0);
+                  return SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: SizedBox(
+                      width: minTableWidth,
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // Top Row: Avatar, Name, Code & Count Badge
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: colorScheme.primaryContainer,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Icon(
-                                  Icons.apartment_rounded,
-                                  color: colorScheme.onPrimaryContainer,
-                                  size: 22,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      comp.name,
-                                      style: GoogleFonts.cairo(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: colorScheme.onSurface,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    Text(
-                                      'كود: ${comp.slug}',
-                                      style: GoogleFonts.cairo(
-                                        fontSize: 11,
-                                        color: colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              // Products Count Badge
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: comp.productsCount > 0
-                                      ? colorScheme.primary.withValues(alpha: 0.12)
-                                      : colorScheme.surfaceContainerHighest,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: comp.productsCount > 0
-                                        ? colorScheme.primary.withValues(alpha: 0.35)
-                                        : colorScheme.outlineVariant,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.inventory_2_rounded,
-                                      size: 14,
-                                      color: comp.productsCount > 0
-                                          ? colorScheme.primary
-                                          : colorScheme.outline,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '${comp.productsCount} صنف',
-                                      style: GoogleFonts.cairo(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: comp.productsCount > 0
-                                            ? colorScheme.primary
-                                            : colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
+                          // Table Header
+                          _buildDirectoryTableHeader(colorScheme),
 
-                          // Bottom Action Row
-                          Row(
-                            children: [
-                              // View Products Button
-                              Expanded(
-                                child: FilledButton.tonalIcon(
-                                  onPressed: () {
-                                    setState(() {
-                                      _selectedGlobalFilter = comp.slug;
-                                      _catalogDisplayLimit = 20;
-                                      _globalSearchQueryController.clear();
-                                    });
-                                  },
-                                  icon: const Icon(Icons.inventory_2_outlined, size: 16),
-                                  label: Text(
-                                    comp.productsCount > 0
-                                        ? 'استعراض المنتجات (${comp.productsCount})'
-                                        : 'استعراض (0 منتج)',
-                                    style: GoogleFonts.cairo(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  style: FilledButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 8),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
+                          // Table Body Rows
+                          ...sortedCompanies.asMap().entries.map((entry) {
+                            final index = entry.key;
+                            final comp = entry.value;
+                            return _buildDirectoryTableRow(
+                              context: context,
+                              index: index,
+                              comp: comp,
+                              totalProducts: totalProducts,
+                              maxProducts: maxProducts,
+                              colorScheme: colorScheme,
+                            );
+                          }),
 
-                              // Add Products Button
-                              IconButton.filledTonal(
-                                tooltip: 'إضافة منتجات لهذه الشركة',
-                                icon: const Icon(Icons.add_box_rounded, size: 18),
-                                onPressed: () {
-                                  setState(() {
-                                    _selectedProductCompanySlug = comp.slug;
-                                    _activeMode = CatalogInputMode.manual;
-                                  });
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('تم تفعيل شركة "${comp.name}" في كارت إضافة المنتجات بالأعلى.'),
-                                      duration: const Duration(seconds: 3),
-                                    ),
-                                  );
-                                },
-                              ),
-
-                              // Edit Company
-                              IconButton.outlined(
-                                tooltip: 'تعديل الاسم التجاري أو الكود الرقمي للشركة',
-                                icon: const Icon(Icons.edit_note_rounded, size: 18),
-                                onPressed: () => _showEditCompanyDialog(comp),
-                              ),
-
-                              // Clear all products for this company
-                              if (comp.productsCount > 0)
-                                IconButton.outlined(
-                                  tooltip: 'مسح وحذف كافة الـ (${comp.productsCount}) منتج المسجلة لـ (${comp.name}) من قاعدة البيانات',
-                                  icon: const Icon(Icons.delete_sweep_rounded, color: Colors.orange, size: 18),
-                                  onPressed: () => _deleteAllProductsForCompany(comp.slug, comp.name),
-                                ),
-
-                              // Delete Company
-                              IconButton.outlined(
-                                tooltip: 'حذف هذه الشركة وجميع أصنافها الموثقة من النظام نهائياً',
-                                icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 18),
-                                onPressed: () => _deleteCompanyFromFirebase(comp.slug, comp.name),
-                              ),
-                            ],
+                          // Table Footer
+                          _buildDirectoryTableFooter(
+                            colorScheme: colorScheme,
+                            displayedCount: sortedCompanies.length,
+                            totalCount: companies.length,
+                            displayedProducts: sortedCompanies.fold<int>(0, (acc, c) => acc + c.productsCount),
                           ),
                         ],
                       ),
                     ),
                   );
                 },
-              );
-            },
+              ),
+            ),
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildDirectoryTableHeader(ColorScheme colorScheme) {
+    return Container(
+      height: 46,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        border: Border(
+          bottom: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.7),
+            width: 1.2,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Col 1: #
+          SizedBox(
+            width: 52,
+            child: Text(
+              '#',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.cairo(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+
+          // Col 2: Company Name
+          Expanded(
+            flex: 3,
+            child: Row(
+              children: [
+                Icon(Icons.business_rounded, size: 16, color: colorScheme.primary),
+                const SizedBox(width: 6),
+                Text(
+                  'الشركة المسجلة والرمز',
+                  style: GoogleFonts.cairo(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Col 3: Slug / Code
+          SizedBox(
+            width: 130,
+            child: Row(
+              children: [
+                Icon(Icons.tag_rounded, size: 15, color: colorScheme.primary),
+                const SizedBox(width: 6),
+                Text(
+                  'الكود (Slug)',
+                  style: GoogleFonts.cairo(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Col 4: Documented Items
+          SizedBox(
+            width: 200,
+            child: Row(
+              children: [
+                Icon(Icons.inventory_2_rounded, size: 15, color: colorScheme.primary),
+                const SizedBox(width: 6),
+                Text(
+                  'الأصناف الموثقة',
+                  style: GoogleFonts.cairo(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Col 5: Catalog Status
+          SizedBox(
+            width: 135,
+            child: Row(
+              children: [
+                Icon(Icons.fact_check_rounded, size: 15, color: colorScheme.primary),
+                const SizedBox(width: 6),
+                Text(
+                  'حالة التوثيق',
+                  style: GoogleFonts.cairo(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Col 6: Actions
+          SizedBox(
+            width: 250,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.tune_rounded, size: 15, color: colorScheme.primary),
+                const SizedBox(width: 6),
+                Text(
+                  'الإجراءات والعمليات',
+                  style: GoogleFonts.cairo(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDirectoryTableRow({
+    required BuildContext context,
+    required int index,
+    required CompanyModel comp,
+    required int totalProducts,
+    required int maxProducts,
+    required ColorScheme colorScheme,
+  }) {
+    final isEven = index.isEven;
+    final rowBackground = isEven
+        ? colorScheme.surface
+        : colorScheme.surfaceContainerLowest.withValues(alpha: 0.65);
+
+    return Material(
+      color: rowBackground,
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _selectedGlobalFilter = comp.slug;
+            _catalogDisplayLimit = 20;
+            _globalSearchQueryController.clear();
+          });
+        },
+        hoverColor: colorScheme.primary.withValues(alpha: 0.04),
+        splashColor: colorScheme.primary.withValues(alpha: 0.08),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+                width: 1.0,
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              // Col 1: #
+              SizedBox(
+                width: 52,
+                child: Center(
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '${index + 1}',
+                      style: GoogleFonts.cairo(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              // Col 2: Company Name & Brand
+              Expanded(
+                flex: 3,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: comp.productsCount > 0
+                            ? colorScheme.primaryContainer.withValues(alpha: 0.8)
+                            : colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: comp.productsCount > 0
+                              ? colorScheme.primary.withValues(alpha: 0.3)
+                              : colorScheme.outlineVariant.withValues(alpha: 0.4),
+                          width: 1.0,
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.apartment_rounded,
+                        size: 20,
+                        color: comp.productsCount > 0
+                            ? colorScheme.onPrimaryContainer
+                            : colorScheme.outline,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            comp.name,
+                            style: GoogleFonts.cairo(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurface,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (comp.createdAt != null)
+                            Text(
+                              'مسجلة: ${comp.createdAt!.year}/${comp.createdAt!.month.toString().padLeft(2, '0')}/${comp.createdAt!.day.toString().padLeft(2, '0')}',
+                              style: GoogleFonts.cairo(
+                                fontSize: 10.5,
+                                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Col 3: Slug / Code
+              SizedBox(
+                width: 130,
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: colorScheme.outlineVariant.withValues(alpha: 0.7),
+                        width: 1.0,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.tag_rounded, size: 12, color: colorScheme.primary),
+                        const SizedBox(width: 4),
+                        Text(
+                          comp.slug,
+                          style: GoogleFonts.cairo(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // Col 4: Documented Items
+              SizedBox(
+                width: 200,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.inventory_2_rounded,
+                          size: 13,
+                          color: comp.productsCount > 0 ? colorScheme.primary : colorScheme.outline,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${comp.productsCount} صنف',
+                          style: GoogleFonts.cairo(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                            color: comp.productsCount > 0
+                                ? colorScheme.primary
+                                : colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        if (totalProducts > 0 && comp.productsCount > 0) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            '(${(comp.productsCount / totalProducts * 100).toStringAsFixed(1)}%)',
+                            style: GoogleFonts.cairo(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: SizedBox(
+                        width: 140,
+                        height: 5,
+                        child: LinearProgressIndicator(
+                          value: maxProducts > 0 ? (comp.productsCount / maxProducts) : 0.0,
+                          backgroundColor: colorScheme.surfaceContainerHighest,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            comp.productsCount > 0
+                                ? colorScheme.primary
+                                : colorScheme.outlineVariant,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Col 5: Catalog Status
+              SizedBox(
+                width: 135,
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: comp.productsCount > 0
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.green.shade300, width: 1.0),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.check_circle_rounded, size: 12, color: Colors.green.shade700),
+                              const SizedBox(width: 4),
+                              Text(
+                                'موثقة ومكتملة',
+                                style: GoogleFonts.cairo(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green.shade800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.amber.shade400, width: 1.0),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.warning_amber_rounded, size: 12, color: Colors.amber.shade800),
+                              const SizedBox(width: 4),
+                              Text(
+                                'بحاجة لأصناف',
+                                style: GoogleFonts.cairo(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.amber.shade900,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                ),
+              ),
+
+              // Col 6: Actions
+              SizedBox(
+                width: 250,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Primary Browse Button
+                    FilledButton.tonalIcon(
+                      onPressed: () {
+                        setState(() {
+                          _selectedGlobalFilter = comp.slug;
+                          _catalogDisplayLimit = 20;
+                          _globalSearchQueryController.clear();
+                        });
+                      },
+                      style: FilledButton.styleFrom(
+                        backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.65),
+                        foregroundColor: colorScheme.primary,
+                        minimumSize: const Size(0, 32),
+                        fixedSize: const Size.fromHeight(32),
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      icon: const Icon(Icons.inventory_2_outlined, size: 14),
+                      label: Text(
+                        comp.productsCount > 0 ? 'استعراض (${comp.productsCount})' : 'استعراض (0)',
+                        style: GoogleFonts.cairo(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+
+                    // Quick Add Product Button
+                    IconButton.filledTonal(
+                      tooltip: 'إضافة منتجات لـ (${comp.name})',
+                      icon: const Icon(Icons.add_rounded, size: 16),
+                      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(32, 32),
+                        fixedSize: const Size(32, 32),
+                        padding: EdgeInsets.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _selectedProductCompanySlug = comp.slug;
+                          _activeMode = CatalogInputMode.manual;
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('تم تفعيل شركة "${comp.name}" في كارت إضافة المنتجات بالأعلى.'),
+                            duration: const Duration(seconds: 3),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 4),
+
+                    // Quick Edit Company Button
+                    IconButton.outlined(
+                      tooltip: 'تعديل اسم أو كود (${comp.name})',
+                      icon: const Icon(Icons.edit_note_rounded, size: 16),
+                      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(32, 32),
+                        fixedSize: const Size(32, 32),
+                        padding: EdgeInsets.zero,
+                        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.8)),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: () => _showEditCompanyDialog(comp),
+                    ),
+                    const SizedBox(width: 4),
+
+                    // M3 Action Menu for secondary & dangerous operations
+                    M3ActionMenu(
+                      tooltip: 'خيارات إضافية لـ (${comp.name})',
+                      anchorIcon: Icon(Icons.more_vert_rounded, size: 16, color: colorScheme.onSurfaceVariant),
+                      children: [
+                        M3ActionMenu.header(context: context, title: comp.name),
+                        M3ActionMenu.item(
+                          context: context,
+                          label: 'فحص واكتشاف الأصناف بالذكاء الاصطناعي',
+                          icon: Icons.auto_awesome_rounded,
+                          onPressed: () => _scanAndReviewDiscoveredProductsForCompany(comp),
+                        ),
+                        M3ActionMenu.item(
+                          context: context,
+                          label: 'تدقيق ومنع التكرار',
+                          icon: Icons.cleaning_services_rounded,
+                          onPressed: () => _auditAndDeduplicateCompany(comp),
+                        ),
+                        M3ActionMenu.divider(),
+                        if (comp.productsCount > 0)
+                          M3ActionMenu.item(
+                            context: context,
+                            label: 'مسح وحذف كل منتجات الشركة',
+                            icon: Icons.delete_sweep_rounded,
+                            isDestructive: true,
+                            onPressed: () => _deleteAllProductsForCompany(comp.slug, comp.name),
+                          ),
+                        M3ActionMenu.item(
+                          context: context,
+                          label: 'حذف الشركة نهائياً من النظام',
+                          icon: Icons.delete_forever_rounded,
+                          isDestructive: true,
+                          onPressed: () => _deleteCompanyFromFirebase(comp.slug, comp.name),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDirectoryTableFooter({
+    required ColorScheme colorScheme,
+    required int displayedCount,
+    required int totalCount,
+    required int displayedProducts,
+  }) {
+    return Container(
+      height: 42,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        border: Border(
+          top: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+            width: 1.0,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline_rounded, size: 14, color: colorScheme.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Text(
+            'عرض $displayedCount من أصل $totalCount شركة مسجلة • إجمالي الأصناف المعروضة: $displayedProducts صنف',
+            style: GoogleFonts.cairo(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const Spacer(),
+          if (_globalSearchQueryController.text.isNotEmpty)
+            TextButton.icon(
+              onPressed: () {
+                _globalSearchQueryController.clear();
+                setState(() {});
+              },
+              icon: const Icon(Icons.clear_all_rounded, size: 14),
+              label: Text(
+                'إلغاء الفلترة',
+                style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+        ],
+      ),
     );
   }
 

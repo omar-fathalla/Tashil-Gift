@@ -77,7 +77,7 @@ void main() {
 
       expect(find.text('3'), findsOneWidget);
       expect(find.text('أسواق فتح الله'), findsOneWidget);
-      expect(find.textContaining('15400.0'), findsOneWidget);
+      expect(find.textContaining('15,400'), findsOneWidget);
     });
 
     testWidgets('Renders KPI metrics row correctly in English and Hindi', (WidgetTester tester) async {
@@ -103,6 +103,66 @@ void main() {
       expect(find.text('12'), findsOneWidget);
       expect(find.text('Smouha Branch'), findsOneWidget);
       expect(find.text('शीर्ष आउटलेट'), findsOneWidget);
+    });
+  });
+
+  group('cleanBranchDisplayName Tests', () {
+    test('Strips parenthetical governorates and supermarket prefixes', () {
+      expect(
+        BranchChainBarChart.cleanBranchDisplayName(
+          'أسواق فتح الله - فرع المحلة الكبرى (الغربية)',
+          isChain: false,
+          isAr: true,
+        ),
+        'فرع المحلة الكبرى',
+      );
+
+      expect(
+        BranchChainBarChart.cleanBranchDisplayName(
+          'أسواق فتح الله - فرع سموحة (الإسكندرية)',
+          isChain: false,
+          isAr: true,
+        ),
+        'فرع سموحة',
+      );
+
+      expect(
+        BranchChainBarChart.cleanBranchDisplayName(
+          'أسواق فتح الله - فرع دمنهور (البحيرة)',
+          isChain: false,
+          isAr: true,
+        ),
+        'فرع دمنهور',
+      );
+
+      expect(
+        BranchChainBarChart.cleanBranchDisplayName(
+          'المحلة الكبرى (الغربية)',
+          isChain: false,
+          isAr: true,
+        ),
+        'فرع المحلة الكبرى',
+      );
+    });
+
+    test('Preserves retail chain names without adding فرع', () {
+      expect(
+        BranchChainBarChart.cleanBranchDisplayName(
+          'أسواق فتح الله (المركز الرئيسي)',
+          isChain: true,
+          isAr: true,
+        ),
+        'أسواق فتح الله',
+      );
+
+      expect(
+        BranchChainBarChart.cleanBranchDisplayName(
+          'كارفور مصر',
+          isChain: true,
+          isAr: true,
+        ),
+        'كارفور مصر',
+      );
     });
   });
 
@@ -164,7 +224,7 @@ void main() {
       expect(find.text('خير زمان'), findsOneWidget);
     });
 
-    testWidgets('Renders Bar Chart container with metric toggle support', (WidgetTester tester) async {
+    testWidgets('Renders Bar Chart container with visible direct values without hover', (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1200, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
@@ -186,6 +246,10 @@ void main() {
       );
 
       expect(find.byType(BranchChainBarChart), findsOneWidget);
+      // Top titles visible values
+      expect(find.textContaining('15,400'), findsOneWidget);
+      expect(find.textContaining('8,600'), findsOneWidget);
+      expect(find.textContaining('4,000'), findsOneWidget);
     });
   });
 }

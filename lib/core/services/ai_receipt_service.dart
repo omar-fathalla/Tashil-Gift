@@ -1370,7 +1370,9 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         }
 
         // Cross-seam line deduplication for genuine multi-part long receipts (AIR-39 & AIR-61)
-        if (additionalImagesBytes.isNotEmpty && result.extractedProducts.isNotEmpty) {
+        // When allowComplementaryReceipts is enabled, separate receipts legitimately contain repeated purchases
+        // of the same product (e.g. buying another CDM chocolate to complete the required spend).
+        if (!allowComplementaryReceipts && additionalImagesBytes.isNotEmpty && result.extractedProducts.isNotEmpty) {
           result = result.copyWith(
             extractedProducts: deduplicateCrossSeamProducts(result.extractedProducts),
           );

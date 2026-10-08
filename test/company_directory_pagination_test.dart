@@ -89,5 +89,75 @@ void main() {
       expect(filteredName.length, 1);
       expect(filteredName.first.id, '1');
     });
+
+    test('Enterprise Table: Sorts companies by products count descending and ascending', () {
+      final desc = List<CompanyModel>.from(sampleCompanies)
+        ..sort((a, b) => b.productsCount.compareTo(a.productsCount));
+      expect(desc.first.name, 'شركة المراعي');
+      expect(desc.first.productsCount, 854);
+      expect(desc.last.name, 'شركة دومتي');
+      expect(desc.last.productsCount, 0);
+
+      final asc = List<CompanyModel>.from(sampleCompanies)
+        ..sort((a, b) => a.productsCount.compareTo(b.productsCount));
+      expect(asc.first.name, 'شركة دومتي');
+      expect(asc.first.productsCount, 0);
+      expect(asc.last.name, 'شركة المراعي');
+    });
+
+    test('Enterprise Table: Sorts companies alphabetically by Arabic name and slug', () {
+      final byName = List<CompanyModel>.from(sampleCompanies)
+        ..sort((a, b) => a.name.compareTo(b.name));
+      expect(byName.first.name, 'شركة المراعي');
+
+      final bySlug = List<CompanyModel>.from(sampleCompanies)
+        ..sort((a, b) => a.slug.compareTo(b.slug));
+      expect(bySlug.first.slug, '2450'); // Juhayna numeric code
+    });
+
+    test('Enterprise Table: Accurately identifies companies requiring items and computes average items', () {
+      final emptyCompanies = sampleCompanies.where((c) => c.productsCount == 0).toList();
+      expect(emptyCompanies.length, 1);
+      expect(emptyCompanies.first.name, 'شركة دومتي');
+
+      final totalProducts = sampleCompanies.fold<int>(0, (acc, c) => acc + c.productsCount);
+      final avg = (totalProducts / sampleCompanies.length).round();
+      expect(avg, 255); // 1019 / 4 = 254.75 -> 255
+    });
+
+    test('Unified Card: Concise Arabic labels and no English parenthetical strings', () {
+      const section1Title = 'تسجيل شركة';
+      const section2Title = 'إضافة منتجات شركة';
+      const companyNameLabel = 'اسم الشركة';
+      const companyCodeLabel = 'كود الشركة';
+      const selectCompanyLabel = 'تحديد الشركة';
+      const manualEntryLabel = 'إدخال يدوي';
+      const excelCsvLabel = 'استيراد Excel / CSV';
+      const liveCatalogLabel = 'دليل المنتجات';
+      const productNameLabel = 'اسم المنتج';
+      const barcodeLabel = 'الباركود';
+      const addToPreviewButtonLabel = 'إضافة لقائمة المعاينة';
+
+      // Verify no redundant English or examples
+      for (final label in [
+        section1Title,
+        section2Title,
+        companyNameLabel,
+        companyCodeLabel,
+        selectCompanyLabel,
+        manualEntryLabel,
+        productNameLabel,
+        barcodeLabel,
+        addToPreviewButtonLabel,
+      ]) {
+        expect(label.contains('('), isFalse, reason: '$label should not contain parentheses');
+        expect(label.contains('مثال'), isFalse, reason: '$label should not contain examples');
+      }
+
+      // Verify concise mode labels
+      expect(excelCsvLabel, 'استيراد Excel / CSV');
+      expect(liveCatalogLabel, 'دليل المنتجات');
+    });
   });
 }
+

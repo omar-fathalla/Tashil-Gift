@@ -28,11 +28,25 @@ class M3ActionMenu extends StatelessWidget {
   /// List of menu items ([MenuItemButton], [SubmenuButton], or [M3ActionMenu.divider]).
   final List<Widget> children;
 
+  /// Optional custom minimum width for the menu container.
+  final double? minWidth;
+
+  /// Optional custom maximum width for the menu container.
+  final double? maxWidth;
+
+  /// Optional custom maximum height for the menu container.
+  final double? maxHeight;
+
   /// Optional external [MenuController] to control the menu programmatically.
   final MenuController? controller;
 
   /// Optional menu alignment offset relative to the anchor widget.
   final Offset? alignmentOffset;
+
+  /// Whether the cross axis is unconstrained. When set to false (default),
+  /// the menu is constrained between [minWidth] and [maxWidth],
+  /// preventing intrinsic-width blowout that clips trailing widgets in RTL/LTR.
+  final bool crossAxisUnconstrained;
 
   /// Whether the anchor button is enabled. Defaults to true.
   final bool enabled;
@@ -45,7 +59,11 @@ class M3ActionMenu extends StatelessWidget {
     required this.children,
     this.controller,
     this.alignmentOffset,
+    this.crossAxisUnconstrained = false,
     this.enabled = true,
+    this.minWidth,
+    this.maxWidth,
+    this.maxHeight,
   });
 
   @override
@@ -67,23 +85,24 @@ class M3ActionMenu extends StatelessWidget {
       ),
       shape: WidgetStatePropertyAll(
         RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8.0),
+          borderRadius: BorderRadius.circular(10.0),
         ),
       ),
       padding: const WidgetStatePropertyAll(
         EdgeInsets.symmetric(vertical: M3SpacingTokens.space1), // 4dp
       ),
       minimumSize: WidgetStatePropertyAll(
-        Size(isDesktop ? 160.0 : 180.0, 0),
+        Size(minWidth ?? (isDesktop ? 160.0 : 180.0), 0),
       ),
-      maximumSize: const WidgetStatePropertyAll(
-        Size(320.0, double.infinity),
+      maximumSize: WidgetStatePropertyAll(
+        Size(maxWidth ?? 340.0, maxHeight ?? double.infinity),
       ),
     );
 
     return MenuAnchor(
       controller: controller,
       alignmentOffset: alignmentOffset,
+      crossAxisUnconstrained: crossAxisUnconstrained,
       style: defaultMenuStyle,
       builder: anchorBuilder ??
           (context, menuController, child) {
@@ -117,6 +136,7 @@ class M3ActionMenu extends StatelessWidget {
   static Widget item({
     required BuildContext context,
     required String label,
+    String? subtitle,
     IconData? icon,
     VoidCallback? onPressed,
     String? shortcutText,
@@ -151,46 +171,88 @@ class M3ActionMenu extends StatelessWidget {
     }
 
     Widget? effectiveTrailing = trailing;
-    if (effectiveTrailing == null) {
-      if (isSelected) {
-        effectiveTrailing = Icon(
-          Icons.check_rounded,
-          size: 18.0,
-          color: colorScheme.primary,
+    if (isSelected) {
+      final checkIcon = Icon(
+        Icons.check_rounded,
+        size: 18.0,
+        color: colorScheme.primary,
+      );
+      if (effectiveTrailing != null) {
+        effectiveTrailing = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            effectiveTrailing,
+            const SizedBox(width: 8),
+            checkIcon,
+          ],
         );
-      } else if (shortcutText != null) {
-        effectiveTrailing = Text(
-          shortcutText,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: colorScheme.onSurfaceVariant,
-            fontFamily: GoogleFonts.cairo().fontFamily,
-          ),
-        );
+      } else {
+        effectiveTrailing = checkIcon;
       }
+    } else if (effectiveTrailing == null && shortcutText != null) {
+      effectiveTrailing = Text(
+        shortcutText,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: colorScheme.onSurfaceVariant,
+          fontFamily: GoogleFonts.cairo().fontFamily,
+        ),
+      );
     }
 
     return MenuItemButton(
       onPressed: enabled ? onPressed : null,
       style: MenuItemButton.styleFrom(
-        minimumSize: Size(isDesktop ? 160.0 : 180.0, isDesktop ? 40.0 : 48.0),
-        padding: const EdgeInsetsDirectional.symmetric(
-          horizontal: M3SpacingTokens.space3, // 12dp
+        minimumSize: Size(
+          isDesktop ? 160.0 : 180.0,
+          subtitle != null ? 52.0 : (isDesktop ? 40.0 : 48.0),
         ),
+        padding: EdgeInsetsDirectional.symmetric(
+          horizontal: 14.0,
+          vertical: subtitle != null ? 6.0 : 0.0,
+        ),
+        backgroundColor: isSelected ? colorScheme.primary.withValues(alpha: 0.08) : null,
         foregroundColor: foregroundColor,
         alignment: AlignmentDirectional.centerStart,
       ),
       leadingIcon: effectiveLeading,
       trailingIcon: effectiveTrailing,
-      child: Text(
-        label,
-        style: GoogleFonts.cairo(
-          fontSize: 13.5,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-          color: foregroundColor,
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
+      child: subtitle != null
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: GoogleFonts.cairo(
+                    fontSize: 13.0,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                    color: foregroundColor,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.cairo(
+                    fontSize: 11.0,
+                    fontWeight: FontWeight.normal,
+                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            )
+          : Text(
+              label,
+              style: GoogleFonts.cairo(
+                fontSize: 13.5,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: foregroundColor,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
     );
   }
 
@@ -286,36 +348,76 @@ class M3ActionMenu extends StatelessWidget {
     );
   }
 
-  /// Builds a non-clickable section subheader for organized categorization.
+  /// Builds a styled Material Design 3 menu header with title, optional icon,
+  /// optional badge, and clean container separation.
   static Widget header({
     required BuildContext context,
     required String title,
     IconData? icon,
+    String? badge,
+    Widget? trailing,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsetsDirectional.only(
-        start: M3SpacingTokens.space3,
-        end: M3SpacingTokens.space3,
-        top: 6.0,
-        bottom: 4.0,
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsetsDirectional.fromSTEB(14.0, 8.0, 14.0, 8.0),
+      margin: const EdgeInsets.only(bottom: 4.0),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        border: Border(
+          bottom: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+            width: 1.0,
+          ),
+        ),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 14.0, color: colorScheme.primary),
-            const SizedBox(width: 6.0),
+            Container(
+              padding: const EdgeInsets.all(4.5),
+              decoration: BoxDecoration(
+                color: colorScheme.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(icon, size: 14.0, color: colorScheme.primary),
+            ),
+            const SizedBox(width: 8.0),
           ],
-          Text(
-            title,
-            style: GoogleFonts.cairo(
-              fontSize: 11.0,
-              fontWeight: FontWeight.bold,
-              color: colorScheme.primary,
-              letterSpacing: 0.2,
+          Expanded(
+            child: Text(
+              title,
+              style: GoogleFonts.cairo(
+                fontSize: 12.0,
+                fontWeight: FontWeight.bold,
+                color: colorScheme.primary,
+                letterSpacing: 0.1,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
+          if (badge != null)
+            Container(
+              margin: const EdgeInsetsDirectional.only(start: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: colorScheme.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                badge,
+                style: GoogleFonts.cairo(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.primary,
+                ),
+              ),
+            ),
+          if (trailing != null) ...[
+            const SizedBox(width: 6),
+            trailing,
+          ],
         ],
       ),
     );

@@ -618,7 +618,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                                     return Badge(
                                       isLabelVisible: count > 0,
                                       label: Text('$count'),
-                                      backgroundColor: Colors.orange.shade800,
+                                      backgroundColor: colorScheme.tertiary,
+                                      textColor: colorScheme.onTertiary,
                                       child: const Icon(Icons.auto_awesome_outlined),
                                     );
                                   },
@@ -630,7 +631,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                                     return Badge(
                                       isLabelVisible: count > 0,
                                       label: Text('$count'),
-                                      backgroundColor: Colors.orange.shade800,
+                                      backgroundColor: colorScheme.tertiary,
+                                      textColor: colorScheme.onTertiary,
                                       child: const Icon(Icons.auto_awesome_rounded),
                                     );
                                   },
@@ -654,19 +656,12 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
             VerticalDivider(thickness: 1, width: 1, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
           ],
 
-          // Main View Content + Switch Point Persistent Footer
+          // Main View Content
           Expanded(
-            child: Column(
-              children: [
-                Expanded(
-                  child: M3ContentBoundary(
-                    maxWidth: 1440.0,
-                    padding: EdgeInsets.zero,
-                    child: _buildMainView(firestore, strings, isAr),
-                  ),
-                ),
-                const SwitchPointFooter(),
-              ],
+            child: M3ContentBoundary(
+              maxWidth: 1440.0,
+              padding: EdgeInsets.zero,
+              child: _buildMainView(firestore, strings, isAr),
             ),
           ),
         ],

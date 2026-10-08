@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -285,7 +284,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
 
   // Branch & Retail Chain Analytics Controls
   String _branchAggregationLevel = 'BRANCH'; // 'BRANCH' vs 'CHAIN'
-  String _branchChartViewMode = 'DONUT'; // 'DONUT', 'BAR', 'LIST'
+  String _branchChartViewMode = 'DONUT'; // 'DONUT' (default initial view), 'BAR', 'LIST'
   String _branchMetricDimension = 'REVENUE'; // 'REVENUE' vs 'COUNT'
 
   // Pagination Constants & State (25 items per page / load)
@@ -366,17 +365,10 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
           },
         ),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: M3ContentBoundary(
-              maxWidth: 1400.0,
-              padding: EdgeInsets.zero,
-              child: content,
-            ),
-          ),
-          const SwitchPointFooter(),
-        ],
+      body: M3ContentBoundary(
+        maxWidth: 1400.0,
+        padding: EdgeInsets.zero,
+        child: content,
       ),
     );
   }
@@ -743,12 +735,11 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth > 900;
-        final isMobile = constraints.maxWidth < 700;
-        final isCompact = constraints.maxWidth < 960;
+        final isMobile = constraints.maxWidth < 720;
+        final isCompact = constraints.maxWidth < 1060;
         final stickyHeight = _computeStickyHeaderHeight(
+          maxWidth: constraints.maxWidth,
           selectedTab: _selectedTab,
-          isCompact: isCompact,
-          isLockedToCompany: isLockedToCompany,
         );
 
         return CustomScrollView(
@@ -814,42 +805,12 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
                       const SizedBox(height: 14),
                     ],
 
-                    // 4. Day Date Filter & Export Bar (Excel & CSV)
-                    _buildDateAndExportBar(
-                      context: context,
-                      colorScheme: colorScheme,
-                      strings: strings,
-                      isAr: isAr,
-                      isHi: isHi,
-                      isMobile: isMobile,
-                      matchingInvoicesCount: filteredTransactions.length,
-                      totalInvoicesCount: totalCampaignTransactions > 0 ? totalCampaignTransactions : filteredTransactions.length,
-                      onExportExcel: () => _exportAnalyticsExcel(
-                        context: context,
-                        filteredTransactions: filteredTransactions,
-                        sortedProducts: sortedProducts,
-                        sortedBranches: sortedBranches,
-                        effectiveCompanyName: effectiveCompanyName.isNotEmpty ? effectiveCompanyName : 'Tashil_Gift',
-                        isAr: isAr,
-                        activeCountry: activeCountry,
-                      ),
-                      onExportCSV: () => _exportAnalyticsCSV(
-                        context: context,
-                        filteredTransactions: filteredTransactions,
-                        sortedProducts: sortedProducts,
-                        sortedBranches: sortedBranches,
-                        effectiveCompanyName: effectiveCompanyName.isNotEmpty ? effectiveCompanyName : 'Tashil_Gift',
-                        isAr: isAr,
-                        activeCountry: activeCountry,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
                   ],
                 ),
               ),
             ),
 
-            // 2. PINNED STICKY HEADER DELEGATE (Tabs + Contextual Search/Sort/Filter Bar)
+            // 2. PINNED STICKY HEADER DELEGATE (Unified Master Controls Header)
             SliverPersistentHeader(
               pinned: true,
               delegate: _StickyReportsHeaderDelegate(
@@ -862,6 +823,26 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
                   isHi: isHi,
                   productsCount: sortedProducts.length,
                   branchesCount: sortedBranches.length,
+                  matchingInvoicesCount: filteredTransactions.length,
+                  totalInvoicesCount: totalCampaignTransactions > 0 ? totalCampaignTransactions : filteredTransactions.length,
+                  onExportExcel: () => _exportAnalyticsExcel(
+                    context: context,
+                    filteredTransactions: filteredTransactions,
+                    sortedProducts: sortedProducts,
+                    sortedBranches: sortedBranches,
+                    effectiveCompanyName: effectiveCompanyName.isNotEmpty ? effectiveCompanyName : 'Tashil_Gift',
+                    isAr: isAr,
+                    activeCountry: activeCountry,
+                  ),
+                  onExportCSV: () => _exportAnalyticsCSV(
+                    context: context,
+                    filteredTransactions: filteredTransactions,
+                    sortedProducts: sortedProducts,
+                    sortedBranches: sortedBranches,
+                    effectiveCompanyName: effectiveCompanyName.isNotEmpty ? effectiveCompanyName : 'Tashil_Gift',
+                    isAr: isAr,
+                    activeCountry: activeCountry,
+                  ),
                   isMobile: isMobile,
                   isCompact: isCompact,
                   isLockedToCompany: isLockedToCompany,
@@ -951,287 +932,6 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
       lockedCompanySlug: widget.lockedCompanySlug,
       isMobile: isMobile,
       actions: const [],
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // 1.5. Interactive Day Date Filter & Excel Action Bar (Material Design 3)
-  // ---------------------------------------------------------------------------
-  Widget _buildDateAndExportBar({
-    required BuildContext context,
-    required ColorScheme colorScheme,
-    required AppStrings strings,
-    required bool isAr,
-    required bool isHi,
-    required bool isMobile,
-    required int matchingInvoicesCount,
-    required int totalInvoicesCount,
-    required VoidCallback onExportExcel,
-    required VoidCallback onExportCSV,
-  }) {
-    final now = DateTime.now();
-    final isSelectedToday = !_isAllDays && _isDateToday(_selectedDate);
-    final canGoForward = !_isAllDays &&
-        (_selectedDate.year < now.year ||
-            (_selectedDate.year == now.year &&
-                (_selectedDate.month < now.month ||
-                    (_selectedDate.month == now.month && _selectedDate.day < now.day))));
-
-    final quickToggleGroup = M3ConnectedButtonGroup<String>(
-      height: 38,
-      borderRadius: 12,
-      isExpanded: true,
-      showCheckmark: false,
-      segments: [
-        M3ButtonSegment<String>(
-          value: 'ALL',
-          label: strings.totalLabel,
-          icon: Icons.analytics_rounded,
-          badgeText: '$totalInvoicesCount',
-          tooltip: isAr ? 'عرض إجمالي مبيعات وفواتير كافة أيام الحملة' : 'View total sales across all campaign days',
-        ),
-        M3ButtonSegment<String>(
-          value: 'DAYS',
-          label: strings.daysLabel,
-          icon: Icons.calendar_today_rounded,
-          tooltip: isAr ? 'استعراض وفلترة التقارير حسب الأيام' : 'Filter reports by day',
-        ),
-      ],
-      selectedValue: _isAllDays ? 'ALL' : 'DAYS',
-      onSelected: (val) {
-        setState(() {
-          if (val == 'ALL') {
-            _isAllDays = true;
-          } else {
-            _isAllDays = false;
-          }
-          _productsCurrentPage = 0;
-          _branchesCurrentPage = 0;
-          _cachedMetrics = null;
-          _lastMetricsCacheKey = null;
-        });
-      },
-    );
-
-    final dateNavigator = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Previous Day Button
-        IconButton.filledTonal(
-          icon: Icon(isAr ? Icons.chevron_right_rounded : Icons.chevron_left_rounded, size: isMobile ? 18 : 20),
-          tooltip: strings.previousDay,
-          style: IconButton.styleFrom(
-            backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-            foregroundColor: colorScheme.onSurfaceVariant,
-          ),
-          padding: EdgeInsets.all(isMobile ? 6 : 8),
-          constraints: BoxConstraints(minWidth: isMobile ? 34 : 38, minHeight: isMobile ? 34 : 38),
-          onPressed: () {
-            setState(() {
-              if (_isAllDays) {
-                _selectedDate = now.subtract(const Duration(days: 1));
-              } else {
-                _selectedDate = _selectedDate.subtract(const Duration(days: 1));
-              }
-              _isAllDays = false;
-              _productsCurrentPage = 0;
-              _branchesCurrentPage = 0;
-              _cachedMetrics = null;
-              _lastMetricsCacheKey = null;
-            });
-          },
-        ),
-        SizedBox(width: isMobile ? 4 : 6),
-
-        // Date Picker Button ("اختر اليوم" / التاريخ المحدد)
-        InkWell(
-          onTap: () => _pickReportDate(context),
-          borderRadius: BorderRadius.circular(12),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 12, vertical: isMobile ? 7 : 8),
-            decoration: BoxDecoration(
-              color: _isAllDays
-                  ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.35)
-                  : colorScheme.primaryContainer.withValues(alpha: 0.7),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: _isAllDays
-                    ? colorScheme.outlineVariant.withValues(alpha: 0.8)
-                    : colorScheme.primary.withValues(alpha: 0.7),
-                width: 1.2,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.calendar_month_rounded,
-                  size: isMobile ? 15 : 17,
-                  color: _isAllDays
-                      ? colorScheme.onSurfaceVariant
-                      : colorScheme.primary,
-                ),
-                SizedBox(width: isMobile ? 6 : 8),
-                Text(
-                  _isAllDays
-                      ? strings.selectDay
-                      : (isMobile ? _formatCompactDate(_selectedDate, isAr) : _formatDisplayDate(_selectedDate, isAr)),
-                  style: GoogleFonts.cairo(
-                    fontSize: isMobile ? 12 : 12.5,
-                    fontWeight: FontWeight.bold,
-                    color: _isAllDays
-                        ? colorScheme.onSurfaceVariant
-                        : colorScheme.onPrimaryContainer,
-                  ),
-                ),
-                if (!_isAllDays) ...[
-                  SizedBox(width: isMobile ? 6 : 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: colorScheme.primary,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      isSelectedToday ? (isAr ? 'اليوم' : 'Today') : '$matchingInvoicesCount ${isAr ? 'فاتورة' : 'invoices'}',
-                      style: GoogleFonts.cairo(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.onPrimary,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-        SizedBox(width: isMobile ? 4 : 6),
-
-        // Next Day Button
-        IconButton.filledTonal(
-          icon: Icon(isAr ? Icons.chevron_left_rounded : Icons.chevron_right_rounded, size: isMobile ? 18 : 20),
-          tooltip: strings.nextDay,
-          style: IconButton.styleFrom(
-            backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-            foregroundColor: colorScheme.onSurfaceVariant,
-          ),
-          padding: EdgeInsets.all(isMobile ? 6 : 8),
-          constraints: BoxConstraints(minWidth: isMobile ? 34 : 38, minHeight: isMobile ? 34 : 38),
-          onPressed: canGoForward
-              ? () {
-                  setState(() {
-                    _selectedDate = _selectedDate.add(const Duration(days: 1));
-                    _isAllDays = false;
-                    _productsCurrentPage = 0;
-                    _branchesCurrentPage = 0;
-                    _cachedMetrics = null;
-                    _lastMetricsCacheKey = null;
-                  });
-                }
-              : null,
-        ),
-      ],
-    );
-
-    final excelButton = FilledButton.tonalIcon(
-      onPressed: _isExporting ? null : onExportExcel,
-      style: FilledButton.styleFrom(
-        backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.6),
-        foregroundColor: colorScheme.primary,
-        padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 12, vertical: isMobile ? 7 : 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        elevation: 0,
-      ),
-      icon: _isExporting
-          ? SizedBox(
-              width: 15,
-              height: 15,
-              child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary),
-            )
-          : Icon(Icons.table_chart_rounded, size: isMobile ? 16 : 17, color: colorScheme.primary),
-      label: Text(
-        strings.excelBtn,
-        style: GoogleFonts.cairo(
-          fontWeight: FontWeight.bold,
-          fontSize: isMobile ? 11.5 : 12,
-          color: colorScheme.primary,
-        ),
-      ),
-    );
-
-    final csvButton = FilledButton.tonalIcon(
-      onPressed: _isExporting ? null : onExportCSV,
-      style: FilledButton.styleFrom(
-        backgroundColor: colorScheme.secondaryContainer.withValues(alpha: 0.6),
-        foregroundColor: colorScheme.secondary,
-        padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 12, vertical: isMobile ? 7 : 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        elevation: 0,
-      ),
-      icon: _isExporting
-          ? SizedBox(
-              width: 15,
-              height: 15,
-              child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.secondary),
-            )
-          : Icon(Icons.description_rounded, size: isMobile ? 16 : 17, color: colorScheme.secondary),
-      label: Text(
-        strings.csvBtn,
-        style: GoogleFonts.cairo(
-          fontWeight: FontWeight.bold,
-          fontSize: isMobile ? 11.5 : 12,
-          color: colorScheme.secondary,
-        ),
-      ),
-    );
-
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.6),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withValues(alpha: 0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Row 1: quickToggleGroup takes the entire line ("الإجمالي والأيام دي هتاخد السطر كله")
-          quickToggleGroup,
-          const SizedBox(height: 10),
-          // Row 2: Underneath, 3 button groups: Date Navigator ("واختار اليوم"), Excel ("Excel"), and CSV ("CSV")
-          Row(
-            children: [
-              if (isMobile)
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    physics: const BouncingScrollPhysics(),
-                    child: dateNavigator,
-                  ),
-                )
-              else ...[
-                dateNavigator,
-                const Spacer(),
-              ],
-              const SizedBox(width: 8),
-              excelButton,
-              const SizedBox(width: 6),
-              csvButton,
-            ],
-          ),
-        ],
-      ),
     );
   }
 
@@ -1580,14 +1280,13 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
   // 4. Sticky Header Computation & Controls Section
   // ---------------------------------------------------------------------------
   double _computeStickyHeaderHeight({
+    required double maxWidth,
     required int selectedTab,
-    required bool isCompact,
-    required bool isLockedToCompany,
   }) {
-    if (selectedTab == 0) {
-      return isCompact ? 172.0 : 130.0;
+    if (maxWidth < 720) {
+      return selectedTab == 1 ? 285.0 : 248.0;
     } else {
-      return isCompact ? 206.0 : 130.0;
+      return 168.0;
     }
   }
 
@@ -1599,84 +1298,421 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
     required bool isHi,
     required int productsCount,
     required int branchesCount,
+    required int matchingInvoicesCount,
+    required int totalInvoicesCount,
+    required VoidCallback onExportExcel,
+    required VoidCallback onExportCSV,
     required bool isMobile,
     required bool isCompact,
     required bool isLockedToCompany,
     required bool isPinned,
   }) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOutCubic,
-      decoration: BoxDecoration(
-        color: colorScheme.surface.withValues(alpha: isPinned ? 0.95 : 1.0),
-        boxShadow: isPinned
-            ? [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
-                ),
-              ]
-            : [],
-        border: isPinned
-            ? Border(
-                bottom: BorderSide(
-                  color: colorScheme.outlineVariant.withValues(alpha: 0.6),
-                  width: 1,
-                ),
-              )
-            : null,
-      ),
-      child: ClipRect(
-        child: BackdropFilter(
-          filter: isPinned
-              ? ImageFilter.blur(sigmaX: 12, sigmaY: 12)
-              : ImageFilter.blur(sigmaX: 0, sigmaY: 0),
-          child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: isMobile ? 12 : 20,
-              vertical: isMobile ? 10 : 12,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // 1. Navigation / Segmented Button Tabs
-                _buildTabsSelector(
-                  colorScheme: colorScheme,
-                  strings: strings,
-                  isAr: isAr,
-                  isHi: isHi,
-                  productsCount: productsCount,
-                  branchesCount: branchesCount,
-                  isMobile: isMobile,
-                ),
+    final now = DateTime.now();
+    final isSelectedToday = !_isAllDays && _isDateToday(_selectedDate);
+    final canGoForward = !_isAllDays &&
+        (_selectedDate.year < now.year ||
+            (_selectedDate.year == now.year &&
+                (_selectedDate.month < now.month ||
+                    (_selectedDate.month == now.month && _selectedDate.day < now.day))));
 
-                // 2. Active Tab Toolbar (Search, Sort, Filters)
-                if (_selectedTab == 0) ...[
-                  SizedBox(height: isMobile ? 8 : 10),
-                  _buildProductsToolbar(
+    Widget buildQuickToggleGroup({required bool isExpanded, double height = 38}) {
+      return M3ConnectedButtonGroup<String>(
+        height: height,
+        borderRadius: 12,
+        isExpanded: isExpanded,
+        showCheckmark: false,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+        segments: [
+          M3ButtonSegment<String>(
+            value: 'ALL',
+            label: strings.totalLabel,
+            icon: Icons.analytics_rounded,
+            badgeText: '$totalInvoicesCount',
+            tooltip: isAr ? 'عرض إجمالي مبيعات وفواتير كافة أيام الحملة' : 'View total sales across all campaign days',
+          ),
+          M3ButtonSegment<String>(
+            value: 'DAYS',
+            label: strings.daysLabel,
+            icon: Icons.calendar_today_rounded,
+            tooltip: isAr ? 'استعراض وفلترة التقارير حسب الأيام' : 'Filter reports by day',
+          ),
+        ],
+        selectedValue: _isAllDays ? 'ALL' : 'DAYS',
+        onSelected: (val) {
+          setState(() {
+            _isAllDays = (val == 'ALL');
+            _productsCurrentPage = 0;
+            _branchesCurrentPage = 0;
+            _cachedMetrics = null;
+            _lastMetricsCacheKey = null;
+          });
+        },
+      );
+    }
+
+    Widget buildDateNavigator({double height = 38, bool isCompact = false}) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Previous Day Button
+          IconButton.filledTonal(
+            icon: Icon(isAr ? Icons.chevron_right_rounded : Icons.chevron_left_rounded, size: height <= 36 ? 17 : 19),
+            tooltip: strings.previousDay,
+            style: IconButton.styleFrom(
+              backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+              foregroundColor: colorScheme.onSurfaceVariant,
+              minimumSize: Size(height, height),
+              padding: EdgeInsets.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            constraints: BoxConstraints.tightFor(width: height, height: height),
+            onPressed: () {
+              setState(() {
+                if (_isAllDays) {
+                  _selectedDate = now.subtract(const Duration(days: 1));
+                } else {
+                  _selectedDate = _selectedDate.subtract(const Duration(days: 1));
+                }
+                _isAllDays = false;
+                _productsCurrentPage = 0;
+                _branchesCurrentPage = 0;
+                _cachedMetrics = null;
+                _lastMetricsCacheKey = null;
+              });
+            },
+          ),
+          const SizedBox(width: 4),
+
+          // Date Picker Button ("اختر اليوم" / التاريخ المحدد)
+          InkWell(
+            onTap: () => _pickReportDate(context),
+            borderRadius: BorderRadius.circular(12),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              height: height,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: _isAllDays
+                    ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.35)
+                    : colorScheme.primaryContainer.withValues(alpha: 0.7),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _isAllDays
+                      ? colorScheme.outlineVariant.withValues(alpha: 0.8)
+                      : colorScheme.primary.withValues(alpha: 0.7),
+                  width: 1.2,
+                ),
+              ),
+              alignment: Alignment.center,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.calendar_month_rounded,
+                    size: height <= 36 ? 15 : 17,
+                    color: _isAllDays ? colorScheme.onSurfaceVariant : colorScheme.primary,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    _isAllDays
+                        ? strings.selectDay
+                        : (isCompact ? _formatCompactDate(_selectedDate, isAr) : _formatDisplayDate(_selectedDate, isAr)),
+                    style: GoogleFonts.cairo(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: _isAllDays ? colorScheme.onSurfaceVariant : colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                  if (!_isAllDays) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        isSelectedToday ? (isAr ? 'اليوم' : 'Today') : '$matchingInvoicesCount ${isAr ? 'فاتورة' : 'inv'}',
+                        style: GoogleFonts.cairo(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.onPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+
+          // Next Day Button
+          IconButton.filledTonal(
+            icon: Icon(isAr ? Icons.chevron_left_rounded : Icons.chevron_right_rounded, size: height <= 36 ? 17 : 19),
+            tooltip: strings.nextDay,
+            style: IconButton.styleFrom(
+              backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+              foregroundColor: colorScheme.onSurfaceVariant,
+              minimumSize: Size(height, height),
+              padding: EdgeInsets.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            constraints: BoxConstraints.tightFor(width: height, height: height),
+            onPressed: canGoForward
+                ? () {
+                    setState(() {
+                      _selectedDate = _selectedDate.add(const Duration(days: 1));
+                      _isAllDays = false;
+                      _productsCurrentPage = 0;
+                      _branchesCurrentPage = 0;
+                      _cachedMetrics = null;
+                      _lastMetricsCacheKey = null;
+                    });
+                  }
+                : null,
+          ),
+        ],
+      );
+    }
+
+    Widget buildExcelButton({double height = 38}) {
+      return FilledButton.tonalIcon(
+        onPressed: _isExporting ? null : onExportExcel,
+        style: FilledButton.styleFrom(
+          backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.6),
+          foregroundColor: colorScheme.primary,
+          minimumSize: Size(0, height),
+          fixedSize: Size.fromHeight(height),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          elevation: 0,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        icon: _isExporting
+            ? SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary),
+              )
+            : Icon(Icons.table_chart_rounded, size: 16, color: colorScheme.primary),
+        label: Text(
+          strings.excelBtn,
+          style: GoogleFonts.cairo(
+            fontWeight: FontWeight.bold,
+            fontSize: 11.5,
+            color: colorScheme.primary,
+          ),
+        ),
+      );
+    }
+
+    Widget buildCsvButton({double height = 38}) {
+      return FilledButton.tonalIcon(
+        onPressed: _isExporting ? null : onExportCSV,
+        style: FilledButton.styleFrom(
+          backgroundColor: colorScheme.secondaryContainer.withValues(alpha: 0.6),
+          foregroundColor: colorScheme.secondary,
+          minimumSize: Size(0, height),
+          fixedSize: Size.fromHeight(height),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          elevation: 0,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        icon: _isExporting
+            ? SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.secondary),
+              )
+            : Icon(Icons.description_rounded, size: 16, color: colorScheme.secondary),
+        label: Text(
+          strings.csvBtn,
+          style: GoogleFonts.cairo(
+            fontWeight: FontWeight.bold,
+            fontSize: 11.5,
+            color: colorScheme.secondary,
+          ),
+        ),
+      );
+    }
+
+    Widget buildDivider() {
+      return Container(
+        height: 24,
+        width: 1,
+        color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        margin: const EdgeInsets.symmetric(horizontal: 6),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth;
+        Widget cardContent;
+
+        if (availableWidth >= 720) {
+          // -------------------------------------------------------------
+          // Desktop & Tablet (>= 720px): 3 Unified Master Rows
+          // -------------------------------------------------------------
+          cardContent = Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Row 1: Global Date Scope Navigator & Report Exports
+              Row(
+                children: [
+                  buildQuickToggleGroup(isExpanded: false, height: 38),
+                  const SizedBox(width: 6),
+                  buildDivider(),
+                  const SizedBox(width: 4),
+                  buildDateNavigator(height: 38, isCompact: availableWidth < 900),
+                  const Spacer(),
+                  buildExcelButton(height: 38),
+                  const SizedBox(width: 6),
+                  buildCsvButton(height: 38),
+                ],
+              ),
+              const SizedBox(height: 8),
+
+              // Row 2: Master Navigation Tabs
+              Row(
+                children: [
+                  _buildTabsSelector(
                     colorScheme: colorScheme,
                     strings: strings,
                     isAr: isAr,
                     isHi: isHi,
-                    isCompact: isCompact,
-                    isLockedToCompany: isLockedToCompany,
-                  ),
-                ] else ...[
-                  SizedBox(height: isMobile ? 8 : 10),
-                  _buildBranchesToolbar(
-                    colorScheme: colorScheme,
-                    strings: strings,
-                    isAr: isAr,
-                    isCompact: isCompact,
+                    productsCount: productsCount,
+                    branchesCount: branchesCount,
+                    isMobile: false,
+                    height: 38,
                   ),
                 ],
+              ),
+              const SizedBox(height: 8),
+
+              // Row 3: Contextual Operational Toolbar
+              if (_selectedTab == 0)
+                _buildProductsToolbar(
+                  colorScheme: colorScheme,
+                  strings: strings,
+                  isAr: isAr,
+                  isHi: isHi,
+                  isCompact: false,
+                  isLockedToCompany: isLockedToCompany,
+                  height: 38,
+                )
+              else
+                _buildBranchesToolbar(
+                  colorScheme: colorScheme,
+                  strings: strings,
+                  isAr: isAr,
+                  isCompact: false,
+                  height: 38,
+                ),
+            ],
+          );
+        } else {
+          // -------------------------------------------------------------
+          // Mobile (< 720px): Streamlined Compact Stack
+          // -------------------------------------------------------------
+          cardContent = Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Row 1: Full-width Tabs
+              _buildTabsSelector(
+                colorScheme: colorScheme,
+                strings: strings,
+                isAr: isAr,
+                isHi: isHi,
+                productsCount: productsCount,
+                branchesCount: branchesCount,
+                isMobile: true,
+                height: 36,
+              ),
+              const SizedBox(height: 6),
+
+              // Row 2: Full-width Quick Toggle
+              buildQuickToggleGroup(isExpanded: true, height: 36),
+              const SizedBox(height: 6),
+
+              // Row 3: Date Navigator + Exports
+              Row(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: buildDateNavigator(height: 36, isCompact: true),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  buildExcelButton(height: 36),
+                  const SizedBox(width: 4),
+                  buildCsvButton(height: 36),
+                ],
+              ),
+              const SizedBox(height: 6),
+
+              // Row 4 & 5: Contextual Toolbar
+              if (_selectedTab == 0)
+                _buildProductsToolbar(
+                  colorScheme: colorScheme,
+                  strings: strings,
+                  isAr: isAr,
+                  isHi: isHi,
+                  isCompact: true,
+                  isLockedToCompany: isLockedToCompany,
+                  height: 36,
+                )
+              else
+                _buildBranchesToolbar(
+                  colorScheme: colorScheme,
+                  strings: strings,
+                  isAr: isAr,
+                  isCompact: true,
+                  height: 36,
+                ),
+            ],
+          );
+        }
+
+        return Container(
+          color: colorScheme.surface,
+          padding: EdgeInsets.symmetric(
+            horizontal: isMobile ? 12 : 20,
+            vertical: 4,
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
               ],
             ),
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 10 : 14,
+              vertical: isMobile ? 8 : 10,
+            ),
+            child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              child: cardContent,
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -1687,13 +1723,13 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
     required bool isHi,
     required bool isCompact,
     required bool isLockedToCompany,
+    double height = 38,
   }) {
     final searchInputWidget = SizedBox(
-      width: isCompact ? double.infinity : 280,
-      height: isCompact ? 38 : 42,
+      height: height,
       child: TextField(
         controller: _productSearchController,
-        style: GoogleFonts.cairo(fontSize: 12.5),
+        style: GoogleFonts.cairo(fontSize: 12),
         onChanged: (_) => setState(() {
           _productsCurrentPage = 0;
           _productsMobileLimit = _reportPageSize;
@@ -1701,10 +1737,12 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
         decoration: InputDecoration(
           hintText: isAr ? 'بحث باسم الصنف أو الباركود...' : (isHi ? 'नाम या बारकोड से खोजें...' : 'Search item name or barcode...'),
           hintStyle: GoogleFonts.cairo(fontSize: 11.5, color: colorScheme.onSurfaceVariant),
-          prefixIcon: Icon(Icons.search_rounded, size: 18, color: colorScheme.primary),
+          prefixIcon: Icon(Icons.search_rounded, size: 17, color: colorScheme.primary),
           suffixIcon: _productSearchController.text.isNotEmpty
               ? IconButton(
-                  icon: const Icon(Icons.clear_rounded, size: 16),
+                  icon: const Icon(Icons.clear_rounded, size: 15),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                   onPressed: () {
                     _productSearchController.clear();
                     setState(() {
@@ -1715,7 +1753,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
                 )
               : null,
           isDense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
           filled: true,
           fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
           border: OutlineInputBorder(
@@ -1735,28 +1773,29 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
     );
 
     final sortSelectorWidget = M3ConnectedButtonGroup<String>(
-      height: isCompact ? 38 : 42,
+      height: height,
       borderRadius: 12,
       isExpanded: false,
       showCheckmark: true,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
       segments: [
         M3ButtonSegment<String>(
           value: 'QTY',
           label: isAr ? 'الكمية' : (isHi ? 'मात्रा' : 'Qty'),
           icon: Icons.inventory_2_rounded,
-          tooltip: isAr ? 'ترتيب تنازلي حسب الكمية المباعة' : (isHi ? 'मात्रा کے مطابق ترتیب' : 'Sort by sold quantity'),
+          tooltip: isAr ? 'ترتيب تنازلي حسب الكمية المباعة' : (isHi ? 'मात्रा के अनुसार क्रमबद्ध करें' : 'Sort by sold quantity'),
         ),
         M3ButtonSegment<String>(
           value: 'REVENUE',
           label: isAr ? 'القيمة' : (isHi ? 'मूल्य' : 'Revenue'),
           icon: Icons.payments_rounded,
-          tooltip: isAr ? 'ترتيب تنازلي حسب إجمالي القيمة والمبيعات' : (isHi ? 'قیمت کے مطابق ترتیب' : 'Sort by total value'),
+          tooltip: isAr ? 'ترتيب تنازلي حسب إجمالي القيمة والمبيعات' : (isHi ? 'मूल्य के अनुसार क्रमबद्ध करें' : 'Sort by total value'),
         ),
         M3ButtonSegment<String>(
           value: 'NAME',
           label: isAr ? 'الاسم' : (isHi ? 'नाम' : 'Name'),
           icon: Icons.sort_by_alpha_rounded,
-          tooltip: isAr ? 'ترتيب أبجدي حسب اسم الصنف' : (isHi ? 'نام کے مطابق حروف تہجی کی ترتیب' : 'Sort alphabetically by item name'),
+          tooltip: isAr ? 'ترتيب أبجدي حسب اسم الصنف' : (isHi ? 'नाम के अनुसार क्रमबद्ध करें' : 'Sort alphabetically by item name'),
         ),
       ],
       selectedValue: _productSortBy,
@@ -1777,8 +1816,8 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeInOut,
-          height: isCompact ? 38 : 42,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
+          height: height,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
             color: _onlyCompanyProductsFilter
                 ? colorScheme.primaryContainer.withValues(alpha: 0.7)
@@ -1796,16 +1835,16 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
             children: [
               Icon(
                 _onlyCompanyProductsFilter ? Icons.verified_rounded : Icons.all_inclusive_rounded,
-                size: 17,
+                size: 16,
                 color: _onlyCompanyProductsFilter ? colorScheme.primary : colorScheme.onSurfaceVariant,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Text(
                 _onlyCompanyProductsFilter
                     ? (isAr ? 'أصناف الشركة فقط' : (isHi ? 'केवल कंपनी आइटम' : 'Company Items Only'))
-                    : (isAr ? 'كافة أصناف الفاتورة' : (isHi ? 'सभी रसीद आइटम' : 'All Receipt Items')),
+                    : (isAr ? 'كافة الأصناف' : (isHi ? 'सभी आइटम' : 'All Items')),
                 style: GoogleFonts.cairo(
-                  fontSize: 12,
+                  fontSize: 11.5,
                   fontWeight: _onlyCompanyProductsFilter ? FontWeight.bold : FontWeight.w600,
                   color: _onlyCompanyProductsFilter ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
                 ),
@@ -1816,76 +1855,17 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
       ),
     );
 
-    final activeDateChip = !_isAllDays
-        ? Container(
-            height: isCompact ? 38 : 42,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              color: colorScheme.primaryContainer.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: colorScheme.primary.withValues(alpha: 0.5),
-                width: 1.2,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                InkWell(
-                  onTap: () => _pickReportDate(context),
-                  borderRadius: BorderRadius.circular(8),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.event_rounded, size: 16, color: colorScheme.primary),
-                      const SizedBox(width: 6),
-                      Text(
-                        _formatDisplayDate(_selectedDate, isAr),
-                        style: GoogleFonts.cairo(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.onPrimaryContainer,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 6),
-                InkWell(
-                  onTap: () {
-                    setState(() {
-                      _isAllDays = true;
-                      _productsCurrentPage = 0;
-                      _branchesCurrentPage = 0;
-                      _cachedMetrics = null;
-                      _lastMetricsCacheKey = null;
-                    });
-                  },
-                  borderRadius: BorderRadius.circular(10),
-                  child: Padding(
-                    padding: const EdgeInsets.all(2.0),
-                    child: Icon(Icons.close_rounded, size: 15, color: colorScheme.primary),
-                  ),
-                ),
-              ],
-            ),
-          )
-        : null;
-
     if (isCompact) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           searchInputWidget,
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
             child: Row(
               children: [
-                if (activeDateChip != null) ...[
-                  activeDateChip,
-                  const SizedBox(width: 8),
-                ],
                 companyFilterWidget,
                 const SizedBox(width: 8),
                 sortSelectorWidget,
@@ -1899,13 +1879,9 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
     return Row(
       children: [
         Expanded(child: searchInputWidget),
-        if (activeDateChip != null) ...[
-          const SizedBox(width: 10),
-          activeDateChip,
-        ],
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         companyFilterWidget,
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         sortSelectorWidget,
       ],
     );
@@ -1916,67 +1892,13 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
     required AppStrings strings,
     required bool isAr,
     required bool isCompact,
+    double height = 38,
   }) {
-    final activeDateChip = !_isAllDays
-        ? Container(
-            height: isCompact ? 36 : 42,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              color: colorScheme.primaryContainer.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: colorScheme.primary.withValues(alpha: 0.5),
-                width: 1.2,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                InkWell(
-                  onTap: () => _pickReportDate(context),
-                  borderRadius: BorderRadius.circular(8),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.event_rounded, size: 16, color: colorScheme.primary),
-                      const SizedBox(width: 6),
-                      Text(
-                        _formatDisplayDate(_selectedDate, isAr),
-                        style: GoogleFonts.cairo(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.onPrimaryContainer,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 6),
-                InkWell(
-                  onTap: () {
-                    setState(() {
-                      _isAllDays = true;
-                      _productsCurrentPage = 0;
-                      _branchesCurrentPage = 0;
-                      _cachedMetrics = null;
-                      _lastMetricsCacheKey = null;
-                    });
-                  },
-                  borderRadius: BorderRadius.circular(10),
-                  child: Padding(
-                    padding: const EdgeInsets.all(2.0),
-                    child: Icon(Icons.close_rounded, size: 15, color: colorScheme.primary),
-                  ),
-                ),
-              ],
-            ),
-          )
-        : null;
-
     final viewModeGroup = M3ConnectedButtonGroup<String>(
-      height: isCompact ? 36 : 42,
+      height: height,
       borderRadius: 12,
       isExpanded: isCompact,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
       segments: [
         M3ButtonSegment<String>(
           value: 'DONUT',
@@ -2002,9 +1924,10 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
     );
 
     final aggregationGroup = M3ConnectedButtonGroup<String>(
-      height: isCompact ? 36 : 42,
+      height: height,
       borderRadius: 12,
       isExpanded: isCompact,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
       segments: [
         M3ButtonSegment<String>(
           value: 'BRANCH',
@@ -2027,9 +1950,10 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
     );
 
     final metricGroup = M3ConnectedButtonGroup<String>(
-      height: isCompact ? 36 : 42,
+      height: height,
       borderRadius: 12,
       isExpanded: isCompact,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
       segments: [
         M3ButtonSegment<String>(
           value: 'REVENUE',
@@ -2052,10 +1976,6 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (activeDateChip != null) ...[
-            activeDateChip,
-            const SizedBox(height: 6),
-          ],
           viewModeGroup,
           const SizedBox(height: 6),
           aggregationGroup,
@@ -2065,22 +1985,15 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
       );
     }
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (activeDateChip != null) ...[
-            activeDateChip,
-            const SizedBox(width: 8),
-          ],
-          viewModeGroup,
-          const SizedBox(width: 8),
-          aggregationGroup,
-          const SizedBox(width: 8),
-          metricGroup,
-        ],
-      ),
+    return Row(
+      children: [
+        viewModeGroup,
+        const SizedBox(width: 8),
+        aggregationGroup,
+        const SizedBox(width: 8),
+        metricGroup,
+        const Spacer(),
+      ],
     );
   }
 
@@ -2095,18 +2008,20 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
     required int productsCount,
     required int branchesCount,
     required bool isMobile,
+    double height = 38,
   }) {
     final prodLabel = isMobile
         ? (isAr ? 'الأصناف' : (isHi ? 'उत्पाद' : 'Products'))
-        : (isAr ? 'الأصناف والمنتجات الأكثر مبيعاً' : (isHi ? 'सर्वाधिक बिकने वाले उत्पाद' : 'Top Selling Products & Brands'));
+        : (isAr ? 'الأصناف الأكثر مبيعاً' : (isHi ? 'सर्वाधिक बिकने वाले उत्पाद' : 'Top Selling Products'));
     final branchLabel = isMobile
         ? (isAr ? 'الفروع' : (isHi ? 'शाखाएं' : 'Branches'))
-        : (isAr ? 'توزيع الفروع والسلاسل' : (isHi ? 'शाखावार बिक्री' : 'Store & Branch Distribution'));
+        : (isAr ? 'توزيع الفروع والسلاسل' : (isHi ? 'शाखावार बिक्री' : 'Branch Distribution'));
 
     final tabsGroup = M3ConnectedButtonGroup<int>(
-      height: isMobile ? 42 : 48,
-      borderRadius: 16,
+      height: height,
+      borderRadius: 12,
       isExpanded: isMobile,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
       segments: [
         M3ButtonSegment<int>(
           value: 0,
@@ -2134,10 +2049,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
       );
     }
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: tabsGroup,
-    );
+    return tabsGroup;
   }
 
   // ---------------------------------------------------------------------------
@@ -2539,7 +2451,13 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
 
     final double maxRevenue = currentStats.isNotEmpty ? currentStats.first.totalRevenue : 1.0;
     final int activeEntitiesCount = currentStats.length;
-    final String topEntityName = currentStats.isNotEmpty ? currentStats.first.branchName : '-';
+    final String topEntityName = currentStats.isNotEmpty
+        ? BranchChainBarChart.cleanBranchDisplayName(
+            currentStats.first.branchName,
+            isChain: isChainMode,
+            isAr: isAr,
+          )
+        : '-';
     final double topEntityRevenue = currentStats.isNotEmpty ? currentStats.first.totalRevenue : 0.0;
     final double avgRevenue = activeEntitiesCount > 0 ? (totalSales / activeEntitiesCount) : 0.0;
 
@@ -2552,7 +2470,11 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
           : (totalReceipts > 0 ? (stat.receiptCount / totalReceipts) * 100 : 0.0);
 
       return BranchChartItem(
-        name: stat.branchName,
+        name: BranchChainBarChart.cleanBranchDisplayName(
+          stat.branchName,
+          isChain: isChainMode,
+          isAr: isAr,
+        ),
         totalRevenue: stat.totalRevenue,
         receiptCount: stat.receiptCount,
         percentageOfTotal: pct,
@@ -4082,6 +4004,6 @@ class _StickyReportsHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(covariant _StickyReportsHeaderDelegate oldDelegate) {
-    return oldDelegate.height != height || oldDelegate.child != child;
+    return true;
   }
 }

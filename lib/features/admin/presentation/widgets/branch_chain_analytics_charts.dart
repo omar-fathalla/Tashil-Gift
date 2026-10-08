@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import '../../../../core/constants/country_currency_config.dart';
 import '../../../../core/widgets/m3_progress_indicators.dart';
 import '../../../../core/widgets/m3_list_tile.dart';
@@ -440,6 +441,49 @@ class BranchChainBarChart extends StatefulWidget {
     required this.isHi,
   });
 
+  /// Cleans branch names for presentation:
+  /// - Strips parenthetical governorates e.g. (الإسكندرية), (الغربية), (البحيرة), (القاهرة)
+  /// - Strips chain prefixes e.g. "أسواق فتح الله - "
+  /// - Ensures "فرع " prefix is present in Arabic for branches (e.g. "فرع المحلة الكبرى")
+  static String cleanBranchDisplayName(
+    String rawName, {
+    bool isChain = false,
+    bool isAr = true,
+  }) {
+    var name = rawName.trim();
+    if (name.isEmpty) return isAr ? 'فرع غير محدد' : 'Unspecified Branch';
+
+    if (isChain) {
+      name = name.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim();
+      return name;
+    }
+
+    // 1. Remove parenthetical governorates, cities, or metadata like (الإسكندرية), (الغربية), (البحيرة), (القاهرة), (الجيزة), (دمياط), etc.
+    name = name.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim();
+
+    // 2. Strip leading parent chain / supermarket brand prefixes like "أسواق فتح الله - ", "فتح الله - ", "كارفور - ", etc.
+    name = name.replaceFirst(
+      RegExp(
+        r'^(?:أسواق\s+)?(?:فتح\s+الله|كارفور|جملة\s+ماركت|بيت\s+الجملة|خير\s+زمان|سبينس|أولاد\s+رجب|مترو|لولو|بيم|باندا|الراية|كازيون|المحمل)\s*[-–:]\s*',
+        caseSensitive: false,
+      ),
+      '',
+    ).trim();
+
+    // 3. Clean any leading/trailing hyphens, colons, or noise
+    name = name.replaceAll(RegExp(r'^[-–:\s]+|[-–:\s]+$'), '').trim();
+
+    // 4. Ensure it reads "فرع ..." in Arabic if it's a branch and doesn't already have "فرع"
+    // As requested by user: "يكتبلي فرع المحلة الكبرى ممكن"
+    if (isAr) {
+      if (!name.startsWith('فرع ') && !name.startsWith('الفرع ')) {
+        name = 'فرع $name';
+      }
+    }
+
+    return name;
+  }
+
   @override
   State<BranchChainBarChart> createState() => _BranchChainBarChartState();
 }
@@ -474,30 +518,36 @@ class _BranchChainBarChartState extends State<BranchChainBarChart> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isCompact = constraints.maxWidth < 600;
+        final isCompact = constraints.maxWidth < 650;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SizedBox(
-              height: isCompact ? 280 : 320,
+              height: isCompact ? 330 : 380,
               child: BarChart(
                 BarChartData(
                   alignment: BarChartAlignment.spaceAround,
-                  maxY: maxValue * 1.15,
+                  maxY: maxValue * 1.30,
                   barTouchData: BarTouchData(
+                    enabled: true,
                     touchTooltipData: BarTouchTooltipData(
                       getTooltipColor: (group) => colorScheme.inverseSurface,
                       tooltipRoundedRadius: 12,
                       tooltipPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
                         final item = displayItems[group.x.toInt()];
+                        final displayName = BranchChainBarChart.cleanBranchDisplayName(
+                          item.name,
+                          isChain: item.isChain,
+                          isAr: widget.isAr,
+                        );
                         final valStr = isRevenue
-                            ? '${item.totalRevenue.toStringAsFixed(1)} ${widget.activeCountry.currencySymbol}'
+                            ? '${NumberFormat('#,##0.#').format(item.totalRevenue)} ${widget.activeCountry.currencySymbol}'
                             : '${item.receiptCount} ${widget.isAr ? "فاتورة" : "receipts"}';
 
                         return BarTooltipItem(
-                          '${item.name}\n',
+                          '$displayName\n',
                           GoogleFonts.cairo(
                             color: colorScheme.onInverseSurface,
                             fontWeight: FontWeight.bold,
@@ -530,8 +580,107 @@ class _BranchChainBarChartState extends State<BranchChainBarChart> {
                   ),
                   titlesData: FlTitlesData(
                     show: true,
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                     rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    // 1. Direct at-a-glance values visible without hovering
+                    topTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: isCompact ? 36 : 42,
+                        getTitlesWidget: (value, meta) {
+                          final idx = value.toInt();
+                          if (idx < 0 || idx >= displayItems.length) return const SizedBox.shrink();
+                          final item = displayItems[idx];
+                          final isTouched = idx == _touchedGroupIndex;
+                          final val = isRevenue ? item.totalRevenue : item.receiptCount.toDouble();
+
+                          // Format primary value clearly
+                          String primaryVal;
+                          if (isRevenue) {
+                            if (val >= 100000) {
+                              primaryVal = '${(val / 1000).toStringAsFixed(1)}k';
+                            } else if (val >= 1000) {
+                              primaryVal = isCompact
+                                  ? '${(val / 1000).toStringAsFixed(1)}k'
+                                  : '${NumberFormat('#,##0').format(val.round())} ${widget.activeCountry.currencySymbol}';
+                            } else {
+                              primaryVal = '${val.toStringAsFixed(0)} ${isCompact ? "" : widget.activeCountry.currencySymbol}';
+                            }
+                          } else {
+                            primaryVal = '${item.receiptCount}${isCompact ? "" : (widget.isAr ? " فاتورة" : " rec")}';
+                          }
+
+                          final pctText = '${item.percentageOfTotal.toStringAsFixed(1)}%';
+
+                          return FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Container(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: isCompact ? 6 : 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isTouched
+                                      ? colorScheme.primaryContainer
+                                      : item.color.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: isTouched
+                                        ? colorScheme.primary
+                                        : item.color.withValues(alpha: 0.45),
+                                    width: isTouched ? 1.5 : 1.0,
+                                  ),
+                                  boxShadow: isTouched
+                                      ? [
+                                          BoxShadow(
+                                            color: colorScheme.primary.withValues(alpha: 0.25),
+                                            blurRadius: 6,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ]
+                                      : [
+                                          BoxShadow(
+                                            color: Colors.black.withValues(alpha: 0.03),
+                                            blurRadius: 3,
+                                            offset: const Offset(0, 1),
+                                          ),
+                                        ],
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      primaryVal,
+                                      style: GoogleFonts.cairo(
+                                        fontSize: isCompact ? 10 : 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: isTouched ? colorScheme.onPrimaryContainer : item.color,
+                                        height: 1.1,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    Text(
+                                      pctText,
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w600,
+                                        color: isTouched
+                                            ? colorScheme.primary
+                                            : colorScheme.onSurfaceVariant.withValues(alpha: 0.85),
+                                        height: 1.0,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
                     leftTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
@@ -554,37 +703,40 @@ class _BranchChainBarChartState extends State<BranchChainBarChart> {
                         },
                       ),
                     ),
+                    // 2. Clean Branch Names without governorates and without artificial truncation
                     bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
-                        reservedSize: 42,
+                        reservedSize: isCompact ? 50 : 64,
                         getTitlesWidget: (value, meta) {
                           final idx = value.toInt();
                           if (idx < 0 || idx >= displayItems.length) return const SizedBox.shrink();
                           final item = displayItems[idx];
-                          // Shortened clean name
-                          String shortName = item.name;
-                          if (shortName.startsWith('فرع ')) {
-                            shortName = shortName.replaceFirst('فرع ', '');
-                          }
-                          if (shortName.length > 8) {
-                            shortName = '${shortName.substring(0, 7)}…';
-                          }
+                          
+                          final displayName = BranchChainBarChart.cleanBranchDisplayName(
+                            item.name,
+                            isChain: item.isChain,
+                            isAr: widget.isAr,
+                          );
 
                           final isTouched = idx == _touchedGroupIndex;
 
                           return Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Text(
-                              shortName,
-                              style: GoogleFonts.cairo(
-                                fontSize: 10,
-                                fontWeight: isTouched ? FontWeight.bold : FontWeight.w500,
-                                color: isTouched ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                            padding: const EdgeInsets.only(top: 8),
+                            child: SizedBox(
+                              width: isCompact ? 60 : 96,
+                              child: Text(
+                                displayName,
+                                style: GoogleFonts.cairo(
+                                  fontSize: isCompact ? 9.5 : 11,
+                                  fontWeight: isTouched ? FontWeight.bold : FontWeight.w600,
+                                  color: isTouched ? colorScheme.primary : colorScheme.onSurface,
+                                  height: 1.2,
+                                ),
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
                             ),
                           );
                         },
@@ -612,13 +764,13 @@ class _BranchChainBarChartState extends State<BranchChainBarChart> {
                         BarChartRodData(
                           toY: val,
                           gradient: LinearGradient(
-                            colors: isTouched
-                                ? [colorScheme.primary, colorScheme.tertiary]
-                                : [item.color, item.color.withValues(alpha: 0.75)],
-                            begin: Alignment.bottomCenter,
-                            end: Alignment.topCenter,
+                             colors: isTouched
+                                 ? [colorScheme.primary, colorScheme.tertiary]
+                                 : [item.color, item.color.withValues(alpha: 0.75)],
+                             begin: Alignment.bottomCenter,
+                             end: Alignment.topCenter,
                           ),
-                          width: isCompact ? 14 : 22,
+                          width: isCompact ? 14 : 24,
                           borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
                           backDrawRodData: BackgroundBarChartRodData(
                             show: true,
@@ -938,15 +1090,15 @@ class BranchPerformanceKpiRow extends StatelessWidget {
                 title: isChainMode
                     ? (isAr ? 'السلسلة الأعلى مبيعاً' : (isHi ? 'शीर्ष रिटेल चेन' : 'Top Chain'))
                     : (isAr ? 'الفرع الأعلى مبيعاً' : (isHi ? 'शीर्ष आउटलेट' : 'Top Outlet')),
-                value: topEntityName,
-                subtitle: '${topEntityRevenue.toStringAsFixed(1)} ${activeCountry.currencySymbol}',
+                value: BranchChainBarChart.cleanBranchDisplayName(topEntityName, isChain: isChainMode, isAr: isAr),
+                subtitle: '${NumberFormat('#,##0.#').format(topEntityRevenue)} ${activeCountry.currencySymbol}',
                 color: Colors.amber.shade800,
               ),
               const SizedBox(height: 8),
               _buildMiniKpi(
                 icon: Icons.query_stats_rounded,
                 title: isAr ? 'متوسط مبيعات المنفذ' : (isHi ? 'औसत आउटलेट बिक्री' : 'Avg Outlet Sales'),
-                value: '${avgRevenuePerEntity.toStringAsFixed(1)} ${activeCountry.currencySymbol}',
+                value: '${NumberFormat('#,##0.#').format(avgRevenuePerEntity)} ${activeCountry.currencySymbol}',
                 color: Colors.teal.shade700,
               ),
             ],
@@ -973,8 +1125,8 @@ class BranchPerformanceKpiRow extends StatelessWidget {
                 title: isChainMode
                     ? (isAr ? 'السلسلة الأعلى مبيعاً' : (isHi ? 'शीर्ष रिटेल चेन' : 'Top Chain'))
                     : (isAr ? 'الفرع الأعلى مبيعاً' : (isHi ? 'शीर्ष आउटलेट' : 'Top Outlet')),
-                value: topEntityName,
-                subtitle: '${topEntityRevenue.toStringAsFixed(1)} ${activeCountry.currencySymbol}',
+                value: BranchChainBarChart.cleanBranchDisplayName(topEntityName, isChain: isChainMode, isAr: isAr),
+                subtitle: '${NumberFormat('#,##0.#').format(topEntityRevenue)} ${activeCountry.currencySymbol}',
                 color: Colors.amber.shade800,
               ),
             ),
@@ -984,7 +1136,7 @@ class BranchPerformanceKpiRow extends StatelessWidget {
               child: _buildMiniKpi(
                 icon: Icons.query_stats_rounded,
                 title: isAr ? 'متوسط مبيعات المنفذ' : (isHi ? 'औसत आउटलेट बिक्री' : 'Avg Outlet Sales'),
-                value: '${avgRevenuePerEntity.toStringAsFixed(1)} ${activeCountry.currencySymbol}',
+                value: '${NumberFormat('#,##0.#').format(avgRevenuePerEntity)} ${activeCountry.currencySymbol}',
                 color: Colors.teal.shade700,
               ),
             ),

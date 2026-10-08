@@ -2834,8 +2834,10 @@ class AppStrings {
   String get approvedTabLabel => _t(ar: 'المعتمدة بالكتالوج', en: 'Approved & Synced', hi: 'स्वीकृत और सिंक');
   String get rejectedTabLabel => _t(ar: 'المستبعدة', en: 'Dismissed', hi: 'खारिज');
   String get allCompaniesFilter => _t(ar: 'كافة الشركات', en: 'All Companies', hi: 'सभी कंपनियां');
-  String get scanPastInvoicesAction => _t(ar: 'فحص واستكشاف الفواتير السابقة 🔍', en: 'Deep Scan Historical Invoices 🔍', hi: 'पिछली रसीदें स्कैन करें 🔍');
-  String get approveAllPendingAction => _t(ar: 'اعتماد الكل وإضافتها للكتالوج ⚡', en: 'Approve All & Sync to Catalog ⚡', hi: 'सभी को स्वीकार और सिंक करें ⚡');
+  String get cleanInboxCriteriaAction => _t(ar: 'تطبيق المعايير وتنظيف الصندوق', en: 'Apply Criteria & Clean Inbox', hi: 'मानदंड लागू करें और इनबॉक्स साफ़ करें');
+  String get criteriaCompliantBadge => _t(ar: 'مطابق 5/5 معايير', en: '5/5 Compliant', hi: '5/5 अनुरूप');
+  String get scanPastInvoicesAction => _t(ar: 'فحص واستكشاف الفواتير السابقة', en: 'Deep Scan Historical Invoices', hi: 'पिछली रसीदें स्कैन करें');
+  String get approveAllPendingAction => _t(ar: 'اعتماد الكل وإضافتها للكتالوج', en: 'Approve All & Sync to Catalog', hi: 'सभी को स्वीकार और सिंक करें');
   String get approveSingleItemAction => _t(ar: 'اعتماد', en: 'Approve', hi: 'स्वीकार करें');
   String get rejectSingleItemAction => _t(ar: 'استبعاد', en: 'Dismiss', hi: 'खारिज करें');
   String get editItemTitle => _t(ar: 'تعديل بيانات الصنف قبل الاعتماد', en: 'Edit Product Details Before Approval', hi: 'अनुमोदन से पहले विवरण संपादित करें');
@@ -2848,7 +2850,7 @@ class AppStrings {
   String get retailChainsObserved => _t(ar: 'السلاسل التي رُصد بها', en: 'Observed Retail Chains', hi: 'देखी गई रिटेल चेन');
   String get frequencyCount => _t(ar: 'مرات الظهور', en: 'Frequency', hi: 'बारंबारता');
   String get confidenceMetric => _t(ar: 'مؤشر الثقة', en: 'Confidence', hi: 'विश्वास सूचकांक');
-  String get emptyDiscoveryStateTitle => _t(ar: 'لا توجد أصناف جديدة بانتظار الاعتماد 🎉', en: 'No Pending Products to Review 🎉', hi: 'समीक्षा के लिए कोई नया उत्पाद नहीं 🎉');
+  String get emptyDiscoveryStateTitle => _t(ar: 'لا توجد أصناف جديدة بانتظار الاعتماد', en: 'No Pending Products to Review', hi: 'समीक्षा के लिए कोई नया उत्पाद नहीं');
   String get emptyDiscoveryStateSubtitle => _t(
     ar: 'جميع أصناف فواتير المبيعات الحالية مسجلة مسبقاً في الكتالوج، وسيقوم الذكاء الاصطناعي بحصاد أي صنف جديد تلقائياً عند فحص الفواتير.',
     en: 'All current sales receipt items are already cataloged. AI will automatically harvest any new item during future scans.',

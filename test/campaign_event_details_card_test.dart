@@ -32,6 +32,9 @@ void main() {
         isActive: true,
       );
 
+      await tester.binding.setSurfaceSize(const Size(1280, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
@@ -97,6 +100,9 @@ void main() {
         isAllBranches: false,
         isActive: true,
       );
+
+      await tester.binding.setSurfaceSize(const Size(1280, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
 
       await tester.pumpWidget(
         ProviderScope(

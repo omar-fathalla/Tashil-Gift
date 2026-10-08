@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -41,7 +42,23 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
   final ScrollController _horizontalScrollController = ScrollController();
 
   @override
+  void initState() {
+    super.initState();
+    _horizontalScrollController.addListener(_onHorizontalScrollChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _onHorizontalScrollChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
   void dispose() {
+    _horizontalScrollController.removeListener(_onHorizontalScrollChanged);
     _horizontalScrollController.dispose();
     super.dispose();
   }
@@ -55,9 +72,23 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
         _currentPage = maxPages - 1;
       });
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
   }
 
-  void _scrollForward() {
+  bool get _canScrollTowardsStart {
+    if (!_horizontalScrollController.hasClients) return false;
+    return _horizontalScrollController.offset > 5.0;
+  }
+
+  bool get _canScrollTowardsEnd {
+    if (!_horizontalScrollController.hasClients) return false;
+    final max = _horizontalScrollController.position.maxScrollExtent;
+    return max > 5.0 && _horizontalScrollController.offset < (max - 5.0);
+  }
+
+  void _scrollNextChains() {
     if (_horizontalScrollController.hasClients) {
       final current = _horizontalScrollController.offset;
       final max = _horizontalScrollController.position.maxScrollExtent;
@@ -69,7 +100,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
     }
   }
 
-  void _scrollBackward() {
+  void _scrollPrevChains() {
     if (_horizontalScrollController.hasClients) {
       final current = _horizontalScrollController.offset;
       final max = _horizontalScrollController.position.maxScrollExtent;
@@ -81,11 +112,12 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
     }
   }
 
+
   void _scrollToStart() {
     if (_horizontalScrollController.hasClients) {
       _horizontalScrollController.animateTo(
         0.0,
-        duration: const Duration(milliseconds: 300),
+        duration: const Duration(milliseconds: 320),
         curve: Curves.easeOutCubic,
       );
     }
@@ -230,49 +262,39 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    if (!widget.isHeadToHead) ...[
+                      const SizedBox(width: 10),
 
-                    // Toggle: All Registered Chains vs Active Observed Chains
-                    Tooltip(
-                      message: isAr
-                          ? 'عرض كافة السلاسل التجارية المعتمدة في السوق حتى لو لم يرصد الصنف فيها بعد'
-                          : 'Toggle displaying all registered enterprise chains',
-                      child: FilterChip(
-                        avatar: Icon(
-                          _showAllRegisteredChains ? Icons.view_column_rounded : Icons.filter_alt_outlined,
-                          size: 14,
-                          color: _showAllRegisteredChains ? cs.primary : cs.onSurfaceVariant,
+                      // Toggle: All Registered Chains vs Active Observed Chains
+                      Tooltip(
+                        message: isAr
+                            ? (_showAllRegisteredChains
+                                ? 'عرض كافة الـ 16 سلسلة منافسة مسجلة في السوق حتى لو لم يرصد الصنف فيها بعد'
+                                : 'عرض السلاسل التي تم رصد أسعار لها فقط وإخفاء الأعمدة غير المرصودة')
+                            : 'Toggle displaying all 16 registered chains vs active chains only',
+                        child: M3ConnectedButtonGroup<bool>(
+                          height: 30,
+                          borderRadius: 8,
+                          showCheckmark: false,
+                          isExpanded: false,
+                          selectedValue: _showAllRegisteredChains,
+                          onSelected: (val) => setState(() => _showAllRegisteredChains = val),
+                          segments: [
+                            M3ButtonSegment(
+                              value: true,
+                              label: isAr ? 'كافة السلاسل' : 'All Chains',
+                              badgeText: '16',
+                              icon: Icons.view_column_rounded,
+                            ),
+                            M3ButtonSegment(
+                              value: false,
+                              label: isAr ? 'النشطة فقط' : 'Active Only',
+                              icon: Icons.filter_alt_outlined,
+                            ),
+                          ],
                         ),
-                        label: Text(
-                          _showAllRegisteredChains
-                              ? (isAr ? 'كافة السلاسل المنافسة (16)' : 'All 16 Chains')
-                              : (isAr ? 'السلاسل النشطة فقط' : 'Active Chains Only'),
-                          style: GoogleFonts.cairo(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: _showAllRegisteredChains ? cs.primary : cs.onSurfaceVariant,
-                          ),
-                        ),
-                        selected: _showAllRegisteredChains,
-                        selectedColor: cs.primaryContainer.withValues(alpha: 0.5),
-                        backgroundColor: cs.surfaceContainerLowest,
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          side: BorderSide(
-                            color: _showAllRegisteredChains
-                                ? cs.primary.withValues(alpha: 0.5)
-                                : cs.outlineVariant.withValues(alpha: 0.5),
-                          ),
-                        ),
-                        onSelected: (val) {
-                          setState(() {
-                            _showAllRegisteredChains = val;
-                          });
-                        },
                       ),
-                    ),
+                    ],
                   ],
                 ),
 
@@ -280,9 +302,9 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Horizontal Quick Scroll Buttons
+                    // Horizontal Quick Scroll Buttons with Tooltips & Active State
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: cs.surfaceContainerLowest,
                         borderRadius: BorderRadius.circular(8),
@@ -292,37 +314,75 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Tooltip(
-                            message: isAr ? 'تمرير المنافسين للبداية' : 'Scroll to start',
+                            message: isAr ? 'العودة لأول سلسلة منافسة' : 'Scroll to first competitor',
                             child: InkWell(
                               borderRadius: BorderRadius.circular(6),
-                              onTap: _scrollToStart,
+                              onTap: _canScrollTowardsStart ? _scrollToStart : null,
                               child: Padding(
                                 padding: const EdgeInsets.all(4),
-                                child: Icon(Icons.first_page_rounded, size: 16, color: cs.primary),
+                                child: Icon(
+                                  Icons.first_page_rounded,
+                                  size: 16,
+                                  color: _canScrollTowardsStart ? cs.primary : cs.outlineVariant.withValues(alpha: 0.6),
+                                ),
                               ),
                             ),
                           ),
                           Container(width: 1, height: 14, color: cs.outlineVariant.withValues(alpha: 0.5)),
                           Tooltip(
-                            message: isAr ? 'تمرير المنافسين لليمين' : 'Scroll right',
+                            message: isAr ? 'السلاسل السابقة' : 'Previous chains',
                             child: InkWell(
                               borderRadius: BorderRadius.circular(6),
-                              onTap: isAr ? _scrollBackward : _scrollForward,
+                              onTap: _canScrollTowardsStart ? _scrollPrevChains : null,
                               child: Padding(
-                                padding: const EdgeInsets.all(4),
-                                child: Icon(Icons.chevron_right_rounded, size: 18, color: cs.primary),
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      isAr ? Icons.chevron_right_rounded : Icons.chevron_left_rounded,
+                                      size: 17,
+                                      color: _canScrollTowardsStart ? cs.primary : cs.outlineVariant.withValues(alpha: 0.6),
+                                    ),
+                                    Text(
+                                      isAr ? 'السابقة' : 'Prev',
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: _canScrollTowardsStart ? cs.onSurface : cs.outlineVariant.withValues(alpha: 0.6),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                           Container(width: 1, height: 14, color: cs.outlineVariant.withValues(alpha: 0.5)),
                           Tooltip(
-                            message: isAr ? 'تمرير المنافسين لليسار' : 'Scroll left',
+                            message: isAr ? 'السلاسل التالية' : 'Next chains',
                             child: InkWell(
                               borderRadius: BorderRadius.circular(6),
-                              onTap: isAr ? _scrollForward : _scrollBackward,
+                              onTap: _canScrollTowardsEnd ? _scrollNextChains : null,
                               child: Padding(
-                                padding: const EdgeInsets.all(4),
-                                child: Icon(Icons.chevron_left_rounded, size: 18, color: cs.primary),
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      isAr ? 'التالية' : 'Next',
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: _canScrollTowardsEnd ? cs.onSurface : cs.outlineVariant.withValues(alpha: 0.6),
+                                      ),
+                                    ),
+                                    Icon(
+                                      isAr ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
+                                      size: 17,
+                                      color: _canScrollTowardsEnd ? cs.primary : cs.outlineVariant.withValues(alpha: 0.6),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -337,6 +397,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                       child: M3ConnectedButtonGroup<bool>(
                         height: 30,
                         borderRadius: 8,
+                        showCheckmark: false,
                         isExpanded: false,
                         selectedValue: _isDenseMode,
                         onSelected: (val) => setState(() => _isDenseMode = val),
@@ -361,7 +422,17 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
           ),
 
           // -------------------------------------------------------------------
-          // 2. Dual-Pane Table Body: Pinned Baseline Pane + Scrollable Competitors Pane
+          // 2. Top Scroll Control Bar (Always visible at top of matrix table)
+          // -------------------------------------------------------------------
+          _buildTopScrollControlBar(
+            cs: cs,
+            isAr: isAr,
+            totalPinnedWidth: totalPinnedWidth,
+            competitorChains: competitorChains,
+          ),
+
+          // -------------------------------------------------------------------
+          // 3. Dual-Pane Table Body: Pinned Baseline Pane + Scrollable Competitors Pane
           // -------------------------------------------------------------------
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -479,110 +550,149 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                       totalPaneWidth = totalMinWidth > availableWidth ? totalMinWidth : availableWidth;
                     }
 
-                    return Scrollbar(
-                      controller: _horizontalScrollController,
-                      thumbVisibility: true,
-                      trackVisibility: true,
-                      thickness: 8,
-                      radius: const Radius.circular(4),
-                      child: SingleChildScrollView(
-                        controller: _horizontalScrollController,
-                        scrollDirection: Axis.horizontal,
-                        physics: const ClampingScrollPhysics(),
-                        child: SizedBox(
-                          width: totalPaneWidth,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Competitors Header Row
-                              _buildCompetitorsHeader(
-                                competitorChains: competitorChains,
-                                cs: cs,
-                                isAr: isAr,
-                                strings: strings,
-                                headerHeight: headerHeight,
-                                totalWidth: totalPaneWidth,
-                                competitorWidth: effectiveCompetitorWidth,
-                                positionWidth: effectivePositionWidth,
+                    return Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Scrollbar(
+                          controller: _horizontalScrollController,
+                          thumbVisibility: true,
+                          trackVisibility: true,
+                          thickness: 8,
+                          radius: const Radius.circular(4),
+                          child: ScrollConfiguration(
+                            behavior: ScrollConfiguration.of(context).copyWith(
+                              dragDevices: {
+                                PointerDeviceKind.touch,
+                                PointerDeviceKind.mouse,
+                                PointerDeviceKind.trackpad,
+                                PointerDeviceKind.stylus,
+                              },
+                            ),
+                            child: SingleChildScrollView(
+                              controller: _horizontalScrollController,
+                              scrollDirection: Axis.horizontal,
+                              physics: const ClampingScrollPhysics(),
+                              child: SizedBox(
+                                width: totalPaneWidth,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Competitors Header Row
+                                    _buildCompetitorsHeader(
+                                      competitorChains: competitorChains,
+                                      cs: cs,
+                                      isAr: isAr,
+                                      strings: strings,
+                                      headerHeight: headerHeight,
+                                      totalWidth: totalPaneWidth,
+                                      competitorWidth: effectiveCompetitorWidth,
+                                      positionWidth: effectivePositionWidth,
+                                    ),
+
+                                    // Competitors Data Rows
+                                    ...pageProducts.asMap().entries.map((entry) {
+                                      final rowIndex = entry.key;
+                                      final item = entry.value;
+                                      final isHovered = _hoveredRowIndex == rowIndex;
+                                      final isEven = rowIndex % 2 == 0;
+                                      final rowColor = isHovered
+                                          ? cs.primary.withValues(alpha: 0.08)
+                                          : (isEven ? Colors.transparent : cs.surfaceContainerHighest.withValues(alpha: 0.22));
+
+                                      return MouseRegion(
+                                        onEnter: (_) => setState(() => _hoveredRowIndex = rowIndex),
+                                        onExit: (_) => setState(() => _hoveredRowIndex = null),
+                                        child: Container(
+                                          height: rowHeight,
+                                          width: totalPaneWidth,
+                                          decoration: BoxDecoration(
+                                            color: rowColor,
+                                            border: Border(
+                                              bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.25), width: 0.8),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.max,
+                                            children: [
+                                              // Dynamic Competitor Price Cells
+                                              ...competitorChains.map((chain) {
+                                                return _buildCompetitorPriceCell(
+                                                  chain: chain,
+                                                  item: item,
+                                                  cs: cs,
+                                                  currency: currency,
+                                                  isAr: isAr,
+                                                  width: effectiveCompetitorWidth,
+                                                  baselineChain: baselineChain,
+                                                );
+                                              }),
+
+                                              // Summary Column: Fathalla Market Position
+                                              _buildPositionCell(
+                                                item: item,
+                                                cs: cs,
+                                                currency: currency,
+                                                isAr: isAr,
+                                                strings: strings,
+                                                width: effectivePositionWidth,
+                                                baselineChain: baselineChain,
+                                              ),
+
+                                              // Summary Column: Price Variance %
+                                              _buildVarianceCell(
+                                                item: item,
+                                                cs: cs,
+                                              ),
+
+                                              // Summary Column: Best Promo %
+                                              _buildPromoCell(
+                                                item: item,
+                                                cs: cs,
+                                              ),
+
+                                              // Summary Column: Proof & Log Button
+                                              _buildActionCell(
+                                                item: item,
+                                                cs: cs,
+                                                isAr: isAr,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    }),
+                                  ],
+                                ),
                               ),
-
-                              // Competitors Data Rows
-                              ...pageProducts.asMap().entries.map((entry) {
-                                final rowIndex = entry.key;
-                                final item = entry.value;
-                                final isHovered = _hoveredRowIndex == rowIndex;
-                                final isEven = rowIndex % 2 == 0;
-                                final rowColor = isHovered
-                                    ? cs.primary.withValues(alpha: 0.08)
-                                    : (isEven ? Colors.transparent : cs.surfaceContainerHighest.withValues(alpha: 0.22));
-
-                                return MouseRegion(
-                                  onEnter: (_) => setState(() => _hoveredRowIndex = rowIndex),
-                                  onExit: (_) => setState(() => _hoveredRowIndex = null),
-                                  child: Container(
-                                    height: rowHeight,
-                                    width: totalPaneWidth,
-                                    decoration: BoxDecoration(
-                                      color: rowColor,
-                                      border: Border(
-                                        bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.25), width: 0.8),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.max,
-                                      children: [
-                                        // Dynamic Competitor Price Cells
-                                        ...competitorChains.map((chain) {
-                                          return _buildCompetitorPriceCell(
-                                            chain: chain,
-                                            item: item,
-                                            cs: cs,
-                                            currency: currency,
-                                            isAr: isAr,
-                                            width: effectiveCompetitorWidth,
-                                            baselineChain: baselineChain,
-                                          );
-                                        }),
-
-                                        // Summary Column: Fathalla Market Position
-                                        _buildPositionCell(
-                                          item: item,
-                                          cs: cs,
-                                          currency: currency,
-                                          isAr: isAr,
-                                          strings: strings,
-                                          width: effectivePositionWidth,
-                                          baselineChain: baselineChain,
-                                        ),
-
-                                        // Summary Column: Price Variance %
-                                        _buildVarianceCell(
-                                          item: item,
-                                          cs: cs,
-                                        ),
-
-                                        // Summary Column: Best Promo %
-                                        _buildPromoCell(
-                                          item: item,
-                                          cs: cs,
-                                        ),
-
-                                        // Summary Column: Proof & Log Button
-                                        _buildActionCell(
-                                          item: item,
-                                          cs: cs,
-                                          isAr: isAr,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              }),
-                            ],
+                            ),
                           ),
                         ),
-                      ),
+
+                        // Floating Edge Chevrons over Header
+                        if (_canScrollTowardsStart)
+                          PositionedDirectional(
+                            start: 6,
+                            top: (headerHeight - 28) / 2,
+                            child: _buildFloatingChevron(
+                              isForward: false,
+                              isAr: isAr,
+                              cs: cs,
+                              onTap: _scrollPrevChains,
+                            ),
+                          ),
+                        if (_canScrollTowardsEnd)
+                          PositionedDirectional(
+                            end: 6,
+                            top: (headerHeight - 28) / 2,
+                            child: _buildFloatingChevron(
+                              isForward: true,
+                              isAr: isAr,
+                              cs: cs,
+                              onTap: _scrollNextChains,
+                            ),
+                          ),
+                      ],
                     );
                   },
                 ),
@@ -710,6 +820,331 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // SUB-BUILDERS: TOP SCROLLBAR TRACK & PINNED PANE
+  // ===========================================================================
+
+  Widget _buildTopScrollControlBar({
+    required ColorScheme cs,
+    required bool isAr,
+    required double totalPinnedWidth,
+    required List<String> competitorChains,
+  }) {
+    final bool hasClients = _horizontalScrollController.hasClients;
+    final double maxScrollExtent = hasClients ? _horizontalScrollController.position.maxScrollExtent : 0.0;
+    final double currentOffset = hasClients ? _horizontalScrollController.offset : 0.0;
+    final double viewportDimension = hasClients ? _horizontalScrollController.position.viewportDimension : 0.0;
+    final bool canScroll = hasClients ? (maxScrollExtent > 5.0) : (competitorChains.length > 3);
+
+    return Container(
+      height: 34,
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        border: Border(
+          bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.4), width: 1.0),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Pinned Reference Info (aligns exactly with PANE A)
+          Container(
+            width: totalPinnedWidth,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                Icon(Icons.push_pin_rounded, size: 13, color: cs.primary),
+                const SizedBox(width: 6),
+                Text(
+                  isAr ? 'الأعمدة المرجعية المثبتة' : 'Pinned Reference Columns',
+                  style: GoogleFonts.cairo(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: cs.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: cs.primary.withValues(alpha: 0.25), width: 0.8),
+                  ),
+                  child: Text(
+                    isAr ? '3 أعمدة مثبتة' : '3 Pinned',
+                    style: GoogleFonts.cairo(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.bold,
+                      color: cs.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Elevation Divider
+          Container(
+            width: 1,
+            height: 34,
+            color: cs.outlineVariant.withValues(alpha: 0.65),
+          ),
+
+          // Competitor Columns Interactive Scroller (aligns exactly with PANE B)
+          Expanded(
+            child: !canScroll
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: Row(
+                      children: [
+                        Icon(Icons.check_circle_outline_rounded, size: 14, color: cs.primary),
+                        const SizedBox(width: 6),
+                        Text(
+                          isAr
+                              ? 'كافة السلاسل الـ (${competitorChains.length}) معروضة بالكامل على الشاشة'
+                              : 'All (${competitorChains.length}) chains fully visible on screen',
+                          style: GoogleFonts.cairo(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : LayoutBuilder(
+                    builder: (context, trackConstraints) {
+                      final double totalContentWidth = viewportDimension + maxScrollExtent;
+                      final double visibleRatio = totalContentWidth > 0
+                          ? (viewportDimension / totalContentWidth).clamp(0.08, 1.0)
+                          : 0.2;
+                      final double progressRatio = maxScrollExtent > 0
+                          ? (currentOffset / maxScrollExtent).clamp(0.0, 1.0)
+                          : 0.0;
+
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Row(
+                          children: [
+                            // Previous Chains Button
+                            Tooltip(
+                              message: isAr ? 'تمرير السلاسل السابقة' : 'Scroll previous chains',
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(6),
+                                onTap: _canScrollTowardsStart ? _scrollPrevChains : null,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        isAr ? Icons.chevron_right_rounded : Icons.chevron_left_rounded,
+                                        size: 16,
+                                        color: _canScrollTowardsStart ? cs.primary : cs.outlineVariant,
+                                      ),
+                                      const SizedBox(width: 2),
+                                      Text(
+                                        isAr ? 'السابقة' : 'Prev',
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: _canScrollTowardsStart ? cs.onSurface : cs.outlineVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+
+                            // Draggable / Clickable Track
+                            Expanded(
+                              child: SizedBox(
+                                height: 20,
+                                child: LayoutBuilder(
+                                  builder: (context, innerConstraints) {
+                                    final double actualTrackWidth = innerConstraints.maxWidth;
+                                    final double actualThumbWidth = (actualTrackWidth * visibleRatio).clamp(36.0, actualTrackWidth);
+                                    final double actualTravel = (actualTrackWidth - actualThumbWidth).clamp(0.0, actualTrackWidth);
+                                    final double actualThumbOffset = (actualTravel * progressRatio).clamp(0.0, actualTravel);
+
+                                    void handleDragOrTap(double localDx) {
+                                      if (maxScrollExtent <= 0 || actualTrackWidth <= 0) return;
+                                      final double ratio = isAr
+                                          ? ((actualTrackWidth - localDx) / actualTrackWidth).clamp(0.0, 1.0)
+                                          : (localDx / actualTrackWidth).clamp(0.0, 1.0);
+                                      final double targetOffset = ratio * maxScrollExtent;
+                                      _horizontalScrollController.jumpTo(targetOffset);
+                                    }
+
+                                    return GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onTapDown: (details) => handleDragOrTap(details.localPosition.dx),
+                                      onHorizontalDragUpdate: (details) => handleDragOrTap(details.localPosition.dx),
+                                      child: Stack(
+                                        alignment: Alignment.center,
+                                        children: [
+                                          // Track Line
+                                          Container(
+                                            height: 12,
+                                            decoration: BoxDecoration(
+                                              color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(
+                                                color: cs.outlineVariant.withValues(alpha: 0.4),
+                                                width: 0.8,
+                                              ),
+                                            ),
+                                          ),
+
+                                          // Guide Text inside track
+                                          if (actualTrackWidth > 180)
+                                            IgnorePointer(
+                                              child: Text(
+                                                isAr
+                                                    ? 'اسحب للتمرير بين ${competitorChains.length} سلسلة منافسة'
+                                                    : 'Drag or click to scroll ${competitorChains.length} chains',
+                                                style: GoogleFonts.cairo(
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: cs.onSurfaceVariant.withValues(alpha: 0.75),
+                                                ),
+                                              ),
+                                            ),
+
+                                          // Thumb
+                                          PositionedDirectional(
+                                            start: actualThumbOffset,
+                                            child: MouseRegion(
+                                              cursor: SystemMouseCursors.grab,
+                                              child: Container(
+                                                width: actualThumbWidth,
+                                                height: 16,
+                                                decoration: BoxDecoration(
+                                                  color: cs.primary,
+                                                  borderRadius: BorderRadius.circular(8),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: cs.primary.withValues(alpha: 0.35),
+                                                      blurRadius: 4,
+                                                      offset: const Offset(0, 1),
+                                                    ),
+                                                  ],
+                                                ),
+                                                child: Center(
+                                                  child: Icon(
+                                                    Icons.drag_handle_rounded,
+                                                    size: 13,
+                                                    color: cs.onPrimary,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+
+                            // Next Chains Button
+                            Tooltip(
+                              message: isAr ? 'تمرير السلاسل التالية' : 'Scroll next chains',
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(6),
+                                onTap: _canScrollTowardsEnd ? _scrollNextChains : null,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        isAr ? 'التالية' : 'Next',
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: _canScrollTowardsEnd ? cs.onSurface : cs.outlineVariant,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 2),
+                                      Icon(
+                                        isAr ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
+                                        size: 16,
+                                        color: _canScrollTowardsEnd ? cs.primary : cs.outlineVariant,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            // Jump to start icon button
+                            Tooltip(
+                              message: isAr ? 'العودة لأول سلسلة' : 'Jump to first chain',
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(6),
+                                onTap: _canScrollTowardsStart ? _scrollToStart : null,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(4),
+                                  child: Icon(
+                                    Icons.first_page_rounded,
+                                    size: 16,
+                                    color: _canScrollTowardsStart ? cs.primary : cs.outlineVariant,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFloatingChevron({
+    required bool isForward,
+    required bool isAr,
+    required ColorScheme cs,
+    required VoidCallback onTap,
+  }) {
+    final IconData icon = isForward
+        ? (isAr ? Icons.chevron_left_rounded : Icons.chevron_right_rounded)
+        : (isAr ? Icons.chevron_right_rounded : Icons.chevron_left_rounded);
+
+    return Tooltip(
+      message: isForward
+          ? (isAr ? 'السلاسل التالية' : 'Next chains')
+          : (isAr ? 'السلاسل السابقة' : 'Previous chains'),
+      child: Material(
+        color: cs.surfaceContainerHighest,
+        elevation: 3,
+        shadowColor: Colors.black38,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.6), width: 1),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Container(
+            width: 28,
+            height: 28,
+            alignment: Alignment.center,
+            child: Icon(icon, size: 20, color: cs.primary),
+          ),
+        ),
       ),
     );
   }

@@ -83,11 +83,11 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify the popup menu opens with options
-      expect(find.text('المملكة العربية السعودية'), findsOneWidget);
-      expect(find.text('الإمارات العربية المتحدة'), findsOneWidget);
+      expect(find.textContaining('المملكة العربية السعودية'), findsOneWidget);
+      expect(find.textContaining('الإمارات العربية المتحدة'), findsOneWidget);
 
       // Select Saudi Arabia
-      await tester.tap(find.text('المملكة العربية السعودية'));
+      await tester.tap(find.textContaining('المملكة العربية السعودية'));
       await tester.pumpAndSettle();
 
       // Verify the header now shows Saudi Arabia

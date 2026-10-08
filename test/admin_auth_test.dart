@@ -167,7 +167,7 @@ void main() {
       expect(find.byType(OutlinedButton), findsNothing);
 
       // 4. Verify Profile Menu is rendered in header
-      final profileFinder = find.widgetWithText(PopupMenuButton<String>, 'مسؤول النظام');
+      final profileFinder = find.text('مسؤول النظام');
       expect(profileFinder, findsOneWidget);
 
       // 5. Tap Profile menu to open popup

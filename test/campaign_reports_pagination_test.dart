@@ -83,7 +83,7 @@ void main() {
       expect(find.byIcon(Icons.auto_awesome_rounded), findsNothing);
 
       // Excel export button must be present
-      expect(find.text('تصدير تقرير Excel'), findsOneWidget);
+      expect(find.text('Excel'), findsOneWidget);
       expect(find.byIcon(Icons.table_chart_rounded), findsOneWidget);
     });
   });
