@@ -12,7 +12,11 @@ import 'ai_model_config_service.dart';
 
 final aiReceiptServiceProvider = Provider<AiReceiptService>((ref) {
   final config = ref.watch(aiModelConfigStreamProvider).value;
-  return AiReceiptService(modelName: config?.effectivePrimaryModel ?? AiConfig.primaryModel);
+  return AiReceiptService(
+    modelName: config?.effectivePrimaryModel ?? AiConfig.primaryModel,
+    fastTierModelName: config?.fastTierModel ?? AiConfig.fastTierModel,
+    deepAuditModelName: config?.deepAuditModel ?? AiConfig.deepAuditModel,
+  );
 });
 
 class ExtractedProductItem {
@@ -272,6 +276,9 @@ class AiReceiptAnalysisResult {
   final String commercialReg;
   final String hotline;
   final String branchAddress;
+  final String pipelineTierUsed;
+  final int aiDurationMs;
+  final int dartDurationMs;
 
   AiReceiptAnalysisResult({
     required this.isValid,
@@ -307,6 +314,9 @@ class AiReceiptAnalysisResult {
     this.commercialReg = '',
     this.hotline = '',
     this.branchAddress = '',
+    this.pipelineTierUsed = 'fast_tier',
+    this.aiDurationMs = 0,
+    this.dartDurationMs = 0,
   }) : kpiRating =
            kpiRating ??
            calculateKpiRating(
@@ -444,6 +454,9 @@ class AiReceiptAnalysisResult {
       commercialReg: json['commercialReg']?.toString() ?? json['commercial_reg']?.toString() ?? '',
       hotline: json['hotline']?.toString() ?? '',
       branchAddress: json['branchAddress']?.toString() ?? json['branch_address']?.toString() ?? '',
+      pipelineTierUsed: json['pipelineTierUsed']?.toString() ?? 'fast_tier',
+      aiDurationMs: (json['aiDurationMs'] as num?)?.toInt() ?? 0,
+      dartDurationMs: (json['dartDurationMs'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -482,6 +495,9 @@ class AiReceiptAnalysisResult {
       'commercialReg': commercialReg,
       'hotline': hotline,
       'branchAddress': branchAddress,
+      'pipelineTierUsed': pipelineTierUsed,
+      'aiDurationMs': aiDurationMs,
+      'dartDurationMs': dartDurationMs,
     };
   }
 
@@ -518,6 +534,9 @@ class AiReceiptAnalysisResult {
     String? commercialReg,
     String? hotline,
     String? branchAddress,
+    String? pipelineTierUsed,
+    int? aiDurationMs,
+    int? dartDurationMs,
   }) {
     final double effectiveDurationSec = durationSeconds ?? this.durationSeconds;
     return AiReceiptAnalysisResult(
@@ -562,21 +581,35 @@ class AiReceiptAnalysisResult {
       commercialReg: commercialReg ?? this.commercialReg,
       hotline: hotline ?? this.hotline,
       branchAddress: branchAddress ?? this.branchAddress,
+      pipelineTierUsed: pipelineTierUsed ?? this.pipelineTierUsed,
+      aiDurationMs: aiDurationMs ?? this.aiDurationMs,
+      dartDurationMs: dartDurationMs ?? this.dartDurationMs,
     );
   }
 }
 
 class AiReceiptService {
   late final GenerativeModel _model;
+  late final GenerativeModel _fastModel;
+  late final GenerativeModel _deepAuditModel;
   late final GenerativeModel _fallbackModel1;
   late final GenerativeModel _fallbackModel2;
   final String modelName;
+  final String fastTierModelName;
+  final String deepAuditModelName;
 
-  AiReceiptService({String? modelName})
-      : modelName = (modelName != null && modelName.isNotEmpty) ? modelName : AiConfig.primaryModel {
+  AiReceiptService({
+    String? modelName,
+    String? fastTierModelName,
+    String? deepAuditModelName,
+  })  : modelName = (modelName != null && modelName.isNotEmpty) ? modelName : AiConfig.primaryModel,
+        fastTierModelName = (fastTierModelName != null && fastTierModelName.isNotEmpty) ? fastTierModelName : AiConfig.fastTierModel,
+        deepAuditModelName = (deepAuditModelName != null && deepAuditModelName.isNotEmpty) ? deepAuditModelName : AiConfig.deepAuditModel {
     _model = _createModel(this.modelName);
-    _fallbackModel1 = _createModel(AiConfig.fallbackModel);
-    _fallbackModel2 = _createModel('gemini-3.6-flash');
+    _fastModel = _createFastTierModel(this.fastTierModelName);
+    _deepAuditModel = _createDeepAuditModel(this.deepAuditModelName);
+    _fallbackModel1 = _createFastTierModel(AiConfig.fallbackModel);
+    _fallbackModel2 = _createFastTierModel('gemini-3.6-flash');
   }
 
   static GenerativeModel _createModel(String name) {
@@ -815,6 +848,294 @@ class AiReceiptService {
     );
   }
 
+  static final Schema _fastTierSchema = Schema.object(
+    properties: {
+      'isValid': Schema.boolean(
+        description:
+            'True if this is a genuine printed supermarket POS receipt containing target company products and meeting all rules. False if invalid, fraudulent, or handwritten.',
+      ),
+      'receiptNumber': Schema.string(
+        description:
+            'The unique receipt number or transaction ID (e.g., 295/8/211/220726). Return empty string if not found.',
+      ),
+      'targetCompanyTotal': Schema.number(
+        description:
+            'The total sum in EGP/AED of ONLY the target company products found on the receipt.',
+      ),
+      'receiptDate': Schema.string(
+        description:
+            'The date of purchase extracted from receipt (e.g. 22/07/2026 or 2026-07-22). Return empty string if not found.',
+      ),
+      'storeChainDetected': Schema.string(
+        description:
+            'The store or supermarket chain name extracted from the receipt header (e.g. أسواق فتح الله, كارفور, سبينس). Return empty string if not found.',
+      ),
+      'branchDetected': Schema.string(
+        description:
+            'The branch name, branch location, or cashier/branch code extracted from the receipt header (e.g. فرع الهانوفيل, سموحة, المعادي, فرع 04). Return empty string if not found.',
+      ),
+      'isBranchMatched': Schema.boolean(
+        description:
+            'True if the detected store chain and branch match the required chain and allowed branches for this campaign. False if from an unapproved store or branch.',
+      ),
+      'storeId': Schema.string(
+        description:
+            'Store number or branch ID code if printed (e.g. Store: 1 or فرع 224). Return empty string if not found.',
+      ),
+      'posNumber': Schema.string(
+        description:
+            'POS terminal or register number if printed (e.g. PoS: 9 or كاشير 3). Return empty string if not found.',
+      ),
+      'taxNumber': Schema.string(
+        description:
+            'Tax registration number or commercial register if printed on receipt. Return empty string if not found.',
+      ),
+      'commercialReg': Schema.string(
+        description:
+            'Commercial registration number if printed on receipt. Return empty string if not found.',
+      ),
+      'hotline': Schema.string(
+        description:
+            'Customer service hotline phone number printed on receipt. Return empty string if not found.',
+      ),
+      'branchAddress': Schema.string(
+        description:
+            'Full branch address or location printed in receipt header or footer. Return empty string if not found.',
+      ),
+      'isHandwritten': Schema.boolean(
+        description:
+            'True ONLY if the receipt items/prices themselves are manually handwritten on a notebook/paper draft.',
+      ),
+      'isThermalPosReceipt': Schema.boolean(
+        description:
+            'True ONLY if this is a genuine printed electronic POS / thermal cash register receipt.',
+      ),
+      'isTampered': Schema.boolean(
+        description:
+            'True ONLY if there is fraudulent alteration, forged/scratched-out printed numbers or prices to alter purchase values.',
+      ),
+      'isScreenCapture': Schema.boolean(
+        description:
+            'True if this is a photo of a computer or phone display screen rather than a physical paper receipt.',
+      ),
+      'fraudRiskScore': Schema.integer(
+        description:
+            'Fraud probability score from 0 (genuine printed receipt) to 100 (blatantly forged/handwritten).',
+      ),
+      'fraudReasons': Schema.array(
+        description:
+            'List of fraud or suspicious triggers detected. Empty if clean.',
+        items: Schema.string(),
+      ),
+      'extractedProducts': Schema.array(
+        description:
+            'List of target company promoted products found on the receipt with strictly single unit prices, quantities, and matched barcodes. Skip unrelated general grocery items.',
+        items: Schema.object(
+          properties: {
+            'name': Schema.string(
+              description: 'Product name as printed on receipt.',
+            ),
+            'price': Schema.number(
+              description:
+                  'Net actual selling unit price per single piece in EGP/AED AFTER any promotional discounts or offers.',
+            ),
+            'quantity': Schema.integer(
+              description: 'Quantity purchased (e.g. 1, 2, 3).',
+            ),
+            'isTargetCompany': Schema.boolean(
+              description:
+                  'True if this product belongs to the target company being promoted.',
+            ),
+            'barcode': Schema.string(
+              description:
+                  'The product barcode or item code if detected. Return empty string if not found.',
+            ),
+            'originalPrice': Schema.number(
+              description:
+                  'Original gross unit price per single piece before discount. Null or 0 if not discounted.',
+            ),
+            'discountAmount': Schema.number(
+              description:
+                  'Monetary discount amount per single piece. 0 if no discount.',
+            ),
+            'discountPercent': Schema.number(
+              description:
+                  'Percentage discount if printed on line item. 0 if no discount.',
+            ),
+            'totalLinePrice': Schema.number(
+              description:
+                  'Total line amount paid for this item in receipt.',
+            ),
+          },
+          requiredProperties: [
+            'name',
+            'price',
+            'quantity',
+            'isTargetCompany',
+          ],
+        ),
+      ),
+      'message': Schema.string(
+        description:
+            'A concise report in Arabic explaining the validation result, or the exact errors if conditions fail.',
+      ),
+      'unfulfilledConditions': Schema.array(
+        description:
+            'List of specific unmet conditions or errors explaining why the receipt is invalid. Return empty array if all conditions are met.',
+        items: Schema.string(),
+      ),
+    },
+    requiredProperties: [
+      'isValid',
+      'receiptNumber',
+      'targetCompanyTotal',
+      'receiptDate',
+      'storeChainDetected',
+      'branchDetected',
+      'isBranchMatched',
+      'isHandwritten',
+      'isThermalPosReceipt',
+      'extractedProducts',
+      'message',
+    ],
+  );
+
+  static GenerativeModel _createFastTierModel(String name) {
+    return GenerativeModel(
+      model: name,
+      apiKey: AiConfig.geminiApiKey,
+      systemInstruction: Content.system(
+        'أنت فاحص ومستخرج بيانات فواتير التجزئة والسوبرماركت فائق السرعة والدقة (Gemini Ultra-Fast POS Scanner Tier).\n'
+        'مهمتك: فحص صورة بون الكاشير المطبوع واستخراج البيانات الأساسية بأقصى سرعة ممكنة وبأعلى دقة OCR وبصيغة JSON نقية وموجزة.\n\n'
+        '🛑 قواعد مكافحة التزوير القاطعة (Zero-Tolerance Anti-Fraud):\n'
+        '1. يُمنع منعاً باتاً قبول أي ورقة أو فاتورة محررة بخط اليد (isHandwritten = true, isThermalPosReceipt = false, isValid = false).\n'
+        '2. الفواتير المقبولة حصراً هي بونات الكاشير الإلكترونية المطبوعة آلياً عبر طابعات نقاط البيع (isThermalPosReceipt = true).\n'
+        '3. إذا وجد أي شطب أو تعديل يدوي في أرقام الفاتورة: isTampered = true, isValid = false.\n'
+        '4. إذا كانت الصورة ملتقطة لشاشة حاسوب أو هاتف: isScreenCapture = true, isValid = false.\n\n'
+        '🛑 استخراج المنتجات والأسعار بدقة (Single Unit Price Rule):\n'
+        '1. في حقل price: ضع سعر بيع القطعة الواحدة الصافي فقط بعد الخصم الترويجي، وليس إجمالي السطر.\n'
+        '2. في فواتير الأعمدة المزدوجة (السعر / القيمة): عمود "السعر" يمثل سعر بيع القطعة الواحدة، وعمود "القيمة" يمثل إجمالي السطر.\n'
+        '3. ركز حصراً على منتجات الشركة الراعية المشروطة وعلاماتها الفرعية، وتجاوز فورياً أي أصناف غذائية أو استهلاكية عامة غير تابعة للشركة لتسريع الاستجابة.\n'
+        '4. استخرج رقم الفاتورة الصريح، التاريخ، اسم السلسلة، الفرع، وكود المتجر Store ID بدقة تامة.\n'
+        '5. التزم التزاماً مطلقاً ببنية JSON المعرفة في responseSchema وتجنب أي نصوص خارج الهيكل.',
+      ),
+      generationConfig: GenerationConfig(
+        responseMimeType: 'application/json',
+        temperature: 0.0,
+        maxOutputTokens: 2500,
+        responseSchema: _fastTierSchema,
+      ),
+    );
+  }
+
+  static GenerativeModel _createDeepAuditModel(String name) {
+    return GenerativeModel(
+      model: name,
+      apiKey: AiConfig.geminiApiKey,
+      systemInstruction: Content.system(
+        'أنت كبير المدققين الجنائيين والماليين لفواتير السوبرماركت المعقدة (Gemini Deep Forensic Audit Tier).\n'
+        'تُستدعى مهامك في حالات الاشتباه الأمني، وتضارب أرقام الكاشير، وفحص الفواتير المركبة أو المشكوك في تلاعبها.\n'
+        'مهمتك: إجراء فحص مجهري فائق التدقيق للصورة لكشف أي تلاعب رقمي خفي، أو تعديل في الفواصل والكسور، أو عدم اتساق بين كود المتجر ورقم ماكينة الـ POS، أو تداخل غير شرعي بين بونات متعددة.\n'
+        'قواعد التدقيق الجنائي:\n'
+        '1. دقق في حواف الأرقام المطبوعة وخط الطابعة الحرارية للتأكد من عدم وجود تعديل أو تركيب رقمي.\n'
+        '2. فحص البونات المتجاورة ومنع دمج بونات منفصلة (AIR-61).\n'
+        '3. التحقق من اتساق إجمالي الفاتورة مع مجموع البنود الفردية.\n'
+        '4. إرجاع تقرير جنائي تفصيلي في message وقائمة fraudReasons.',
+      ),
+      generationConfig: GenerationConfig(
+        responseMimeType: 'application/json',
+        temperature: 0.0,
+        maxOutputTokens: 4096,
+        responseSchema: _fastTierSchema,
+      ),
+    );
+  }
+
+  // ==========================================
+  // LRU In-Memory Cache & Fingerprinting (AIR-74)
+  // ==========================================
+  static final Map<String, AiReceiptAnalysisResult> _receiptAnalysisLruCache = {};
+  static const int _maxLruCacheEntries = 100;
+
+  /// Computes a fast deterministic fingerprint for receipt image bytes
+  static String computeBytesFingerprint(List<Uint8List> allBytesList) {
+    if (allBytesList.isEmpty) return '';
+    int hash = 0;
+    int totalBytes = 0;
+    for (final bytes in allBytesList) {
+      totalBytes += bytes.length;
+      final step = math.max(1, bytes.length ~/ 100);
+      for (int i = 0; i < bytes.length; i += step) {
+        hash = (hash * 31 + bytes[i]) & 0x7fffffff;
+      }
+    }
+    return '${totalBytes}_$hash';
+  }
+
+  static void cacheReceiptAnalysis(String fingerprint, AiReceiptAnalysisResult result) {
+    if (fingerprint.isEmpty) return;
+    if (_receiptAnalysisLruCache.length >= _maxLruCacheEntries) {
+      _receiptAnalysisLruCache.remove(_receiptAnalysisLruCache.keys.first);
+    }
+    _receiptAnalysisLruCache[fingerprint] = result;
+  }
+
+  static AiReceiptAnalysisResult? getCachedReceiptAnalysis(String fingerprint) {
+    if (fingerprint.isEmpty) return null;
+    return _receiptAnalysisLruCache[fingerprint];
+  }
+
+  static void clearReceiptAnalysisCache() {
+    _receiptAnalysisLruCache.clear();
+  }
+
+  // ==========================================
+  // Client-Side Throttling & Exponential Backoff
+  // ==========================================
+  static DateTime? _lastAiCallTimestamp;
+  static const int _minInterRequestIntervalMs = 250;
+
+  static Future<void> _throttleClientRequest() async {
+    if (_lastAiCallTimestamp != null) {
+      final elapsed = DateTime.now().difference(_lastAiCallTimestamp!).inMilliseconds;
+      if (elapsed < _minInterRequestIntervalMs) {
+        await Future.delayed(Duration(milliseconds: _minInterRequestIntervalMs - elapsed));
+      }
+    }
+    _lastAiCallTimestamp = DateTime.now();
+  }
+
+  /// Executes Gemini generateContent with automatic exponential backoff retry on HTTP 429 quota errors.
+  Future<GenerateContentResponse> _executeWithExponentialBackoff(
+    GenerativeModel model,
+    List<Content> contents, {
+    int maxRetries = 3,
+    int initialBackoffMs = 1500,
+  }) async {
+    int attempt = 0;
+    while (true) {
+      attempt++;
+      try {
+        await _throttleClientRequest();
+        return await model.generateContent(contents).timeout(const Duration(seconds: 30));
+      } catch (e) {
+        final errStr = e.toString().toLowerCase();
+        final isQuotaExhausted = errStr.contains('429') ||
+            errStr.contains('resource_exhausted') ||
+            errStr.contains('resourceexhausted') ||
+            errStr.contains('quota');
+
+        if (isQuotaExhausted && attempt <= maxRetries) {
+          final backoff = (initialBackoffMs * (1 << (attempt - 1))) + math.Random().nextInt(400);
+          debugPrint('⚠️ [AiReceiptService] Gemini 429 quota hit on attempt $attempt. Retrying in ${backoff}ms with exponential backoff...');
+          await Future.delayed(Duration(milliseconds: backoff));
+        } else {
+          rethrow;
+        }
+      }
+    }
+  }
+
   Future<AiReceiptAnalysisResult> analyzeReceiptImage(
     Uint8List imageBytes,
     String mimeType, {
@@ -837,9 +1158,27 @@ class AiReceiptService {
     int maxChancesPerReceipt = 0,
     List<PromotionalRuleItem> promotionalRules = const [],
     bool allowComplementaryReceipts = false,
+    bool forceDeepAudit = false,
+    bool forceRefresh = false,
   }) async {
     final stopwatch = Stopwatch()..start();
     try {
+      final allImagesBytesList = [imageBytes, ...additionalImagesBytes];
+      final String fingerprint = computeBytesFingerprint(allImagesBytesList);
+
+      // Check LRU In-Memory Cache for identical receipt image submissions
+      if (!forceRefresh && fingerprint.isNotEmpty) {
+        final cached = getCachedReceiptAnalysis(fingerprint);
+        if (cached != null) {
+          debugPrint('⚡ [AiReceiptService] In-Memory Cache Hit for fingerprint $fingerprint (0ms)');
+          return cached.copyWith(
+            pipelineTierUsed: 'lru_cache',
+            aiDurationMs: 0,
+            dartDurationMs: 0,
+          );
+        }
+      }
+
       final Set<String> effectiveRequiredProducts = Set<String>.from(requiredProducts);
       for (final r in promotionalRules) {
         for (final sp in r.selectedProductNames) {
@@ -1248,38 +1587,35 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
 
       final prompt = TextPart(finalPromptText);
 
+      final aiStopwatch = Stopwatch()..start();
       GenerateContentResponse response;
+      final targetModel = forceDeepAudit ? _deepAuditModel : _fastModel;
+      final primaryFallback = forceDeepAudit ? _model : _fallbackModel1;
+      final contentParts = [
+        Content.multi([prompt, ...allImageParts]),
+      ];
+
       try {
-        response = await _model
-            .generateContent([
-              Content.multi([prompt, ...allImageParts]),
-            ])
-            .timeout(const Duration(seconds: 30));
+        response = await _executeWithExponentialBackoff(targetModel, contentParts);
       } catch (e1) {
+        debugPrint('⚠️ [AiReceiptService] Primary model failed: $e1. Escalating to primary fallback...');
         try {
-          response = await _fallbackModel1
-              .generateContent([
-                Content.multi([prompt, ...allImageParts]),
-              ])
-              .timeout(const Duration(seconds: 30));
+          response = await _executeWithExponentialBackoff(primaryFallback, contentParts);
         } catch (e2) {
-          response = await _fallbackModel2
-              .generateContent([
-                Content.multi([prompt, ...allImageParts]),
-              ])
-              .timeout(const Duration(seconds: 30));
+          debugPrint('⚠️ [AiReceiptService] Primary fallback failed: $e2. Escalating to secondary fallback...');
+          response = await _executeWithExponentialBackoff(_fallbackModel2, contentParts);
         }
       }
-
-      stopwatch.stop();
-      final int durationMs = stopwatch.elapsedMilliseconds;
-      final double durationSeconds = durationMs / 1000.0;
+      aiStopwatch.stop();
+      int aiDurationMs = aiStopwatch.elapsedMilliseconds;
+      String pipelineTier = forceDeepAudit ? 'deep_reasoning_tier' : 'fast_tier';
 
       if (response.text != null && response.text!.trim().isNotEmpty) {
+        final dartStopwatch = Stopwatch()..start();
         final Map<String, dynamic> jsonMap = _cleanAndParseJson(response.text!);
         var result = AiReceiptAnalysisResult.fromJson(
           jsonMap,
-          durationMs: durationMs,
+          durationMs: stopwatch.elapsedMilliseconds,
           targetCompany: targetCompany,
           targetBrands: resolvedRequiredProducts,
         );
@@ -1875,6 +2211,59 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           }
         }
 
+        dartStopwatch.stop();
+        int dartDurationMs = dartStopwatch.elapsedMilliseconds;
+
+        // 🛑 Conditional Escalation to Deep Reasoning Tier (AIR-72)
+        if (!forceDeepAudit &&
+            (result.isTampered ||
+                (result.fraudRiskScore >= 40 &&
+                    result.isThermalPosReceipt &&
+                    !result.isHandwritten &&
+                    !result.isScreenCapture))) {
+          try {
+            final deepAiStopwatch = Stopwatch()..start();
+            final deepPrompt = TextPart(
+              '⚠️ تنبيه تدقيق جنائي عميق واستدلال متقدم (Deep Forensic Audit - AIR-72):\n'
+              'هذه الفاتورة تحتوي على اشتباه تلاعب في الأرقام أو درجة خطورة تزوير مرتفعة.\n'
+              'يرجى إجراء فحص مجهري فائق الدقة لحواف الأرقام المطبوعة، وتطابق كود الفرع، وصحة البنود، واستخراج القرار النهائي الصارم.\n\n'
+              '$finalPromptText',
+            );
+            final deepResponse = await _deepAuditModel
+                .generateContent([
+                  Content.multi([deepPrompt, ...allImageParts]),
+                ])
+                .timeout(const Duration(seconds: 30));
+            deepAiStopwatch.stop();
+            aiDurationMs += deepAiStopwatch.elapsedMilliseconds;
+            pipelineTier = 'deep_reasoning_tier';
+
+            if (deepResponse.text != null && deepResponse.text!.trim().isNotEmpty) {
+              final deepJson = _cleanAndParseJson(deepResponse.text!);
+              final deepResult = AiReceiptAnalysisResult.fromJson(
+                deepJson,
+                durationMs: stopwatch.elapsedMilliseconds,
+                targetCompany: targetCompany,
+                targetBrands: resolvedRequiredProducts,
+              );
+              result = result.copyWith(
+                isTampered: deepResult.isTampered,
+                fraudRiskScore: deepResult.fraudRiskScore,
+                fraudReasons: deepResult.fraudReasons.isNotEmpty
+                    ? deepResult.fraudReasons
+                    : result.fraudReasons,
+                isValid: !deepResult.isTampered && result.isValid,
+              );
+            }
+          } catch (deepErr) {
+            debugPrint('Deep Reasoning Audit Fallback gracefully ignored: $deepErr');
+          }
+        }
+
+        stopwatch.stop();
+        final int finalDurationMs = stopwatch.elapsedMilliseconds;
+        final double finalDurationSeconds = finalDurationMs / 1000.0;
+
         // Branch matching fallback validation
         if (retailChainName.trim().isNotEmpty &&
             !isAllBranches &&
@@ -1886,8 +2275,11 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
             return result.copyWith(
               isValid: false,
               isBranchMatched: false,
-              durationMs: durationMs,
-              durationSeconds: durationSeconds,
+              durationMs: finalDurationMs,
+              durationSeconds: finalDurationSeconds,
+              aiDurationMs: aiDurationMs,
+              dartDurationMs: dartDurationMs,
+              pipelineTierUsed: pipelineTier,
               message:
                   'عذراً، الفاتورة صادرة من ($detected) بينما العرض سارٍ حصرياً في فروع: [${allowedBranches.join("، ")}].',
             );
@@ -1909,8 +2301,11 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                     "${startDate.day}/${startDate.month}/${startDate.year}";
                 return result.copyWith(
                   isValid: false,
-                  durationMs: durationMs,
-                  durationSeconds: durationSeconds,
+                  durationMs: finalDurationMs,
+                  durationSeconds: finalDurationSeconds,
+                  aiDurationMs: aiDurationMs,
+                  dartDurationMs: dartDurationMs,
+                  pipelineTierUsed: pipelineTier,
                   message:
                       'تاريخ الشراء بالفاتورة ($rawDateStr) أقدم من تاريخ بداية الحملة ($startStr). الشراء غير مشمول بالعرض.',
                 );
@@ -1921,8 +2316,11 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                     "${endDate.day}/${endDate.month}/${endDate.year}";
                 return result.copyWith(
                   isValid: false,
-                  durationMs: durationMs,
-                  durationSeconds: durationSeconds,
+                  durationMs: finalDurationMs,
+                  durationSeconds: finalDurationSeconds,
+                  aiDurationMs: aiDurationMs,
+                  dartDurationMs: dartDurationMs,
+                  pipelineTierUsed: pipelineTier,
                   message:
                       'تاريخ الشراء بالفاتورة ($rawDateStr) متأخر عن تاريخ نهاية الحملة ($endStr). عذراً، انتهى العرض.',
                 );
@@ -1931,7 +2329,17 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           }
         }
 
-        return result;
+        final finalResult = result.copyWith(
+          durationMs: finalDurationMs,
+          durationSeconds: finalDurationSeconds,
+          aiDurationMs: aiDurationMs,
+          dartDurationMs: dartDurationMs,
+          pipelineTierUsed: pipelineTier,
+        );
+        if (fingerprint.isNotEmpty && finalResult.isValid) {
+          cacheReceiptAnalysis(fingerprint, finalResult);
+        }
+        return finalResult;
       } else {
         throw Exception(
           "تعذر قراءة بيانات الفاتورة من نموذج الذكاء الاصطناعي. يرجى إعادة المحاولة.",

@@ -22,6 +22,8 @@ class AiConfig {
   // --- Dynamic Model & Agent In-Memory State ---
   static String _primaryModel = 'gemini-3.7-flash';
   static String _fallbackModel = 'gemini-3.6-flash';
+  static String _fastTierModel = 'gemini-3.7-flash';
+  static String _deepAuditModel = 'gemini-3.8-pro';
   static dynamic _activeAgentMode;
   static int _thinkingBudget = 0;
 
@@ -31,6 +33,12 @@ class AiConfig {
 
   /// Returns the active fallback model identifier
   static String get fallbackModel => _fallbackModel;
+
+  /// Returns the model identifier for Tier 1 Fast Vision OCR
+  static String get fastTierModel => _fastTierModel;
+
+  /// Returns the model identifier for Tier 2 Deep Forensic Audit & Reasoning
+  static String get deepAuditModel => _deepAuditModel;
 
   /// Active agent mode code or object
   static dynamic get activeAgentMode => _activeAgentMode;
@@ -42,6 +50,8 @@ class AiConfig {
   static void updateActiveModelConfig({
     required String primary,
     required String fallback,
+    String? fastTier,
+    String? deepAudit,
     dynamic mode,
     int budget = 0,
   }) {
@@ -50,6 +60,12 @@ class AiConfig {
     }
     if (fallback.trim().isNotEmpty) {
       _fallbackModel = fallback.trim();
+    }
+    if (fastTier != null && fastTier.trim().isNotEmpty) {
+      _fastTierModel = fastTier.trim();
+    }
+    if (deepAudit != null && deepAudit.trim().isNotEmpty) {
+      _deepAuditModel = deepAudit.trim();
     }
     _activeAgentMode = mode;
     _thinkingBudget = budget;

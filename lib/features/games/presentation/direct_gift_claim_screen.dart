@@ -609,6 +609,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                 count: giftAlloc.quantity,
                 unitValue: giftAlloc.unitValue,
                 isVoucher: giftAlloc.isVoucher,
+                gameType: 'directGift',
               );
             }
           } else {
@@ -619,6 +620,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
               count: effectiveQuantity,
               unitValue: finalUnitValue,
               isVoucher: finalIsVoucher,
+              gameType: 'directGift',
             );
           }
         }

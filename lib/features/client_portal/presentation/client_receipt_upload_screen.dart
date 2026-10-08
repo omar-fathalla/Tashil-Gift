@@ -23,7 +23,6 @@ import '../../../core/widgets/switch_point_branding.dart';
 import '../../../core/constants/country_currency_config.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
-import '../../../core/widgets/m3_progress_indicators.dart';
 import '../../../core/widgets/m3_adaptive_scaffold.dart';
 import '../../../core/animations/m3_motion.dart';
 import '../../admin/domain/event_model.dart';
@@ -40,6 +39,8 @@ import 'widgets/unified_multi_campaign_claim_screen.dart';
 import '../../../core/services/multi_campaign_receipt_evaluator.dart';
 import '../../../core/services/receipt_deduplication_helper.dart';
 import '../../../core/widgets/campaign_suspended_screen.dart';
+import '../../../core/utils/receipt_image_calibrator.dart';
+import '../../../core/widgets/optimistic_receipt_scanner_card.dart';
 
 
 class ClientReceiptUploadScreen extends ConsumerStatefulWidget {
@@ -71,7 +72,10 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
   final List<XFile> _receiptImages = [];
   int _selectedPreviewIndex = 0;
   bool _isAiLoading = false;
+  int _aiPhase = 0;
   String _aiPhaseText = '';
+  CalibratedImageResult? _latestCalibration;
+  Uint8List? _previewImageBytes;
   
   final _customerPhoneController = TextEditingController();
   final _customerNameController = TextEditingController();
@@ -513,7 +517,8 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
 
     setState(() {
       _isAiLoading = true;
-      _aiPhaseText = '1/3 جاري قراءة وتدقيق الفاتورة بالذكاء الاصطناعي...';
+      _aiPhase = 0;
+      _aiPhaseText = '1/3 جاري معايرة الصورة وضبط التباين محلياً...';
     });
 
     try {
@@ -544,18 +549,40 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       final productsService = ref.read(companyProductsServiceProvider);
 
       final primaryImage = _receiptImages.first;
-      final bytes = await primaryImage.readAsBytes();
-      final mimeType = primaryImage.mimeType ?? 'image/jpeg';
+      final rawPrimaryBytes = await primaryImage.readAsBytes();
 
+      if (mounted) {
+        setState(() {
+          _previewImageBytes = rawPrimaryBytes;
+        });
+      }
+
+      // Step 1: Calibrate primary image & thermal contrast
+      final primaryCalib = await ReceiptImageCalibrator.calibrateReceiptBytes(rawPrimaryBytes);
+      final bytes = primaryCalib.bytes;
+      final mimeType = primaryCalib.mimeType;
+
+      // Step 2: Calibrate additional parts if present
       final List<Uint8List> additionalBytesList = [];
       final List<String> additionalMimesList = [];
       for (int i = 1; i < _receiptImages.length; i++) {
-        additionalBytesList.add(await _receiptImages[i].readAsBytes());
-        additionalMimesList.add(_receiptImages[i].mimeType ?? 'image/jpeg');
+        final addRaw = await _receiptImages[i].readAsBytes();
+        final addCalib = await ReceiptImageCalibrator.calibrateReceiptBytes(addRaw);
+        additionalBytesList.add(addCalib.bytes);
+        additionalMimesList.add(addCalib.mimeType);
       }
 
       final allBytesList = [bytes, ...additionalBytesList];
       final allImagesList = List<XFile>.from(_receiptImages);
+
+      if (mounted) {
+        setState(() {
+          _latestCalibration = primaryCalib;
+          _previewImageBytes = primaryCalib.bytes;
+          _aiPhase = 1;
+          _aiPhaseText = '2/3 جاري قراءة وتدقيق الفاتورة بالذكاء الاصطناعي...';
+        });
+      }
 
       // Fetch company product barcodes catalog and branch signatures concurrently in parallel
       List<String> registeredBarcodes = [];
@@ -832,11 +859,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                   },
                 );
 
-                if (kIsWeb) {
-                  await storageRef.putData(allBytesList[index], metadata).timeout(const Duration(seconds: 15));
-                } else {
-                  await storageRef.putFile(File(allImagesList[index].path), metadata).timeout(const Duration(seconds: 15));
-                }
+                await storageRef
+                    .putData(allBytesList[index], metadata)
+                    .timeout(const Duration(seconds: 15));
                 final url = await storageRef.getDownloadURL().timeout(const Duration(seconds: 10));
                 uploadedImageUrls.add(url);
                 uploadedStoragePaths.add(sPath);
@@ -1133,11 +1158,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
               },
             );
 
-            if (kIsWeb) {
-              await storageRef.putData(allBytesList[index], metadata).timeout(const Duration(seconds: 15));
-            } else {
-              await storageRef.putFile(File(allImagesList[index].path), metadata).timeout(const Duration(seconds: 15));
-            }
+            await storageRef
+                .putData(allBytesList[index], metadata)
+                .timeout(const Duration(seconds: 15));
             final url = await storageRef.getDownloadURL().timeout(const Duration(seconds: 10));
             uploadedImageUrls.add(url);
             uploadedStoragePaths.add(sPath);
@@ -1479,6 +1502,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       if (mounted) {
         setState(() {
           _isAiLoading = false;
+          _aiPhase = 0;
           _aiPhaseText = '';
         });
       }
@@ -2439,17 +2463,12 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                           if (_receiptImages.isNotEmpty) ...[
                             SizedBox(height: isMobile ? 16 : 22),
                             if (_isAiLoading) ...[
-                              Text(
-                                _aiPhaseText,
-                                textAlign: TextAlign.center,
-                                style: GoogleFonts.cairo(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: isMobile ? 12.5 : 13.5,
-                                  color: colorScheme.primary,
-                                ),
+                              OptimisticReceiptScannerCard(
+                                imageBytes: _previewImageBytes,
+                                activePhase: _aiPhase,
+                                statusText: _aiPhaseText,
+                                calibrationResult: _latestCalibration,
                               ),
-                              const SizedBox(height: 10),
-                              const M3LinearProgress(height: 6.0),
                               const SizedBox(height: 16),
                             ],
                             M3ActionButton(

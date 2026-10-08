@@ -137,6 +137,8 @@ class GeminiModelPreset {
 class AiModelConfig {
   final String primaryModel;
   final String fallbackModel;
+  final String fastTierModel;
+  final String deepAuditModel;
   final AiAgentMode agentMode;
   final int thinkingBudget;
   final String? customModelIdentifier;
@@ -146,6 +148,8 @@ class AiModelConfig {
   const AiModelConfig({
     this.primaryModel = 'gemini-3.7-flash',
     this.fallbackModel = 'gemini-3.6-flash',
+    this.fastTierModel = 'gemini-3.7-flash',
+    this.deepAuditModel = 'gemini-3.8-pro',
     this.agentMode = AiAgentMode.standardVision,
     this.thinkingBudget = 0,
     this.customModelIdentifier,
@@ -168,6 +172,8 @@ class AiModelConfig {
     return {
       'primary_model': primaryModel,
       'fallback_model': fallbackModel,
+      'fast_tier_model': fastTierModel,
+      'deep_audit_model': deepAuditModel,
       'agent_mode': agentMode.code,
       'thinking_budget': thinkingBudget,
       'custom_model_identifier': customModelIdentifier,
@@ -183,6 +189,8 @@ class AiModelConfig {
     final modeCode = data['agent_mode'] as String?;
     final primary = (data['primary_model'] as String?)?.trim();
     final fallback = (data['fallback_model'] as String?)?.trim();
+    final fastTier = (data['fast_tier_model'] as String?)?.trim();
+    final deepAudit = (data['deep_audit_model'] as String?)?.trim();
     final custom = (data['custom_model_identifier'] as String?)?.trim();
     final budget = (data['thinking_budget'] as num?)?.toInt() ?? 0;
 
@@ -194,6 +202,8 @@ class AiModelConfig {
     return AiModelConfig(
       primaryModel: primary != null && primary.isNotEmpty ? primary : 'gemini-3.7-flash',
       fallbackModel: fallback != null && fallback.isNotEmpty ? fallback : 'gemini-3.6-flash',
+      fastTierModel: fastTier != null && fastTier.isNotEmpty ? fastTier : 'gemini-3.7-flash',
+      deepAuditModel: deepAudit != null && deepAudit.isNotEmpty ? deepAudit : 'gemini-3.8-pro',
       agentMode: AiAgentMode.fromCode(modeCode),
       thinkingBudget: budget,
       customModelIdentifier: custom != null && custom.isNotEmpty ? custom : null,
@@ -220,6 +230,8 @@ class AiModelConfigService {
       AiConfig.updateActiveModelConfig(
         primary: config.effectivePrimaryModel,
         fallback: config.fallbackModel,
+        fastTier: config.fastTierModel,
+        deepAudit: config.deepAuditModel,
         mode: config.agentMode,
         budget: config.thinkingBudget,
       );
@@ -235,6 +247,8 @@ class AiModelConfigService {
       AiConfig.updateActiveModelConfig(
         primary: config.effectivePrimaryModel,
         fallback: config.fallbackModel,
+        fastTier: config.fastTierModel,
+        deepAudit: config.deepAuditModel,
         mode: config.agentMode,
         budget: config.thinkingBudget,
       );
@@ -249,6 +263,8 @@ class AiModelConfigService {
   Future<void> updateConfig({
     required String primaryModel,
     required String fallbackModel,
+    String? fastTierModel,
+    String? deepAuditModel,
     required AiAgentMode agentMode,
     int thinkingBudget = 0,
     String? customModelIdentifier,
@@ -261,6 +277,8 @@ class AiModelConfigService {
     final config = AiModelConfig(
       primaryModel: primaryModel,
       fallbackModel: fallbackModel,
+      fastTierModel: fastTierModel ?? 'gemini-3.7-flash',
+      deepAuditModel: deepAuditModel ?? 'gemini-3.8-pro',
       agentMode: agentMode,
       thinkingBudget: thinkingBudget,
       customModelIdentifier: customModelIdentifier,
@@ -271,6 +289,8 @@ class AiModelConfigService {
     AiConfig.updateActiveModelConfig(
       primary: effectiveModel,
       fallback: fallbackModel,
+      fastTier: config.fastTierModel,
+      deepAudit: config.deepAuditModel,
       mode: agentMode,
       budget: thinkingBudget,
     );

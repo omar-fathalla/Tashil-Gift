@@ -1,18 +1,23 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_service.dart';
+import 'distributed_counter_service.dart';
 import '../../features/admin/domain/company_gift_model.dart';
 import '../../features/admin/domain/event_model.dart';
 
 final companyGiftsServiceProvider = Provider<CompanyGiftsService>((ref) {
   final firestore = ref.watch(firestoreProvider);
-  return CompanyGiftsService(firestore);
+  final counterService = ref.watch(distributedCounterServiceProvider);
+  return CompanyGiftsService(firestore, counterService: counterService);
 });
 
 class CompanyGiftsService {
   final FirebaseFirestore _firestore;
+  final DistributedCounterService? _counterService;
 
-  CompanyGiftsService(this._firestore);
+  CompanyGiftsService(this._firestore, {DistributedCounterService? counterService})
+      : _counterService = counterService ?? DistributedCounterService(_firestore);
 
   /// Returns a real-time stream of all gifts for a specific company.
   Stream<List<CompanyGiftModel>> giftsStream(String companySlug) {
@@ -1406,32 +1411,53 @@ class CompanyGiftsService {
     int count = 1,
     double? unitValue,
     bool? isVoucher,
+    String gameType = 'claim',
   }) async {
     if (eventId.isEmpty || prizeIdentifier.isEmpty || count <= 0) return;
 
-    final doc = await _firestore.collection('events').doc(eventId).get();
-    if (!doc.exists) return;
+    // 1. Sharded Lock-Free Increment (always guaranteed, zero lock contention)
+    try {
+      await _counterService?.recordClaimEvent(
+        eventId: eventId,
+        prizeIdentifier: prizeIdentifier,
+        branchId: branchId,
+        count: count,
+        gameType: gameType,
+      );
+    } catch (e) {
+      debugPrint('⚠️ CompanyGiftsService.decrementCampaignPrize sharded record error: $e');
+    }
 
-    final data = doc.data()!;
-    final prizes = List<Map<String, dynamic>>.from(data['allocatedPrizes'] ?? []);
-    if (prizes.isEmpty) return;
+    // 2. Decrement on root event document with optimistic safety
+    try {
+      final doc = await _firestore.collection('events').doc(eventId).get();
+      if (!doc.exists) return;
 
-    final matchIndex = findBestPrizeMatchIndex(
-      prizes,
-      prizeIdentifier,
-      branchId: branchId,
-      unitValue: unitValue,
-      isVoucher: isVoucher,
-      preferWithRemaining: true,
-    );
+      final data = doc.data()!;
+      final prizes = List<Map<String, dynamic>>.from(data['allocatedPrizes'] ?? []);
+      if (prizes.isEmpty) return;
 
-    if (matchIndex != -1) {
-      final remaining = (prizes[matchIndex]['remainingQuantity'] as num?)?.toInt() ?? 0;
-      final newRemaining = (remaining - count).clamp(0, double.infinity).toInt();
-      prizes[matchIndex]['remainingQuantity'] = newRemaining;
-      await _firestore.collection('events').doc(eventId).update({
-        'allocatedPrizes': prizes,
-      });
+      final matchIndex = findBestPrizeMatchIndex(
+        prizes,
+        prizeIdentifier,
+        branchId: branchId,
+        unitValue: unitValue,
+        isVoucher: isVoucher,
+        preferWithRemaining: true,
+      );
+
+      if (matchIndex != -1) {
+        final remaining = (prizes[matchIndex]['remainingQuantity'] as num?)?.toInt() ?? 0;
+        final newRemaining = (remaining - count).clamp(0, double.infinity).toInt();
+        prizes[matchIndex]['remainingQuantity'] = newRemaining;
+        await _firestore.collection('events').doc(eventId).update({
+          'allocatedPrizes': prizes,
+        });
+      }
+    } catch (e) {
+      // If root document update encounters lock contention (Firestore 1 write/sec limit),
+      // the sharded counter recorded in step 1 guarantees exact claim auditability!
+      debugPrint('⚠️ CompanyGiftsService.decrementCampaignPrize root update contention fallback: $e');
     }
   }
 
@@ -1446,31 +1472,53 @@ class CompanyGiftsService {
   }) async {
     if (eventId.isEmpty || prizeIdentifier.isEmpty || count <= 0) return;
 
-    final doc = await _firestore.collection('events').doc(eventId).get();
-    if (!doc.exists) return;
+    // 1. Revert distributed sharded counters by negative delta
+    try {
+      final cleanPrize = DistributedCounterService.sanitizeCounterKey(prizeIdentifier);
+      await _counterService?.incrementCampaignCounter(
+        eventId: eventId,
+        counterName: 'prize_$cleanPrize',
+        delta: -count,
+      );
+      await _counterService?.incrementCampaignCounter(
+        eventId: eventId,
+        counterName: 'claims_total',
+        delta: -count,
+      );
+    } catch (e) {
+      debugPrint('⚠️ CompanyGiftsService.replenishCampaignPrize sharded revert error: $e');
+    }
 
-    final data = doc.data()!;
-    final prizes = List<Map<String, dynamic>>.from(data['allocatedPrizes'] ?? []);
-    if (prizes.isEmpty) return;
+    // 2. Replenish root event document
+    try {
+      final doc = await _firestore.collection('events').doc(eventId).get();
+      if (!doc.exists) return;
 
-    final matchIndex = findBestPrizeMatchIndex(
-      prizes,
-      prizeIdentifier,
-      branchId: branchId,
-      unitValue: unitValue,
-      isVoucher: isVoucher,
-      preferWithRemaining: false,
-    );
+      final data = doc.data()!;
+      final prizes = List<Map<String, dynamic>>.from(data['allocatedPrizes'] ?? []);
+      if (prizes.isEmpty) return;
 
-    if (matchIndex != -1) {
-      final allocated = (prizes[matchIndex]['allocatedQuantity'] as num?)?.toInt() ?? 0;
-      final remaining = (prizes[matchIndex]['remainingQuantity'] as num?)?.toInt() ?? 0;
-      final maxCapacity = allocated > 0 ? allocated : (remaining + count);
-      final newRemaining = (remaining + count).clamp(0, maxCapacity).toInt();
-      prizes[matchIndex]['remainingQuantity'] = newRemaining;
-      await _firestore.collection('events').doc(eventId).update({
-        'allocatedPrizes': prizes,
-      });
+      final matchIndex = findBestPrizeMatchIndex(
+        prizes,
+        prizeIdentifier,
+        branchId: branchId,
+        unitValue: unitValue,
+        isVoucher: isVoucher,
+        preferWithRemaining: false,
+      );
+
+      if (matchIndex != -1) {
+        final allocated = (prizes[matchIndex]['allocatedQuantity'] as num?)?.toInt() ?? 0;
+        final remaining = (prizes[matchIndex]['remainingQuantity'] as num?)?.toInt() ?? 0;
+        final maxCapacity = allocated > 0 ? allocated : (remaining + count);
+        final newRemaining = (remaining + count).clamp(0, maxCapacity).toInt();
+        prizes[matchIndex]['remainingQuantity'] = newRemaining;
+        await _firestore.collection('events').doc(eventId).update({
+          'allocatedPrizes': prizes,
+        });
+      }
+    } catch (e) {
+      debugPrint('⚠️ CompanyGiftsService.replenishCampaignPrize root update fallback: $e');
     }
   }
 

@@ -30,6 +30,7 @@ import '../../../core/widgets/m3_adaptive_scaffold.dart';
 import '../../../core/widgets/m3_date_range_picker_dialog.dart';
 import '../../../core/widgets/m3_list_tile.dart';
 import '../../../core/widgets/m3_action_menu.dart';
+import '../../../core/widgets/m3_button_groups.dart';
 import 'package:http/http.dart' as http;
 import '../../games/presentation/choose_gift_screen.dart';
 import '../../games/presentation/spin_the_wheel_screen.dart';
@@ -6403,7 +6404,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
               M3ActionMenu.item(
                 context: context,
                 label: isAr ? 'عرض التفاصيل والصورة' : 'View Details & Image',
-                icon: Icons.visibility_outlined,
+                icon: Icons.visibility_rounded,
                 onPressed: () {
                   onTap();
                   if (allReceiptUrls.isNotEmpty || (inv['storage_path']?.toString().isNotEmpty ?? false)) {
@@ -6457,7 +6458,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                 M3ActionMenu.item(
                   context: context,
                   label: isAr ? 'إلغاء وحذف الفاتورة' : 'Cancel & Delete Invoice',
-                  icon: Icons.delete_outline_rounded,
+                  icon: Icons.delete_rounded,
                   isDestructive: true,
                   onPressed: () => _confirmAndDeleteInvoice(
                     context: context,
@@ -7023,13 +7024,17 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: durationSec <= 2.0
-                                      ? Colors.green.shade50
-                                      : (durationSec <= 3.5 ? Colors.teal.shade50 : Colors.amber.shade50),
+                                      ? colorScheme.primaryContainer.withValues(alpha: 0.7)
+                                      : (durationSec <= 3.5
+                                          ? colorScheme.secondaryContainer.withValues(alpha: 0.7)
+                                          : colorScheme.tertiaryContainer.withValues(alpha: 0.7)),
                                   borderRadius: BorderRadius.circular(6),
                                   border: Border.all(
                                     color: durationSec <= 2.0
-                                        ? Colors.green.shade300
-                                        : (durationSec <= 3.5 ? Colors.teal.shade300 : Colors.amber.shade300),
+                                        ? colorScheme.primary.withValues(alpha: 0.3)
+                                        : (durationSec <= 3.5
+                                            ? colorScheme.secondary.withValues(alpha: 0.3)
+                                            : colorScheme.tertiary.withValues(alpha: 0.3)),
                                   ),
                                 ),
                                 child: Row(
@@ -7038,7 +7043,9 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                                     Icon(
                                       Icons.bolt_rounded,
                                       size: 12,
-                                      color: durationSec <= 2.0 ? Colors.green.shade800 : Colors.amber.shade900,
+                                      color: durationSec <= 2.0
+                                          ? colorScheme.primary
+                                          : (durationSec <= 3.5 ? colorScheme.secondary : colorScheme.tertiary),
                                     ),
                                     const SizedBox(width: 2),
                                     Text(
@@ -7046,7 +7053,11 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.bold,
-                                        color: durationSec <= 2.0 ? Colors.green.shade900 : Colors.amber.shade900,
+                                        color: durationSec <= 2.0
+                                            ? colorScheme.onPrimaryContainer
+                                            : (durationSec <= 3.5
+                                                ? colorScheme.onSecondaryContainer
+                                                : colorScheme.onTertiaryContainer),
                                       ),
                                     ),
                                   ],
@@ -7063,14 +7074,14 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                           decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
+                            color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
                             borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: Colors.blue.shade200),
+                            border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.storefront_rounded, size: 12, color: Colors.blue.shade800),
+                              Icon(Icons.storefront_rounded, size: 12, color: colorScheme.primary),
                               const SizedBox(width: 4),
                               Flexible(
                                 child: Text(
@@ -7078,7 +7089,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                                   style: TextStyle(
                                     fontSize: 10.5,
                                     fontWeight: FontWeight.w600,
-                                    color: Colors.blue.shade900,
+                                    color: colorScheme.onSurface,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -7100,9 +7111,15 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                             decoration: BoxDecoration(
-                              color: isValid ? Colors.green.shade50 : Colors.red.shade50,
+                              color: isValid
+                                  ? colorScheme.primaryContainer.withValues(alpha: 0.7)
+                                  : colorScheme.errorContainer.withValues(alpha: 0.7),
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: isValid ? Colors.green.shade300 : Colors.red.shade300),
+                              border: Border.all(
+                                color: isValid
+                                    ? colorScheme.primary.withValues(alpha: 0.3)
+                                    : colorScheme.error.withValues(alpha: 0.3),
+                              ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -7110,7 +7127,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                                 Icon(
                                   isValid ? Icons.check_circle_rounded : Icons.cancel_rounded,
                                   size: 12,
-                                  color: isValid ? Colors.green.shade800 : Colors.red.shade800,
+                                  color: isValid ? colorScheme.primary : colorScheme.error,
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
@@ -7118,7 +7135,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                                   style: TextStyle(
                                     fontSize: 10.5,
                                     fontWeight: FontWeight.bold,
-                                    color: isValid ? Colors.green.shade900 : Colors.red.shade900,
+                                    color: isValid ? colorScheme.onPrimaryContainer : colorScheme.onErrorContainer,
                                   ),
                                 ),
                               ],
@@ -7131,6 +7148,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                               decoration: BoxDecoration(
                                 color: colorScheme.surfaceContainerHighest,
                                 borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                               ),
                               child: Text(
                                 eventName,
@@ -7158,7 +7176,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.person_outline_rounded, size: 12, color: colorScheme.onSurfaceVariant),
+                                Icon(Icons.person_rounded, size: 12, color: colorScheme.onSurfaceVariant),
                                 const SizedBox(width: 3),
                                 Text(
                                   customerName,
@@ -7170,7 +7188,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.phone_outlined, size: 12, color: colorScheme.onSurfaceVariant),
+                                Icon(Icons.phone_rounded, size: 12, color: colorScheme.onSurfaceVariant),
                                 const SizedBox(width: 3),
                                 Text(
                                   customerPhone,
@@ -7199,9 +7217,9 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                           decoration: BoxDecoration(
-                            color: Colors.red.shade50.withValues(alpha: 0.85),
+                            color: colorScheme.errorContainer.withValues(alpha: 0.35),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.red.shade200),
+                            border: Border.all(color: colorScheme.error.withValues(alpha: 0.25)),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -7209,85 +7227,69 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
-                                  Icon(Icons.report_problem_rounded, size: 16, color: Colors.red.shade800),
+                                  Icon(Icons.report_problem_rounded, size: 16, color: colorScheme.error),
                                   const SizedBox(width: 6),
                                   Text(
                                     strings.rejectionReasonLabel,
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.red.shade900,
+                                      color: colorScheme.onErrorContainer,
                                     ),
                                   ),
                                   const Spacer(),
-                                  // Quick Re-verify Pill Button
-                                  TextButton.icon(
-                                    onPressed: isRechecking
-                                        ? null
-                                        : () => _promptRecheckOptions(
-                                              context: context,
-                                              inv: inv,
-                                              event: event,
-                                              eventsMap: eventsMap,
-                                              strings: strings,
-                                              colorScheme: colorScheme,
-                                              activeCountry: activeCountry,
-                                              isAr: isAr,
-                                            ),
-                                    icon: isRechecking
-                                        ? SizedBox(
-                                            width: 12,
-                                            height: 12,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: Colors.red.shade900,
-                                            ),
-                                          )
-                                        : Icon(Icons.sync_rounded, size: 14, color: Colors.red.shade900),
-                                    label: Text(
-                                      isRechecking ? strings.recheckingReceiptLoading : strings.recheckInvoiceAction,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.red.shade900,
+                                  // Connected Action Group for Quick Re-check and AI Brain
+                                  M3ConnectedActionGroup(
+                                    height: 30,
+                                    borderRadius: 8,
+                                    fontSize: 11,
+                                    iconSize: 14,
+                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                    actions: [
+                                      M3ConnectedActionItem(
+                                        label: isRechecking ? strings.recheckingReceiptLoading : strings.recheckInvoiceAction,
+                                        iconWidget: isRechecking
+                                            ? SizedBox(
+                                                width: 12,
+                                                height: 12,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  color: colorScheme.error,
+                                                ),
+                                              )
+                                            : null,
+                                        icon: isRechecking ? null : Icons.sync_rounded,
+                                        isDestructive: true,
+                                        onPressed: isRechecking
+                                            ? null
+                                            : () => _promptRecheckOptions(
+                                                  context: context,
+                                                  inv: inv,
+                                                  event: event,
+                                                  eventsMap: eventsMap,
+                                                  strings: strings,
+                                                  colorScheme: colorScheme,
+                                                  activeCountry: activeCountry,
+                                                  isAr: isAr,
+                                                ),
                                       ),
-                                    ),
-                                    style: TextButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                      visualDensity: VisualDensity.compact,
-                                      backgroundColor: Colors.red.shade100,
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  // AI Brain Co-Pilot Studio Shortcut
-                                  TextButton.icon(
-                                    onPressed: () => _openAiBrainCoPilotForInvoice(
-                                      context: context,
-                                      inv: inv,
-                                      event: event,
-                                      strings: strings,
-                                      isAr: isAr,
-                                    ),
-                                    icon: Icon(Icons.psychology_rounded, size: 14, color: colorScheme.primary),
-                                    label: Text(
-                                      isAr ? 'عقل الذكاء' : 'AI Brain',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: colorScheme.primary,
+                                      M3ConnectedActionItem(
+                                        label: isAr ? 'عقل الذكاء' : 'AI Brain',
+                                        icon: Icons.psychology_rounded,
+                                        isPrimary: true,
+                                        onPressed: () => _openAiBrainCoPilotForInvoice(
+                                          context: context,
+                                          inv: inv,
+                                          event: event,
+                                          strings: strings,
+                                          isAr: isAr,
+                                        ),
                                       ),
-                                    ),
-                                    style: TextButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      visualDensity: VisualDensity.compact,
-                                      backgroundColor: colorScheme.primary.withValues(alpha: 0.12),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    ),
+                                    ],
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 6),
+                              const SizedBox(height: 8),
                               ...displayReasons.map(
                                 (reason) => Padding(
                                   padding: const EdgeInsets.only(top: 2, bottom: 2),
@@ -7296,7 +7298,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                                     children: [
                                       Padding(
                                         padding: const EdgeInsets.only(top: 5),
-                                        child: Icon(Icons.circle, size: 5, color: Colors.red.shade700),
+                                        child: Icon(Icons.fiber_manual_record_rounded, size: 6, color: colorScheme.error),
                                       ),
                                       const SizedBox(width: 6),
                                       Expanded(
@@ -7304,7 +7306,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                                           reason,
                                           style: TextStyle(
                                             fontSize: 11.5,
-                                            color: const Color(0xFF5C0000),
+                                            color: colorScheme.onErrorContainer,
                                             fontWeight: FontWeight.w500,
                                             height: 1.35,
                                           ),
@@ -7370,100 +7372,115 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                       ),
                     ),
 
-                    // Recheck Action Button for Rejected Invoices
-                    if (!isValid) ...[
+                    // Action Buttons using M3ConnectedActionGroup
+                    if (!isDesktopDetailPane) ...[
                       const SizedBox(width: 8),
-                      FilledButton.tonalIcon(
-                        onPressed: isRechecking
-                            ? null
-                            : () => _promptRecheckOptions(
-                                  context: context,
-                                  inv: inv,
-                                  event: event,
-                                  eventsMap: eventsMap,
-                                  strings: strings,
-                                  colorScheme: colorScheme,
-                                  activeCountry: activeCountry,
-                                  isAr: isAr,
-                                ),
-                        icon: isRechecking
-                            ? SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.amber.shade900,
-                                ),
-                              )
-                            : Icon(Icons.sync_rounded, size: isCardMobile ? 16 : 18),
-                        label: Text(
-                          isCardMobile ? strings.recheckInvoiceAction : '${strings.recheckInvoiceAction} 🔄',
-                          style: TextStyle(
-                            fontSize: isCardMobile ? 11 : 12,
-                            fontWeight: FontWeight.bold,
+                      M3ConnectedActionGroup(
+                        height: isCardMobile ? 32 : 36,
+                        borderRadius: 10,
+                        fontSize: isCardMobile ? 11 : 12,
+                        iconSize: isCardMobile ? 15 : 17,
+                        actions: [
+                          if (!isValid)
+                            M3ConnectedActionItem(
+                              label: strings.recheckInvoiceAction,
+                              iconWidget: isRechecking
+                                  ? SizedBox(
+                                      width: 13,
+                                      height: 13,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: colorScheme.error,
+                                      ),
+                                    )
+                                  : null,
+                              icon: isRechecking ? null : Icons.sync_rounded,
+                              isDestructive: true,
+                              onPressed: isRechecking
+                                  ? null
+                                  : () => _promptRecheckOptions(
+                                        context: context,
+                                        inv: inv,
+                                        event: event,
+                                        eventsMap: eventsMap,
+                                        strings: strings,
+                                        colorScheme: colorScheme,
+                                        activeCountry: activeCountry,
+                                        isAr: isAr,
+                                      ),
+                            ),
+                          M3ConnectedActionItem(
+                            label: itemsBtnLabel,
+                            icon: isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                            isPrimary: isValid,
+                            onPressed: () => _toggleExpand(docId),
                           ),
-                        ),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: Colors.amber.shade100,
-                          foregroundColor: const Color(0xFF452700),
-                          padding: EdgeInsets.symmetric(
-                            horizontal: isCardMobile ? 8 : 12,
-                            vertical: isCardMobile ? 6 : 8,
-                          ),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
+                        ],
                       ),
-                    ],
-
-                    const SizedBox(width: 8),
-
-                    // Items Count Button with Expand action (or static indicator in detail pane)
-                    if (!isDesktopDetailPane)
-                      OutlinedButton.icon(
-                        onPressed: () => _toggleExpand(docId),
-                        icon: Icon(
-                          isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                          size: isCardMobile ? 16 : 18,
+                    ] else ...[
+                      if (!isValid) ...[
+                        const SizedBox(width: 8),
+                        M3ConnectedActionGroup(
+                          height: 36,
+                          borderRadius: 10,
+                          fontSize: 12,
+                          iconSize: 16,
+                          actions: [
+                            M3ConnectedActionItem(
+                              label: strings.recheckInvoiceAction,
+                              iconWidget: isRechecking
+                                  ? SizedBox(
+                                      width: 13,
+                                      height: 13,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: colorScheme.error,
+                                      ),
+                                    )
+                                  : null,
+                              icon: isRechecking ? null : Icons.sync_rounded,
+                              isDestructive: true,
+                              onPressed: isRechecking
+                                  ? null
+                                  : () => _promptRecheckOptions(
+                                        context: context,
+                                        inv: inv,
+                                        event: event,
+                                        eventsMap: eventsMap,
+                                        strings: strings,
+                                        colorScheme: colorScheme,
+                                        activeCountry: activeCountry,
+                                        isAr: isAr,
+                                      ),
+                            ),
+                          ],
                         ),
-                        label: Text(
-                          itemsBtnLabel,
-                          style: TextStyle(
-                            fontSize: isCardMobile ? 11 : 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: isCardMobile ? 8 : 12,
-                            vertical: isCardMobile ? 6 : 8,
-                          ),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      )
-                    else
+                      ],
+                      const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                         decoration: BoxDecoration(
-                          color: colorScheme.primary.withValues(alpha: 0.1),
+                          color: colorScheme.primaryContainer.withValues(alpha: 0.5),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: colorScheme.primary.withValues(alpha: 0.25)),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.inventory_2_rounded, size: 15, color: colorScheme.primary),
+                            Icon(Icons.inventory_2_rounded, size: 15, color: colorScheme.onPrimaryContainer),
                             const SizedBox(width: 6),
                             Text(
                               '${products.length} ${strings.itemsCountLabel}',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
-                                color: colorScheme.primary,
+                                color: colorScheme.onPrimaryContainer,
                               ),
                             ),
                           ],
                         ),
                       ),
+                    ],
 
                     // Material Design 3 Invoice Action Menu
                     const SizedBox(width: 8),
@@ -8088,14 +8105,28 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                             decoration: BoxDecoration(
                               color: isPromo ? colorScheme.primaryContainer : colorScheme.surfaceContainerHighest,
                               borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              isPromo ? strings.includedInPromo : strings.generalItem,
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: isPromo ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
+                              border: Border.all(
+                                color: isPromo
+                                    ? colorScheme.primary.withValues(alpha: 0.3)
+                                    : colorScheme.outlineVariant.withValues(alpha: 0.4),
                               ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (isPromo) ...[
+                                  Icon(Icons.stars_rounded, size: 12, color: colorScheme.primary),
+                                  const SizedBox(width: 4),
+                                ],
+                                Text(
+                                  isPromo ? strings.includedInPromo : strings.generalItem,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: isPromo ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),

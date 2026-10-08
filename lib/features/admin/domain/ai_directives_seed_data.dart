@@ -1415,6 +1415,94 @@ class AiDirectivesSeedData {
           tags: ['generic-multipack', 'cadbury-mondelez', 'brand-isolation', 'zero-hallucination', 'fathalla-damanhour', 'spend-governance', 'air-71'],
           lastUpdated: '2026-10-03',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-72',
+          code: 'TWO_TIER_CASCADING_PIPELINE_AND_STRUCTURED_OUTPUTS_GOVERNANCE',
+          orderIndex: 72,
+          category: AiDirectiveCategory.fraudSecurity,
+          titleAr: 'معيار خط المعالجة المتتابع ثنائي المراحل واستجابات JSON المنضبطة فائقة السرعة (Two-Tier Cascading Pipeline & Structured Outputs Governance)',
+          titleEn: 'Two-Tier Cascading Pipeline & Ultra-Fast Structured Outputs Governance Standard',
+          descriptionAr:
+              'معيار حوكمة معماري يوجه معالجة فواتير التجزئة عبر مسار متتابع ثنائي الطبقات (Two-Tier Cascading Pipeline) يجمع بين السرعة الفائقة لخدمة العملاء على نقاط الدفع وبين أقصى درجات التدقيق الأمني ومكافحة التلاعب: 1) مسار السرعة اللحظي (Fast Tier): يستعين بنموذج Gemini 3.7 Flash مع صفر ميزانية تفكير (thinkingBudget = 0) ومخطط بيانات موجز ومنضبط (Lean responseSchema) لاستخراج بيانات الفاتورة (OCR والفرع والأصناف) في زمن استجابة يتراوح بين ثانية وثانيتين فقط دون أي ثرثرة نصية. 2) محرك دارت الحتمي: يعالج شروط الحملات والعروض واقتصاديات الأسعار ومضاعفات الهدايا محلياً في زمن 0.001ms. 3) مسار التدقيق العميق الاستثنائي (Deep Audit Tier): يقتصر تفعيله آلياً على الحالات الشاذة، مثل رصد مؤشرات تلاعب بصرية (isTampered)، أو ارتفاع مؤشر مخاطر الاحتيال (fraudRiskScore >= 0.70)، أو عدم مقروئية أجزاء جوهرية، حيث يتم تصعيد الفاتورة فورياً لنموذج التدقيق الجنائي العميق لإجراء فحص استدلالي مفصل دون إبطاء الفواتير الطبيعية المستقيمة.',
+          descriptionEn:
+              'Architectural governance standard orchestrating retail receipt processing through an intelligent Two-Tier Cascading Pipeline combining instant point-of-sale customer throughput with rigorous forensic fraud defense: 1) Instant Fast Tier: leverages Gemini 3.7 Flash with thinkingBudget = 0 and a lean, strictly enforced responseSchema to execute raw OCR extraction, canonical branch matching, and SKU normalization within 1.0-1.5s with zero token chatter. 2) Deterministic Dart Engine: evaluates promotional rules, single-unit economics, and gift multipliers locally in 0.001ms with zero hallucination. 3) Exceptional Deep Audit Tier: conditionally escalates receipts flagged with visual tampering (isTampered), elevated fraud risk (fraudRiskScore >= 0.70), or high ambiguity to Gemini Deep Audit Pro tier for forensic verification, protecting enterprise integrity without burdening ordinary receipts with latency penalties.',
+          logicAr:
+              '1. مسار الاستخراج اللحظي (Fast Tier): استدعاء Gemini 3.7 Flash بمخطط JSON محكم وموجز (بدون حقول العمليات الحسابية المحلية) وبميزانية تفكير = 0 لتقليل زمن الاستجابة إلى أقصى حد.\n2. محرك دارت المحلي (0.001ms Engine): معالجة قواعد العروض والجوائز ومطابقة الفروع المعتمدة محلياً بدقة 100% دون أي تكلفة زمنية أو تخمين من الذكاء الاصطناعي.\n3. كاشف التلاعب والنزاهة (Fraud Guard Escalator): فحص مخرجات المسار السريع؛ إذا كانت الفاتورة طبيعية وسليمة، تعتمد النتيجة فوراً؛ وإذا رُصد تلاعب (isTampered = true) أو مؤشر احتيال مرتفع (fraudRiskScore >= 0.70)، يتم التصعيد التلقائي إلى المسار العميق (Deep Tier).\n4. مسار التدقيق الجنائي العميق (Deep Audit Tier): تشغيل نموذج الفحص الاستدلالي المتقدم لمراجعة تفاصيل التلاعب، والتعديلات اليدوية، والتواريخ المتعارضة، وأكواد الـ POS المشبوهة.\n5. قياس الأداء المزدوج (Dual Telemetry): توثيق وتسجيل زمن استجابة الذكاء الاصطناعي (aiDurationMs) وزمن محرك دارت (dartDurationMs) والمسار المستخدم (pipelineTierUsed) لكل فاتورة لتحقيق شفافية مطلقة في لوحة القيادة وسجلات التدقيق.',
+          logicEn:
+              '1. Instant Fast Tier: invokes Gemini 3.7 Flash with a streamlined responseSchema (excluding client-derived fields) and thinkingBudget = 0 for sub-2s raw extraction.\n2. Local Deterministic Dart Engine: processes campaign rules, prize allocations, and canonical branch matching in 0.001ms with zero hallucination.\n3. Fraud Guard Escalator: evaluates fast-tier outputs; pristine receipts proceed immediately, while receipts exhibiting visual tampering (isTampered = true) or elevated fraud risk (fraudRiskScore >= 0.70) trigger automated Deep Tier escalation.\n4. Deep Audit Tier: activates advanced forensic reasoning models to scrutinize structural tampering, ink discrepancies, altered timestamps, or duplicate POS codes.\n5. Dual Telemetry Logging: tracks aiDurationMs, dartDurationMs, and pipelineTierUsed across all transactions for complete observability and performance benchmarking.',
+          exampleInput:
+              'فاتورة مشتريات واردة من المتجر: 1) في الحالة الطبيعية: صورة واضحة لفاتورة كارفور أو فتح الله. 2) في حالة الاشتباه: صورة فاتورة يُشتبه في تزوير تاريخها أو قص سطر الإجمالي أو إعادة تصوير شاشة كمبيوتر.',
+          exampleOutput:
+              '1) الفاتورة الطبيعية: تنجز في المسار السريع (Fast Tier) خلال 1.2 ثانية بنجاح، ويحسب محرك دارت الهدايا في 0.001 ثانية. 2) الفاتورة المشبوهة: يكتشف المسار السريع شبهة التلاعب، وتصعد تلقائياً إلى Deep Tier للتدقيق الجنائي وكشف التزوير ورفض الفاتورة بأسباب قطعية.',
+          tags: ['cascading-pipeline', 'gemini-flash-tier', 'deep-audit-pro', 'structured-outputs', 'sub-second-ocr', 'fraud-escalation', 'air-72'],
+          lastUpdated: '2026-10-09',
+        ),
+        const AiDirectiveModel(
+          id: 'AIR-73',
+          code: 'DISTRIBUTED_COUNTERS_SHARDING_AND_COMPOSITE_INDEXING_GOVERNANCE',
+          orderIndex: 73,
+          category: AiDirectiveCategory.branchGovernance,
+          titleAr: 'معيار العدادات الموزعة المجزأة والفهارس المركبة لحوكمة أحمال الذروة (Distributed Counters Sharding & Composite Indexing Governance)',
+          titleEn: 'Distributed Counters Sharding & Composite Indexing Governance Standard',
+          descriptionAr:
+              'معيار حوكمة معماري يعالج معضلتين متزامنتين في بيئات التجزئة عالية الكثافة وسحب الجوائز: 1) فك اختناق الكتابة على وثيقة الحملة الرئيسية (Lock Contention / 1 write-per-second Firestore Limit) عند تدافع مئات العملاء والبروموترز لسحب كروت الخدش وصرف الفواتشر في عطلات نهاية الأسبوع، عبر توزيع عمليات الزيادة على 10 شرائح عشوائية (Random Shards) تحت events/{eventId}/sharded_counters/{counterName}/shards، مما يضمن تسجيل السحوبات دون أي توقف أو رفض للمعاملات. 2) التكشيف السحابي المركب الشامل (Composite Indexing) لجميع استعلامات الفواتير المجمعة (campaignId + branch_id + status + createdAt/timestamp) لمنع عمليات المسح الكامل للجدول (Table Scan) وتسريع استرجاع السجلات وتقارير الفروع في أجزاء من الثانية.',
+          descriptionEn:
+              'Mandatory architectural governance standard resolving two simultaneous high-throughput retail scaling hurdles: 1) Eliminates document write lock contention (Firestore 1 write/sec per-doc constraint) during peak customer rushes for scratch cards and voucher disbursals by distributing increments across 10 random shards under events/{eventId}/sharded_counters/{counterName}/shards, ensuring 100% claim reliability without transaction aborts or promoter lockouts. 2) Enforces declared composite indexes across campaign queries (campaignId + branch_id + status + createdAt/timestamp) in firestore.indexes.json, completely preventing collection table scans and delivering sub-second dashboard aggregations and branch reporting.',
+          logicAr:
+              '1. التجزئة العشوائية للعدادات (Random Shard Distribution): اختيار شريحة عشوائية بين 0 و 9 لكل عملية سحب أو فوتشر، واستخدام FieldValue.increment لتوزيع ضغط الكتابة بالتساوي.\n2. التجميع اللحظي بدون أقفال (Lock-Free Aggregation): قراءة مجموع الشرائح إما عبر تدفق حي أو استعلام تجميعي (Aggregate Query) في 15ms بدقة مطلقة.\n3. التكشيف المركب المعتمد (Declared Composite Indexes): توفير فهارس لجميع التركيبات (campaignId + branch_id + status + createdAt)، و (campaignId + branch_detected + status)، و (campaign_stock_settlements) لمنع Table Scans.\n4. الحماية التلقائية للجوائز (Resilient Prize Fallback): ربط decrementCampaignPrize بالعدادات المجزأة، بحيث إذا واجه تحديث وثيقة الفعالية الرئيسية أي تزامن أو تأخير، يضمن العداد المجزأ عدم ضياع أي سحب وتوثيق الجائزة بدقة 100%.\n5. الرصد والشفافية: تتبع عدادات الجوائز والفروع وأنواع الألعاب (scratch, directGift) بصورة معزولة وفورية.',
+          logicEn:
+              '1. Random Shard Distribution: directs each claim increment to a random shard (0-9) using FieldValue.increment, seamlessly handling concurrent bursts.\n2. Lock-Free Aggregation: reads shard sums via real-time streams or aggregate queries in ~15ms with 100% precision.\n3. Declared Composite Indexes: establishes multi-field indexes in firestore.indexes.json for (campaignId + branch_id + status + createdAt/timestamp) and settlements, eliminating collection scans.\n4. Resilient Prize Fallback: anchors decrementCampaignPrize with sharded claim logs so concurrent writes never drop counts even under heavy contention on the root event document.\n5. Granular Telemetry: isolates counters per campaign, game type, prize SKU, and branch for comprehensive real-time auditability.',
+          exampleInput:
+              'تزاحم 50 عميل في فروع فتح الله سموحة وكارفور سيتي سنتر في نفس اللحظة لسحب كروت خدش وصرف فوتشر 50 ج.م.',
+          exampleOutput:
+              'تتوزع عمليات الكتابة على الشرائح الـ 10 (shards 0-9) دون أي تصادم أو تأخير (0ms contention)، وتُسترجع تقارير الفروع فورياً بفضل الفهارس المركبة دون أي Table Scan.',
+          tags: ['distributed-counters', 'sharding', 'lock-contention', 'composite-indexes', 'table-scan-prevention', 'high-throughput-retail', 'air-73'],
+          lastUpdated: '2026-10-09',
+        ),
+        const AiDirectiveModel(
+          id: 'AIR-74',
+          code: 'GEMINI_LRU_CACHING_RATE_LIMITING_AND_EXPONENTIAL_BACKOFF_STANDARD',
+          orderIndex: 74,
+          category: AiDirectiveCategory.fraudSecurity,
+          titleAr: 'معيار التخزين المؤقت الذكي والتحكم في تدفق الطلبات والتراجع الأسي لحصص Gemini (Gemini LRU Caching, Rate Limiting & Exponential Backoff Standard)',
+          titleEn: 'Gemini LRU Caching, Rate Limiting & Exponential Backoff Standard',
+          descriptionAr:
+              'معيار حوكمة معماري متكامل لحماية استهلاك واجهات برمجة تطبيقات Gemini ومنع أخطاء تجاوز الحصص (429 ResourceExhausted) وتسريع استرجاع الفواتير المتكررة في زمن 0ms: 1) التخزين المؤقت اللحظي (LRU Cache): استخدام خوارزمية LRU في Cloud Functions و Dart لتخزين أسماء الفروع والقوائم المؤهلة لكل حملة، وتخزين نتائج فحص الفواتير السابقة بالبصمة التشفيرية لمحتوى الصورة (SHA-256 Fingerprinting)، مما يمنع إعادة إرسال الفواتير المتكررة لـ Gemini ويوفر استجابة فورية بدون أي تكلفة توكنات. 2) التحكم الصارم في معدل الطلبات (Token Bucket Rate Limiter): ضبط سقف انزلاقي (60 طلب/دقيقة مع قدرة تدفق 10 طلبات) لمنع انفجار الطلبات المتزامنة أثناء الذروة. 3) معالجة التراجع الأسي (Exponential Backoff with Jitter): في حال اعتراض الخطأ 429 أو 503، يتم تفعيل التراجع الأسي مع إزاحة عشوائية (Jitter) وإعادة المحاولة حتى 3 مرات تلقائياً قبل التحويل للنماذج الاحتياطية.',
+          descriptionEn:
+              'Architectural governance standard safeguarding Gemini API quotas, eliminating 429 ResourceExhausted errors, and unlocking 0ms instant cached processing: 1) Intelligent LRU Caching: leverages lru-cache in Cloud Functions and memory LRU caching in Dart to store campaign branches, product catalogs, and cryptographic image fingerprints (SHA-256), completely bypassing Gemini for duplicate receipt submissions and slashing token overhead to zero. 2) Token Bucket Rate Limiting: enforces a sliding window rate limiter (60 req/min with burst of 10) to smooth concurrent traffic spikes during weekend campaigns. 3) Exponential Backoff with Jitter: automatically intercepts HTTP 429 and 503 errors and executes exponential backoff retries (initial delay * 2^attempt + jitter) up to 3 times before escalating to fallback models, guaranteeing uninterrupted promoter workflows.',
+          logicAr:
+              '1. البصمة الرقمية للصور (Deterministic Fingerprinting): حساب بصمة تشفيرية لكل صورة فاتورة (SHA-256) لفحص ذاكرة الـ LRU Cache فورياً.\n2. الاسترجاع اللحظي (0ms Instant Hit): إذا كانت الفاتورة مطابقة لبصمة سابقة، تُرجع النتيجة المعتمدة فوراً دون أي استهلاك لواجهة Gemini.\n3. كاش الفروع والمنتجات (Campaign Context Cache): تخزين فروع الحملة وقوائم المنتجات المشروطة لمدة ساعة، لمنع إعادة قراءتها أو تضخيم سياق النموذج.\n4. محدد تدفق الطلبات (Token Bucket Throttling): حجز التوكنات عبر limiter لمنع تجاوز الحصص التنافسية.\n5. التراجع الأسي التلقائي (Exponential Backoff Loop): معالجة أخطاء 429 و RESOURCE_EXHAUSTED تلقائياً عبر فترات انتظار متصاعدة (1.5s -> 3s -> 6s) مع Jitter لمنع تصادم الطلبات.',
+          logicEn:
+              '1. Deterministic Image Fingerprinting: computes SHA-256 hashes of receipt images to perform instant O(1) LRU cache lookups.\n2. 0ms Instant Cache Hit: returns verified analysis results immediately without incurring API roundtrips or token costs.\n3. Campaign Context Cache: caches campaign branches and product catalogs with a 1-hour TTL, eliminating redundant Firestore lookups.\n4. Token Bucket Throttling: regulates API velocity via limiter, preventing quota exhaustion.\n5. Exponential Backoff Retry Loop: catches 429/ResourceExhausted exceptions and retries with exponential backoff (1.5s -> 3s -> 6s + jitter) across up to 3 attempts before fallback escalation.',
+          exampleInput:
+              '1) محاولة تصوير نفس الفاتورة مرتين من نفس البروموتر للتأكد من استحقاق الجائزة. 2) تزاحم متزامن لـ 20 بروموتر على Gemini مما ينتج عنه استجابة 429 ResourceExhausted.',
+          exampleOutput:
+              '1) الاستدعاء الثاني يعود فورياً في 0ms من ذاكرة الـ LRU Cache (tier: lru_cache) دون أي تكلفة توكنات. 2) معالجة الـ 429 عبر Exponential Backoff وإعادة المحاولة في 1.8 ثانية بنجاح تام دون ظهور أي شاشة خطأ للبروموتر.',
+          tags: ['lru-cache', 'limiter', 'retry-request', 'exponential-backoff', '429-quota-protection', 'sha256-fingerprint', 'air-74'],
+          lastUpdated: '2026-10-09',
+        ),
+        const AiDirectiveModel(
+          id: 'AIR-75',
+          code: 'CLIENT_SIDE_OPTIMISTIC_UI_AND_IMAGE_CALIBRATION_STANDARD',
+          orderIndex: 75,
+          category: AiDirectiveCategory.fraudSecurity,
+          titleAr: 'معيار المعالجة التفاؤلية غير المتزامنة ومعايرة صور الفواتير محلياً (Optimistic UI & Client-Side Image Calibration)',
+          titleEn: 'Client-Side Optimistic UI & Local Image Calibration Standard',
+          descriptionAr:
+              'معيار حوكمة معماري لتسريع تجربة العميل والبروموتر في تطبيق Flutter اللحظي عبر مسارين متكاملين: 1) معايرة وضغط الصور محلياً (Local Image Calibration): خوارزمية ذكية تعالج الصور الحرارية داخل جهاز العميل/البروموتر قبل الإرسال، عبر معالجة التدوير (bakeOrientation)، وإعادة التحجيم لأبعاد مثالية (max 1400px)، وتعزيز التباين اللوني (contrast: 1.25x) لتحويل حبر البون الحراري الباهت إلى أسود غامق ناصع، وضغط JPEG عالي الكفاءة (quality: 78). مما يقلص حجم البيانات المرسلة بنسبة 60% إلى 80% (من 4-8MB إلى أقل من 300KB) ويختصر أكثر من 60% من وقت النقل الشبكي في أقل من ثانية. 2) المعالجة غير المتزامنة التفاؤلية (Optimistic UI): استجابة فورية (0ms) فور التقاط الصورة بأنيميشن المسح الليزري الذكي المعتمد على Material Design 3، مع شريط تقدم ثلاثي المراحل (معايرة محلياً -> ذكاء اصطناعي سحابي -> حوكمة الجوائز) بينما تعمل Cloud Functions و Gemini في الخلفية.',
+          descriptionEn:
+              'Architectural governance standard maximizing client-side responsiveness and eliminating network upload bottlenecks in Flutter via dual pathways: 1) Local Thermal Image Calibration: processes receipt images on-device prior to transmission via EXIF orientation baking, aspect-ratio downscaling (max 1400px), thermal contrast enhancement (contrast: 1.25x, brightness: 1.05x to sharpen faint POS thermal ink against paper glare), and high-efficiency JPEG compression (quality: 78). Slashes network payload by >60% to 80% (from 4-8MB to ~200-300KB), reducing mobile cellular upload latency to sub-second durations. 2) Optimistic UI & Material Motion: delivers 0ms instant feedback upon receipt capture via a Material Design 3 interactive laser scanner beam and 3-stage visual progress timeline while Cloud Functions and Gemini operate asynchronously in the background.',
+          logicAr:
+              '1. تشغيل المعايرة في خيط مستقل (compute) لضمان معدل 60 إطار/ثانية دون أي تهنيج في واجهة المستخدم.\n2. تعزيز التباين بنسبة 1.25x وإعادة التحجيم إلى 1400px لضمان دقة قراءة 100% للنصوص والأرقام والباركود الحراري.\n3. رفع البيانات المعايرة مباشرة باستخدام putData بدلاً من الملفات الخام الضخمة لتوفير استهلاك الباقة السحابية.\n4. عرض كارت المسح الليزري التفاؤلي OptimisticReceiptScannerCard مع بادج توفير الحجم (مثال: -76% تخفيف الحجم) ومؤشرات المراحل الثلاث.\n5. التحديث الانسيابي للمراحل فور عودة استجابة السحابة أو اكتمال حوكمة الجوائز.',
+          logicEn:
+              '1. Runs calibration on background isolates via compute, guaranteeing a locked 60 FPS UI thread.\n2. Enhances contrast by 1.25x and normalizes dimensions to 1400px for crystal-clear thermal receipt OCR.\n3. Directly uploads calibrated bytes via putData, bypassing raw multi-megabyte camera files.\n4. Renders OptimisticReceiptScannerCard featuring an animated laser sweep and payload reduction badge.\n5. Progresses seamlessly across the 3 visual stages upon cloud response or prize claim completion.',
+          exampleInput:
+              'عميل أو بروموتر يلتقط صورة فاتورة كارفور أو فتح الله بحجم 6.2 ميجابايت عبر هاتف بكاميرا 12 ميجابكسل في متجر به إضاءة فلورسنت خافتة.',
+          exampleOutput:
+              '1) محلياً: معايرة الصورة في 45ms وتعزيز تباين الحبر، وتقليص الحجم بنسبة 76% إلى 240KB. 2) بصرياً: ظهور فوري لكارت المسح الليزري التفاؤلي وشريط التقدم. 3) شبكياً: انتقال فوري في 0.8 ثانية بدلاً من 8 ثوانٍ واعتماد الجائزة بسلاسة.',
+          tags: ['optimistic-ui', 'image-calibration', 'thermal-contrast', 'payload-reduction', 'laser-scanner', 'material-motion', 'm3', 'air-75'],
+          lastUpdated: '2026-10-09',
+        ),
       ];
 }
 

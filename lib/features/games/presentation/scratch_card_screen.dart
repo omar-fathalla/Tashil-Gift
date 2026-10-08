@@ -104,7 +104,7 @@ class _ScratchCardScreenState extends ConsumerState<ScratchCardScreen> {
         // Decrement the prize from the campaign's allocated inventory
         if (widget.eventId.isNotEmpty) {
           final giftsService = ref.read(companyGiftsServiceProvider);
-          await giftsService.decrementCampaignPrize(widget.eventId, _prize);
+          await giftsService.decrementCampaignPrize(widget.eventId, _prize, gameType: 'scratch');
         }
       }
 

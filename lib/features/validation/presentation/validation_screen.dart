@@ -32,6 +32,8 @@ import '../../../core/widgets/m3_adaptive_scaffold.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/widgets/m3_action_menu.dart';
+import '../../../core/utils/receipt_image_calibrator.dart';
+import '../../../core/widgets/optimistic_receipt_scanner_card.dart';
 
 class ValidationScreen extends ConsumerStatefulWidget {
   const ValidationScreen({super.key});
@@ -44,6 +46,10 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
   final List<XFile> _receiptImages = [];
   int _selectedPreviewIndex = 0;
   bool _isAiLoading = false;
+  int _aiPhase = 0;
+  String _aiPhaseText = '';
+  CalibratedImageResult? _latestCalibration;
+  Uint8List? _previewImageBytes;
   EventModel? _activeEvent;
   List<EventModel> _activeEvents = [];
 
@@ -233,7 +239,11 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       return;
     }
     
-    setState(() => _isAiLoading = true);
+    setState(() {
+      _isAiLoading = true;
+      _aiPhase = 0;
+      _aiPhaseText = '1/3 جاري معايرة الصورة وضبط التباين محلياً...';
+    });
     
     try {
       final firestore = ref.read(firestoreProvider);
@@ -269,18 +279,40 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       final productsService = ref.read(companyProductsServiceProvider);
       
       final primaryImage = _receiptImages.first;
-      final bytes = await primaryImage.readAsBytes();
-      final mimeType = primaryImage.mimeType ?? 'image/jpeg'; 
+      final rawPrimaryBytes = await primaryImage.readAsBytes();
 
+      if (mounted) {
+        setState(() {
+          _previewImageBytes = rawPrimaryBytes;
+        });
+      }
+
+      // Step 1: Calibrate primary image & thermal contrast
+      final primaryCalib = await ReceiptImageCalibrator.calibrateReceiptBytes(rawPrimaryBytes);
+      final bytes = primaryCalib.bytes;
+      final mimeType = primaryCalib.mimeType;
+
+      // Step 2: Calibrate additional parts if present
       final List<Uint8List> additionalBytesList = [];
       final List<String> additionalMimesList = [];
       for (int i = 1; i < _receiptImages.length; i++) {
-        additionalBytesList.add(await _receiptImages[i].readAsBytes());
-        additionalMimesList.add(_receiptImages[i].mimeType ?? 'image/jpeg');
+        final addRaw = await _receiptImages[i].readAsBytes();
+        final addCalib = await ReceiptImageCalibrator.calibrateReceiptBytes(addRaw);
+        additionalBytesList.add(addCalib.bytes);
+        additionalMimesList.add(addCalib.mimeType);
       }
 
       final allBytesList = [bytes, ...additionalBytesList];
       final allImagesList = List<XFile>.from(_receiptImages);
+
+      if (mounted) {
+        setState(() {
+          _latestCalibration = primaryCalib;
+          _previewImageBytes = primaryCalib.bytes;
+          _aiPhase = 1;
+          _aiPhaseText = '2/3 جاري استخراج البيانات عبر الذكاء الاصطناعي...';
+        });
+      }
 
       // Fetch company catalog products & barcodes
       // Fetch company product barcodes catalog and branch signatures concurrently in parallel
@@ -339,8 +371,14 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         multiplierBasis: activeEvent.multiplierBasis,
         maxChancesPerReceipt: activeEvent.maxChancesPerReceipt,
         promotionalRules: activeEvent.promotionalRules,
-        allowComplementaryReceipts: activeEvent.allowComplementaryReceipts,
       );
+
+      if (mounted) {
+        setState(() {
+          _aiPhase = 2;
+          _aiPhaseText = '3/3 جاري مطابقة شروط العروض واحتساب الجوائز...';
+        });
+      }
 
       final previewImgUrl = 'data:$mimeType;base64,${base64Encode(bytes)}';
       final List<String> previewUrls = allBytesList
@@ -1010,7 +1048,10 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       _showPopupMessage('تنبيه النظام', AppErrorHandler.getFriendlyMessage(e, defaultMessage: 'حدث خطأ أثناء معالجة الفاتورة'), isError: true);
     } finally {
       if (mounted) {
-        setState(() => _isAiLoading = false);
+        setState(() {
+          _isAiLoading = false;
+          _aiPhase = 0;
+        });
       }
     }
   }
@@ -1538,6 +1579,16 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
                                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                                 ),
                               ),
+                            ),
+                          ],
+
+                          if (_isAiLoading) ...[
+                            const SizedBox(height: 18),
+                            OptimisticReceiptScannerCard(
+                              imageBytes: _previewImageBytes,
+                              activePhase: _aiPhase,
+                              statusText: _aiPhaseText,
+                              calibrationResult: _latestCalibration,
                             ),
                           ],
 

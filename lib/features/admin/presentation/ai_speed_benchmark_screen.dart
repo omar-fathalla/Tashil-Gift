@@ -19,12 +19,16 @@ enum BenchmarkMode {
   cameraPhoto,
   galleryFile,
   stressTest,
+  deepAuditTest,
 }
 
 class BenchmarkRecord {
   final int runNumber;
   final double durationSeconds;
   final int durationMs;
+  final int aiDurationMs;
+  final int dartDurationMs;
+  final String pipelineTier;
   final int imageBytesSize;
   final String kpiRating;
   final String modelName;
@@ -39,6 +43,9 @@ class BenchmarkRecord {
     required this.runNumber,
     required this.durationSeconds,
     required this.durationMs,
+    this.aiDurationMs = 0,
+    this.dartDurationMs = 0,
+    this.pipelineTier = 'fast_tier',
     required this.imageBytesSize,
     required this.kpiRating,
     required this.modelName,
@@ -206,7 +213,9 @@ class _AiSpeedBenchmarkScreenState extends ConsumerState<AiSpeedBenchmarkScreen>
   }
 
   Future<void> _executeBenchmark() async {
-    if (_selectedMode == BenchmarkMode.instantSample || _selectedMode == BenchmarkMode.stressTest) {
+    if (_selectedMode == BenchmarkMode.instantSample ||
+        _selectedMode == BenchmarkMode.stressTest ||
+        _selectedMode == BenchmarkMode.deepAuditTest) {
       final sampleBytes = await _generateSampleReceiptImage();
       setState(() {
         _imageBytes = sampleBytes;
@@ -254,9 +263,12 @@ class _AiSpeedBenchmarkScreenState extends ConsumerState<AiSpeedBenchmarkScreen>
               runNumber: _testCounter,
               durationSeconds: result.durationSeconds,
               durationMs: result.durationMs,
+              aiDurationMs: result.aiDurationMs,
+              dartDurationMs: result.dartDurationMs,
+              pipelineTier: result.pipelineTierUsed,
               imageBytesSize: _lastImageSize,
               kpiRating: result.kpiRating,
-              modelName: aiService.modelName,
+              modelName: aiService.fastTierModelName,
               isValid: result.isValid,
               receiptNumber: result.receiptNumber,
               targetTotal: result.targetCompanyTotal,
@@ -270,8 +282,11 @@ class _AiSpeedBenchmarkScreenState extends ConsumerState<AiSpeedBenchmarkScreen>
           }
         }
       } else {
+        final bool isDeepAudit = _selectedMode == BenchmarkMode.deepAuditTest;
         setState(() {
-          _currentPhaseText = '2/3 استدعاء محرك Gemini 2.5 Flash المتعدد الوسائط...';
+          _currentPhaseText = isDeepAudit
+              ? '2/3 استدعاء مسار الاستدلال والتدقيق العميق (Deep Tier)...'
+              : '2/3 استدعاء مسار Gemini 3.7 Flash الفائق السرعة (Fast Tier)...';
         });
 
         final result = await aiService.analyzeReceiptImage(
@@ -280,10 +295,11 @@ class _AiSpeedBenchmarkScreenState extends ConsumerState<AiSpeedBenchmarkScreen>
           targetCompany: 'المراعي',
           minimumSpend: 50.0,
           retailChainName: 'أسواق فتح الله',
+          forceDeepAudit: isDeepAudit,
         );
 
         setState(() {
-          _currentPhaseText = '3/3 تدقيق وتنسيق البيانات المستخرجة...';
+          _currentPhaseText = '3/3 تدقيق وتنسيق البيانات المستخرجة محلياً...';
         });
 
         _testCounter++;
@@ -291,9 +307,12 @@ class _AiSpeedBenchmarkScreenState extends ConsumerState<AiSpeedBenchmarkScreen>
           runNumber: _testCounter,
           durationSeconds: result.durationSeconds,
           durationMs: result.durationMs,
+          aiDurationMs: result.aiDurationMs,
+          dartDurationMs: result.dartDurationMs,
+          pipelineTier: result.pipelineTierUsed,
           imageBytesSize: _lastImageSize,
           kpiRating: result.kpiRating,
-          modelName: aiService.modelName,
+          modelName: isDeepAudit ? aiService.deepAuditModelName : aiService.fastTierModelName,
           isValid: result.isValid,
           receiptNumber: result.receiptNumber,
           targetTotal: result.targetCompanyTotal,
@@ -591,6 +610,72 @@ class _AiSpeedBenchmarkScreenState extends ConsumerState<AiSpeedBenchmarkScreen>
                           ],
                         ),
                       ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 6,
+                        alignment: WrapAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: _lastResult!.pipelineTierUsed == 'fast_tier'
+                                  ? Colors.amber.withValues(alpha: 0.15)
+                                  : Colors.purple.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: _lastResult!.pipelineTierUsed == 'fast_tier'
+                                    ? Colors.amber.shade700
+                                    : Colors.purple.shade400,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  _lastResult!.pipelineTierUsed == 'fast_tier'
+                                      ? Icons.electric_bolt_rounded
+                                      : Icons.psychology_rounded,
+                                  size: 16,
+                                  color: _lastResult!.pipelineTierUsed == 'fast_tier'
+                                      ? Colors.amber.shade800
+                                      : Colors.purple.shade700,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  _lastResult!.pipelineTierUsed == 'fast_tier'
+                                      ? (isAr ? 'المسار السريع الفوري (Fast Tier)' : 'Fast Flash Tier')
+                                      : (isAr ? 'مسار الاستدلال والتدقيق العميق (Deep Tier)' : 'Deep Audit Tier'),
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: _lastResult!.pipelineTierUsed == 'fast_tier'
+                                        ? Colors.amber.shade900
+                                        : Colors.purple.shade900,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (_lastResult!.aiDurationMs > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: colorScheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: colorScheme.outlineVariant),
+                              ),
+                              child: Text(
+                                '🤖 AI: ${_lastResult!.aiDurationMs}ms | 🎯 Dart: ${_lastResult!.dartDurationMs}ms',
+                                style: GoogleFonts.spaceMono(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ],
 
                     const SizedBox(height: 22),
@@ -688,6 +773,12 @@ class _AiSpeedBenchmarkScreenState extends ConsumerState<AiSpeedBenchmarkScreen>
                           label: isAr ? 'اختبار تكراري x3' : 'Stress Test',
                           icon: Icons.repeat_rounded,
                           tooltip: 'تشغيل 3 اختبارات متتالية لاحتساب متوسط زمن الاستجابة الإحصائي',
+                        ),
+                        M3ButtonSegment(
+                          value: BenchmarkMode.deepAuditTest,
+                          label: isAr ? 'تدقيق عميق' : 'Deep Audit',
+                          icon: Icons.psychology_rounded,
+                          tooltip: 'فحص استثنائي باستخدام مسار الاستدلال والتدقيق الجنائي العميق',
                         ),
                       ],
                     ),
@@ -923,7 +1014,9 @@ class _AiSpeedBenchmarkScreenState extends ConsumerState<AiSpeedBenchmarkScreen>
                           columnSpacing: 22,
                           columns: [
                             DataColumn(label: Text(isAr ? 'رقم التجربة' : 'Run #', style: const TextStyle(fontWeight: FontWeight.bold))),
+                            DataColumn(label: Text(isAr ? 'المسار' : 'Tier', style: const TextStyle(fontWeight: FontWeight.bold))),
                             DataColumn(label: Text(isAr ? 'زمن الاستجابة' : 'Latency', style: const TextStyle(fontWeight: FontWeight.bold))),
+                            DataColumn(label: Text(isAr ? 'تفصيل الزمن' : 'Breakdown', style: const TextStyle(fontWeight: FontWeight.bold))),
                             DataColumn(label: Text(isAr ? 'تقييم KPI' : 'KPI Rating', style: const TextStyle(fontWeight: FontWeight.bold))),
                             DataColumn(label: Text(isAr ? 'حجم الصورة' : 'Size', style: const TextStyle(fontWeight: FontWeight.bold))),
                             DataColumn(label: Text(isAr ? 'رقم الفاتورة' : 'Receipt #', style: const TextStyle(fontWeight: FontWeight.bold))),
@@ -935,6 +1028,27 @@ class _AiSpeedBenchmarkScreenState extends ConsumerState<AiSpeedBenchmarkScreen>
                               cells: [
                                 DataCell(Text('#${h.runNumber}')),
                                 DataCell(
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: h.pipelineTier == 'Deep Tier'
+                                          ? colorScheme.tertiaryContainer
+                                          : colorScheme.secondaryContainer,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      h.pipelineTier,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: h.pipelineTier == 'Deep Tier'
+                                            ? colorScheme.onTertiaryContainer
+                                            : colorScheme.onSecondaryContainer,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
                                   Text(
                                     '${h.durationSeconds.toStringAsFixed(2)}s',
                                     style: TextStyle(
@@ -943,6 +1057,12 @@ class _AiSpeedBenchmarkScreenState extends ConsumerState<AiSpeedBenchmarkScreen>
                                           ? colorScheme.primary
                                           : colorScheme.onSurface,
                                     ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    'AI: ${h.aiDurationMs}ms | Dart: ${h.dartDurationMs}ms',
+                                    style: const TextStyle(fontSize: 11),
                                   ),
                                 ),
                                 DataCell(Text(h.kpiRating, style: const TextStyle(fontSize: 12))),

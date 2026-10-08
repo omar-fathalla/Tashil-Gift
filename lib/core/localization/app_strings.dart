@@ -573,7 +573,7 @@ class AppStrings {
   String get unitPriceCol => _t(ar: 'السعر', en: 'Price', hi: 'मूल्य');
   String get totalPriceCol => _t(ar: 'الإجمالي', en: 'Total', hi: 'कुल');
   String get itemCategoryCol => _t(ar: 'حالة الصنف', en: 'Item Status', hi: 'उत्पाद स्थिति');
-  String get includedInPromo => _t(ar: 'مشمول بالعرض 🎯', en: 'Promo Target 🎯', hi: 'प्रचार में शामिल 🎯');
+  String get includedInPromo => _t(ar: 'مشمول بالعرض', en: 'Promo Target', hi: 'प्रचार में शामिल');
   String get generalItem => _t(ar: 'صنف عام 🛒', en: 'General Item 🛒', hi: 'सामान्य उत्पाद 🛒');
   String get noBarcodesAvailable => _t(ar: 'غير مسجل بالكتالوج', en: 'Not In Catalog', hi: 'कैटलॉग में नहीं');
   String get receiptDetailsTitle => _t(ar: 'تفاصيل الفاتورة والأصناف', en: 'Receipt Details & Items', hi: 'रसीद विवरण और उत्पाद');
