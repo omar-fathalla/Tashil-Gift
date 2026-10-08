@@ -284,3 +284,198 @@ class M3MorphingActionButton extends StatelessWidget {
     return buttonWidget;
   }
 }
+
+/// Action item descriptor for [M3ConnectedActionGroup]
+class M3ConnectedActionItem {
+  final String label;
+  final IconData? icon;
+  final Widget? iconWidget;
+  final VoidCallback? onPressed;
+  final bool isPrimary;
+  final bool isDestructive;
+  final String? tooltip;
+  final String? badgeText;
+
+  const M3ConnectedActionItem({
+    required this.label,
+    this.icon,
+    this.iconWidget,
+    required this.onPressed,
+    this.isPrimary = false,
+    this.isDestructive = false,
+    this.tooltip,
+    this.badgeText,
+  });
+}
+
+/// M3 Connected Action Button Group
+/// Connects multiple action buttons into a unified Material 3 segmented pill container
+/// with subtle dividers, ripple states, and theme color derivation.
+class M3ConnectedActionGroup extends StatelessWidget {
+  final List<M3ConnectedActionItem> actions;
+  final double height;
+  final double borderRadius;
+  final bool isExpanded;
+  final EdgeInsetsGeometry? padding;
+  final double? fontSize;
+  final double? iconSize;
+
+  const M3ConnectedActionGroup({
+    super.key,
+    required this.actions,
+    this.height = 40,
+    this.borderRadius = 14,
+    this.isExpanded = false,
+    this.padding,
+    this.fontSize,
+    this.iconSize,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final effectiveFontSize = fontSize ?? (height <= 32 ? 11.5 : 12.5);
+    final effectiveIconSize = iconSize ?? (height <= 32 ? 15.0 : 17.0);
+
+    Widget buildItem(int index) {
+      final item = actions[index];
+      final isFirst = index == 0;
+      final isLast = index == actions.length - 1;
+
+      BorderRadius itemBorderRadius;
+      if (Directionality.of(context) == TextDirection.rtl) {
+        itemBorderRadius = BorderRadius.horizontal(
+          right: isFirst ? Radius.circular(borderRadius - 2) : Radius.zero,
+          left: isLast ? Radius.circular(borderRadius - 2) : Radius.zero,
+        );
+      } else {
+        itemBorderRadius = BorderRadius.horizontal(
+          left: isFirst ? Radius.circular(borderRadius - 2) : Radius.zero,
+          right: isLast ? Radius.circular(borderRadius - 2) : Radius.zero,
+        );
+      }
+
+      Color bg = Colors.transparent;
+      Color fg = cs.onSurfaceVariant;
+      if (item.isDestructive) {
+        bg = cs.errorContainer.withValues(alpha: 0.3);
+        fg = cs.error;
+      } else if (item.isPrimary) {
+        bg = cs.primaryContainer;
+        fg = cs.onPrimaryContainer;
+      }
+
+      final content = Material(
+        color: bg,
+        borderRadius: itemBorderRadius,
+        child: InkWell(
+          onTap: item.onPressed,
+          borderRadius: itemBorderRadius,
+          child: Container(
+            height: double.infinity,
+            padding: padding ?? EdgeInsets.symmetric(horizontal: isExpanded ? 6 : (height <= 32 ? 8 : 12)),
+            alignment: Alignment.center,
+            child: Row(
+              mainAxisSize: isExpanded ? MainAxisSize.max : MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (item.iconWidget != null) ...[
+                  item.iconWidget!,
+                  const SizedBox(width: 6),
+                ] else if (item.icon != null) ...[
+                  Icon(
+                    item.icon!,
+                    size: effectiveIconSize,
+                    color: fg,
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                Flexible(
+                  child: Text(
+                    item.label,
+                    style: GoogleFonts.cairo(
+                      fontSize: effectiveFontSize,
+                      fontWeight: FontWeight.bold,
+                      color: fg,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ),
+                if (item.badgeText != null) ...[
+                  const SizedBox(width: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: cs.primary,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      item.badgeText!,
+                      style: GoogleFonts.cairo(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.bold,
+                        color: cs.onPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      );
+
+      Widget result = content;
+      if (item.tooltip != null) {
+        result = Tooltip(message: item.tooltip!, child: content);
+      }
+
+      if (isExpanded) {
+        return Expanded(child: result);
+      }
+      return result;
+    }
+
+    final children = <Widget>[];
+    for (int i = 0; i < actions.length; i++) {
+      if (i > 0) {
+        children.add(
+          VerticalDivider(
+            width: 1,
+            thickness: 1,
+            color: cs.outlineVariant.withValues(alpha: 0.6),
+            indent: 6,
+            endIndent: 6,
+          ),
+        );
+      }
+      children.add(buildItem(i));
+    }
+
+    return Container(
+      height: height,
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(borderRadius),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.8),
+          width: 1.2,
+        ),
+      ),
+      child: IntrinsicHeight(
+        child: isExpanded
+            ? Row(
+                mainAxisSize: MainAxisSize.max,
+                children: children,
+              )
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: children,
+              ),
+      ),
+    );
+  }
+}
+

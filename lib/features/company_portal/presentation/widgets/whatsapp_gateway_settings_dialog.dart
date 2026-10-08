@@ -6,6 +6,8 @@ import '../../domain/whatsapp_ai_auto_reply_service.dart';
 import '../../domain/whatsapp_gateway_config_model.dart';
 import '../../domain/whatsapp_gateway_service.dart';
 import 'whatsapp_screenshot_dialog.dart';
+import '../../../../core/widgets/m3_action_menu.dart';
+import '../../../../core/widgets/m3_button_groups.dart';
 
 /// Modal dialog for configuring WhatsApp Gateway API credentials and testing live connection
 class WhatsAppGatewaySettingsDialog extends StatefulWidget {
@@ -133,7 +135,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                 : (widget.isAr ? 'تعذر إعادة تشغيل الجلسة' : 'Failed to restart instance'),
             style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
           ),
-          backgroundColor: success ? const Color(0xFF198754) : Colors.red,
+          backgroundColor: success ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.error,
         ),
       );
       if (success) {
@@ -158,7 +160,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: Row(
               children: [
-                const Icon(Icons.smart_toy_rounded, color: Color(0xFF6750A4)),
+                Icon(Icons.smart_toy_rounded, color: cs.tertiary),
                 const SizedBox(width: 8),
                 Text(
                   widget.isAr ? 'محاكاة الرد الآلي الذكي (Gemini 3.7 Flash)' : 'AI Auto-Reply Simulator',
@@ -222,20 +224,20 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF198754).withValues(alpha: 0.1),
+                        color: cs.primaryContainer.withValues(alpha: 0.4),
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFF198754)),
+                        border: Border.all(color: cs.primary.withValues(alpha: 0.6)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
                             children: [
-                              const Icon(Icons.mark_chat_read_rounded, size: 16, color: Color(0xFF0F5132)),
+                              Icon(Icons.mark_chat_read_rounded, size: 16, color: cs.primary),
                               const SizedBox(width: 6),
                               Text(
                                 widget.isAr ? 'رد الذكاء الاصطناعي المُرسل للعميل:' : 'AI Generated WhatsApp Reply:',
-                                style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF0F5132)),
+                                style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSurface),
                               ),
                             ],
                           ),
@@ -278,7 +280,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
             widget.isAr ? 'تم حفظ وتفعيل إعدادات بوابة الواتساب بنجاح' : 'WhatsApp Gateway configured successfully',
             style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
           ),
-          backgroundColor: const Color(0xFF198754),
+          backgroundColor: Theme.of(context).colorScheme.primary,
         ),
       );
     }
@@ -288,7 +290,6 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final strings = widget.strings;
-    final isMobile = MediaQuery.of(context).size.width < 700;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -308,10 +309,10 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF25D366).withValues(alpha: 0.15),
+                      color: cs.primaryContainer,
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: const Icon(Icons.cloud_sync_rounded, size: 28, color: Color(0xFF198754)),
+                    child: Icon(Icons.cloud_sync_rounded, size: 28, color: cs.onPrimaryContainer),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -345,29 +346,52 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                 style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-              DropdownButtonFormField<WhatsAppGatewayProvider>(
-                initialValue: _selectedProvider,
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.hub_rounded, size: 20),
-                  filled: true,
-                  fillColor: cs.surfaceContainerLow,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+              M3ActionMenu(
+                anchorBuilder: (context, controller, child) => InkWell(
+                  onTap: () {
+                    if (controller.isOpen) {
+                      controller.close();
+                    } else {
+                      controller.open();
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.6)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.hub_rounded, size: 20, color: cs.primary),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _selectedProvider.displayName,
+                            style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold, color: cs.onSurface),
+                          ),
+                        ),
+                        Icon(Icons.unfold_more_rounded, size: 20, color: cs.onSurfaceVariant),
+                      ],
+                    ),
+                  ),
                 ),
-                items: WhatsAppGatewayProvider.values.map((p) {
-                  return DropdownMenuItem(
-                    value: p,
-                    child: Text(p.displayName, style: GoogleFonts.cairo(fontSize: 13)),
+                children: WhatsAppGatewayProvider.values.map((p) {
+                  return M3ActionMenu.item(
+                    context: context,
+                    label: p.displayName,
+                    icon: Icons.hub_rounded,
+                    isSelected: _selectedProvider == p,
+                    onPressed: () {
+                      setState(() {
+                        _selectedProvider = p;
+                        _testStatus = null;
+                      });
+                    },
                   );
                 }).toList(),
-                onChanged: (val) {
-                  if (val != null) {
-                    setState(() {
-                      _selectedProvider = val;
-                      _testStatus = null;
-                    });
-                  }
-                },
               ),
               const SizedBox(height: 16),
 
@@ -495,7 +519,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.shield_outlined, size: 18, color: Color(0xFF198754)),
+                            Icon(Icons.shield_rounded, size: 18, color: cs.primary),
                             const SizedBox(width: 8),
                             Text(
                               strings.delayBetweenMessagesLabel,
@@ -521,7 +545,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                       min: 1,
                       max: 10,
                       divisions: 9,
-                      activeColor: const Color(0xFF198754),
+                      activeColor: cs.primary,
                       onChanged: (val) => setState(() => _delaySeconds = val.round()),
                     ),
                     Text(
@@ -553,10 +577,10 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF198754).withValues(alpha: 0.12),
+                            color: cs.primaryContainer,
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(Icons.keyboard_outlined, color: Color(0xFF198754), size: 20),
+                          child: Icon(Icons.keyboard_rounded, color: cs.onPrimaryContainer, size: 20),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -578,7 +602,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                         ),
                         Switch(
                           value: _enableTypingSimulation,
-                          activeThumbColor: const Color(0xFF198754),
+                          activeThumbColor: cs.primary,
                           onChanged: (val) => setState(() => _enableTypingSimulation = val),
                         ),
                       ],
@@ -612,7 +636,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                         min: 1,
                         max: 5,
                         divisions: 4,
-                        activeColor: const Color(0xFF198754),
+                        activeColor: cs.primary,
                         onChanged: (val) => setState(() => _typingDurationSeconds = val.round()),
                       ),
                     ],
@@ -637,10 +661,10 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF6750A4).withValues(alpha: 0.12),
+                            color: cs.tertiaryContainer,
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(Icons.smart_toy_outlined, color: Color(0xFF6750A4), size: 20),
+                          child: Icon(Icons.smart_toy_rounded, color: cs.onTertiaryContainer, size: 20),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -657,12 +681,12 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF6750A4).withValues(alpha: 0.15),
+                                      color: cs.tertiaryContainer,
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: Text(
                                       'Gemini 3.7 Flash',
-                                      style: GoogleFonts.robotoMono(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF6750A4)),
+                                      style: GoogleFonts.robotoMono(fontSize: 9, fontWeight: FontWeight.bold, color: cs.onTertiaryContainer),
                                     ),
                                   ),
                                 ],
@@ -678,7 +702,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                         ),
                         Switch(
                           value: _enableAiAutoReply,
-                          activeThumbColor: const Color(0xFF6750A4),
+                          activeThumbColor: cs.tertiary,
                           onChanged: (val) => setState(() => _enableAiAutoReply = val),
                         ),
                       ],
@@ -791,11 +815,11 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: _testStatus!.isConnected
-                        ? const Color(0xFF198754).withValues(alpha: 0.12)
-                        : Colors.red.withValues(alpha: 0.1),
+                        ? cs.primaryContainer.withValues(alpha: 0.25)
+                        : cs.errorContainer.withValues(alpha: 0.25),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: _testStatus!.isConnected ? const Color(0xFF198754) : Colors.red,
+                      color: _testStatus!.isConnected ? cs.primary : cs.error,
                       width: 1.2,
                     ),
                   ),
@@ -806,7 +830,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                         children: [
                           Icon(
                             _testStatus!.isConnected ? Icons.check_circle_rounded : Icons.error_rounded,
-                            color: _testStatus!.isConnected ? const Color(0xFF198754) : Colors.red,
+                            color: _testStatus!.isConnected ? cs.primary : cs.error,
                             size: 24,
                           ),
                           const SizedBox(width: 10),
@@ -819,7 +843,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                                   style: GoogleFonts.cairo(
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,
-                                    color: _testStatus!.isConnected ? const Color(0xFF0F5132) : Colors.red.shade900,
+                                    color: _testStatus!.isConnected ? cs.primary : cs.error,
                                   ),
                                 ),
                                 if (_testStatus!.statusDetails != null)
@@ -830,7 +854,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                                 if (_testStatus!.phoneNumber != null)
                                   Text(
                                     '${widget.isAr ? "الرقم المتصل: " : "Connected Phone: "}${_testStatus!.phoneNumber}',
-                                    style: GoogleFonts.robotoMono(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF0F5132)),
+                                    style: GoogleFonts.robotoMono(fontSize: 12, fontWeight: FontWeight.bold, color: cs.primary),
                                   ),
                               ],
                             ),
@@ -894,7 +918,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                                   children: [
                                     Text(
                                       '${_liveStats!.sentCount}',
-                                      style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF198754)),
+                                      style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold, color: cs.primary),
                                     ),
                                     Text(
                                       widget.isAr ? 'المرسلة' : 'Sent',
@@ -917,7 +941,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                                   children: [
                                     Text(
                                       '${_liveStats!.queueCount}',
-                                      style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue.shade700),
+                                      style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold, color: cs.secondary),
                                     ),
                                     Text(
                                       widget.isAr ? 'في الانتظار' : 'In Queue',
@@ -940,7 +964,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                                   children: [
                                     Text(
                                       '${_liveStats!.unsentCount + _liveStats!.invalidCount}',
-                                      style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.orange.shade800),
+                                      style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold, color: cs.error),
                                     ),
                                     Text(
                                       widget.isAr ? 'لم تُسلّم' : 'Unsent',
@@ -958,66 +982,35 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                 ),
               ],
 
-              // Buttons Bar
-              if (isMobile)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                      icon: _isTesting
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.wifi_tethering_rounded, size: 20),
-                      label: Text(strings.testGatewayConnection, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
-                      onPressed: _isTesting ? null : _testConnection,
-                    ),
-                    const SizedBox(height: 10),
-                    FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF198754),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                      icon: const Icon(Icons.save_rounded, size: 20),
-                      label: Text(strings.saveGatewaySettings, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
-                      onPressed: _saveAndClose,
-                    ),
-                  ],
-                )
-              else
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        ),
-                        icon: _isTesting
-                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.wifi_tethering_rounded, size: 20),
-                        label: Text(strings.testGatewayConnection, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
-                        onPressed: _isTesting ? null : _testConnection,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF198754),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        ),
-                        icon: const Icon(Icons.save_rounded, size: 20),
-                        label: Text(strings.saveGatewaySettings, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
-                        onPressed: _saveAndClose,
-                      ),
-                    ),
-                  ],
-                ),
+              // M3 Connected Action Buttons Bar (اختبار الاتصال & حفظ الإعدادات)
+              M3ConnectedActionGroup(
+                height: 48,
+                borderRadius: 14,
+                isExpanded: true,
+                actions: [
+                  M3ConnectedActionItem(
+                    label: strings.testGatewayConnection,
+                    icon: _isTesting ? null : Icons.wifi_tethering_rounded,
+                    iconWidget: _isTesting
+                        ? SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: cs.primary,
+                            ),
+                          )
+                        : null,
+                    onPressed: _isTesting ? null : _testConnection,
+                  ),
+                  M3ConnectedActionItem(
+                    label: strings.saveGatewaySettings,
+                    icon: Icons.check_circle_rounded,
+                    isPrimary: true,
+                    onPressed: _saveAndClose,
+                  ),
+                ],
+              ),
             ],
           ),
         ),

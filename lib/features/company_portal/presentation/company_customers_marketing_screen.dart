@@ -1957,16 +1957,46 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                 ),
                                 if (!isMobile) ...[
                                   const SizedBox(width: 12),
-                                  FilledButton.tonalIcon(
-                                    style: FilledButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                    ),
-                                    icon: const Icon(Icons.screenshot_monitor_rounded, size: 18),
-                                    label: Text(
-                                      isAr ? 'شاشة حية' : 'Live Screen',
-                                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
-                                    ),
+                                  M3ConnectedActionGroup(
+                                    height: 40,
+                                    borderRadius: 12,
+                                    actions: [
+                                      M3ConnectedActionItem(
+                                        label: isAr ? 'الشاشة' : 'Screen',
+                                        icon: Icons.screenshot_monitor_rounded,
+                                        isPrimary: true,
+                                        onPressed: () {
+                                          showDialog(
+                                            context: context,
+                                            builder: (ctx) => WhatsAppScreenshotDialog(
+                                              config: _gatewayConfig,
+                                              strings: strings,
+                                              isAr: isAr,
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                      M3ConnectedActionItem(
+                                        label: isAr ? 'إعدادات' : 'Settings',
+                                        icon: Icons.tune_rounded,
+                                        onPressed: () => _openGatewaySettings(strings, isAr),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ],
+                            ),
+                            if (isMobile) ...[
+                              const SizedBox(height: 10),
+                              M3ConnectedActionGroup(
+                                height: 38,
+                                borderRadius: 10,
+                                isExpanded: true,
+                                actions: [
+                                  M3ConnectedActionItem(
+                                    label: isAr ? 'الشاشة' : 'Screen',
+                                    icon: Icons.screenshot_monitor_rounded,
+                                    isPrimary: true,
                                     onPressed: () {
                                       showDialog(
                                         context: context,
@@ -1978,63 +2008,10 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                       );
                                     },
                                   ),
-                                  const SizedBox(width: 8),
-                                  OutlinedButton.icon(
-                                    style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                    ),
-                                    icon: const Icon(Icons.tune_rounded, size: 18),
-                                    label: Text(
-                                      isAr ? 'إعدادات البوابة' : 'Gateway Settings',
-                                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
-                                    ),
+                                  M3ConnectedActionItem(
+                                    label: isAr ? 'إعدادات' : 'Settings',
+                                    icon: Icons.tune_rounded,
                                     onPressed: () => _openGatewaySettings(strings, isAr),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            if (isMobile) ...[
-                              const SizedBox(height: 10),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: FilledButton.tonalIcon(
-                                      style: FilledButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                      ),
-                                      icon: const Icon(Icons.screenshot_monitor_rounded, size: 16),
-                                      label: Text(
-                                        isAr ? 'شاشة حية' : 'Screen',
-                                        style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
-                                      ),
-                                      onPressed: () {
-                                        showDialog(
-                                          context: context,
-                                          builder: (ctx) => WhatsAppScreenshotDialog(
-                                            config: _gatewayConfig,
-                                            strings: strings,
-                                            isAr: isAr,
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: OutlinedButton.icon(
-                                      style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                      ),
-                                      icon: const Icon(Icons.tune_rounded, size: 16),
-                                      label: Text(
-                                        isAr ? 'إعدادات البوابة' : 'Settings',
-                                        style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
-                                      ),
-                                      onPressed: () => _openGatewaySettings(strings, isAr),
-                                    ),
                                   ),
                                 ],
                               ),

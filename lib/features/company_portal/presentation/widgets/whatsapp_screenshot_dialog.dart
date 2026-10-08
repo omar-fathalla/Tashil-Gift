@@ -197,7 +197,7 @@ class _WhatsAppScreenshotDialogState extends State<WhatsAppScreenshotDialog> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.zoom_in_rounded, size: 16, color: Color(0xFF198754)),
+                    Icon(Icons.zoom_in_rounded, size: 16, color: cs.primary),
                     const SizedBox(width: 6),
                     Text(
                       widget.isAr

@@ -3166,19 +3166,19 @@ class AppStrings {
     hi: 'व्हाट्सएप ग्राहक गेटवे',
   );
   String get whatsappGatewaySubtitle => _t(
-    ar: 'إعدادات سيرفر الواتساب الخاص (WAHA) أو البوابة السحابية للإرسال الآلي للرسائل والعروض الترويجية بدون اشتراكات',
+    ar: 'إعدادات سيرفر الواتساب للإرسال التلقائي للرسائل والعروض الترويجية',
     en: 'Configure Private WhatsApp Server (WAHA) or Custom Gateway for automated promotions with zero fees',
     hi: 'स्वचालित संदेशों के लिए अल्ट्रा-मैसेज या वासापी गेटवे सेटिंग्स',
   );
-  String get gatewayProviderLabel => _t(ar: 'مزود خدمة البوابة', en: 'Gateway Provider', hi: 'गेटवे प्रदाता');
+  String get gatewayProviderLabel => _t(ar: 'مزود الخدمة', en: 'Service Provider', hi: 'सेवा प्रदाता');
   String get instanceIdLabel => _t(ar: 'معرف النسخة (Instance ID)', en: 'Instance ID', hi: 'इंस्टेंस आईडी');
   String get apiTokenLabel => _t(ar: 'رمز المصادقة (API Token)', en: 'API Token', hi: 'एपीआई टोकन');
   String get customEndpointLabel => _t(ar: 'رابط البوابة المخصصة (Webhook/API Endpoint)', en: 'Custom API Endpoint', hi: 'कस्टम एपीआई यूआरएल');
   String get delayBetweenMessagesLabel => _t(ar: 'الفاصل الزمني بين كل رسالة (ثواني)', en: 'Delay Between Messages (seconds)', hi: 'संदेशों के बीच का समय (सेकंड)');
   String get gatewayConnectedBadge => _t(ar: 'متصل وجاهز', en: 'Connected & Ready', hi: 'सक्रिय और तैयार');
   String get gatewayDisconnectedBadge => _t(ar: 'غير متصل', en: 'Not Configured', hi: 'कॉन्फ़िगर नहीं किया गया');
-  String get testGatewayConnection => _t(ar: 'اختبار الاتصال بالبوابة', en: 'Test Gateway Connection', hi: 'गेटवे कनेक्शन का परीक्षण करें');
-  String get saveGatewaySettings => _t(ar: 'حفظ إعدادات البوابة', en: 'Save Gateway Settings', hi: 'गेटवे सेटिंग्स سहेजें');
+  String get testGatewayConnection => _t(ar: 'اختبار الاتصال', en: 'Test Connection', hi: 'कनेक्शन का परीक्षण करें');
+  String get saveGatewaySettings => _t(ar: 'حفظ الإعدادات', en: 'Save Settings', hi: 'सेटिंग्स सहेजें');
   String get autoGatewayDispatchMode => _t(ar: 'إرسال آلي عبر سيرفر الواتساب (WAHA)', en: 'Auto Dispatch via WhatsApp Server (WAHA)', hi: 'गेटवे के माध्यम से स्वचालित प्रेषण');
   String get manualDispatchMode => _t(ar: 'إرسال يدوي فردي (WhatsApp Web / App)', en: 'Manual One-by-One Dispatch (WhatsApp Web / App)', hi: 'मैन्युअल एक-एक करके प्रेषण');
   String get autoAdvanceToggle => _t(ar: 'الانتقال التلقائي للعميل التالي بعد الإرسال', en: 'Auto-advance to next customer after dispatch', hi: 'भेजने के बाद स्वचालित रूप से अगले ग्राहक पर जाएं');
