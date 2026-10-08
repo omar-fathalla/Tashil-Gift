@@ -15,6 +15,8 @@ import '../../../core/utils/arabic_numbers_utils.dart';
 import '../../../core/utils/file_download_helper.dart';
 import '../../../core/utils/slug_utils.dart';
 import '../../../core/widgets/switch_point_branding.dart';
+import '../../../core/widgets/m3_action_menu.dart';
+import '../../../core/widgets/m3_button_groups.dart';
 import '../../admin/domain/event_model.dart';
 import '../domain/whatsapp_gateway_config_model.dart';
 import '../domain/whatsapp_gateway_service.dart';
@@ -96,6 +98,9 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
   // Verified active WhatsApp numbers cache across sessions
   final Map<String, bool> _verifiedWhatsAppMap = {};
 
+  // Customer purchase transactions indexed by clean phone number (Rule 4 & Transaction Sheet)
+  final Map<String, List<Map<String, dynamic>>> _customerTransactionsMap = {};
+
   // Memoization cache key and cached contact list (Rule 9: O(1) performance)
   String _lastCacheKey = '';
   List<CustomerCampaignContact> _cachedContacts = [];
@@ -163,6 +168,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
         strings: strings,
         isAr: isAr,
         onImportSuccess: (savedCount) {
+          final cs = Theme.of(context).colorScheme;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -171,7 +177,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                     : '$savedCount customers successfully saved to database!',
                 style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
               ),
-              backgroundColor: const Color(0xFF198754),
+              backgroundColor: cs.primary,
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
@@ -229,6 +235,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
       return;
     }
 
+    _customerTransactionsMap.clear();
     final Map<String, CustomerCampaignContact> contactsMap = {};
     int totalPrizes = 0;
     double totalSpend = 0;
@@ -264,6 +271,9 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
       if (_selectedBranch != null && _selectedBranch!.isNotEmpty && _selectedBranch != 'all') {
         if (branch != _selectedBranch) continue;
       }
+
+      // Record transaction into map for fast customer transaction view (Rule 4 & Transaction Sheet)
+      _customerTransactionsMap.putIfAbsent(cleanPhone, () => []).add(data);
 
       // Spend and prizes
       final spend = (data['target_company_total'] ?? data['total_value'] ?? 0);
@@ -459,11 +469,12 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
     required AppStrings strings,
     required bool isAr,
   }) {
+    final cs = Theme.of(context).colorScheme;
     if (targetContacts.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(strings.noCustomersFound),
-          backgroundColor: Colors.orange.shade800,
+          backgroundColor: cs.tertiary,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -478,7 +489,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(strings.pollQuestionRequired),
-            backgroundColor: Colors.red.shade700,
+            backgroundColor: cs.error,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -488,7 +499,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(strings.pollRequiresTwoOptions),
-            backgroundColor: Colors.red.shade700,
+            backgroundColor: cs.error,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -528,11 +539,12 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
     required AppStrings strings,
     required bool isAr,
   }) async {
+    final cs = Theme.of(context).colorScheme;
     if (contactsToCheck.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(strings.noCustomersFound),
-          backgroundColor: Colors.orange.shade800,
+          backgroundColor: cs.tertiary,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -601,10 +613,10 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF198754).withValues(alpha: 0.15),
+                      color: cs.primary.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.phonelink_ring_rounded, color: Color(0xFF198754), size: 24),
+                    child: Icon(Icons.phonelink_ring_rounded, color: cs.primary, size: 24),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -631,7 +643,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                     LinearProgressIndicator(
                       value: isFinished && !isCancelled ? 1.0 : progress,
                       backgroundColor: cs.surfaceContainerHighest,
-                      color: const Color(0xFF198754),
+                      color: cs.primary,
                       borderRadius: BorderRadius.circular(8),
                       minHeight: 8,
                     ),
@@ -645,7 +657,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                         ),
                         Text(
                           '${(progress * 100).toInt()}%',
-                          style: GoogleFonts.robotoMono(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF198754)),
+                          style: GoogleFonts.robotoMono(fontSize: 12, fontWeight: FontWeight.bold, color: cs.primary),
                         ),
                       ],
                     ),
@@ -656,26 +668,26 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                           child: Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF198754).withValues(alpha: 0.12),
+                              color: cs.primaryContainer.withValues(alpha: 0.4),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFF198754).withValues(alpha: 0.4)),
+                              border: Border.all(color: cs.primary.withValues(alpha: 0.3)),
                             ),
                             child: Column(
                               children: [
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    const Icon(Icons.check_circle_rounded, size: 16, color: Color(0xFF198754)),
+                                    Icon(Icons.check_circle_rounded, size: 16, color: cs.primary),
                                     const SizedBox(width: 4),
                                     Text(
                                       '$activeCount',
-                                      style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF0F5132)),
+                                      style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.bold, color: cs.onPrimaryContainer),
                                     ),
                                   ],
                                 ),
                                 Text(
                                   isAr ? 'حساب نشط' : 'Active WhatsApp',
-                                  style: GoogleFonts.cairo(fontSize: 11, color: const Color(0xFF0F5132), fontWeight: FontWeight.w600),
+                                  style: GoogleFonts.cairo(fontSize: 11, color: cs.onPrimaryContainer, fontWeight: FontWeight.w600),
                                 ),
                               ],
                             ),
@@ -686,26 +698,26 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                           child: Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.orange.withValues(alpha: 0.12),
+                              color: cs.errorContainer.withValues(alpha: 0.4),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+                              border: Border.all(color: cs.error.withValues(alpha: 0.3)),
                             ),
                             child: Column(
                               children: [
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(Icons.phonelink_erase_rounded, size: 16, color: Colors.orange.shade800),
+                                    Icon(Icons.phonelink_erase_rounded, size: 16, color: cs.error),
                                     const SizedBox(width: 4),
                                     Text(
                                       '$inactiveCount',
-                                      style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orange.shade900),
+                                      style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.bold, color: cs.onErrorContainer),
                                     ),
                                   ],
                                 ),
                                 Text(
                                   isAr ? 'ليس لديه واتساب' : 'No WhatsApp',
-                                  style: GoogleFonts.cairo(fontSize: 11, color: Colors.orange.shade900, fontWeight: FontWeight.w600),
+                                  style: GoogleFonts.cairo(fontSize: 11, color: cs.onErrorContainer, fontWeight: FontWeight.w600),
                                 ),
                               ],
                             ),
@@ -723,7 +735,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                       isCancelled = true;
                       Navigator.of(dialogCtx).pop();
                     },
-                    child: Text(isAr ? 'إيقاف الفحص' : 'Cancel Check', style: GoogleFonts.cairo(color: Colors.red)),
+                    child: Text(isAr ? 'إيقاف الفحص' : 'Cancel Check', style: GoogleFonts.cairo(color: cs.error)),
                   )
                 else ...[
                   TextButton(
@@ -735,8 +747,8 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                   if (activeCount > 0)
                     FilledButton.icon(
                       style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF198754),
-                        foregroundColor: Colors.white,
+                        backgroundColor: cs.primary,
+                        foregroundColor: cs.onPrimary,
                       ),
                       icon: const Icon(Icons.check_box_rounded, size: 18),
                       label: Text(
@@ -837,12 +849,11 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                       // Header
                       Container(
                         padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 20, vertical: 14),
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              Color(0xFF0F5132),
-                              Color(0xFF198754),
-                              Color(0xFF20C997),
+                              cs.primary,
+                              cs.primaryContainer,
                             ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
@@ -853,10 +864,10 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                             Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.2),
+                                color: cs.onPrimary.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Icon(Icons.science_rounded, color: Colors.white, size: 22),
+                              child: Icon(Icons.science_rounded, color: cs.onPrimary, size: 22),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -868,7 +879,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                     style: GoogleFonts.cairo(
                                       fontSize: isMobile ? 15 : 17,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.white,
+                                      color: cs.onPrimary,
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -877,7 +888,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                     '$companyName • $campaignName',
                                     style: GoogleFonts.cairo(
                                       fontSize: 11,
-                                      color: Colors.white.withValues(alpha: 0.9),
+                                      color: cs.onPrimary.withValues(alpha: 0.9),
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -886,7 +897,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                               ),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.close_rounded, color: Colors.white),
+                              icon: Icon(Icons.close_rounded, color: cs.onPrimary),
                               onPressed: () => Navigator.of(dialogCtx).pop(),
                             ),
                           ],
@@ -904,14 +915,14 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF198754).withValues(alpha: 0.1),
+                                  color: cs.primaryContainer.withValues(alpha: 0.25),
                                   borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: const Color(0xFF198754).withValues(alpha: 0.3)),
+                                  border: Border.all(color: cs.primary.withValues(alpha: 0.3)),
                                 ),
                                 child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Icon(Icons.info_outline_rounded, size: 18, color: Color(0xFF198754)),
+                                    Icon(Icons.info_outline_rounded, size: 18, color: cs.primary),
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
@@ -937,7 +948,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                 decoration: InputDecoration(
                                   hintText: strings.testPhonePlaceholder,
                                   hintStyle: GoogleFonts.cairo(fontSize: 12, color: cs.onSurfaceVariant.withValues(alpha: 0.7)),
-                                  prefixIcon: const Icon(Icons.phone_iphone_rounded, size: 20, color: Color(0xFF25D366)),
+                                  prefixIcon: Icon(Icons.phone_iphone_rounded, size: 20, color: cs.primary),
                                   suffixIcon: rawInput.isNotEmpty
                                       ? IconButton(
                                           icon: const Icon(Icons.clear_rounded, size: 18),
@@ -951,7 +962,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                   fillColor: cs.surfaceContainerLow,
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                                   helperText: formattedPhone.isNotEmpty ? 'WhatsApp ID: +$formattedPhone' : null,
-                                  helperStyle: GoogleFonts.robotoMono(fontSize: 11, color: const Color(0xFF198754)),
+                                  helperStyle: GoogleFonts.robotoMono(fontSize: 11, color: cs.primary),
                                 ),
                                 style: GoogleFonts.robotoMono(fontSize: 14, fontWeight: FontWeight.w600),
                                 onChanged: (_) => setDialogState(() {}),
@@ -983,11 +994,11 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                               if (_messageMode == MarketingMessageMode.poll) ...[
                                 Row(
                                   children: [
-                                    const Icon(Icons.poll_rounded, size: 16, color: Color(0xFF198754)),
+                                    Icon(Icons.poll_rounded, size: 16, color: cs.primary),
                                     const SizedBox(width: 6),
                                     Text(
                                       strings.pollPreviewTitle,
-                                      style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF0F5132)),
+                                      style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.primary),
                                     ),
                                   ],
                                 ),
@@ -995,9 +1006,9 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                 Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFDCF8C6).withValues(alpha: 0.35),
+                                    color: cs.surfaceContainerHigh,
                                     borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(color: const Color(0xFF25D366).withValues(alpha: 0.4)),
+                                    border: Border.all(color: cs.outlineVariant),
                                   ),
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1016,7 +1027,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                                 padding: const EdgeInsets.symmetric(vertical: 2),
                                                 child: Row(
                                                   children: [
-                                                    const Icon(Icons.radio_button_unchecked, size: 14, color: Color(0xFF198754)),
+                                                    Icon(Icons.radio_button_unchecked_rounded, size: 14, color: cs.primary),
                                                     const SizedBox(width: 8),
                                                     Expanded(child: Text(opt, style: GoogleFonts.cairo(fontSize: 12))),
                                                   ],
@@ -1034,13 +1045,13 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                 Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFDCF8C6).withValues(alpha: 0.35),
+                                    color: cs.surfaceContainerHigh,
                                     borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(color: const Color(0xFF25D366).withValues(alpha: 0.4)),
+                                    border: Border.all(color: cs.outlineVariant),
                                   ),
                                   child: SelectableText(
                                     previewText,
-                                    style: GoogleFonts.cairo(fontSize: 13, height: 1.5, color: Colors.black87),
+                                    style: GoogleFonts.cairo(fontSize: 13, height: 1.5, color: cs.onSurface),
                                   ),
                                 ),
                               ],
@@ -1052,13 +1063,13 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                   margin: const EdgeInsets.only(bottom: 14),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF198754).withValues(alpha: 0.1),
+                                    color: cs.surfaceContainerHigh,
                                     borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: const Color(0xFF198754).withValues(alpha: 0.25)),
+                                    border: Border.all(color: cs.outlineVariant),
                                   ),
                                   child: Row(
                                     children: [
-                                      const Icon(Icons.cloud_done_rounded, size: 18, color: Color(0xFF198754)),
+                                      Icon(Icons.cloud_done_rounded, size: 18, color: cs.primary),
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
@@ -1068,7 +1079,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                           style: GoogleFonts.cairo(
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
-                                            color: const Color(0xFF0F5132),
+                                            color: cs.primary,
                                           ),
                                         ),
                                       ),
@@ -1081,15 +1092,15 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                 height: 48,
                                 child: FilledButton.icon(
                                   style: FilledButton.styleFrom(
-                                    backgroundColor: const Color(0xFF198754),
-                                    foregroundColor: Colors.white,
+                                    backgroundColor: cs.primary,
+                                    foregroundColor: cs.onPrimary,
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                                   ),
                                   icon: isSending
-                                      ? const SizedBox(
+                                      ? SizedBox(
                                           width: 18,
                                           height: 18,
-                                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                          child: CircularProgressIndicator(strokeWidth: 2, color: cs.onPrimary),
                                         )
                                       : const Icon(Icons.send_rounded, size: 18),
                                   label: Text(
@@ -1145,7 +1156,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                                           : 'Test message sent successfully via ${_gatewayConfig.provider.displayName}! 🚀',
                                                       style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
                                                     ),
-                                                    backgroundColor: const Color(0xFF198754),
+                                                    backgroundColor: cs.primary,
                                                     behavior: SnackBarBehavior.floating,
                                                   ),
                                                 );
@@ -1159,7 +1170,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                                       result.error ?? (isAr ? 'فشل الإرسال عبر البوابة' : 'Failed to send via Gateway'),
                                                       style: GoogleFonts.cairo(),
                                                     ),
-                                                    backgroundColor: Colors.red.shade700,
+                                                    backgroundColor: cs.error,
                                                     behavior: SnackBarBehavior.floating,
                                                     duration: const Duration(seconds: 5),
                                                   ),
@@ -1172,7 +1183,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                               messenger.showSnackBar(
                                                 SnackBar(
                                                   content: Text(strings.operationFailed(e.toString())),
-                                                  backgroundColor: Colors.red.shade700,
+                                                  backgroundColor: cs.error,
                                                   behavior: SnackBarBehavior.floating,
                                                 ),
                                               );
@@ -1188,7 +1199,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                               messenger.showSnackBar(
                                                 SnackBar(
                                                   content: Text(strings.testMessageSentSuccess),
-                                                  backgroundColor: const Color(0xFF198754),
+                                                  backgroundColor: cs.primary,
                                                   behavior: SnackBarBehavior.floating,
                                                 ),
                                               );
@@ -1196,7 +1207,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                               messenger.showSnackBar(
                                                 SnackBar(
                                                   content: Text(strings.operationFailed(e.toString())),
-                                                  backgroundColor: Colors.red.shade700,
+                                                  backgroundColor: cs.error,
                                                 ),
                                               );
                                             }
@@ -1260,7 +1271,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                         ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(
                                             content: Text(isAr ? 'تمت إضافة الرقم إلى قائمة المستلمين وتحديده' : 'Contact added and selected in audience queue'),
-                                            backgroundColor: const Color(0xFF198754),
+                                            backgroundColor: cs.primary,
                                             behavior: SnackBarBehavior.floating,
                                           ),
                                         );
@@ -1326,16 +1337,17 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
       downloadFileBytes(bytes: fileBytes, fileName: fileName);
 
       if (mounted) {
+        final cs = Theme.of(context).colorScheme;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
               children: [
-                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                Icon(Icons.check_circle_rounded, color: cs.onPrimary, size: 20),
                 const SizedBox(width: 10),
-                Text('${strings.success}: $fileName'),
+                Text('${strings.success}: $fileName', style: TextStyle(color: cs.onPrimary)),
               ],
             ),
-            backgroundColor: const Color(0xFF198754),
+            backgroundColor: cs.primary,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -1370,20 +1382,408 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
     downloadFileBytes(bytes: bytes, fileName: fileName);
 
     if (mounted) {
+      final cs = Theme.of(context).colorScheme;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
             children: [
-              const Icon(Icons.contact_phone_rounded, color: Colors.white, size: 20),
+              Icon(Icons.contact_phone_rounded, color: cs.onSecondary, size: 20),
               const SizedBox(width: 10),
-              Text('${strings.success}: $fileName'),
+              Text('${strings.success}: $fileName', style: TextStyle(color: cs.onSecondary)),
             ],
           ),
-          backgroundColor: Colors.teal.shade700,
+          backgroundColor: cs.secondary,
           behavior: SnackBarBehavior.floating,
         ),
       );
     }
+  }
+
+  /// Displays the full customer transaction history & receipts breakdown sheet (Rule 4 & Transaction Sheet)
+  void _showCustomerTransactionsDialog({
+    required BuildContext context,
+    required CustomerCampaignContact customer,
+    required ColorScheme cs,
+    required AppStrings strings,
+    required bool isAr,
+    required String companyName,
+    required String campaignName,
+  }) {
+    final transactions = _customerTransactionsMap[customer.cleanPhone] ?? [];
+    // Sort transactions by date descending (newest first)
+    final sortedTransactions = List<Map<String, dynamic>>.from(transactions)
+      ..sort((a, b) {
+        DateTime? dateA;
+        if (a['receipt_date'] is Timestamp) {
+          dateA = (a['receipt_date'] as Timestamp).toDate();
+        } else if (a['timestamp'] is Timestamp) {
+          dateA = (a['timestamp'] as Timestamp).toDate();
+        } else if (a['receipt_date'] is String) {
+          dateA = DateTime.tryParse(a['receipt_date']);
+        }
+        DateTime? dateB;
+        if (b['receipt_date'] is Timestamp) {
+          dateB = (b['receipt_date'] as Timestamp).toDate();
+        } else if (b['timestamp'] is Timestamp) {
+          dateB = (b['timestamp'] as Timestamp).toDate();
+        } else if (b['receipt_date'] is String) {
+          dateB = DateTime.tryParse(b['receipt_date']);
+        }
+        if (dateA == null && dateB == null) return 0;
+        if (dateA == null) return 1;
+        if (dateB == null) return -1;
+        return dateB.compareTo(dateA);
+      });
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return Dialog(
+          backgroundColor: cs.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 680, maxHeight: 720),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Header with customer avatar, name, and phone
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerLow,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                    border: Border(bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5))),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 24,
+                        backgroundColor: cs.primaryContainer,
+                        child: Text(
+                          customer.name.isNotEmpty ? customer.name.characters.first : 'ع',
+                          style: GoogleFonts.cairo(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: cs.onPrimaryContainer,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              customer.name.isNotEmpty ? customer.name : (isAr ? 'عميل بدون اسم' : 'Unnamed Customer'),
+                              style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Directionality(
+                              textDirection: TextDirection.ltr,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    customer.rawPhone,
+                                    style: GoogleFonts.robotoMono(fontSize: 13, color: cs.onSurfaceVariant),
+                                  ),
+                                  if (customer.isWhatsAppActive != null) ...[
+                                    const SizedBox(width: 6),
+                                    Icon(
+                                      customer.isWhatsAppActive == true
+                                          ? Icons.verified_rounded
+                                          : Icons.phonelink_erase_rounded,
+                                      size: 16,
+                                      color: customer.isWhatsAppActive == true ? cs.primary : cs.error,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => Navigator.of(dialogCtx).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Customer Metrics Bar
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  color: cs.surfaceContainerLowest,
+                  child: Row(
+                    children: [
+                      _buildDialogMetricBadge(
+                        icon: Icons.receipt_long_rounded,
+                        label: isAr ? 'عدد الفواتير' : 'Invoices',
+                        value: '${customer.totalInvoices}',
+                        cs: cs,
+                      ),
+                      const SizedBox(width: 12),
+                      _buildDialogMetricBadge(
+                        icon: Icons.shopping_bag_rounded,
+                        label: isAr ? 'إجمالي المشتريات' : 'Total Spend',
+                        value: '${customer.totalSpend.toStringAsFixed(1)} ${isAr ? "ج.م" : "EGP"}',
+                        cs: cs,
+                      ),
+                      const SizedBox(width: 12),
+                      _buildDialogMetricBadge(
+                        icon: Icons.military_tech_rounded,
+                        label: isAr ? 'الجوائز المستلمة' : 'Prizes Won',
+                        value: '${customer.prizesWon.length}',
+                        cs: cs,
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+
+                // Transactions List
+                Expanded(
+                  child: sortedTransactions.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.receipt_long_rounded, size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+                              const SizedBox(height: 8),
+                              Text(
+                                isAr ? 'لا توجد فواتير مسجلة في قاعدة البيانات' : 'No recorded transactions found',
+                                style: GoogleFonts.cairo(color: cs.onSurfaceVariant),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: sortedTransactions.length,
+                          separatorBuilder: (ctx, i) => const SizedBox(height: 10),
+                          itemBuilder: (ctx, i) {
+                            final tx = sortedTransactions[i];
+                            return _buildTransactionCard(tx, cs, isAr);
+                          },
+                        ),
+                ),
+
+                // Footer Actions
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerLow,
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+                    border: Border(top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5))),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.phone_rounded, size: 16),
+                        label: Text(strings.callCustomerPhone, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                        onPressed: () async {
+                          final uri = Uri.parse('tel:${customer.rawPhone}');
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(uri);
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton.icon(
+                        icon: const Icon(Icons.send_rounded, size: 16),
+                        label: Text(strings.sendDirectWhatsApp, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                        onPressed: () {
+                          Navigator.of(dialogCtx).pop();
+                          _launchWhatsAppCampaign(
+                            targetContacts: [customer],
+                            companyName: companyName,
+                            campaignName: campaignName,
+                            strings: strings,
+                            isAr: isAr,
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTransactionCard(Map<String, dynamic> tx, ColorScheme cs, bool isAr) {
+    final receiptNum = (tx['receipt_number'] ?? tx['receiptId'] ?? '').toString();
+    final branch = (tx['canonical_branch'] ?? tx['branch_detected'] ?? tx['branch'] ?? tx['store_name'] ?? '').toString();
+    final spend = (tx['target_company_total'] ?? tx['total_value'] ?? 0);
+    final spendVal = spend is num ? spend.toDouble() : 0.0;
+    final prizeWon = (tx['prize_won'] ?? tx['prizeName'] ?? '').toString().trim();
+
+    DateTime? date;
+    if (tx['receipt_date'] is Timestamp) {
+      date = (tx['receipt_date'] as Timestamp).toDate();
+    } else if (tx['timestamp'] is Timestamp) {
+      date = (tx['timestamp'] as Timestamp).toDate();
+    } else if (tx['receipt_date'] is String) {
+      date = DateTime.tryParse(tx['receipt_date']);
+    }
+    final dateStr = date != null ? intl.DateFormat('yyyy/MM/dd HH:mm').format(date) : '—';
+    final items = tx['items'] as List?;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.receipt_long_rounded, size: 18, color: cs.primary),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      receiptNum.isNotEmpty ? '${isAr ? "فاتورة رقم" : "Receipt #"} $receiptNum' : (isAr ? 'فاتورة بدون رقم' : 'Receipt'),
+                      style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold, color: cs.onSurface),
+                    ),
+                    Text(
+                      dateStr,
+                      style: GoogleFonts.cairo(fontSize: 11, color: cs.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: cs.secondaryContainer,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${spendVal.toStringAsFixed(1)} ${isAr ? "ج.م" : "EGP"}',
+                  style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSecondaryContainer),
+                ),
+              ),
+            ],
+          ),
+          if (branch.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.storefront_rounded, size: 14, color: cs.onSurfaceVariant),
+                const SizedBox(width: 4),
+                Text(branch, style: GoogleFonts.cairo(fontSize: 12, color: cs.onSurfaceVariant)),
+              ],
+            ),
+          ],
+          if (prizeWon.isNotEmpty && prizeWon != 'null') ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: cs.tertiaryContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.military_tech_rounded, size: 14, color: cs.onTertiaryContainer),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      prizeWon,
+                      style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: cs.onTertiaryContainer),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (items != null && items.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Divider(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: items.take(5).map((it) {
+                final itName = (it is Map ? (it['product_name'] ?? it['name'] ?? it['item'] ?? '') : it).toString();
+                final itQty = (it is Map ? (it['quantity'] ?? 1) : 1);
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '$itQty × $itName',
+                    style: GoogleFonts.cairo(fontSize: 10, color: cs.onSurfaceVariant),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDialogMetricBadge({
+    required IconData icon,
+    required String label,
+    required String value,
+    required ColorScheme cs,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+        ),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 14, color: cs.primary),
+                const SizedBox(width: 4),
+                Text(
+                  value,
+                  style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold, color: cs.onSurface),
+                ),
+              ],
+            ),
+            Text(
+              label,
+              style: GoogleFonts.cairo(fontSize: 10, color: cs.onSurfaceVariant),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -1522,19 +1922,10 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                 Container(
                                   padding: EdgeInsets.all(isMobile ? 10 : 12),
                                   decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                      colors: [Color(0xFF0F5132), Color(0xFF198754)],
-                                    ),
+                                    color: cs.primaryContainer,
                                     borderRadius: BorderRadius.circular(16),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: const Color(0xFF198754).withValues(alpha: 0.3),
-                                        blurRadius: 10,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ],
                                   ),
-                                  child: Icon(Icons.people_alt_rounded, color: Colors.white, size: isMobile ? 24 : 28),
+                                  child: Icon(Icons.forum_rounded, color: cs.onPrimaryContainer, size: isMobile ? 24 : 28),
                                 ),
                                 const SizedBox(width: 14),
                                 Expanded(
@@ -1542,23 +1933,23 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        strings.customersMarketingTitle,
+                                        isAr ? 'تسويق وتواصل العملاء' : 'Customer Outreach & Marketing',
                                         style: GoogleFonts.cairo(
                                           fontSize: isMobile ? 16 : 22,
                                           fontWeight: FontWeight.bold,
                                           color: cs.onSurface,
                                         ),
-                                        maxLines: 2,
+                                        maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
-                                        strings.customersMarketingSubtitle,
+                                        isAr ? 'إدارة قاعدة بيانات المتسوقين وتخصيص حملات الرسائل' : 'Manage shopper audience and direct marketing campaigns',
                                         style: GoogleFonts.cairo(
                                           fontSize: isMobile ? 11 : 13,
                                           color: cs.onSurfaceVariant,
                                         ),
-                                        maxLines: isMobile ? 2 : 3,
+                                        maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ],
@@ -1573,7 +1964,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                     ),
                                     icon: const Icon(Icons.screenshot_monitor_rounded, size: 18),
                                     label: Text(
-                                      isAr ? 'لقطة الشاشة الحية' : 'Live Screen',
+                                      isAr ? 'شاشة حية' : 'Live Screen',
                                       style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
                                     ),
                                     onPressed: () {
@@ -1595,7 +1986,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                     ),
                                     icon: const Icon(Icons.tune_rounded, size: 18),
                                     label: Text(
-                                      strings.whatsappGatewayTitle,
+                                      isAr ? 'إعدادات البوابة' : 'Gateway Settings',
                                       style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
                                     ),
                                     onPressed: () => _openGatewaySettings(strings, isAr),
@@ -1655,35 +2046,23 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                               width: double.infinity,
                               child: SingleChildScrollView(
                                 scrollDirection: Axis.horizontal,
-                                child: SegmentedButton<MarketingMainTab>(
-                                  style: SegmentedButton.styleFrom(
-                                    selectedBackgroundColor: cs.primaryContainer,
-                                    selectedForegroundColor: cs.onPrimaryContainer,
-                                  ),
+                                child: M3ConnectedButtonGroup<MarketingMainTab>(
+                                  height: 42,
+                                  borderRadius: 14,
+                                  selectedValue: _activeMainTab,
+                                  onSelected: (tab) => setState(() => _activeMainTab = tab),
                                   segments: [
-                                    ButtonSegment<MarketingMainTab>(
+                                    M3ButtonSegment<MarketingMainTab>(
                                       value: MarketingMainTab.audience,
-                                      label: Text(
-                                        isAr ? 'دليل العملاء والحملات (${_cachedContacts.length})' : 'Customer Audience (${_cachedContacts.length})',
-                                        style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
-                                      ),
-                                      icon: const Icon(Icons.people_outline_rounded, size: 18),
+                                      label: isAr ? 'دليل العملاء (${_cachedContacts.length})' : 'Audience (${_cachedContacts.length})',
+                                      icon: Icons.groups_rounded,
                                     ),
-                                    ButtonSegment<MarketingMainTab>(
+                                    M3ButtonSegment<MarketingMainTab>(
                                       value: MarketingMainTab.liveOutbox,
-                                      label: Text(
-                                        isAr ? 'سجل رسائل الواتساب وحالة التسليم الحية' : 'Live WhatsApp Outbox & Delivery Log',
-                                        style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
-                                      ),
-                                      icon: const Icon(Icons.outbox_rounded, size: 18),
+                                      label: isAr ? 'سجل الإرسال والتسليم' : 'Outbox & Delivery',
+                                      icon: Icons.outbox_rounded,
                                     ),
                                   ],
-                                  selected: {_activeMainTab},
-                                  onSelectionChanged: (newSelection) {
-                                    setState(() {
-                                      _activeMainTab = newSelection.first;
-                                    });
-                                  },
                                 ),
                               ),
                             ),
@@ -1814,25 +2193,25 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
         icon: Icons.groups_rounded,
         title: strings.totalCustomersKpi,
         value: '${_cachedContacts.length}',
-        accentColor: const Color(0xFF6750A4),
+        accentColor: cs.primary,
       ),
       _KpiItem(
-        icon: Icons.shopping_cart_checkout_rounded,
+        icon: Icons.shopping_bag_rounded,
         title: strings.totalCustomerSpendKpi,
         value: '${_cachedTotalSpend.toStringAsFixed(1)} ${isAr ? "ج.م" : "EGP"}',
-        accentColor: const Color(0xFF006C50),
+        accentColor: cs.tertiary,
       ),
       _KpiItem(
         icon: Icons.military_tech_rounded,
         title: strings.totalPrizesWonKpi,
         value: '$_cachedTotalPrizes',
-        accentColor: Colors.amber.shade800,
+        accentColor: cs.secondary,
       ),
       _KpiItem(
-        icon: Icons.replay_circle_filled_rounded,
+        icon: Icons.replay_rounded,
         title: strings.repeatShoppersKpi,
         value: '$_cachedRepeatCount',
-        accentColor: const Color(0xFF2563EB),
+        accentColor: cs.primary,
       ),
     ];
 
@@ -1941,46 +2320,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
     required AppStrings strings,
     required bool isAr,
   }) {
-    // 1. Company Dropdown (for Admin mode)
-    final companyDropdown = DropdownButtonFormField<String>(
-      key: ValueKey('company_dd_${distinctCompanies.length}_$_selectedCompany'),
-      initialValue: distinctCompanies.contains(_selectedCompany) ? _selectedCompany : 'all',
-      isExpanded: true,
-      decoration: InputDecoration(
-        labelText: isAr ? 'الشركة المستهدفة' : 'Target Company',
-        prefixIcon: const Icon(Icons.business_rounded, size: 20),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        filled: true,
-        fillColor: cs.surface,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      items: [
-        DropdownMenuItem(
-          value: 'all',
-          child: Text(
-            isAr ? '🏢 كافة الشركات المكودة' : '🏢 All Registered Companies',
-            style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        ...distinctCompanies.map((c) => DropdownMenuItem(
-              value: c,
-              child: Text(c, style: GoogleFonts.cairo(fontSize: 13), overflow: TextOverflow.ellipsis),
-            )),
-      ],
-      onChanged: (val) {
-        if (val != null) {
-          setState(() {
-            _selectedCompany = val;
-            _selectedEventId = 'all';
-            _selectedBranch = 'all';
-            _currentPage = 0;
-          });
-        }
-      },
-    );
-
-    // 2. Deduplicate company events by ID to prevent any duplicate dropdown values
+    // 1. Deduplicate company events by ID to prevent any duplicate dropdown values
     final Map<String, EventModel> uniqueEventsMap = {};
     for (final e in companyEvents) {
       if (e.id.isNotEmpty) {
@@ -1989,85 +2329,260 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
     }
     final uniqueEvents = uniqueEventsMap.values.toList();
 
-    // 3. Safe event selection check (Rule against Dropdown assertion crashes)
-    final validEventIds = {'all', ...uniqueEvents.map((e) => e.id)};
-    final currentEventVal = validEventIds.contains(_selectedEventId) ? _selectedEventId! : 'all';
-
-    // 4. Deduplicate branches to prevent any duplicate dropdown values
+    // 3. Deduplicate branches
     final uniqueBranches = sortedBranches.where((b) => b.trim().isNotEmpty).toSet().toList();
-    final validBranchValues = {'all', ...uniqueBranches};
-    final currentBranchVal = validBranchValues.contains(_selectedBranch) ? _selectedBranch! : 'all';
 
-    final campaignDropdown = DropdownButtonFormField<String>(
-      key: ValueKey('campaign_dd_${uniqueEvents.length}_$currentEventVal'),
-      initialValue: currentEventVal,
-      isExpanded: true,
-      decoration: InputDecoration(
-        labelText: strings.eventsTitle,
-        prefixIcon: const Icon(Icons.campaign_outlined, size: 20),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        filled: true,
-        fillColor: cs.surface,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      items: [
-        DropdownMenuItem(
-          value: 'all',
-          child: Text(
-            isAr ? 'جميع فعاليات وحملات الشركة' : 'All Company Campaigns',
-            style: GoogleFonts.cairo(fontSize: 13),
-            overflow: TextOverflow.ellipsis,
+    final hasActiveFilter = (!isLockedCompany && _selectedCompany != 'all') ||
+        (_selectedEventId != null && _selectedEventId != 'all') ||
+        (_selectedBranch != null && _selectedBranch != 'all');
+
+    final companyMenu = M3ActionMenu(
+      tooltip: isAr ? 'تصفية حسب الشركة' : 'Filter by Company',
+      minWidth: 220,
+      maxWidth: 320,
+      maxHeight: 400,
+      anchorBuilder: (context, controller, child) {
+        final isFiltered = _selectedCompany != 'all';
+        final label = isFiltered ? _selectedCompany : (isAr ? 'كافة الشركات' : 'All Companies');
+        return InkWell(
+          onTap: () => controller.isOpen ? controller.close() : controller.open(),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: isFiltered ? cs.primaryContainer : cs.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: isFiltered ? cs.primary : cs.outlineVariant),
+            ),
+            child: Row(
+              mainAxisSize: isMobile ? MainAxisSize.max : MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.business_rounded,
+                  size: 18,
+                  color: isFiltered ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: GoogleFonts.cairo(
+                      fontSize: 12.5,
+                      fontWeight: isFiltered ? FontWeight.bold : FontWeight.w600,
+                      color: isFiltered ? cs.onPrimaryContainer : cs.onSurface,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.arrow_drop_down_rounded,
+                  size: 20,
+                  color: isFiltered ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+                ),
+              ],
+            ),
           ),
-        ),
-        ...uniqueEvents.map((e) => DropdownMenuItem(
-              value: e.id,
-              child: Text(e.eventName, style: GoogleFonts.cairo(fontSize: 13), overflow: TextOverflow.ellipsis),
-            )),
-      ],
-      onChanged: (val) {
-        setState(() {
-          _selectedEventId = val;
-          _currentPage = 0;
-        });
+        );
       },
+      children: [
+        M3ActionMenu.header(context: context, title: isAr ? 'اختيار الشركة' : 'Select Company'),
+        M3ActionMenu.item(
+          context: context,
+          label: isAr ? 'كافة الشركات' : 'All Companies',
+          icon: Icons.business_rounded,
+          isSelected: _selectedCompany == 'all',
+          onPressed: () {
+            setState(() {
+              _selectedCompany = 'all';
+              _selectedEventId = 'all';
+              _selectedBranch = 'all';
+              _currentPage = 0;
+            });
+          },
+        ),
+        if (distinctCompanies.isNotEmpty) M3ActionMenu.divider(),
+        ...distinctCompanies.map((c) => M3ActionMenu.item(
+          context: context,
+          label: c,
+          isSelected: _selectedCompany == c,
+          onPressed: () {
+            setState(() {
+              _selectedCompany = c;
+              _selectedEventId = 'all';
+              _selectedBranch = 'all';
+              _currentPage = 0;
+            });
+          },
+        )),
+      ],
     );
 
-    final branchDropdown = DropdownButtonFormField<String>(
-      key: ValueKey('branch_dd_${uniqueBranches.length}_$currentBranchVal'),
-      initialValue: currentBranchVal,
-      isExpanded: true,
-      decoration: InputDecoration(
-        labelText: strings.branchField,
-        prefixIcon: const Icon(Icons.storefront_outlined, size: 20),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        filled: true,
-        fillColor: cs.surface,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      items: [
-        DropdownMenuItem(
-          value: 'all',
-          child: Text(
-            isAr ? 'كافة الفروع والمنافذ' : 'All Branches & Outlets',
-            style: GoogleFonts.cairo(fontSize: 13),
-            overflow: TextOverflow.ellipsis,
+    final campaignMenu = M3ActionMenu(
+      tooltip: strings.eventsTitle,
+      minWidth: 240,
+      maxWidth: 340,
+      maxHeight: 400,
+      anchorBuilder: (context, controller, child) {
+        final isFiltered = _selectedEventId != null && _selectedEventId != 'all';
+        final selectedEvent = uniqueEvents.where((e) => e.id == _selectedEventId).firstOrNull;
+        final label = isFiltered && selectedEvent != null ? selectedEvent.eventName : (isAr ? 'كافة الحملات' : 'All Campaigns');
+        return InkWell(
+          onTap: () => controller.isOpen ? controller.close() : controller.open(),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: isFiltered ? cs.primaryContainer : cs.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: isFiltered ? cs.primary : cs.outlineVariant),
+            ),
+            child: Row(
+              mainAxisSize: isMobile ? MainAxisSize.max : MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.campaign_rounded,
+                  size: 18,
+                  color: isFiltered ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: GoogleFonts.cairo(
+                      fontSize: 12.5,
+                      fontWeight: isFiltered ? FontWeight.bold : FontWeight.w600,
+                      color: isFiltered ? cs.onPrimaryContainer : cs.onSurface,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.arrow_drop_down_rounded,
+                  size: 20,
+                  color: isFiltered ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+                ),
+              ],
+            ),
           ),
-        ),
-        ...uniqueBranches.map((b) => DropdownMenuItem(
-              value: b,
-              child: Text(b, style: GoogleFonts.cairo(fontSize: 13), overflow: TextOverflow.ellipsis),
-            )),
-      ],
-      onChanged: (val) {
-        setState(() {
-          _selectedBranch = val;
-          _currentPage = 0;
-        });
+        );
       },
+      children: [
+        M3ActionMenu.header(context: context, title: isAr ? 'اختيار الحملة' : 'Select Campaign'),
+        M3ActionMenu.item(
+          context: context,
+          label: isAr ? 'كافة الحملات' : 'All Campaigns',
+          icon: Icons.campaign_rounded,
+          isSelected: _selectedEventId == null || _selectedEventId == 'all',
+          onPressed: () {
+            setState(() {
+              _selectedEventId = 'all';
+              _currentPage = 0;
+            });
+          },
+        ),
+        if (uniqueEvents.isNotEmpty) M3ActionMenu.divider(),
+        ...uniqueEvents.map((e) => M3ActionMenu.item(
+          context: context,
+          label: e.eventName,
+          isSelected: _selectedEventId == e.id,
+          onPressed: () {
+            setState(() {
+              _selectedEventId = e.id;
+              _currentPage = 0;
+            });
+          },
+        )),
+      ],
+    );
+
+    final branchMenu = M3ActionMenu(
+      tooltip: strings.branchField,
+      minWidth: 220,
+      maxWidth: 320,
+      maxHeight: 400,
+      anchorBuilder: (context, controller, child) {
+        final isFiltered = _selectedBranch != null && _selectedBranch != 'all';
+        final label = isFiltered ? _selectedBranch! : (isAr ? 'كافة الفروع' : 'All Branches');
+        return InkWell(
+          onTap: () => controller.isOpen ? controller.close() : controller.open(),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: isFiltered ? cs.primaryContainer : cs.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: isFiltered ? cs.primary : cs.outlineVariant),
+            ),
+            child: Row(
+              mainAxisSize: isMobile ? MainAxisSize.max : MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.storefront_rounded,
+                  size: 18,
+                  color: isFiltered ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: GoogleFonts.cairo(
+                      fontSize: 12.5,
+                      fontWeight: isFiltered ? FontWeight.bold : FontWeight.w600,
+                      color: isFiltered ? cs.onPrimaryContainer : cs.onSurface,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.arrow_drop_down_rounded,
+                  size: 20,
+                  color: isFiltered ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      children: [
+        M3ActionMenu.header(context: context, title: isAr ? 'اختيار الفرع' : 'Select Branch'),
+        M3ActionMenu.item(
+          context: context,
+          label: isAr ? 'كافة الفروع' : 'All Branches',
+          icon: Icons.storefront_rounded,
+          isSelected: _selectedBranch == null || _selectedBranch == 'all',
+          onPressed: () {
+            setState(() {
+              _selectedBranch = 'all';
+              _currentPage = 0;
+            });
+          },
+        ),
+        if (uniqueBranches.isNotEmpty) M3ActionMenu.divider(),
+        ...uniqueBranches.map((b) => M3ActionMenu.item(
+          context: context,
+          label: b,
+          isSelected: _selectedBranch == b,
+          onPressed: () {
+            setState(() {
+              _selectedBranch = b;
+              _currentPage = 0;
+            });
+          },
+        )),
+      ],
     );
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(18),
@@ -2078,32 +2593,73 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (!isLockedCompany) ...[
-                  companyDropdown,
-                  const SizedBox(height: 12),
+                  companyMenu,
+                  const SizedBox(height: 10),
                 ],
-                campaignDropdown,
-                const SizedBox(height: 12),
-                branchDropdown,
+                campaignMenu,
+                const SizedBox(height: 10),
+                branchMenu,
+                if (hasActiveFilter) ...[
+                  const SizedBox(height: 10),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: cs.error,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                    icon: const Icon(Icons.filter_alt_off_rounded, size: 16),
+                    label: Text(
+                      isAr ? 'إعادة ضبط كافة الفلاتر' : 'Reset All Filters',
+                      style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _selectedCompany = 'all';
+                        _selectedEventId = 'all';
+                        _selectedBranch = 'all';
+                        _currentPage = 0;
+                      });
+                    },
+                  ),
+                ],
               ],
             )
           : Wrap(
-              spacing: 12,
-              runSpacing: 12,
+              spacing: 10,
+              runSpacing: 10,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 if (!isLockedCompany)
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 240),
-                    child: companyDropdown,
+                    child: companyMenu,
                   ),
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 280),
-                  child: campaignDropdown,
+                  child: campaignMenu,
                 ),
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 240),
-                  child: branchDropdown,
+                  child: branchMenu,
                 ),
+                if (hasActiveFilter)
+                  Tooltip(
+                    message: isAr ? 'إعادة ضبط كافة الفلاتر' : 'Reset All Filters',
+                    child: IconButton.filledTonal(
+                      style: IconButton.styleFrom(
+                        backgroundColor: cs.errorContainer.withValues(alpha: 0.5),
+                        foregroundColor: cs.error,
+                      ),
+                      icon: const Icon(Icons.filter_alt_off_rounded, size: 18),
+                      onPressed: () {
+                        setState(() {
+                          _selectedCompany = 'all';
+                          _selectedEventId = 'all';
+                          _selectedBranch = 'all';
+                          _currentPage = 0;
+                        });
+                      },
+                    ),
+                  ),
               ],
             ),
     );
@@ -2127,12 +2683,12 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF198754).withValues(alpha: 0.3)),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF198754).withValues(alpha: 0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: cs.shadow.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -2150,10 +2706,10 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF198754).withValues(alpha: 0.15),
+                      color: cs.primaryContainer.withValues(alpha: 0.7),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.mark_chat_unread_rounded, color: Color(0xFF198754), size: 22),
+                    child: Icon(Icons.forum_rounded, color: cs.primary, size: 22),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -2172,13 +2728,13 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                         ),
                         Text(
                           isAr
-                              ? 'صياغة رسالة العرض الجديد مع استبدال الأسماء تلقائياً والإرسال التتابعي'
-                              : 'Personalize promotional message with dynamic tags and dispatch queue',
+                              ? 'صياغة العرض وإرسال تتابعي للعملاء'
+                              : 'Personalize campaign message & dispatch queue',
                           style: GoogleFonts.cairo(
                             fontSize: isMobile ? 11 : 12,
                             color: cs.onSurfaceVariant,
                           ),
-                          maxLines: isMobile ? 1 : 2,
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
@@ -2188,8 +2744,8 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                   // Quick Launch Queue Button directly from header
                   FilledButton.icon(
                     style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF25D366),
-                      foregroundColor: Colors.white,
+                      backgroundColor: cs.primary,
+                      foregroundColor: cs.onPrimary,
                       padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 16, vertical: isMobile ? 8 : 10),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
@@ -2197,7 +2753,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                     label: Text(
                       isMobile
                           ? '(${targetContacts.length})'
-                          : '${strings.launchWhatsAppQueue} (${targetContacts.length})',
+                          : '${isAr ? "إرسال الحملة" : "Send Campaign"} (${targetContacts.length})',
                       style: GoogleFonts.cairo(fontSize: isMobile ? 12 : 13, fontWeight: FontWeight.bold),
                     ),
                     onPressed: () => _launchWhatsAppCampaign(
@@ -2227,40 +2783,29 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 1. Message Mode Selector (SegmentedButton M3)
-                  SizedBox(
-                    width: double.infinity,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: SegmentedButton<MarketingMessageMode>(
-                        style: SegmentedButton.styleFrom(
-                          selectedBackgroundColor: cs.primaryContainer,
-                          selectedForegroundColor: cs.onPrimaryContainer,
+                  // 1. Message Mode Selector (M3ConnectedButtonGroup)
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: M3ConnectedButtonGroup<MarketingMessageMode>(
+                      selectedValue: _messageMode,
+                      onSelected: (mode) => setState(() => _messageMode = mode),
+                      segments: [
+                        M3ButtonSegment(
+                          value: MarketingMessageMode.text,
+                          label: isAr ? 'رسالة نصية' : 'Text',
+                          icon: Icons.article_rounded,
                         ),
-                        segments: [
-                          ButtonSegment<MarketingMessageMode>(
-                            value: MarketingMessageMode.text,
-                            label: Text(isAr ? 'رسالة نصية' : 'Text Message', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12)),
-                            icon: const Icon(Icons.article_outlined, size: 18),
-                          ),
-                          ButtonSegment<MarketingMessageMode>(
-                            value: MarketingMessageMode.media,
-                            label: Text(isAr ? 'بوستر وعرض مصور' : 'Media Poster', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12)),
-                            icon: const Icon(Icons.image_outlined, size: 18),
-                          ),
-                          ButtonSegment<MarketingMessageMode>(
-                            value: MarketingMessageMode.poll,
-                            label: Text(isAr ? 'استطلاع رأي تفاعلي' : 'Interactive Poll', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12)),
-                            icon: const Icon(Icons.poll_outlined, size: 18),
-                          ),
-                        ],
-                        selected: {_messageMode},
-                        onSelectionChanged: (newSelection) {
-                          setState(() {
-                            _messageMode = newSelection.first;
-                          });
-                        },
-                      ),
+                        M3ButtonSegment(
+                          value: MarketingMessageMode.media,
+                          label: isAr ? 'بوستر مصور' : 'Media',
+                          icon: Icons.image_rounded,
+                        ),
+                        M3ButtonSegment(
+                          value: MarketingMessageMode.poll,
+                          label: isAr ? 'استطلاع رأي' : 'Poll',
+                          icon: Icons.poll_rounded,
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -2280,10 +2825,10 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                         children: [
                           Row(
                             children: [
-                              const Icon(Icons.photo_library_rounded, size: 18, color: Color(0xFF198754)),
+                              Icon(Icons.photo_library_rounded, size: 18, color: cs.primary),
                               const SizedBox(width: 8),
                               Text(
-                                isAr ? 'رابط صورة أو بوستر العرض (Media Poster URL)' : 'Media Poster / Image URL',
+                                isAr ? 'رابط بوستر العرض' : 'Media Poster URL',
                                 style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
                               ),
                             ],
@@ -2326,12 +2871,12 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                       child: Row(
                                         mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
-                                          Icon(Icons.broken_image_rounded, size: 16, color: Colors.orange.shade900),
+                                          Icon(Icons.broken_image_rounded, size: 16, color: cs.error),
                                           const SizedBox(width: 6),
                                           Flexible(
                                             child: Text(
-                                              isAr ? 'تعذر تحميل المعاينة، يرجى التأكد من صحة الرابط المباشر للصورة' : 'Unable to preview image from URL',
-                                              style: GoogleFonts.cairo(fontSize: 12, color: Colors.orange.shade900),
+                                              isAr ? 'تعذر تحميل المعاينة، يرجى التأكد من صحة الرابط' : 'Unable to preview image from URL',
+                                              style: GoogleFonts.cairo(fontSize: 12, color: cs.error),
                                             ),
                                           ),
                                         ],
@@ -2345,8 +2890,8 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                           const SizedBox(height: 8),
                           Text(
                             isAr
-                                ? 'ℹ️ سيتم إرسال الصورة بجانب نص الرسالة الترويجي أدناه معاً كرسالة وسائط متكاملة (Media Message).'
-                                : 'ℹ️ The image will be dispatched together with the caption text below as a single media bundle.',
+                                ? 'يتم إرسال الصورة بجانب نص الرسالة كحزمة وسائط متكاملة'
+                                : 'The image will be dispatched together with the caption text',
                             style: GoogleFonts.cairo(fontSize: 11, color: cs.onSurfaceVariant),
                           ),
                         ],
@@ -2369,10 +2914,10 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                         children: [
                           Row(
                             children: [
-                              const Icon(Icons.poll_rounded, size: 18, color: Color(0xFF198754)),
+                              Icon(Icons.poll_rounded, size: 18, color: cs.primary),
                               const SizedBox(width: 8),
                               Text(
-                                isAr ? 'استطلاع الرأي التفاعلي (WhatsApp Poll)' : 'Interactive WhatsApp Poll',
+                                isAr ? 'استطلاع رأي تفاعلي' : 'Interactive WhatsApp Poll',
                                 style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
                               ),
                             ],
@@ -2382,8 +2927,8 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                             controller: _pollQuestionController,
                             onChanged: (_) => setState(() {}),
                             decoration: InputDecoration(
-                              labelText: isAr ? 'سؤال أو عنوان الاستطلاع' : 'Poll Question',
-                              hintText: isAr ? 'مثال: ما هو فرعك المفضل لاستلام الجائزة؟ أو ما رأيك في هدايا العرض؟' : 'e.g. Which branch do you prefer?',
+                              labelText: isAr ? 'سؤال الاستطلاع' : 'Poll Question',
+                              hintText: isAr ? 'مثال: ما رأيك في هدايا العرض؟' : 'e.g. Which branch do you prefer?',
                               prefixIcon: const Icon(Icons.help_outline_rounded, size: 20),
                               filled: true,
                               fillColor: cs.surfaceContainerLow,
@@ -2393,7 +2938,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            isAr ? 'خيارات التصويت المتاحة للعميل:' : 'Poll Choices for Customer:',
+                            isAr ? 'خيارات التصويت المتاحة:' : 'Poll Choices for Customer:',
                             style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSurfaceVariant),
                           ),
                           const SizedBox(height: 8),
@@ -2427,7 +2972,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                   ),
                                   if (_pollOptionControllers.length > 2)
                                     IconButton(
-                                      icon: const Icon(Icons.remove_circle_outline_rounded, size: 20, color: Colors.red),
+                                      icon: Icon(Icons.remove_circle_outline_rounded, size: 20, color: cs.error),
                                       onPressed: () {
                                         setState(() {
                                           _pollOptionControllers.removeAt(optIdx).dispose();
@@ -2441,7 +2986,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                           if (_pollOptionControllers.length < 12)
                             TextButton.icon(
                               icon: const Icon(Icons.add_rounded, size: 18),
-                              label: Text(isAr ? 'إضافة خيار تصويت آخر' : 'Add Poll Option', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                              label: Text(isAr ? 'إضافة خيار تصويت' : 'Add Poll Option', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
                               onPressed: () {
                                 setState(() {
                                   _pollOptionControllers.add(TextEditingController());
@@ -2456,7 +3001,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                               style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
                             ),
                             value: _pollMultipleAnswers,
-                            activeThumbColor: const Color(0xFF198754),
+                            activeThumbColor: cs.primary,
                             onChanged: (val) => setState(() => _pollMultipleAnswers = val),
                           ),
                         ],
@@ -2468,7 +3013,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                   if (_messageMode != MarketingMessageMode.poll) ...[
                     Text(
                       _messageMode == MarketingMessageMode.media
-                          ? (isAr ? 'شرح وصياغة البوستر الترويجي (Caption):' : 'Promotional Caption:')
+                          ? (isAr ? 'صياغة البوستر الترويجي (Caption):' : 'Promotional Caption:')
                           : strings.presetTemplatesTitle,
                       style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSurfaceVariant),
                     ),
@@ -2478,21 +3023,21 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                       runSpacing: 8,
                       children: [
                         ActionChip(
-                          avatar: const Icon(Icons.campaign_rounded, size: 16, color: Color(0xFF0F5132)),
+                          avatar: Icon(Icons.campaign_rounded, size: 16, color: cs.primary),
                           label: Text(strings.templateNewEvent, style: GoogleFonts.cairo(fontSize: 12)),
                           onPressed: () => _applyPresetTemplate(
                             'أهلاً بك {اسم_العميل}! يسر {الشركة} دعوتك لمهرجان وعروض {الحملة} في فرع {الفرع}. زُرنا اليوم واربح جوائز فورية وقسائم مشتريات قيمة!',
                           ),
                         ),
                         ActionChip(
-                          avatar: const Icon(Icons.card_giftcard_rounded, size: 16, color: Color(0xFF0F5132)),
+                          avatar: Icon(Icons.card_giftcard_rounded, size: 16, color: cs.tertiary),
                           label: Text(strings.templateRewardVoucher, style: GoogleFonts.cairo(fontSize: 12)),
                           onPressed: () => _applyPresetTemplate(
                             'مرحباً {اسم_العميل}، شكراً لتسوقك الدائم لمنتجات {الشركة}. يسعدنا إهداؤك فرصة حصرية في مهرجاننا الجديد {الحملة} بفرع {الفرع}. ننتظرك لتستلم هديتك!',
                           ),
                         ),
                         ActionChip(
-                          avatar: const Icon(Icons.local_fire_department_rounded, size: 16, color: Colors.orange),
+                          avatar: Icon(Icons.local_fire_department_rounded, size: 16, color: cs.secondary),
                           label: Text(strings.templateWeekendOffer, style: GoogleFonts.cairo(fontSize: 12)),
                           onPressed: () => _applyPresetTemplate(
                             'عروض حصرية من {الشركة} لنهاية الأسبوع بفرع {الفرع}! خصومات استثنائية وجوائز فورية بانتظارك في {الحملة}. لا تفوّت الفرصة!',
@@ -2568,9 +3113,9 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF198754).withValues(alpha: 0.08),
+                      color: cs.secondaryContainer.withValues(alpha: 0.25),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFF198754).withValues(alpha: 0.25)),
+                      border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
                     ),
                     child: isMobile
                         ? Column(
@@ -2578,7 +3123,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.science_rounded, size: 20, color: Color(0xFF198754)),
+                                  Icon(Icons.science_rounded, size: 20, color: cs.secondary),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
@@ -2586,7 +3131,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                       style: GoogleFonts.cairo(
                                         fontSize: 13,
                                         fontWeight: FontWeight.bold,
-                                        color: const Color(0xFF0F5132),
+                                        color: cs.onSurface,
                                       ),
                                     ),
                                   ),
@@ -2600,14 +3145,14 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                               const SizedBox(height: 10),
                               FilledButton.tonalIcon(
                                 style: FilledButton.styleFrom(
-                                  backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.2),
-                                  foregroundColor: const Color(0xFF075E54),
+                                  backgroundColor: cs.primaryContainer,
+                                  foregroundColor: cs.onPrimaryContainer,
                                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                 ),
-                                icon: const Icon(Icons.send_to_mobile_rounded, size: 18, color: Color(0xFF25D366)),
+                                icon: Icon(Icons.send_to_mobile_rounded, size: 18, color: cs.primary),
                                 label: Text(
-                                  strings.quickTestSend,
+                                  isAr ? 'تجربة إرسال' : strings.quickTestSend,
                                   style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
                                 ),
                                 onPressed: () => _showCustomNumberTestDialog(
@@ -2626,10 +3171,10 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                               Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF198754).withValues(alpha: 0.15),
+                                  color: cs.secondaryContainer,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: const Icon(Icons.science_rounded, size: 20, color: Color(0xFF198754)),
+                                child: Icon(Icons.science_rounded, size: 20, color: cs.secondary),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -2641,7 +3186,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                       style: GoogleFonts.cairo(
                                         fontSize: 13,
                                         fontWeight: FontWeight.bold,
-                                        color: const Color(0xFF0F5132),
+                                        color: cs.onSurface,
                                       ),
                                     ),
                                     Text(
@@ -2656,14 +3201,14 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                               const SizedBox(width: 12),
                               FilledButton.tonalIcon(
                                 style: FilledButton.styleFrom(
-                                  backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.2),
-                                  foregroundColor: const Color(0xFF075E54),
+                                  backgroundColor: cs.primaryContainer,
+                                  foregroundColor: cs.onPrimaryContainer,
                                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                 ),
-                                icon: const Icon(Icons.send_to_mobile_rounded, size: 18, color: Color(0xFF25D366)),
+                                icon: Icon(Icons.send_to_mobile_rounded, size: 18, color: cs.primary),
                                 label: Text(
-                                  strings.quickTestSend,
+                                  isAr ? 'تجربة إرسال' : strings.quickTestSend,
                                   style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
                                 ),
                                 onPressed: () => _showCustomNumberTestDialog(
@@ -2724,26 +3269,39 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Segments Row
+        // Segments Button Group
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _buildSegmentTab(CustomerSegmentType.all, strings.filterSegmentAll, Icons.people_outline_rounded, cs),
-              const SizedBox(width: 8),
-              _buildSegmentTab(CustomerSegmentType.winners, strings.filterSegmentWinners, Icons.emoji_events_outlined, cs),
-              const SizedBox(width: 8),
-              _buildSegmentTab(CustomerSegmentType.topSpenders, strings.filterSegmentTopSpenders, Icons.star_border_rounded, cs),
-              const SizedBox(width: 8),
-              _buildSegmentTab(CustomerSegmentType.repeatShoppers, strings.filterSegmentRepeat, Icons.repeat_rounded, cs),
-              const SizedBox(width: 8),
-              _buildSegmentTab(
-                CustomerSegmentType.activeWhatsApp,
-                isAr
-                    ? 'أرقام واتساب نشطة (${_verifiedWhatsAppMap.values.where((v) => v).length})'
-                    : 'Active WhatsApp (${_verifiedWhatsAppMap.values.where((v) => v).length})',
-                Icons.verified_rounded,
-                cs,
+          child: M3ConnectedButtonGroup<CustomerSegmentType>(
+            selectedValue: _selectedSegment,
+            onSelected: (seg) => setState(() => _selectedSegment = seg),
+            segments: [
+              M3ButtonSegment(
+                value: CustomerSegmentType.all,
+                label: isAr ? 'كافة العملاء' : 'All',
+                icon: Icons.people_rounded,
+              ),
+              M3ButtonSegment(
+                value: CustomerSegmentType.winners,
+                label: isAr ? 'الفائزون' : 'Winners',
+                icon: Icons.emoji_events_rounded,
+              ),
+              M3ButtonSegment(
+                value: CustomerSegmentType.topSpenders,
+                label: isAr ? 'الأعلى إنفاقاً' : 'Top Spenders',
+                icon: Icons.star_rounded,
+              ),
+              M3ButtonSegment(
+                value: CustomerSegmentType.repeatShoppers,
+                label: isAr ? 'المتكررون' : 'Repeat',
+                icon: Icons.replay_rounded,
+              ),
+              M3ButtonSegment(
+                value: CustomerSegmentType.activeWhatsApp,
+                label: isAr
+                    ? 'واتساب نشط (${_verifiedWhatsAppMap.values.where((v) => v).length})'
+                    : 'WhatsApp (${_verifiedWhatsAppMap.values.where((v) => v).length})',
+                icon: Icons.verified_rounded,
               ),
             ],
           ),
@@ -2793,14 +3351,14 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                       // Add / Import Customers Button (Mobile)
                       FilledButton.icon(
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF0F5132),
-                          foregroundColor: Colors.white,
+                          backgroundColor: cs.primary,
+                          foregroundColor: cs.onPrimary,
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        icon: const Icon(Icons.person_add_alt_1_rounded, size: 16),
+                        icon: const Icon(Icons.person_add_rounded, size: 16),
                         label: Text(
-                          strings.addOrImportCustomers,
+                          isAr ? 'إضافة عملاء' : 'Add Customers',
                           style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
                         ),
                         onPressed: () => _openCustomerImportDialog(
@@ -2812,11 +3370,11 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                         ),
                       ),
 
-                      // Feature 4: Filter Active WhatsApp Numbers (Mobile)
+                      // Filter Active WhatsApp Numbers (Mobile)
                       FilledButton.tonalIcon(
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.15),
-                          foregroundColor: const Color(0xFF0F5132),
+                          backgroundColor: cs.secondaryContainer,
+                          foregroundColor: cs.onSecondaryContainer,
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
@@ -2843,10 +3401,12 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                         icon: Icon(
                           allFilteredSelected ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
                           size: 18,
-                          color: allFilteredSelected ? const Color(0xFF198754) : cs.onSurfaceVariant,
+                          color: allFilteredSelected ? cs.primary : cs.onSurfaceVariant,
                         ),
                         label: Text(
-                          allFilteredSelected ? strings.deselectAllCustomers : strings.selectAllCustomers,
+                          allFilteredSelected
+                              ? (isAr ? 'إلغاء التحديد' : 'Deselect')
+                              : (isAr ? 'تحديد الكل' : 'Select All'),
                           style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
                         ),
                         onPressed: () {
@@ -2917,8 +3477,8 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                         message: strings.sendTestMessage,
                         child: IconButton.filledTonal(
                           style: IconButton.styleFrom(
-                            backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.15),
-                            foregroundColor: const Color(0xFF075E54),
+                            backgroundColor: cs.tertiaryContainer,
+                            foregroundColor: cs.onTertiaryContainer,
                           ),
                           icon: const Icon(Icons.science_rounded, size: 18),
                           onPressed: () => _showCustomNumberTestDialog(
@@ -2938,10 +3498,10 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                         child: IconButton.filledTonal(
                           style: IconButton.styleFrom(
                             backgroundColor: _gatewayConfig.isConfigured
-                                ? const Color(0xFF198754).withValues(alpha: 0.15)
+                                ? cs.primaryContainer
                                 : cs.surfaceContainerHighest,
                             foregroundColor: _gatewayConfig.isConfigured
-                                ? const Color(0xFF198754)
+                                ? cs.primary
                                 : cs.onSurfaceVariant,
                           ),
                           icon: const Icon(Icons.cloud_sync_rounded, size: 18),
@@ -2998,15 +3558,15 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                       // Add / Import Customers Button (Desktop)
                       FilledButton.icon(
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF0F5132),
-                          foregroundColor: Colors.white,
+                          backgroundColor: cs.primary,
+                          foregroundColor: cs.onPrimary,
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           elevation: 1,
                         ),
-                        icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+                        icon: const Icon(Icons.person_add_rounded, size: 18),
                         label: Text(
-                          strings.addOrImportCustomers,
+                          isAr ? 'إضافة عملاء' : 'Add Customers',
                           style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
                         ),
                         onPressed: () => _openCustomerImportDialog(
@@ -3018,17 +3578,17 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                         ),
                       ),
 
-                      // Feature 4: Filter Active WhatsApp Numbers (Desktop)
+                      // Filter Active WhatsApp Numbers (Desktop)
                       FilledButton.tonalIcon(
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.15),
-                          foregroundColor: const Color(0xFF0F5132),
+                          backgroundColor: cs.secondaryContainer,
+                          foregroundColor: cs.onSecondaryContainer,
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         icon: const Icon(Icons.phonelink_ring_rounded, size: 18),
                         label: Text(
-                          isAr ? 'فحص أرقام الواتساب' : 'Check Active WhatsApp',
+                          isAr ? 'فحص الواتساب' : 'Check Active WhatsApp',
                           style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
                         ),
                         onPressed: filteredContacts.isEmpty
@@ -3049,10 +3609,12 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                         icon: Icon(
                           allFilteredSelected ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
                           size: 18,
-                          color: allFilteredSelected ? const Color(0xFF198754) : cs.onSurfaceVariant,
+                          color: allFilteredSelected ? cs.primary : cs.onSurfaceVariant,
                         ),
                         label: Text(
-                          allFilteredSelected ? strings.deselectAllCustomers : strings.selectAllCustomers,
+                          allFilteredSelected
+                              ? (isAr ? 'إلغاء التحديد' : 'Deselect')
+                              : (isAr ? 'تحديد الكل' : 'Select All'),
                           style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
                         ),
                         onPressed: () {
@@ -3123,8 +3685,8 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                         message: strings.sendTestMessage,
                         child: IconButton.filledTonal(
                           style: IconButton.styleFrom(
-                            backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.15),
-                            foregroundColor: const Color(0xFF075E54),
+                            backgroundColor: cs.tertiaryContainer,
+                            foregroundColor: cs.onTertiaryContainer,
                           ),
                           icon: const Icon(Icons.science_rounded, size: 20),
                           onPressed: () => _showCustomNumberTestDialog(
@@ -3144,10 +3706,10 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                         child: IconButton.filledTonal(
                           style: IconButton.styleFrom(
                             backgroundColor: _gatewayConfig.isConfigured
-                                ? const Color(0xFF198754).withValues(alpha: 0.15)
+                                ? cs.primaryContainer
                                 : cs.surfaceContainerHighest,
                             foregroundColor: _gatewayConfig.isConfigured
-                                ? const Color(0xFF198754)
+                                ? cs.primary
                                 : cs.onSurfaceVariant,
                           ),
                           icon: const Icon(Icons.cloud_sync_rounded, size: 20),
@@ -3159,29 +3721,6 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                 ],
               ),
       ],
-    );
-  }
-
-  Widget _buildSegmentTab(CustomerSegmentType segment, String label, IconData icon, ColorScheme cs) {
-    final isSelected = _selectedSegment == segment;
-    return ChoiceChip(
-      avatar: Icon(icon, size: 16, color: isSelected ? cs.onPrimary : cs.onSurfaceVariant),
-      label: Text(label),
-      selected: isSelected,
-      onSelected: (val) {
-        if (val) {
-          setState(() {
-            _selectedSegment = segment;
-          });
-        }
-      },
-      selectedColor: cs.primary,
-      labelStyle: GoogleFonts.cairo(
-        fontSize: 13,
-        fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-        color: isSelected ? cs.onPrimary : cs.onSurface,
-      ),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     );
   }
 
@@ -3261,7 +3800,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                 DataCell(
                                   Checkbox(
                                     value: isSelected,
-                                    activeColor: const Color(0xFF198754),
+                                    activeColor: cs.primary,
                                     onChanged: (val) {
                                       setState(() {
                                         if (val == true) {
@@ -3273,61 +3812,76 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                     },
                                   ),
                                 ),
-                                // Customer Avatar + Name
+                                // Customer Avatar + Name (Clickable to view transactions)
                                 DataCell(
-                                  ConstrainedBox(
-                                    constraints: const BoxConstraints(maxWidth: 220),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        CircleAvatar(
-                                          radius: 16,
-                                          backgroundColor: cs.primary.withValues(alpha: 0.15),
-                                          child: Text(
-                                            c.name.isNotEmpty ? c.name.characters.first : 'ع',
-                                            style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.primary),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Text(
-                                                c.name.isNotEmpty ? c.name : (isAr ? 'عميل بدون اسم' : 'Unnamed Customer'),
-                                                style: GoogleFonts.cairo(fontWeight: FontWeight.w600, fontSize: 13),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
+                                  Tooltip(
+                                    message: isAr ? 'عرض سجل فواتير ومعاملات العميل' : 'View customer transactions & receipts',
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(10),
+                                      onTap: () => _showCustomerTransactionsDialog(
+                                        context: context,
+                                        customer: c,
+                                        cs: cs,
+                                        strings: strings,
+                                        isAr: isAr,
+                                        companyName: companyName,
+                                        campaignName: campaignName,
+                                      ),
+                                      child: ConstrainedBox(
+                                        constraints: const BoxConstraints(maxWidth: 220),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            CircleAvatar(
+                                              radius: 16,
+                                              backgroundColor: cs.primary.withValues(alpha: 0.15),
+                                              child: Text(
+                                                c.name.isNotEmpty ? c.name.characters.first : 'ع',
+                                                style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.primary),
                                               ),
-                                              if (c.sourceTag != null && c.sourceTag!.isNotEmpty) ...[
-                                                const SizedBox(height: 2),
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                                  decoration: BoxDecoration(
-                                                    color: c.sourceTag == 'excel_import'
-                                                        ? const Color(0xFF107C41).withValues(alpha: 0.12)
-                                                        : const Color(0xFF6750A4).withValues(alpha: 0.12),
-                                                    borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    c.name.isNotEmpty ? c.name : (isAr ? 'عميل بدون اسم' : 'Unnamed Customer'),
+                                                    style: GoogleFonts.cairo(fontWeight: FontWeight.w600, fontSize: 13),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
                                                   ),
-                                                  child: Text(
-                                                    c.sourceTag == 'excel_import'
-                                                        ? strings.excelSourceTag
-                                                        : strings.manualSourceTag,
-                                                    style: GoogleFonts.cairo(
-                                                      fontSize: 10,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: c.sourceTag == 'excel_import'
-                                                          ? const Color(0xFF107C41)
-                                                          : const Color(0xFF6750A4),
+                                                  if (c.sourceTag != null && c.sourceTag!.isNotEmpty) ...[
+                                                    const SizedBox(height: 2),
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                                      decoration: BoxDecoration(
+                                                        color: c.sourceTag == 'excel_import'
+                                                            ? cs.tertiaryContainer.withValues(alpha: 0.7)
+                                                            : cs.secondaryContainer.withValues(alpha: 0.7),
+                                                        borderRadius: BorderRadius.circular(6),
+                                                      ),
+                                                      child: Text(
+                                                        c.sourceTag == 'excel_import'
+                                                            ? strings.excelSourceTag
+                                                            : strings.manualSourceTag,
+                                                        style: GoogleFonts.cairo(
+                                                          fontSize: 10,
+                                                          fontWeight: FontWeight.bold,
+                                                          color: c.sourceTag == 'excel_import'
+                                                              ? cs.onTertiaryContainer
+                                                              : cs.onSecondaryContainer,
+                                                        ),
+                                                      ),
                                                     ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ],
-                                          ),
+                                                  ],
+                                                ],
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                      ],
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -3351,7 +3905,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                             child: Icon(
                                               c.isWhatsAppActive == true ? Icons.verified_rounded : Icons.phonelink_erase_rounded,
                                               size: 16,
-                                              color: c.isWhatsAppActive == true ? const Color(0xFF25D366) : cs.error,
+                                              color: c.isWhatsAppActive == true ? cs.primary : cs.error,
                                             ),
                                           ),
                                         ],
@@ -3359,17 +3913,40 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                     ),
                                   ),
                                 ),
-                                // Invoices Count
+                                // Invoices Count (Clickable pill for transactions)
                                 DataCell(
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: cs.surfaceContainerHighest,
+                                  Tooltip(
+                                    message: isAr ? 'عرض فواتير ومعاملات العميل' : 'View customer transactions & receipts',
+                                    child: InkWell(
                                       borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Text(
-                                      '${c.totalInvoices}',
-                                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
+                                      onTap: () => _showCustomerTransactionsDialog(
+                                        context: context,
+                                        customer: c,
+                                        cs: cs,
+                                        strings: strings,
+                                        isAr: isAr,
+                                        companyName: companyName,
+                                        campaignName: campaignName,
+                                      ),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: cs.primaryContainer.withValues(alpha: 0.6),
+                                          borderRadius: BorderRadius.circular(10),
+                                          border: Border.all(color: cs.primary.withValues(alpha: 0.2)),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.receipt_long_rounded, size: 14, color: cs.primary),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              '${c.totalInvoices}',
+                                              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12, color: cs.onPrimaryContainer),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -3388,18 +3965,18 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                           child: Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                             decoration: BoxDecoration(
-                                              color: Colors.amber.shade800.withValues(alpha: 0.15),
+                                              color: cs.tertiaryContainer.withValues(alpha: 0.6),
                                               borderRadius: BorderRadius.circular(10),
                                             ),
                                             child: Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                Icon(Icons.emoji_events_rounded, size: 14, color: Colors.amber.shade800),
+                                                Icon(Icons.emoji_events_rounded, size: 14, color: cs.tertiary),
                                                 const SizedBox(width: 4),
                                                 Expanded(
                                                   child: Text(
                                                     c.prizesWon.join(', '),
-                                                    style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+                                                    style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: cs.onTertiaryContainer),
                                                     maxLines: 2,
                                                     overflow: TextOverflow.ellipsis,
                                                   ),
@@ -3424,15 +4001,30 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                 ),
                                 // Last Visit
                                 DataCell(Text(dateStr, style: GoogleFonts.cairo(fontSize: 12))),
-                                // Quick Direct WhatsApp Action Button
+                                // Action Buttons (Transactions, WhatsApp, Call)
                                 DataCell(
                                   Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Tooltip(
+                                        message: isAr ? 'سجل المعاملات والفواتير' : 'Customer Transactions',
+                                        child: IconButton(
+                                          icon: Icon(Icons.receipt_long_rounded, size: 18, color: cs.tertiary),
+                                          onPressed: () => _showCustomerTransactionsDialog(
+                                            context: context,
+                                            customer: c,
+                                            cs: cs,
+                                            strings: strings,
+                                            isAr: isAr,
+                                            companyName: companyName,
+                                            campaignName: campaignName,
+                                          ),
+                                        ),
+                                      ),
+                                      Tooltip(
                                         message: strings.sendDirectWhatsApp,
                                         child: IconButton(
-                                          icon: const Icon(Icons.chat_bubble_rounded, size: 18, color: Color(0xFF25D366)),
+                                          icon: Icon(Icons.chat_bubble_rounded, size: 18, color: cs.primary),
                                           onPressed: () {
                                             _launchWhatsAppCampaign(
                                               targetContacts: [c],
@@ -3447,7 +4039,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                       Tooltip(
                                         message: strings.callCustomerPhone,
                                         child: IconButton(
-                                          icon: Icon(Icons.phone_rounded, size: 18, color: cs.primary),
+                                          icon: Icon(Icons.phone_rounded, size: 18, color: cs.secondary),
                                           onPressed: () async {
                                             final uri = Uri.parse('tel:${c.rawPhone}');
                                             if (await canLaunchUrl(uri)) {
@@ -3525,7 +4117,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Rows per page selector
+              // Rows per page selector with M3ActionMenu
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -3534,24 +4126,72 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                     style: GoogleFonts.cairo(fontSize: 12, color: cs.onSurfaceVariant),
                   ),
                   const SizedBox(width: 8),
-                  DropdownButton<int>(
-                    value: _rowsPerPage,
-                    underline: const SizedBox(),
-                    borderRadius: BorderRadius.circular(10),
-                    items: [
-                      DropdownMenuItem(value: 25, child: Text('25', style: GoogleFonts.cairo(fontSize: 12))),
-                      DropdownMenuItem(value: 50, child: Text('50', style: GoogleFonts.cairo(fontSize: 12))),
-                      DropdownMenuItem(value: 100, child: Text('100', style: GoogleFonts.cairo(fontSize: 12))),
-                      DropdownMenuItem(value: 999999, child: Text(strings.allRowsOption, style: GoogleFonts.cairo(fontSize: 12))),
-                    ],
-                    onChanged: (val) {
-                      if (val != null) {
-                        setState(() {
-                          _rowsPerPage = val;
-                          _currentPage = 0;
-                        });
-                      }
+                  M3ActionMenu(
+                    tooltip: strings.rowsPerPageLabel,
+                    anchorBuilder: (context, controller, child) {
+                      return InkWell(
+                        onTap: () => controller.isOpen ? controller.close() : controller.open(),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: cs.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _rowsPerPage >= 999999 ? strings.allRowsOption : '$_rowsPerPage',
+                                style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSurface),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(Icons.arrow_drop_down_rounded, size: 18, color: cs.onSurfaceVariant),
+                            ],
+                          ),
+                        ),
+                      );
                     },
+                    children: [
+                      M3ActionMenu.item(
+                        context: context,
+                        label: '25',
+                        isSelected: _rowsPerPage == 25,
+                        onPressed: () => setState(() {
+                          _rowsPerPage = 25;
+                          _currentPage = 0;
+                        }),
+                      ),
+                      M3ActionMenu.item(
+                        context: context,
+                        label: '50',
+                        isSelected: _rowsPerPage == 50,
+                        onPressed: () => setState(() {
+                          _rowsPerPage = 50;
+                          _currentPage = 0;
+                        }),
+                      ),
+                      M3ActionMenu.item(
+                        context: context,
+                        label: '100',
+                        isSelected: _rowsPerPage == 100,
+                        onPressed: () => setState(() {
+                          _rowsPerPage = 100;
+                          _currentPage = 0;
+                        }),
+                      ),
+                      M3ActionMenu.divider(),
+                      M3ActionMenu.item(
+                        context: context,
+                        label: strings.allRowsOption,
+                        isSelected: _rowsPerPage >= 999999,
+                        onPressed: () => setState(() {
+                          _rowsPerPage = 999999;
+                          _currentPage = 0;
+                        }),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -3689,7 +4329,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                   color: cs.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: isSelected ? const Color(0xFF198754) : cs.outlineVariant.withValues(alpha: 0.5),
+                    color: isSelected ? cs.primary : cs.outlineVariant.withValues(alpha: 0.5),
                     width: isSelected ? 1.5 : 1,
                   ),
                 ),
@@ -3700,7 +4340,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                       children: [
                         Checkbox(
                           value: isSelected,
-                          activeColor: const Color(0xFF198754),
+                          activeColor: cs.primary,
                           onChanged: (val) {
                             setState(() {
                               if (val == true) {
@@ -3711,12 +4351,25 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                             });
                           },
                         ),
-                        CircleAvatar(
-                          radius: 16,
-                          backgroundColor: cs.primary.withValues(alpha: 0.15),
-                          child: Text(
-                            c.name.isNotEmpty ? c.name.characters.first : 'ع',
-                            style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.primary),
+                        // Customer Avatar (Clickable for transactions)
+                        InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () => _showCustomerTransactionsDialog(
+                            context: context,
+                            customer: c,
+                            cs: cs,
+                            strings: strings,
+                            isAr: isAr,
+                            companyName: companyName,
+                            campaignName: campaignName,
+                          ),
+                          child: CircleAvatar(
+                            radius: 16,
+                            backgroundColor: cs.primary.withValues(alpha: 0.15),
+                            child: Text(
+                              c.name.isNotEmpty ? c.name.characters.first : 'ع',
+                              style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: cs.primary),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -3727,11 +4380,22 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                               Row(
                                 children: [
                                   Flexible(
-                                    child: Text(
-                                      c.name.isNotEmpty ? c.name : (isAr ? 'عميل بدون اسم' : 'Unnamed Customer'),
-                                      style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                    child: InkWell(
+                                      onTap: () => _showCustomerTransactionsDialog(
+                                        context: context,
+                                        customer: c,
+                                        cs: cs,
+                                        strings: strings,
+                                        isAr: isAr,
+                                        companyName: companyName,
+                                        campaignName: campaignName,
+                                      ),
+                                      child: Text(
+                                        c.name.isNotEmpty ? c.name : (isAr ? 'عميل بدون اسم' : 'Unnamed Customer'),
+                                        style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
                                   ),
                                   if (c.sourceTag != null && c.sourceTag!.isNotEmpty) ...[
@@ -3740,8 +4404,8 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                                       decoration: BoxDecoration(
                                         color: c.sourceTag == 'excel_import'
-                                            ? const Color(0xFF107C41).withValues(alpha: 0.12)
-                                            : const Color(0xFF6750A4).withValues(alpha: 0.12),
+                                            ? cs.tertiaryContainer.withValues(alpha: 0.7)
+                                            : cs.secondaryContainer.withValues(alpha: 0.7),
                                         borderRadius: BorderRadius.circular(6),
                                       ),
                                       child: Text(
@@ -3752,8 +4416,8 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                           fontSize: 9,
                                           fontWeight: FontWeight.bold,
                                           color: c.sourceTag == 'excel_import'
-                                              ? const Color(0xFF107C41)
-                                              : const Color(0xFF6750A4),
+                                              ? cs.onTertiaryContainer
+                                              : cs.onSecondaryContainer,
                                         ),
                                       ),
                                     ),
@@ -3774,7 +4438,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                       Icon(
                                         c.isWhatsAppActive == true ? Icons.verified_rounded : Icons.phonelink_erase_rounded,
                                         size: 14,
-                                        color: c.isWhatsAppActive == true ? const Color(0xFF25D366) : cs.error,
+                                        color: c.isWhatsAppActive == true ? cs.primary : cs.error,
                                       ),
                                     ],
                                   ],
@@ -3783,11 +4447,32 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                             ],
                           ),
                         ),
+                        // Quick Transactions button
+                        IconButton.filledTonal(
+                          style: IconButton.styleFrom(
+                            backgroundColor: cs.tertiaryContainer.withValues(alpha: 0.7),
+                            foregroundColor: cs.onTertiaryContainer,
+                            minimumSize: const Size(36, 36),
+                            padding: EdgeInsets.zero,
+                          ),
+                          icon: const Icon(Icons.receipt_long_rounded, size: 16),
+                          tooltip: isAr ? 'سجل المعاملات والفواتير' : 'Transactions',
+                          onPressed: () => _showCustomerTransactionsDialog(
+                            context: context,
+                            customer: c,
+                            cs: cs,
+                            strings: strings,
+                            isAr: isAr,
+                            companyName: companyName,
+                            campaignName: campaignName,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
                         // Quick Phone Call button
                         IconButton.filledTonal(
                           style: IconButton.styleFrom(
-                            backgroundColor: cs.primary.withValues(alpha: 0.12),
-                            foregroundColor: cs.primary,
+                            backgroundColor: cs.secondaryContainer.withValues(alpha: 0.7),
+                            foregroundColor: cs.onSecondaryContainer,
                             minimumSize: const Size(36, 36),
                             padding: EdgeInsets.zero,
                           ),
@@ -3803,8 +4488,8 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                         // Quick WhatsApp button
                         IconButton.filledTonal(
                           style: IconButton.styleFrom(
-                            backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.15),
-                            foregroundColor: const Color(0xFF25D366),
+                            backgroundColor: cs.primaryContainer,
+                            foregroundColor: cs.primary,
                             minimumSize: const Size(36, 36),
                             padding: EdgeInsets.zero,
                           ),
@@ -3826,8 +4511,26 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                       spacing: 6,
                       runSpacing: 6,
                       children: [
-                        _buildChip(Icons.receipt_long_rounded, '${c.totalInvoices} ${isAr ? "فواتير" : "inv"}', cs, maxWidth: maxChipWidth),
-                        _buildChip(Icons.shopping_bag_outlined, '${c.totalSpend.toStringAsFixed(0)} ${isAr ? "ج.م" : "EGP"}', cs, maxWidth: maxChipWidth),
+                        InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () => _showCustomerTransactionsDialog(
+                            context: context,
+                            customer: c,
+                            cs: cs,
+                            strings: strings,
+                            isAr: isAr,
+                            companyName: companyName,
+                            campaignName: campaignName,
+                          ),
+                          child: _buildChip(
+                            Icons.receipt_long_rounded,
+                            '${c.totalInvoices} ${isAr ? "فواتير" : "inv"}',
+                            cs,
+                            accentColor: cs.primary,
+                            maxWidth: maxChipWidth,
+                          ),
+                        ),
+                        _buildChip(Icons.shopping_bag_rounded, '${c.totalSpend.toStringAsFixed(0)} ${isAr ? "ج.م" : "EGP"}', cs, maxWidth: maxChipWidth),
                         if (c.lastBranch.isNotEmpty)
                           _buildChip(Icons.storefront_rounded, c.lastBranch, cs, maxWidth: maxChipWidth),
                         if (c.isWinner)
@@ -3835,7 +4538,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                             Icons.emoji_events_rounded,
                             c.prizesWon.join(', '),
                             cs,
-                            accentColor: Colors.amber.shade800,
+                            accentColor: cs.tertiary,
                             maxWidth: maxChipWidth,
                           ),
                       ],
