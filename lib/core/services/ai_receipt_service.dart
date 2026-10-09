@@ -663,7 +663,7 @@ class AiReceiptService {
       generationConfig: GenerationConfig(
         responseMimeType: 'application/json',
         temperature: 0.0,
-        maxOutputTokens: 4096,
+        maxOutputTokens: 8192,
         responseSchema: Schema.object(
           properties: {
             'isValid': Schema.boolean(
@@ -1022,7 +1022,7 @@ class AiReceiptService {
       generationConfig: GenerationConfig(
         responseMimeType: 'application/json',
         temperature: 0.0,
-        maxOutputTokens: 2500,
+        maxOutputTokens: 8192,
         responseSchema: _fastTierSchema,
       ),
     );
@@ -1045,7 +1045,7 @@ class AiReceiptService {
       generationConfig: GenerationConfig(
         responseMimeType: 'application/json',
         temperature: 0.0,
-        maxOutputTokens: 4096,
+        maxOutputTokens: 8192,
         responseSchema: _fastTierSchema,
       ),
     );
@@ -2179,6 +2179,11 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
             allowCampaignMultipliers: allowMultipleChances,
           );
           if (dartMatches.isNotEmpty) {
+            final double promoMinSpendThreshold = promotionalRules
+                .where((r) => r.isSpendBased)
+                .map((r) => r.effectiveMinSpend)
+                .fold<double>(minimumSpend, (min, s) => s > 0 && (min <= 0 || s < min) ? s : min);
+
             final cleanedUnfulfilled = result.unfulfilledConditions.where((c) {
               final lower = c.toLowerCase();
               final isPromoRuleComplaint = lower.contains('شرط عرض') ||
@@ -2188,11 +2193,13 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                   lower.contains('قطعتين') ||
                   lower.contains('شراء 2') ||
                   lower.contains('غير مشمول');
-              return !isPromoRuleComplaint;
+              final isSpendComplaint = (promoMinSpendThreshold <= 0 || result.targetCompanyTotal >= promoMinSpendThreshold) &&
+                  (lower.contains('الحد الأدنى') || lower.contains('أقل من'));
+              return !isPromoRuleComplaint && !isSpendComplaint;
             }).toList();
 
             final isStillFailed = cleanedUnfulfilled.isNotEmpty ||
-                (minimumSpend > 0 && result.targetCompanyTotal < minimumSpend) ||
+                (promoMinSpendThreshold > 0 && result.targetCompanyTotal < promoMinSpendThreshold) ||
                 !result.isBranchMatched;
 
             final firstMatch = dartMatches.first;
@@ -2828,6 +2835,17 @@ class PromotionalRuleMatcher {
       }
     }
 
+    // 5. Spend-based fallback for company-wide spend promotions (e.g. spend >= 350 EGP on sponsor products)
+    if (result != null && result.targetCompanyTotal > 0) {
+      final eligibleSpendRules = promotionalRules
+          .where((r) => r.isSpendBased && !r.isCombo && result.targetCompanyTotal >= r.effectiveMinSpend)
+          .toList()
+        ..sort((a, b) => b.effectiveMinSpend.compareTo(a.effectiveMinSpend));
+      if (eligibleSpendRules.isNotEmpty) {
+        return eligibleSpendRules.first;
+      }
+    }
+
     return null;
   }
 
@@ -2875,15 +2893,20 @@ class PromotionalRuleMatcher {
           totalTriggerSpend += p.actualLineSpend;
         }
       }
+    } else if (result != null && result.targetCompanyTotal > 0 && matchedRule.isSpendBased) {
+      totalTriggerSpend = result.targetCompanyTotal;
     }
 
     // Determine multiplier
     int multiplier = 1;
     if (matchedRule.isSpendBased) {
-      if (matchedRule.minSpend > 0 &&
-          totalTriggerSpend >= matchedRule.minSpend) {
+      final effectiveMin = matchedRule.effectiveMinSpend > 0
+          ? matchedRule.effectiveMinSpend
+          : matchedRule.minSpend;
+      if (effectiveMin > 0 && totalTriggerSpend >= effectiveMin) {
         if (matchedRule.allowMultipliers || allowCampaignMultipliers) {
-          multiplier = totalTriggerSpend ~/ matchedRule.minSpend;
+          final divisor = matchedRule.minSpend > 0 ? matchedRule.minSpend : effectiveMin;
+          multiplier = divisor > 0 ? (totalTriggerSpend ~/ divisor) : 1;
           if (multiplier < 1) multiplier = 1;
         } else {
           multiplier = 1;
@@ -3256,18 +3279,31 @@ class PromotionalRuleMatcher {
         extractedProducts ??
         result?.extractedProducts ??
         const <ExtractedProductItem>[];
-    if (products.isEmpty) {
-      return [
-        'الفاتورة لا تحتوي على أي من المنتجات المؤهلة لعروض الحملة الحالية.',
-      ];
-    }
 
     // If receipt already matches any promotional rule, there are no unfulfilled reasons
     final matches = matchAllWithMultipliers(
+      result: result,
       extractedProducts: products,
       promotionalRules: promotionalRules,
     );
     if (matches.isNotEmpty) return const [];
+
+    if (products.isEmpty) {
+      if (result != null && result.targetCompanyTotal > 0) {
+        final minRuleSpend = promotionalRules
+            .where((r) => r.isSpendBased)
+            .map((r) => r.effectiveMinSpend)
+            .fold<double>(double.infinity, math.min);
+        if (minRuleSpend.isFinite && result.targetCompanyTotal < minRuleSpend) {
+          return [
+            'إجمالي مشتريات منتجات الشركة (${result.targetCompanyTotal.toInt()} ج.م) أقل من الحد الأدنى المطلوب للعرض (${minRuleSpend.toInt()} ج.م).',
+          ];
+        }
+      }
+      return [
+        'الفاتورة لا تحتوي على أي من المنتجات المؤهلة لعروض الحملة الحالية.',
+      ];
+    }
 
     final reasons = <String>[];
     final campaignBrands = _extractCampaignBrands(promotionalRules);

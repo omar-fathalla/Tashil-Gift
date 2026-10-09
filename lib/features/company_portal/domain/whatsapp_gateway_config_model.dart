@@ -69,6 +69,21 @@ class WhatsAppGatewayConfigModel {
   final int typingDurationSeconds;
   final bool enableAiAutoReply;
   final String aiCustomSystemPrompt;
+  final bool autoNotifyWinnersOnGiftHandover;
+  final String winnerNotificationTemplate;
+
+  static const String defaultWinnerTemplate =
+      '🎉 ألف مبروك يا {customer_name}! 🎁\n\n'
+      'يسر {retail_chain} - {branch_name}\n'
+      'بالتعاون مع {company_name}\n'
+      'تهنئتكم بالفوز بـ:\n'
+      '✨ {prize_name} ✨\n'
+      '{voucher_details}'
+      '📌 تفاصيل المشاركة:\n'
+      '• الحملة: {campaign_name}\n'
+      '• رقم الفاتورة: {receipt_number}\n'
+      '• تاريخ الاستلام: {claim_date}\n\n'
+      'سعداء جداً بخدمتكم ونتمنى لكم تجربة تسوق ممتعة ومميزة دائماً! 🛍️✨';
 
   const WhatsAppGatewayConfigModel({
     this.provider = WhatsAppGatewayProvider.waha,
@@ -79,11 +94,13 @@ class WhatsAppGatewayConfigModel {
     this.isEnabled = true,
     this.lastTestedAt,
     this.isConnected = true,
-    this.connectedPhoneNumber = '01211857725',
+    this.connectedPhoneNumber = '+201508899965',
     this.enableTypingSimulation = true,
     this.typingDurationSeconds = 2,
     this.enableAiAutoReply = false,
     this.aiCustomSystemPrompt = '',
+    this.autoNotifyWinnersOnGiftHandover = true,
+    this.winnerNotificationTemplate = defaultWinnerTemplate,
   });
 
   bool get isConfigured {
@@ -107,6 +124,8 @@ class WhatsAppGatewayConfigModel {
     int? typingDurationSeconds,
     bool? enableAiAutoReply,
     String? aiCustomSystemPrompt,
+    bool? autoNotifyWinnersOnGiftHandover,
+    String? winnerNotificationTemplate,
   }) {
     return WhatsAppGatewayConfigModel(
       provider: provider ?? this.provider,
@@ -122,6 +141,8 @@ class WhatsAppGatewayConfigModel {
       typingDurationSeconds: typingDurationSeconds ?? this.typingDurationSeconds,
       enableAiAutoReply: enableAiAutoReply ?? this.enableAiAutoReply,
       aiCustomSystemPrompt: aiCustomSystemPrompt ?? this.aiCustomSystemPrompt,
+      autoNotifyWinnersOnGiftHandover: autoNotifyWinnersOnGiftHandover ?? this.autoNotifyWinnersOnGiftHandover,
+      winnerNotificationTemplate: winnerNotificationTemplate ?? this.winnerNotificationTemplate,
     );
   }
 
@@ -140,6 +161,8 @@ class WhatsAppGatewayConfigModel {
       'typingDurationSeconds': typingDurationSeconds,
       'enableAiAutoReply': enableAiAutoReply,
       'aiCustomSystemPrompt': aiCustomSystemPrompt.trim(),
+      'autoNotifyWinnersOnGiftHandover': autoNotifyWinnersOnGiftHandover,
+      'winnerNotificationTemplate': winnerNotificationTemplate,
     };
   }
 
@@ -159,6 +182,8 @@ class WhatsAppGatewayConfigModel {
       typingDurationSeconds: int.tryParse(map['typingDurationSeconds']?.toString() ?? '') ?? 2,
       enableAiAutoReply: map['enableAiAutoReply'] == true,
       aiCustomSystemPrompt: map['aiCustomSystemPrompt']?.toString() ?? '',
+      autoNotifyWinnersOnGiftHandover: map['autoNotifyWinnersOnGiftHandover'] != false,
+      winnerNotificationTemplate: map['winnerNotificationTemplate']?.toString() ?? defaultWinnerTemplate,
     );
   }
 

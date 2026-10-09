@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../domain/whatsapp_gateway_config_model.dart';
 import '../../domain/whatsapp_gateway_service.dart';
+import 'whatsapp_qr_pairing_dialog.dart';
 
 /// Modal dialog displaying a live rendered screenshot of the WAHA WhatsApp Web session
 class WhatsAppScreenshotDialog extends StatefulWidget {
@@ -27,6 +28,7 @@ class _WhatsAppScreenshotDialogState extends State<WhatsAppScreenshotDialog> {
   final WhatsAppGatewayService _service = WhatsAppGatewayService();
   Uint8List? _screenshotBytes;
   bool _isLoading = true;
+  bool _isRestarting = false;
   String? _errorMessage;
   DateTime? _capturedAt;
 
@@ -34,6 +36,16 @@ class _WhatsAppScreenshotDialogState extends State<WhatsAppScreenshotDialog> {
   void initState() {
     super.initState();
     _fetchScreenshot();
+  }
+
+  Future<void> _restartAndRetry() async {
+    setState(() => _isRestarting = true);
+    await _service.restartInstance(widget.config);
+    await Future.delayed(const Duration(seconds: 4));
+    if (mounted) {
+      setState(() => _isRestarting = false);
+      _fetchScreenshot();
+    }
   }
 
   Future<void> _fetchScreenshot() async {
@@ -167,11 +179,50 @@ class _WhatsAppScreenshotDialogState extends State<WhatsAppScreenshotDialog> {
                                     textAlign: TextAlign.center,
                                     style: GoogleFonts.cairo(fontSize: 13, color: cs.error),
                                   ),
-                                  const SizedBox(height: 18),
-                                  FilledButton.tonalIcon(
-                                    onPressed: _fetchScreenshot,
-                                    icon: const Icon(Icons.refresh_rounded, size: 18),
-                                    label: Text(widget.isAr ? 'إعادة المحاولة' : 'Retry'),
+                                  Wrap(
+                                    spacing: 10,
+                                    runSpacing: 8,
+                                    alignment: WrapAlignment.center,
+                                    children: [
+                                      FilledButton.tonalIcon(
+                                        onPressed: _fetchScreenshot,
+                                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                                        label: Text(widget.isAr ? 'إعادة المحاولة' : 'Retry'),
+                                      ),
+                                      FilledButton.icon(
+                                        style: FilledButton.styleFrom(
+                                          backgroundColor: cs.primary,
+                                          foregroundColor: cs.onPrimary,
+                                        ),
+                                        onPressed: () {
+                                          Navigator.of(context).pop();
+                                          showDialog(
+                                            context: context,
+                                            builder: (ctx) => WhatsAppQrPairingDialog(
+                                              config: widget.config,
+                                              strings: widget.strings,
+                                              isAr: widget.isAr,
+                                              onLinked: (_) {},
+                                            ),
+                                          );
+                                        },
+                                        icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
+                                        label: Text(
+                                          widget.isAr ? 'مسح كود QR / ربط رقم جديد' : 'Scan QR / Link Phone',
+                                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                      OutlinedButton.icon(
+                                        onPressed: _isRestarting ? null : _restartAndRetry,
+                                        icon: _isRestarting
+                                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                            : const Icon(Icons.restart_alt_rounded, size: 18),
+                                        label: Text(
+                                          widget.strings.restartSessionBtn,
+                                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),

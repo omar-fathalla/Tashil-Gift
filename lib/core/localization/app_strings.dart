@@ -3220,6 +3220,38 @@ class AppStrings {
   String get skipToNextCustomer => _t(ar: 'تخطي للعميل التالي', en: 'Skip to Next Customer', hi: 'अगले ग्राहक पर जाएं');
   String get dispatchCompleted => _t(ar: 'اكتمل إرسال الحملة بنجاح لكافة العملاء المحددِين!', en: 'Campaign dispatch completed successfully for all targeted customers!', hi: 'सभी लक्षित ग्राहकों के लिए अभियान सफलतापूर्वक पूरा हुआ!');
 
+  // WhatsApp Winner Automatic Notification
+  String get enableWhatsAppWinnerNotificationTitle => _t(
+    ar: 'إرسال التهنئة التلقائي للفائزين عبر الواتساب',
+    en: 'Auto WhatsApp Winner Greetings',
+    hi: 'विजेताओं को स्वचालित व्हाट्सएप बधाई',
+  );
+  String get enableWhatsAppWinnerNotificationDesc => _t(
+    ar: 'إرسال رسالة تهنئة احتفالية رسمية برقم الفاتورة وبيانات الهدية لهاتف العميل عبر الواتساب فور تأكيد تسليم الجائزة.',
+    en: 'Automatically dispatch official celebratory WhatsApp greetings with receipt and prize details to winners upon gift handover.',
+    hi: 'उपहार सौंपने पर विजेताओं को रसीद और पुरस्कार विवरण के साथ स्वचालित उत्सव व्हाट्सएप संदेश भेजें।',
+  );
+  String get enableWhatsAppWinnerNotificationActive => _t(
+    ar: 'إرسال تلقائي مفعل',
+    en: 'Auto-send Active',
+    hi: 'स्वचालित प्रेषण सक्रिय',
+  );
+  String get enableWhatsAppWinnerNotificationDisabled => _t(
+    ar: 'إرسال متوقف',
+    en: 'Auto-send Paused',
+    hi: 'स्वचालित प्रेषण रुका हुआ',
+  );
+  String get campaignWhatsAppWinnerTileTitle => _t(
+    ar: 'تهنئة الفائزين عبر الواتساب',
+    en: 'WhatsApp Winner Greetings',
+    hi: 'व्हाट्सएप विजेता बधाई',
+  );
+  String get campaignWhatsAppWinnerTileSubtitle => _t(
+    ar: 'إرسال فوري فور تسليم الهدية',
+    en: 'Instant send on gift handover',
+    hi: 'उपहार सौंपने पर तुरंत भेजें',
+  );
+
   // ---------------------------------------------------------------------------
   // 22. 3-Tier Enterprise Portal Hierarchy (منظومة البوابات الثلاثية)
   // ---------------------------------------------------------------------------
@@ -3608,6 +3640,24 @@ class AppStrings {
   String get typingSimulatorDesc => _t(ar: 'تشغيل إشارة "يكتب الآن..." قبل الإرسال لمحاكاة السلوك البشري الطبيعي وحماية الرقم من الحظر.', en: 'Display "Typing..." indicator before sending to mimic natural human messaging and protect number.', hi: 'मानव व्यवहार की नकल करने के लिए टाइपिंग दिखाएं।');
   String get aiAutoReplyLabel => _t(ar: 'المجيب الآلي الذكي (AI Auto-Reply Bot)', en: 'AI Auto-Reply Bot', hi: 'एआई ऑटो-रिप्लाई बॉट');
   String get aiAutoReplyDesc => _t(ar: 'الرد الفوري والذكي على ردود واستفسارات العملاء على الواتساب بذكاء Gemini 3.7 Flash.', en: 'Instant intelligent replies to incoming customer queries using Gemini 3.7 Flash.', hi: 'जेमिनी 3.7 फ्लैश के साथ स्वचालित उत्तर।');
+  String get qrPairingTitle => _t(ar: 'ربط الواتساب بالهاتف (QR Code)', en: 'Link WhatsApp via QR Code', hi: 'व्हाट्सएप क्यूआर लिंक');
+  String get qrPairingSubtitle => _t(ar: 'امسح رمز الاستجابة السريعة بكاميرا الواتساب لربط رقم الهاتف فوراً بالسيرفر', en: 'Scan QR code with your WhatsApp camera to link your phone number to the server', hi: 'अपने फोन को जोड़ने के लिए क्यूआर कोड स्कैन करें');
+  String get scanQrTab => _t(ar: 'مسح كود QR', en: 'Scan QR Code', hi: 'क्यूआर स्कैन');
+  String get pairingCodeTab => _t(ar: 'كود الاقتران بالرقم', en: 'Pairing Code', hi: 'पेयरिंग कोड');
+  String get enterPhoneToGetCode => _t(ar: 'أدخل رقم الهاتف لطلب كود الاقتران المكون من 8 خانات:', en: 'Enter phone number to generate 8-character pairing code:', hi: 'पेयरिंग कोड प्राप्त करने के लिए फोन नंबर दर्ज करें:');
+  String get requestPairingCodeBtn => _t(ar: 'طلب كود الاقتران', en: 'Request Pairing Code', hi: 'कोड का अनुरोध करें');
+  String get enterPairingCodeInWhatsApp => _t(ar: 'افتح واتساب > الأجهزة المرتبطة > ربط برقم الهاتف وأدخل الكود التالي:', en: 'Open WhatsApp > Linked Devices > Link with phone number and enter this code:', hi: 'व्हाट्सएप में यह कोड दर्ज करें:');
+  String get unlinkAndChangeNumber => _t(ar: 'فك الارتباط وتغيير الرقم', en: 'Unlink & Change Number', hi: 'नंबर बदलें और अनलिंक करें');
+  String get unlinkConfirmTitle => _t(ar: 'تأكيد فك الارتباط من هذا الرقم', en: 'Confirm Unlinking Current Phone', hi: 'अनलिंक की पुष्टि करें');
+  String get unlinkConfirmDesc => _t(ar: 'سيتم تسجيل الخروج من جلسة الواتساب الحالية على السيرفر لتتمكن من ربط رقم هاتف جديد. هل ترغب بالاستمرار؟', en: 'This will log out the active WhatsApp session on the server to allow linking a new number. Continue?', hi: 'यह वर्तमान सत्र को लॉग आउट करेगा। क्या आप जारी रखना चाहते हैं?');
+  String get pairingSuccessTitle => _t(ar: 'تم ربط رقم الهاتف بنجاح!', en: 'WhatsApp Linked Successfully!', hi: 'व्हाट्सएप सफलतापूर्वक लिंक हो गया!');
+  String get restartSessionBtn => _t(ar: 'إعادة تشغيل الجلسة', en: 'Restart Session', hi: 'सत्र पुनरारंभ करें');
+  String get linkNewWhatsAppNumber => _t(ar: 'ربط رقم واتساب جديد', en: 'Link New WhatsApp Number', hi: 'नया नंबर लिंक करें');
+  String get linkViaQrOrCode => _t(ar: 'مسح كود QR أو كود الاقتران', en: 'Scan QR or Pairing Code', hi: 'क्यूआर या कोड स्कैन करें');
+  String get sessionStatusStarting => _t(ar: 'جارٍ بدء تشغيل محرك الواتساب بالسيرفر...', en: 'Starting WhatsApp engine on server...', hi: 'सर्वर पर व्हाट्सएप शुरू हो रहा है...');
+  String get sessionStatusScanQr => _t(ar: 'بانتظار مسح رمز الـ QR من هاتفك...', en: 'Waiting for QR scan from your phone...', hi: 'क्यूआर स्कैन की प्रतीक्षा है...');
+  String get sessionStatusWorking => _t(ar: 'الجلسة متصلة وتعمل بنجاح', en: 'Session connected & active', hi: 'सत्र सक्रिय है');
+  String get sessionStatusFailed => _t(ar: 'تعطلت الجلسة، يرجى إعادة التشغيل', en: 'Session failed, please restart', hi: 'सत्र विफल रहा, पुनः प्रयास करें');
 
   // ---------------------------------------------------------------------------
   // 26. Branch Invoices Distribution & Analytics (بيان إحصائي لتوزيع فواتير الفروع)

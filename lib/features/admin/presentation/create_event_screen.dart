@@ -81,6 +81,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   String _multiplierBasis = 'both';
   bool _requireVoucherSerials = false;
   bool _allowComplementaryReceipts = false;
+  bool _enableWhatsAppWinnerNotification = true;
   
   DateTime? _startDate;
   DateTime? _endDate;
@@ -178,6 +179,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     _multiplierBasis = e?.multiplierBasis ?? 'both';
     _requireVoucherSerials = e?.requireVoucherSerials ?? false;
     _allowComplementaryReceipts = e?.allowComplementaryReceipts ?? false;
+    _enableWhatsAppWinnerNotification = e?.enableWhatsAppWinnerNotification ?? true;
     _maxChancesController = TextEditingController(
       text: (e?.maxChancesPerReceipt != null && e!.maxChancesPerReceipt > 0)
           ? e.maxChancesPerReceipt.toString()
@@ -4038,6 +4040,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         }).toList(),
         requireVoucherSerials: _requireVoucherSerials,
         allowComplementaryReceipts: _allowComplementaryReceipts,
+        enableWhatsAppWinnerNotification: _enableWhatsAppWinnerNotification,
       );
 
       String createdEventId = widget.eventToEdit?.id ?? '';
@@ -4802,6 +4805,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     _buildMultipleChancesSection(context, colorScheme, isMobile, activeCountry),
                     _buildVoucherSerialsSettingSection(context, colorScheme, isMobile),
                     _buildComplementaryReceiptsSettingSection(context, colorScheme, isMobile),
+                    _buildWhatsAppWinnerNotificationSettingSection(context, colorScheme, isMobile),
                   ],
                 ),
 
@@ -6030,6 +6034,115 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
             onChanged: (val) {
               setState(() {
                 _allowComplementaryReceipts = val;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWhatsAppWinnerNotificationSettingSection(
+    BuildContext context,
+    ColorScheme colorScheme,
+    bool isMobile,
+  ) {
+    final isEnabled = _enableWhatsAppWinnerNotification;
+    final primaryColor = Colors.teal.shade700;
+    return Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isEnabled
+            ? Colors.teal.shade50.withValues(alpha: 0.55)
+            : colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isEnabled
+              ? Colors.teal.shade400
+              : colorScheme.outlineVariant.withValues(alpha: 0.4),
+          width: isEnabled ? 1.5 : 1,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isEnabled
+                  ? primaryColor
+                  : colorScheme.surfaceContainerHighest,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.mark_chat_read_rounded,
+              size: 20,
+              color: isEnabled
+                  ? Colors.white
+                  : colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    Text(
+                      'إرسال التهنئة التلقائي للفائزين عبر الواتساب',
+                      style: GoogleFonts.cairo(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isEnabled
+                            ? Colors.green.shade100
+                            : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        isEnabled ? 'إرسال تلقائي مفعل 🟢' : 'معطل لهذه الحملة ⏸️',
+                        style: GoogleFonts.cairo(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: isEnabled
+                              ? Colors.green.shade900
+                              : Colors.grey.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  isEnabled
+                      ? 'عند تفعيل هذا الخيار، يقوم النظام تلقائياً بإرسال رسالة تهنئة احتفالية رسمية برقم الفاتورة واسم الجائزة وكود الفواتشر إلى هاتف العميل عبر الواتساب فور تأكيد تسليم الهدية.'
+                      : 'تم تعطيل إرسال رسائل التهنئة عبر الواتساب لهذه الحملة تحديداً، ولن يتم إرسال أي رسائل تلقائية للعملاء عند استلام هداياهم.',
+                  style: GoogleFonts.cairo(
+                    fontSize: 12,
+                    color: colorScheme.onSurfaceVariant,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Switch.adaptive(
+            value: _enableWhatsAppWinnerNotification,
+            activeTrackColor: primaryColor,
+            onChanged: (val) {
+              setState(() {
+                _enableWhatsAppWinnerNotification = val;
               });
             },
           ),

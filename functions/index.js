@@ -10,105 +10,93 @@ const db = admin.firestore();
 function escapeHtml(str) {
   if (!str) return "";
   return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 /**
- * Cloud Function to generate dynamic OpenGraph link previews for WhatsApp & Social Media
+ * Resolves event document from Firestore by eventId or companySlug
  */
-exports.sharePreview = functions.https.onRequest(async (req, res) => {
-  try {
-    const rawPath = req.path || "/";
-    const pathSegments = rawPath.split("/").filter(Boolean);
-    const query = req.query || {};
+async function resolveEvent(db, eventIdParam, routeIdentifier) {
+  if (eventIdParam) {
+    const eventDoc = await db.collection("events").doc(eventIdParam).get();
+    if (eventDoc.exists) return eventDoc.data();
+  }
 
-    const routeType = pathSegments[0] || "portal"; // portal, c, p, event, ep, share
-    const routeIdentifier = pathSegments[1] || query.event || query.company || "";
-    const eventIdParam = query.event || "";
+  if (routeIdentifier) {
+    const directDoc = await db.collection("events").doc(routeIdentifier).get();
+    if (directDoc.exists) return directDoc.data();
 
-    let companyName = "تسهيل جيفت";
-    let eventName = "منظومة إدارة العروض والهدايا الترويجية";
-    let companyLogoUrl = "https://tashil-gift.web.app/icons/Icon-512.png";
-    let welcomeDesc = "Tashil Gift - Smart Multi-Company Promotion & Validation Platform by Switch Point";
-    let isManagerPortal = routeType === "portal" || routeType === "p" || routeType === "ep";
+    const cleanSlug = routeIdentifier.toLowerCase();
+    const slugQuery = await db
+      .collection("events")
+      .where("companySlug", "==", cleanSlug)
+      .limit(1)
+      .get();
 
-    // 1. Try resolving event from Firestore by ID if available
-    let resolvedEvent = null;
+    if (!slugQuery.empty) return slugQuery.docs[0].data();
+  }
 
-    if (eventIdParam) {
-      const eventDoc = await db.collection("events").doc(eventIdParam).get();
-      if (eventDoc.exists) {
-        resolvedEvent = eventDoc.data();
-      }
+  return null;
+}
+
+/**
+ * Extracts and formats metadata for social share preview
+ */
+function extractPreviewMetadata(resolvedEvent, query, isManagerPortal) {
+  let companyName = "تسهيل جيفت";
+  let eventName = "منظومة إدارة العروض والهدايا الترويجية";
+  let companyLogoUrl = "https://tashil-gift.web.app/icons/Icon-512.png";
+  let welcomeDesc = "Tashil Gift - Smart Multi-Company Promotion & Validation Platform by Switch Point";
+
+  if (resolvedEvent) {
+    companyName = resolvedEvent.targetCompany || resolvedEvent.companyName || companyName;
+    eventName = resolvedEvent.eventName || eventName;
+    if (resolvedEvent.companyLogoUrl?.trim()) {
+      companyLogoUrl = resolvedEvent.companyLogoUrl.trim();
     }
-
-    if (!resolvedEvent && routeIdentifier) {
-      // Check if identifier is an event ID
-      const eventDoc = await db.collection("events").doc(routeIdentifier).get();
-      if (eventDoc.exists) {
-        resolvedEvent = eventDoc.data();
-      }
+    const welcome = resolvedEvent.welcomeMessage?.trim() || resolvedEvent.welcomeTitle?.trim();
+    if (welcome) {
+      welcomeDesc = welcome;
     }
+  } else if (query.companyName) {
+    companyName = query.companyName;
+  }
 
-    // 2. If not found by event ID, search by companySlug or targetCompany in events collection
-    if (!resolvedEvent && routeIdentifier) {
-      const cleanSlug = routeIdentifier.toLowerCase();
-      const slugQuery = await db
-        .collection("events")
-        .where("companySlug", "==", cleanSlug)
-        .limit(1)
-        .get();
+  if (query.logo) {
+    companyLogoUrl = query.logo;
+  }
 
-      if (!slugQuery.empty) {
-        resolvedEvent = slugQuery.docs[0].data();
-      }
-    }
+  let pageTitle = "";
+  let pageDescription = "";
 
-    // 3. Extract resolved brand information
-    if (resolvedEvent) {
-      companyName = resolvedEvent.targetCompany || resolvedEvent.companyName || companyName;
-      eventName = resolvedEvent.eventName || eventName;
-      if (resolvedEvent.companyLogoUrl && resolvedEvent.companyLogoUrl.trim().length > 0) {
-        companyLogoUrl = resolvedEvent.companyLogoUrl.trim();
-      }
-      if (resolvedEvent.welcomeMessage && resolvedEvent.welcomeMessage.trim().length > 0) {
-        welcomeDesc = resolvedEvent.welcomeMessage.trim();
-      } else if (resolvedEvent.welcomeTitle && resolvedEvent.welcomeTitle.trim().length > 0) {
-        welcomeDesc = resolvedEvent.welcomeTitle.trim();
-      }
-    } else if (query.companyName) {
-      companyName = query.companyName;
-    }
+  if (isManagerPortal) {
+    pageTitle = `${companyName} • بوابة الشريك | Tashil Gift`;
+    pageDescription = `منظومة إدارة ومتابعة الحملات الترويجية والهدايا لشركة ${companyName}`;
+  } else {
+    pageTitle = `${eventName} (${companyName}) | Tashil Gift`;
+    pageDescription = welcomeDesc;
+  }
 
-    if (query.logo) {
-      companyLogoUrl = query.logo;
-    }
+  return {
+    pageTitle,
+    pageDescription,
+    companyLogoUrl,
+  };
+}
 
-    // 4. Construct rich title and description
-    let pageTitle = "";
-    let pageDescription = "";
+/**
+ * Builds HTML page template with rich OpenGraph / Twitter meta tags
+ */
+function buildPreviewHtml({ pageTitle, pageDescription, companyLogoUrl }) {
+  const escapedTitle = escapeHtml(pageTitle);
+  const escapedDesc = escapeHtml(pageDescription);
+  const escapedLogo = escapeHtml(companyLogoUrl);
 
-    if (isManagerPortal) {
-      pageTitle = `${companyName} • بوابة الشريك | Tashil Gift`;
-      pageDescription = `منظومة إدارة ومتابعة الحملات الترويجية والهدايا لشركة ${companyName}`;
-    } else {
-      pageTitle = `${eventName} (${companyName}) | Tashil Gift`;
-      pageDescription = welcomeDesc;
-    }
-
-    const escapedTitle = escapeHtml(pageTitle);
-    const escapedDesc = escapeHtml(pageDescription);
-    const escapedLogo = escapeHtml(companyLogoUrl);
-
-    // Set cache control for performance
-    res.set("Cache-Control", "public, max-age=300, s-maxage=600");
-    res.set("Content-Type", "text/html; charset=utf-8");
-
-    const html = `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <base href="/">
@@ -174,8 +162,30 @@ exports.sharePreview = functions.https.onRequest(async (req, res) => {
   <script src="/flutter_bootstrap.js" async></script>
 </body>
 </html>`;
+}
 
-    res.status(200).send(html);
+/**
+ * Cloud Function to generate dynamic OpenGraph link previews for WhatsApp & Social Media
+ */
+exports.sharePreview = functions.https.onRequest(async (req, res) => {
+  try {
+    const rawPath = req.path || "/";
+    const pathSegments = rawPath.split("/").filter(Boolean);
+    const query = req.query || {};
+
+    const routeType = pathSegments[0] || "portal"; // portal, c, p, event, ep, share
+    const routeIdentifier = pathSegments[1] || query.event || query.company || "";
+    const eventIdParam = query.event || "";
+    const isManagerPortal = routeType === "portal" || routeType === "p" || routeType === "ep";
+
+    const resolvedEvent = await resolveEvent(db, eventIdParam, routeIdentifier);
+    const meta = extractPreviewMetadata(resolvedEvent, query, isManagerPortal);
+
+    // Set cache control for performance
+    res.set("Cache-Control", "public, max-age=300, s-maxage=600");
+    res.set("Content-Type", "text/html; charset=utf-8");
+
+    res.status(200).send(buildPreviewHtml(meta));
   } catch (error) {
     console.error("Error generating share preview:", error);
     // Graceful fallback to static Flutter web SPA

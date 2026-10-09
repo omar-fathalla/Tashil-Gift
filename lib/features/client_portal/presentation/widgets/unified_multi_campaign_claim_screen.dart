@@ -14,6 +14,7 @@ import '../../../../core/utils/arabic_numbers_utils.dart';
 import '../../../../core/animations/m3_motion.dart';
 import '../../../../core/constants/country_currency_config.dart';
 import '../../../games/presentation/winner_celebration_dialog.dart';
+import '../../../company_portal/domain/whatsapp_winner_notification_service.dart';
 
 /// Helper for individual voucher serial input in multi-campaign view
 class MultiCampaignVoucherSlot {
@@ -322,6 +323,24 @@ class _UnifiedMultiCampaignClaimScreenState
         }
       }
 
+      // Dispatch automated celebratory WhatsApp winner message
+      final isAnyCampaignWhatsAppEnabled = widget.qualifiedCampaigns.any((q) => q.campaign.enableWhatsAppWinnerNotification);
+      if (isAnyCampaignWhatsAppEnabled && widget.customerPhone.isNotEmpty && widget.qualifiedCampaigns.isNotEmpty) {
+        final firstCampaign = widget.qualifiedCampaigns.first;
+        final combinedPrizeName = allAwardedPrizeSummaries.join(' + ');
+        unawaited(ref.read(whatsappWinnerNotificationServiceProvider).sendWinnerNotification(
+          toPhone: widget.customerPhone,
+          prizeName: combinedPrizeName,
+          customerName: widget.customerName,
+          retailChain: firstCampaign.campaign.retailChainName,
+          branchName: firstCampaign.resolvedBranchName,
+          companyName: firstCampaign.campaign.targetCompany,
+          receiptNumber: widget.receiptNumber,
+          companySlug: firstCampaign.campaign.companySlug,
+          isEnabledForCampaign: isAnyCampaignWhatsAppEnabled,
+        ));
+      }
+
       if (!mounted) return;
 
       setState(() {
@@ -334,6 +353,7 @@ class _UnifiedMultiCampaignClaimScreenState
         context: context,
         prizeName: allAwardedPrizeSummaries.join('\n• '),
         isVoucher: widget.qualifiedCampaigns.any((q) => q.resolvedIsVoucher),
+        recipientPhone: isAnyCampaignWhatsAppEnabled ? widget.customerPhone : null,
         onNextCustomer: () {},
       );
 

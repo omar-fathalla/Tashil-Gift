@@ -1,7 +1,6 @@
 const LRU = require("lru-cache");
 const { RateLimiter } = require("limiter");
-const retryRequest = require("retry-request");
-const crypto = require("crypto");
+const crypto = require("node:crypto");
 
 /**
  * 1. LRU Caches for Campaign Metadata & Recurring Invoices
@@ -37,7 +36,9 @@ const geminiRateLimiter = new RateLimiter(60, "minute", true);
 function acquireRateLimitToken() {
   return new Promise((resolve, reject) => {
     geminiRateLimiter.removeTokens(1, (err, remaining) => {
-      if (err) return reject(err);
+      if (err) {
+        return reject(err instanceof Error ? err : new Error(String(err)));
+      }
       if (remaining < 0) {
         const error = new Error("Rate limit exceeded. Please retry after a brief pause.");
         error.code = 429;
@@ -58,43 +59,42 @@ function computeSha256(content) {
 }
 
 /**
- * 3. Exponential Backoff & Retry Logic (retry-request / custom backoff loop)
+ * 3. Exponential Backoff & Retry Logic
  * Retries on HTTP 429 (ResourceExhausted) and 503 (Unavailable) errors.
  *
  * @param {Function} asyncFn Async operation to execute
  * @param {Object} options Retry configuration
+ * @param {number} attempt Current retry attempt index
  * @returns {Promise<any>}
  */
-async function executeWithExponentialBackoff(asyncFn, options = {}) {
-  const maxRetries = options.maxRetries || 3;
-  const initialDelayMs = options.initialDelayMs || 1000;
-  const maxDelayMs = options.maxDelayMs || 8000;
+async function executeWithExponentialBackoff(asyncFn, options = {}, attempt = 0) {
+  const maxRetries = options.maxRetries ?? 3;
+  const initialDelayMs = options.initialDelayMs ?? 1000;
+  const maxDelayMs = options.maxDelayMs ?? 8000;
 
-  let attempt = 0;
-  while (true) {
-    try {
-      return await asyncFn();
-    } catch (err) {
-      attempt++;
-      const isRateLimit =
-        err.code === 429 ||
-        err.status === 429 ||
-        (err.message && (err.message.includes("429") || err.message.includes("RESOURCE_EXHAUSTED")));
-      const isUnavailable = err.code === 503 || err.status === 503;
+  try {
+    return await asyncFn();
+  } catch (err) {
+    const nextAttempt = attempt + 1;
+    const isRateLimit =
+      err?.code === 429 ||
+      err?.status === 429 ||
+      (typeof err?.message === "string" &&
+        (err.message.includes("429") || err.message.includes("RESOURCE_EXHAUSTED")));
+    const isUnavailable = err?.code === 503 || err?.status === 503;
 
-      if ((isRateLimit || isUnavailable) && attempt <= maxRetries) {
-        const exponentialDelay = Math.min(maxDelayMs, initialDelayMs * Math.pow(2, attempt - 1));
-        const jitter = Math.floor(Math.random() * 400);
-        const delay = exponentialDelay + jitter;
+    if ((isRateLimit || isUnavailable) && nextAttempt <= maxRetries) {
+      const exponentialDelay = Math.min(maxDelayMs, initialDelayMs * (2 ** (nextAttempt - 1)));
+      const jitter = crypto.randomInt(0, 400);
+      const delay = exponentialDelay + jitter;
 
-        console.warn(
-          `[GeminiGateway] HTTP ${err.code || 429} encountered on attempt ${attempt}. Retrying in ${delay}ms with exponential backoff...`
-        );
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      } else {
-        throw err;
-      }
+      console.warn(
+        `[GeminiGateway] HTTP ${err?.code || 429} encountered on attempt ${nextAttempt}. Retrying in ${delay}ms with exponential backoff...`
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return executeWithExponentialBackoff(asyncFn, options, nextAttempt);
     }
+    throw err;
   }
 }
 
@@ -181,7 +181,7 @@ async function analyzeReceiptWithGateway({
   });
 
   // 6. Cache Valid Results in LRU Cache
-  if (result && result.isValid !== undefined) {
+  if (result?.isValid !== undefined) {
     receiptAnalysisCache.set(imageHash, result);
   }
 

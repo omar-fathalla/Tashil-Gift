@@ -18,6 +18,7 @@ Future<void> showWinnerCelebrationDialog({
   bool? isVoucher,
   List<LinkedGiftAllocation> linkedGifts = const [],
   String? imageUrl,
+  String? recipientPhone,
 }) {
   return showGeneralDialog(
     context: context,
@@ -43,6 +44,7 @@ Future<void> showWinnerCelebrationDialog({
         isVoucher: isVoucher,
         linkedGifts: linkedGifts,
         imageUrl: imageUrl,
+        recipientPhone: recipientPhone,
       );
     },
   );
@@ -58,6 +60,7 @@ class WinnerCelebrationDialog extends ConsumerStatefulWidget {
   final bool? isVoucher;
   final List<LinkedGiftAllocation> linkedGifts;
   final String? imageUrl;
+  final String? recipientPhone;
 
   const WinnerCelebrationDialog({
     super.key,
@@ -70,6 +73,7 @@ class WinnerCelebrationDialog extends ConsumerStatefulWidget {
     this.isVoucher,
     this.linkedGifts = const [],
     this.imageUrl,
+    this.recipientPhone,
   });
 
   @override
@@ -586,6 +590,38 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                             );
                           },
                         ),
+
+                        if (widget.recipientPhone != null && widget.recipientPhone!.trim().isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF25D366).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: const Color(0xFF25D366).withValues(alpha: 0.4),
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.mark_chat_read_rounded, color: Color(0xFF1E7E34), size: 18),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    'تم إرسال إشعار الهدية عبر الواتساب إلى ${widget.recipientPhone!.trim()} 📲',
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF1E7E34),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
 
                         if (widget.remainingChances > 0) ...[
                           const SizedBox(height: 14),

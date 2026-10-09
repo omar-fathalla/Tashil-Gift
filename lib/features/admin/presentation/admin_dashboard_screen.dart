@@ -1670,6 +1670,24 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                           }
                         },
                       ),
+                      // 4. WhatsApp Winner Auto-Notification Switch
+                      _buildPortalControlTile(
+                        context,
+                        title: strings.campaignWhatsAppWinnerTileTitle,
+                        subtitle: strings.campaignWhatsAppWinnerTileSubtitle,
+                        icon: Icons.mark_chat_read_rounded,
+                        isActive: event.isActive && event.enableWhatsAppWinnerNotification,
+                        colorScheme: colorScheme,
+                        isAr: isAr,
+                        tooltip: event.enableWhatsAppWinnerNotification
+                            ? (isAr ? 'الإرسال التلقائي لرسائل التهنئة عبر الواتساب مفعل لهذه الحملة' : 'WhatsApp winner auto-notification enabled')
+                            : (isAr ? 'الإرسال التلقائي لرسائل التهنئة عبر الواتساب متوقف لهذه الحملة' : 'WhatsApp winner auto-notification paused'),
+                        onChanged: (val) async {
+                          if (firestore != null) {
+                            await firestore.collection('events').doc(event.id).update({'enableWhatsAppWinnerNotification': val});
+                          }
+                        },
+                      ),
                     ],
                   ),
                 ],

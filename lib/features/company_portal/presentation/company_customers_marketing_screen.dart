@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -75,6 +76,8 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
   CustomerSegmentType _selectedSegment = CustomerSegmentType.all;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  Timer? _searchDebounceTimer;
+  bool _isSearching = false;
 
   // Pagination state for ultra-fast rendering (Rule 9)
   int _currentPage = 0;
@@ -189,6 +192,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
 
   @override
   void dispose() {
+    _searchDebounceTimer?.cancel();
     _searchController.dispose();
     _messageController.dispose();
     _mediaUrlController.dispose();
@@ -197,6 +201,52 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
       c.dispose();
     }
     super.dispose();
+  }
+
+  /// Debounced search handler: waits 600ms after user stops typing before triggering search
+  void _onSearchQueryChanged(String val) {
+    _searchDebounceTimer?.cancel();
+    if (val.trim() == _searchQuery.trim()) {
+      if (mounted && _isSearching) {
+        setState(() => _isSearching = false);
+      }
+      return;
+    }
+    if (!_isSearching) {
+      setState(() => _isSearching = true);
+    }
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 600), () {
+      if (!mounted) return;
+      setState(() {
+        _searchQuery = val;
+        _isSearching = false;
+        _currentPage = 0;
+      });
+    });
+  }
+
+  /// Immediate 0ms search execution when pressing Enter or tapping Search icon
+  void _executeSearchImmediately([String? val]) {
+    _searchDebounceTimer?.cancel();
+    final query = val ?? _searchController.text;
+    if (!mounted) return;
+    setState(() {
+      _searchQuery = query;
+      _isSearching = false;
+      _currentPage = 0;
+    });
+  }
+
+  /// Immediately resets search query and clears text
+  void _clearSearch() {
+    _searchDebounceTimer?.cancel();
+    _searchController.clear();
+    if (!mounted) return;
+    setState(() {
+      _searchQuery = '';
+      _isSearching = false;
+      _currentPage = 0;
+    });
   }
 
   /// Inserts a smart tag into the message composer
@@ -444,13 +494,10 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
           break;
       }
 
-      // Search query filter
+      // Search query filter with O(1) pre-computed index (Rule 9)
       if (_searchQuery.isNotEmpty) {
-        final query = _searchQuery.toLowerCase().trim();
-        final nameMatch = contact.name.toLowerCase().contains(query);
-        final phoneMatch = contact.rawPhone.toEnglishDigits().contains(query) || contact.cleanPhone.contains(query);
-        final branchMatch = contact.branches.any((b) => b.toLowerCase().contains(query));
-        if (!nameMatch && !phoneMatch && !branchMatch) return false;
+        final query = _searchQuery.toLowerCase().trim().toEnglishDigits();
+        if (!contact.searchIndex.contains(query)) return false;
       }
 
       return true;
@@ -3293,22 +3340,27 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                   // Search field full-width
                   TextField(
                     controller: _searchController,
-                    onChanged: (val) {
-                      setState(() {
-                        _searchQuery = val;
-                      });
-                    },
+                    onChanged: _onSearchQueryChanged,
+                    onSubmitted: (val) => _executeSearchImmediately(val),
+                    textInputAction: TextInputAction.search,
                     decoration: InputDecoration(
                       hintText: strings.searchCustomerPlaceholder,
                       hintStyle: GoogleFonts.cairo(fontSize: 13),
-                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                      suffixIcon: _searchQuery.isNotEmpty
+                      prefixIcon: IconButton(
+                        icon: _isSearching
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.search_rounded, size: 20),
+                        tooltip: 'بحث فوري',
+                        onPressed: () => _executeSearchImmediately(),
+                      ),
+                      suffixIcon: (_searchQuery.isNotEmpty || _searchController.text.isNotEmpty)
                           ? IconButton(
                               icon: const Icon(Icons.clear_rounded, size: 18),
-                              onPressed: () {
-                                _searchController.clear();
-                                setState(() => _searchQuery = '');
-                              },
+                              onPressed: _clearSearch,
                             )
                           : null,
                       filled: true,
@@ -3500,22 +3552,27 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                     constraints: const BoxConstraints(maxWidth: 380),
                     child: TextField(
                       controller: _searchController,
-                      onChanged: (val) {
-                        setState(() {
-                          _searchQuery = val;
-                        });
-                      },
+                      onChanged: _onSearchQueryChanged,
+                      onSubmitted: (val) => _executeSearchImmediately(val),
+                      textInputAction: TextInputAction.search,
                       decoration: InputDecoration(
                         hintText: strings.searchCustomerPlaceholder,
                         hintStyle: GoogleFonts.cairo(fontSize: 13),
-                        prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                        suffixIcon: _searchQuery.isNotEmpty
+                        prefixIcon: IconButton(
+                          icon: _isSearching
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.search_rounded, size: 20),
+                          tooltip: 'بحث فوري',
+                          onPressed: () => _executeSearchImmediately(),
+                        ),
+                        suffixIcon: (_searchQuery.isNotEmpty || _searchController.text.isNotEmpty)
                             ? IconButton(
                                 icon: const Icon(Icons.clear_rounded, size: 18),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() => _searchQuery = '');
-                                },
+                                onPressed: _clearSearch,
                               )
                             : null,
                         filled: true,

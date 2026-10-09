@@ -103,9 +103,9 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
     try {
       final pickedFile = await _picker.pickImage(
         source: source,
-        maxWidth: 1400,
-        maxHeight: 1400,
-        imageQuality: 82,
+        maxWidth: 2560,
+        maxHeight: 2560,
+        imageQuality: 92,
       );
       if (pickedFile != null) {
         setState(() {
@@ -350,13 +350,18 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         ],
       ].where((s) => s.trim().isNotEmpty).toSet().toList();
 
+      final double effectiveCampaignMinSpend = activeEvent.promotionalRules
+          .where((r) => r.isSpendBased)
+          .map((r) => r.effectiveMinSpend)
+          .fold<double>(activeEvent.minimumSpend, (min, s) => s > 0 && (min <= 0 || s < min) ? s : min);
+
       final result = await aiService.analyzeReceiptImage(
         bytes, 
         mimeType,
         additionalImagesBytes: additionalBytesList,
         additionalMimeTypes: additionalMimesList,
         targetCompany: activeEvent.targetCompany,
-        minimumSpend: activeEvent.minimumSpend,
+        minimumSpend: effectiveCampaignMinSpend,
         requiredProducts: effectiveRequiredProducts,
         registeredBarcodes: registeredBarcodes,
         catalogBarcodeMap: catalogBarcodeMap,
@@ -420,7 +425,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           isValid: false,
           message: result.message,
           targetCompanyTotal: result.targetCompanyTotal,
-          minimumSpend: activeEvent.minimumSpend,
+          minimumSpend: effectiveCampaignMinSpend,
           targetCompany: activeEvent.targetCompany,
           currencySymbol: activeCountry.currencySymbol,
           unfulfilledConditions: unfulfilledList,

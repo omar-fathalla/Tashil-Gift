@@ -1503,6 +1503,50 @@ class AiDirectivesSeedData {
           tags: ['optimistic-ui', 'image-calibration', 'thermal-contrast', 'payload-reduction', 'laser-scanner', 'material-motion', 'm3', 'air-75'],
           lastUpdated: '2026-10-09',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-76',
+          code: 'GEMINI_OUTPUT_TOKEN_EXPANSION_AND_COMPANY_SPEND_INVARIANT',
+          orderIndex: 76,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'توسعة سعة توكنز المخرجات وحوكمة عروض الإنفاق الشاملة للشركات',
+          titleEn: 'Gemini Output Token Expansion & Company Spend Invariant Standard',
+          descriptionAr:
+              'معيار حوكمة معماري لحماية معالجة فواتير السوبرماركت الطويلة من الاقتطاع النصي وضمان استحقاق جوائز عروض الإنفاق: 1) رفع الحد الأقصى لتوكنز المخرجات (maxOutputTokens = 8192) في نماذج Gemini 3.7 Flash: نظراً لاحتساب توكنز التفكير والاستدلال ضمن حد المخرجات في نماذج الرؤية، تضمن السعة الموسعة (8192) عدم توقف النموذج قبل استكمال قائمة أصناف الفاتورة (extractedProducts) أو بتر JSON. 2) حوكمة عروض الإنفاق الشاملة للشركات (Spend-Based Rule Invariant): عند احتساب إجمالي مشتريات شركة راعية (targetCompanyTotal) يتجاوز الحد الأدنى المطلوب لعرض إنفاق (by_spend)، يُحظر قطعياً إخراج رسالة "الفاتورة لا تحتوي على أي من المنتجات المؤهلة"، بل يتم اعتماد الفاتورة واستحقاق الجائزة فورياً حتى في الفواتير المطبوعة بأسماء فرعية متعددة.',
+          descriptionEn:
+              'Architectural governance standard safeguarding long supermarket receipt OCR from premature JSON truncations and guaranteeing sponsor spend rule resolution: 1) Model Output Token Capacity Expansion (maxOutputTokens = 8192) across Gemini 3.7 Flash vision tiers: because internal chain-of-thought/reasoning tokens count against generation output limits, expanding capacity to 8192 tokens prevents models from hitting maxTokens cutoffs before serializing extractedProducts or completing the JSON structure. 2) Company Spend Rule Invariant: whenever targetCompanyTotal satisfies a campaign by_spend rule threshold, the evaluation engine guarantees immediate promotion qualification and prize allocation, preventing contradictory "no qualifying products" rejection dialogs when multi-line umbrella sub-brands are present.',
+          logicAr:
+              '1. تعيين maxOutputTokens = 8192 في نماذج Fast Tier و Deep Audit Tier لاستيعاب أطول بونات الكاشير (20-40 صنفاً) مع استدلال Gemini 3.7 الكامل دون انقطاع.\n2. التحقق من انتهاء النموذج بحالة stop الطبيعية بدلاً من maxTokens.\n3. في PromotionalRuleMatcher: إذا كان targetCompanyTotal >= minSpend لعرض إنفاق عام، يتم تأهيل الفاتورة واستحقاق الجائزة حتمياً في 0ms.\n4. في getUnfulfilledPromotionReasons: منع إخراج رسالة عدم وجود منتجات مؤهلة إذا كان targetCompanyTotal > 0، وتقديم توجيه مالي دقيق بالقيمة المتبقية.',
+          logicEn:
+              '1. Sets maxOutputTokens = 8192 across Fast Tier and Deep Audit Tier to accommodate long receipts (20-40 items) alongside Gemini 3.7 reasoning without truncation.\n2. Verifies natural completion with finishReason: stop rather than maxTokens.\n3. In PromotionalRuleMatcher: when targetCompanyTotal satisfies by_spend rules, guarantees deterministic prize qualification in 0ms.\n4. In getUnfulfilledPromotionReasons: eliminates contradictory "no qualifying products" errors when targetCompanyTotal > 0, rendering precise financial feedback instead.',
+          exampleInput:
+              'فاتورة أسواق فتح الله بقيمة 4848 ج.م تحتوي على 3 أصناف لشركة إدكو (فلفيتا 169 ج.م + ديفا 170 ج.م + كلوريل 33 ج.م = 372 ج.م)، وعرض الحملة يشترط شراء بقيمة 340-350 ج.م.',
+          exampleOutput:
+              '1) نموذج الذكاء الاصطناعي يستخرج الـ 3 أصناف كاملة في extractedProducts دون أي بتر (finishReason: stop). 2) محرك دارت يطابق العرض بنجاح ويمنح كوبون مشتريات 50 ج.م. 3) واجهة المستخدم تفتح شاشة الاحتفال بالجائزة بدون أي رسائل رفض متعارضة.',
+          tags: ['max-output-tokens', 'token-expansion', 'spend-invariant', 'edco', 'fathalla-pos', 'ai-brain', 'air-76'],
+          lastUpdated: '2026-10-09',
+        ),
+        const AiDirectiveModel(
+          id: 'AIR-77',
+          code: 'CAMERA_IMAGE_RESOLUTION_AND_PROMOTIONAL_SPEND_TOLERANCE_HARMONIZATION',
+          orderIndex: 77,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'دقة تصوير بونات الكاشير الطويلة ومواءمة سماحية الخصم للعروض الترويجية',
+          titleEn: 'Long Receipt High-Fidelity Capture & Promo Spend Tolerance Harmonization',
+          descriptionAr:
+              'معيار يضمن دقة استخراج أصناف بونات الكاشير الطويلة ومنع سقوط البنود أو الرفض المتناقض: 1) رفع دقة التقاط كاميرا الهاتف (maxWidth/maxHeight = 2560 بدقة جودة 92%): بونات السوبرماركت الطويلة (20-80 صنفاً) والمطبوعة بالطابعات الحرارية أو النقطية تصبح غير مقروءة عند ضغطها إلى 1400px بجودة 82%، وتسقط الأصناف الدقيقة أو المشطوبة بخطوط أقلام البروموتر (مثل صنف كلوريل 33 ج.م)، مما يسبب تذبذب الإجمالي المستخرج بين 372 ج.م و 339 ج.م. 2) مواءمة حد الإنفاق المشروط مع سماحية الخصم (Spend Tolerance Harmonization): عندما يحدد العرض الترويجي حداً للإنفاق بسماحية خصم (مثل إنفاق 340 ج.م بسماحية 10 ج.م = 330 ج.م كحد أدنى فعال)، يجب على مدقق الفواتير وبطاقات الشروط في واجهة المستخدم اعتماد الحد الأدنى الفعال للقواعد الترويجية (330 ج.م) بدلاً من الرفض الصارم على مستوى الفعالية المجرد (350 ج.م).',
+          descriptionEn:
+              'Standard guaranteeing high-fidelity long receipt OCR extraction and eliminating contradictory promotional rejections: 1) Camera Image Capture Resolution Upgrade (maxWidth/maxHeight = 2560 at 92% quality): long supermarket thermal receipts (20-80 items) degrade into illegible pixels when downscaled to 1400px at 82% quality, losing fine dot-matrix lines or items marked with promoter pen strokes (e.g. Cloril 33 EGP), leading to total variance between 372 EGP and 339 EGP. 2) Promotional Rule Spend Tolerance Harmonization: when promotional rules define spend thresholds with discount tolerance (e.g. minSpend: 340 with tolerance: 10 = effective minimum: 330 EGP), verification checks and UI condition cards must evaluate against the effective promotional minimum spend (330 EGP), preventing false rejections against raw event-level values (350 EGP).',
+          logicAr:
+              '1. رفع أبعاد ومعايير ImagePicker إلى maxWidth: 2560 و maxHeight: 2560 بجودة imageQuality: 92 في بوابات رفع الفواتير والتحقق.\n2. احتساب effectiveCampaignMinSpend من أدنى حد فعال للقواعد الترويجية المشروطة بالإنفاق (effectiveMinSpend).\n3. تغذية مدقق الذكاء الاصطناعي وبطاقات الشروط بالحد الفعال لمنع رفض الفواتير التي تقع ضمن نطاق سماحية الخصم المعتمدة.',
+          logicEn:
+              '1. Elevates ImagePicker constraints to maxWidth: 2560, maxHeight: 2560, imageQuality: 92 across client and validation portals.\n2. Computes effectiveCampaignMinSpend from the minimum effectiveMinSpend across spend-based promotional rules.\n3. Feeds the effective threshold into AiReceiptService and UI condition cards to prevent rejecting receipts qualifying under approved discount tolerances.',
+          exampleInput:
+              'فاتورة بونات مشتريات طويلة بها فلفيتا (169 ج.م) وديفا (170 ج.م) بمجموع 339 ج.م، وقاعدة العرض تشترط 340 ج.م بسماحية خصم 10 ج.م (الحد الفعال 330 ج.م).',
+          exampleOutput:
+              '1) يتم احتساب الفاتورة مستوفية للحد الأدنى (339 >= 330 ج.م) ولا تظهر بطاقة "أقل من الحد الأدنى 350 ج.م". 2) يتم اعتماد الفاتورة ومنح الجائزة الترويجية مباشرة دون أي رسائل متضاربة.',
+          tags: ['receipt-resolution', 'image-quality', 'discount-tolerance', 'promotional-spend-harmonization', 'air-77'],
+          lastUpdated: '2026-10-09',
+        ),
       ];
 }
 

@@ -535,6 +535,9 @@ class EventModel {
   /// Whether to allow complementary / multi-receipt spend aggregation for this campaign (strictly false by default - AIR-61).
   final bool allowComplementaryReceipts;
 
+  /// Whether to automatically send celebratory WhatsApp greeting messages to winning shoppers upon gift handover (true by default).
+  final bool enableWhatsAppWinnerNotification;
+
   EventModel({
     required this.id,
     required this.eventName,
@@ -569,6 +572,7 @@ class EventModel {
     this.maxChancesPerReceipt = 0,
     this.requireVoucherSerials = false,
     this.allowComplementaryReceipts = false,
+    this.enableWhatsAppWinnerNotification = true,
   });
 
   bool get isExpired {
@@ -726,6 +730,7 @@ class EventModel {
       maxChancesPerReceipt: (data['maxChancesPerReceipt'] as num?)?.toInt() ?? 0,
       requireVoucherSerials: data['requireVoucherSerials'] == true || data['require_voucher_serials'] == true,
       allowComplementaryReceipts: data['allowComplementaryReceipts'] == true || data['allow_complementary_receipts'] == true,
+      enableWhatsAppWinnerNotification: data['enableWhatsAppWinnerNotification'] != false && data['enable_whatsapp_winner_notification'] != false,
     );
   }
 
@@ -789,6 +794,7 @@ class EventModel {
       'maxChancesPerReceipt': maxChancesPerReceipt,
       'requireVoucherSerials': requireVoucherSerials,
       'allowComplementaryReceipts': allowComplementaryReceipts,
+      'enableWhatsAppWinnerNotification': enableWhatsAppWinnerNotification,
     };
   }
 
@@ -826,6 +832,7 @@ class EventModel {
     int? maxChancesPerReceipt,
     bool? requireVoucherSerials,
     bool? allowComplementaryReceipts,
+    bool? enableWhatsAppWinnerNotification,
   }) {
     return EventModel(
       id: id ?? this.id,
@@ -861,6 +868,7 @@ class EventModel {
       maxChancesPerReceipt: maxChancesPerReceipt ?? this.maxChancesPerReceipt,
       requireVoucherSerials: requireVoucherSerials ?? this.requireVoucherSerials,
       allowComplementaryReceipts: allowComplementaryReceipts ?? this.allowComplementaryReceipts,
+      enableWhatsAppWinnerNotification: enableWhatsAppWinnerNotification ?? this.enableWhatsAppWinnerNotification,
     );
   }
 }

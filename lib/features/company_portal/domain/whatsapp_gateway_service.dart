@@ -3,12 +3,16 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/arabic_numbers_utils.dart';
 import '../presentation/widgets/whatsapp_campaign_dispatcher_dialog.dart';
 import 'whatsapp_gateway_config_model.dart';
+
+/// Global Riverpod Provider for WhatsAppGatewayService
+final whatsappGatewayServiceProvider = Provider<WhatsAppGatewayService>((ref) => WhatsAppGatewayService());
 
 /// Result of a single WhatsApp Gateway dispatch operation
 class WhatsAppGatewayResult {
@@ -113,7 +117,7 @@ class WhatsAppGatewayService {
       delayBetweenMessagesSeconds: 3,
       isEnabled: true,
       isConnected: true,
-      connectedPhoneNumber: '01211857725',
+      connectedPhoneNumber: '+201508899965',
     );
   }
 
@@ -893,6 +897,114 @@ class WhatsAppGatewayService {
     } catch (e) {
       debugPrint('Error fetching WAHA live screenshot: $e');
       return null;
+    } finally {
+      if (client == null) httpClient.close();
+    }
+  }
+
+  /// Fetches the live QR code PNG image for session authorization
+  Future<Uint8List?> fetchQrCode(WhatsAppGatewayConfigModel config, {http.Client? client}) async {
+    if (config.provider != WhatsAppGatewayProvider.waha) return null;
+    final httpClient = client ?? http.Client();
+    try {
+      final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
+      final url = Uri.parse('$endpoint/api/$session/auth/qr');
+      final headers = <String, String>{};
+      if (config.apiToken.trim().isNotEmpty) {
+        headers['X-Api-Key'] = config.apiToken.trim();
+      }
+      final response = await httpClient.get(url, headers: headers).timeout(const Duration(seconds: 12));
+      if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+        return response.bodyBytes;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error fetching WAHA QR code: $e');
+      return null;
+    } finally {
+      if (client == null) httpClient.close();
+    }
+  }
+
+  /// Requests an 8-character pairing code to link WhatsApp by entering the code in mobile app
+  Future<String?> requestPairingCode({
+    required WhatsAppGatewayConfigModel config,
+    required String phoneNumber,
+    http.Client? client,
+  }) async {
+    if (config.provider != WhatsAppGatewayProvider.waha) return null;
+    final cleanPhone = formatInternationalPhone(phoneNumber);
+    if (cleanPhone.isEmpty) return null;
+
+    final httpClient = client ?? http.Client();
+    try {
+      final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
+      final url = Uri.parse('$endpoint/api/$session/auth/request-code');
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+      };
+      if (config.apiToken.trim().isNotEmpty) {
+        headers['X-Api-Key'] = config.apiToken.trim();
+      }
+      final body = json.encode({'phoneNumber': cleanPhone});
+      final response = await httpClient.post(url, headers: headers, body: body).timeout(const Duration(seconds: 15));
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final data = json.decode(response.body);
+        if (data is Map && data.containsKey('code')) {
+          return data['code']?.toString();
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error requesting WAHA pairing code: $e');
+      return null;
+    } finally {
+      if (client == null) httpClient.close();
+    }
+  }
+
+  /// Retrieves real-time session information (status, me, phone, pushName)
+  Future<Map<String, dynamic>?> fetchSessionDetails(WhatsAppGatewayConfigModel config, {http.Client? client}) async {
+    if (config.provider != WhatsAppGatewayProvider.waha) return null;
+    final httpClient = client ?? http.Client();
+    try {
+      final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
+      final url = Uri.parse('$endpoint/api/sessions/$session');
+      final headers = <String, String>{};
+      if (config.apiToken.trim().isNotEmpty) {
+        headers['X-Api-Key'] = config.apiToken.trim();
+      }
+      final response = await httpClient.get(url, headers: headers).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>?;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error fetching session details: $e');
+      return null;
+    } finally {
+      if (client == null) httpClient.close();
+    }
+  }
+
+  /// Starts a WAHA session
+  Future<bool> startInstance(WhatsAppGatewayConfigModel config, {http.Client? client}) async {
+    if (!config.isConfigured || config.provider != WhatsAppGatewayProvider.waha) return false;
+    final httpClient = client ?? http.Client();
+    try {
+      final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
+      final url = Uri.parse('$endpoint/api/sessions/$session/start');
+      final headers = <String, String>{};
+      if (config.apiToken.trim().isNotEmpty) headers['X-Api-Key'] = config.apiToken.trim();
+      final response = await httpClient.post(url, headers: headers).timeout(const Duration(seconds: 15));
+      return response.statusCode >= 200 && response.statusCode < 300;
+    } catch (e) {
+      debugPrint('Error starting WAHA instance: $e');
+      return false;
     } finally {
       if (client == null) httpClient.close();
     }

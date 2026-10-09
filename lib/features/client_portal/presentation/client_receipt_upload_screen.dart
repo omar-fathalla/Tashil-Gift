@@ -286,9 +286,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
     try {
       final pickedFile = await _picker.pickImage(
         source: source,
-        maxWidth: 1400,
-        maxHeight: 1400,
-        imageQuality: 82,
+        maxWidth: 2560,
+        maxHeight: 2560,
+        imageQuality: 92,
       );
       if (pickedFile != null) {
         setState(() {
@@ -659,6 +659,13 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         combinedIsAllBranches = _activeEvent!.isAllBranches;
       }
 
+      final double effectiveCampaignMinSpend = isMultiScan
+          ? 0.0
+          : (combinedPromotionalRules
+              .where((r) => r.isSpendBased)
+              .map((r) => r.effectiveMinSpend)
+              .fold<double>(_activeEvent!.minimumSpend, (min, s) => s > 0 && (min <= 0 || s < min) ? s : min));
+
       // Run Gemini AI analysis
       final result = await aiService.analyzeReceiptImage(
         bytes,
@@ -666,7 +673,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         additionalImagesBytes: additionalBytesList,
         additionalMimeTypes: additionalMimesList,
         targetCompany: primaryTargetEvent.targetCompany,
-        minimumSpend: isMultiScan ? 0.0 : _activeEvent!.minimumSpend,
+        minimumSpend: effectiveCampaignMinSpend,
         requiredProducts: combinedRequiredProducts,
         registeredBarcodes: registeredBarcodes,
         catalogBarcodeMap: catalogBarcodeMap,
@@ -724,7 +731,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           isValid: false,
           message: result.message,
           targetCompanyTotal: result.targetCompanyTotal,
-          minimumSpend: _activeEvent!.minimumSpend,
+          minimumSpend: effectiveCampaignMinSpend,
           targetCompany: _activeEvent!.targetCompany,
           currencySymbol: activeCountry.currencySymbol,
           unfulfilledConditions: unfulfilledList,
@@ -1425,6 +1432,13 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
               isVoucher: resolvedIsVoucher,
               linkedGifts: resolvedLinkedGifts,
               requireVoucherSerials: currentEvent?.requireVoucherSerials ?? false,
+              customerPhone: _customerPhoneController.text.toEnglishDigits().trim(),
+              customerName: _customerNameController.text.trim(),
+              retailChainName: currentEvent?.retailChainName ?? result.storeChainDetected,
+              branchName: result.branchDetected,
+              companyName: currentEvent?.targetCompany ?? '',
+              receiptNumber: receiptNumber,
+              companySlug: currentEvent?.companySlug,
             ),
           ),
         );

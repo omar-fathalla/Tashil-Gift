@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/localization/app_strings.dart';
+import '../../../../core/utils/arabic_numbers_utils.dart';
 import '../../domain/whatsapp_gateway_config_model.dart';
 import '../../domain/whatsapp_gateway_service.dart';
 import 'whatsapp_gateway_settings_dialog.dart';
@@ -42,6 +43,22 @@ class CustomerCampaignContact {
 
   bool get isWinner => prizesWon.isNotEmpty;
   bool get isRepeat => totalInvoices >= 2;
+
+  /// Pre-computed search index token for ultra-fast O(1) filtering (Rule 9)
+  late final String searchIndex = () {
+    final sb = StringBuffer();
+    sb.write(name.toLowerCase());
+    sb.write(' ');
+    sb.write(rawPhone.toEnglishDigits());
+    sb.write(' ');
+    sb.write(cleanPhone);
+    sb.write(' ');
+    for (final b in branches) {
+      sb.write(b.toLowerCase());
+      sb.write(' ');
+    }
+    return sb.toString();
+  }();
 }
 
 enum ContactDispatchStatus {
