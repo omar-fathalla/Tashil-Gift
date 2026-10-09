@@ -8,6 +8,7 @@ import 'package:al_mraay/features/admin/domain/event_model.dart';
 void main() {
   test('Investigate Edco receipt matching with actual rule from Firestore', () {
     final file = File('/tmp/edco_rule.json');
+    if (!file.existsSync()) return;
     final Map<String, dynamic> ruleJson = jsonDecode(file.readAsStringSync());
 
     final rule = PromotionalRuleItem(
@@ -90,9 +91,11 @@ void main() {
   test(
     'Run full AiReceiptService.analyzeReceiptImage on /tmp/receipt_test.jpg',
     () async {
-    final bytes = File('/tmp/receipt_test.jpg').readAsBytesSync();
-    final file = File('/tmp/edco_rule.json');
-    final Map<String, dynamic> ruleJson = jsonDecode(file.readAsStringSync());
+    final imageFile = File('/tmp/receipt_test.jpg');
+    final ruleFile = File('/tmp/edco_rule.json');
+    if (!imageFile.existsSync() || !ruleFile.existsSync()) return;
+    final bytes = imageFile.readAsBytesSync();
+    final Map<String, dynamic> ruleJson = jsonDecode(ruleFile.readAsStringSync());
 
     final rule = PromotionalRuleItem(
       id: ruleJson['id'] ?? 'rule_1',

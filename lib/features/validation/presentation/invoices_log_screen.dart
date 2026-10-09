@@ -38,7 +38,7 @@ import '../../games/presentation/scratch_card_screen.dart';
 import '../../games/presentation/direct_gift_claim_screen.dart';
 import '../../admin/presentation/ai_brain_rules_screen.dart';
 
-enum DateFilterType { all, today, last7Days, thisMonth, custom }
+enum DateFilterType { all, today, thisMonth, custom }
 
 class InvoicesLogScreen extends ConsumerStatefulWidget {
   final String? lockedCompanySlug;
@@ -70,7 +70,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
   String _selectedCompanySlug = 'all';
   String _selectedBranch = 'all';
   String _statusFilter = 'accepted'; // 'accepted', 'rejected', 'all'
-  DateFilterType _dateFilter = DateFilterType.all;
+  DateFilterType _dateFilter = DateFilterType.today;
   DateTimeRange? _customDateRange;
   final Set<String> _expandedDocIds = <String>{};
   final Set<String> _recheckingDocIds = <String>{};
@@ -231,7 +231,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       _selectedCompanySlug = widget.lockedCompanySlug ?? 'all';
       _selectedBranch = 'all';
       _statusFilter = 'accepted';
-      _dateFilter = DateFilterType.all;
+      _dateFilter = DateFilterType.today;
       _customDateRange = null;
       _currentPage = 0;
       _mobileLimit = _pageSize;
@@ -402,9 +402,6 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     switch (_dateFilter) {
       case DateFilterType.today:
         return date.year == now.year && date.month == now.month && date.day == now.day;
-      case DateFilterType.last7Days:
-        final sevenDaysAgo = now.subtract(const Duration(days: 7));
-        return date.isAfter(sevenDaysAgo) && date.isBefore(now.add(const Duration(days: 1)));
       case DateFilterType.thisMonth:
         return date.year == now.year && date.month == now.month;
       case DateFilterType.custom:
@@ -3217,7 +3214,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
         _selectedCompanySlug != 'all' ||
         _selectedBranch != 'all' ||
         _statusFilter != 'accepted' ||
-        _dateFilter != DateFilterType.all;
+        _dateFilter != DateFilterType.today;
 
     final baseScopedEventsMap = (widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty)
         ? Map.fromEntries(eventsMap.entries.where((e) {
@@ -3871,17 +3868,10 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
     }
 
     Widget buildDatePickerWidget({bool isMobile = false}) {
-      final String dateLabel;
-      if (_dateFilter == DateFilterType.all) {
-        dateLabel = isMobile
-            ? (isAr ? 'التاريخ' : (isHi ? 'तिथि' : 'Date'))
-            : _getDateFilterLabel(strings);
-      } else {
-        dateLabel = _getDateFilterLabel(strings);
-      }
+      final String dateLabel = _getDateFilterLabel(strings);
 
       return M3ActionMenu(
-        tooltip: isAr ? 'تصفية حسب التاريخ' : 'Filter by Date',
+        tooltip: isAr ? 'تصفية حسب التاريخ' : (isHi ? 'तिथि द्वारा फ़िल्टर करें' : 'Filter by Date'),
         anchorBuilder: (context, controller, child) {
           return InkWell(
             onTap: () {
@@ -3935,21 +3925,8 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
         children: [
           M3ActionMenu.header(
             context: context,
-            title: isAr ? 'الفترة الزمنية' : 'Time Period',
+            title: isAr ? 'الفترة الزمنية' : (isHi ? 'समय अवधि' : 'Time Period'),
             icon: Icons.date_range_rounded,
-          ),
-          M3ActionMenu.item(
-            context: context,
-            label: strings.filterByDate,
-            icon: Icons.calendar_today_rounded,
-            isSelected: _dateFilter == DateFilterType.all,
-            onPressed: () {
-              setState(() {
-                _dateFilter = DateFilterType.all;
-                _customDateRange = null;
-              });
-              _resetPagination();
-            },
           ),
           M3ActionMenu.item(
             context: context,
@@ -3964,13 +3941,39 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
               _resetPagination();
             },
           ),
-          M3ActionMenu.divider(),
+          M3ActionMenu.item(
+            context: context,
+            label: strings.filterThisMonth,
+            icon: Icons.calendar_view_month_rounded,
+            isSelected: _dateFilter == DateFilterType.thisMonth,
+            onPressed: () {
+              setState(() {
+                _dateFilter = DateFilterType.thisMonth;
+                _customDateRange = null;
+              });
+              _resetPagination();
+            },
+          ),
           M3ActionMenu.item(
             context: context,
             label: strings.filterCustomDate,
             icon: Icons.date_range_rounded,
             isSelected: _dateFilter == DateFilterType.custom,
             onPressed: () => _pickCustomDateRange(context),
+          ),
+          M3ActionMenu.divider(),
+          M3ActionMenu.item(
+            context: context,
+            label: isAr ? 'كافة الفترات (الكل)' : (isHi ? 'सभी समय' : 'All Time'),
+            icon: Icons.calendar_today_rounded,
+            isSelected: _dateFilter == DateFilterType.all,
+            onPressed: () {
+              setState(() {
+                _dateFilter = DateFilterType.all;
+                _customDateRange = null;
+              });
+              _resetPagination();
+            },
           ),
         ],
       );
@@ -5126,13 +5129,13 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
   }
 
   String _getDateFilterLabel(AppStrings strings) {
+    final isAr = ref.isArabic;
+    final isHi = ref.isHindi;
     switch (_dateFilter) {
       case DateFilterType.all:
-        return strings.filterByDate;
+        return isAr ? 'كافة الفترات' : (isHi ? 'सभी समय' : 'All Time');
       case DateFilterType.today:
         return strings.filterToday;
-      case DateFilterType.last7Days:
-        return strings.filterLast7Days;
       case DateFilterType.thisMonth:
         return strings.filterThisMonth;
       case DateFilterType.custom:
