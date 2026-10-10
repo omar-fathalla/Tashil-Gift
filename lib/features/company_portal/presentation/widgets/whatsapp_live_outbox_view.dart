@@ -79,10 +79,23 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
     final results = await Future.wait([statsFuture, messagesFuture]);
 
     if (mounted) {
+      final pageRes = results[1] as WhatsAppOutboxPageResult;
+      var statsRes = results[0] as WhatsAppGatewayStats?;
+      // If stats query returned null/0 but we have fetched messages, derive stats from messages!
+      if ((statsRes == null || statsRes.sentCount == 0) && pageRes.messages.isNotEmpty) {
+        final sent = pageRes.messages.where((m) => m.status == 'sent').length;
+        statsRes = WhatsAppGatewayStats(
+          sentCount: sent,
+          queueCount: 0,
+          unsentCount: 0,
+          invalidCount: 0,
+          expiredCount: 0,
+        );
+      }
       setState(() {
         _isLoading = false;
-        _stats = results[0] as WhatsAppGatewayStats?;
-        _pageResult = results[1] as WhatsAppOutboxPageResult;
+        _stats = statsRes;
+        _pageResult = pageRes;
       });
     }
   }
@@ -449,6 +462,43 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
                     CircularProgressIndicator(strokeWidth: 2.5),
                     SizedBox(height: 16),
                     Text('جارٍ جلب سجل الرسائل المباشر من السيرفر...'),
+                  ],
+                ),
+              ),
+            )
+          else if (!_pageResult.isSuccess && _pageResult.errorMessage != null)
+            Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: cs.errorContainer.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: cs.error.withValues(alpha: 0.4)),
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.wifi_off_rounded, size: 48, color: cs.error),
+                    const SizedBox(height: 12),
+                    Text(
+                      widget.isAr ? 'تعذر الاتصال بسيرفر الواتساب' : 'Failed to connect to WhatsApp Gateway',
+                      style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold, color: cs.error),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      widget.isAr
+                          ? 'تأكد من تشغيل السيرفر وصحة الإعدادات أو مسار الـ Proxy الآمن.'
+                          : 'Ensure the server is running and settings or secure proxy are configured properly.',
+                      style: GoogleFonts.cairo(fontSize: 13, color: cs.onSurfaceVariant),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(backgroundColor: cs.primary),
+                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                      label: Text(widget.isAr ? 'إعادة المحاولة' : 'Retry', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                      onPressed: _loadMessages,
+                    ),
                   ],
                 ),
               ),

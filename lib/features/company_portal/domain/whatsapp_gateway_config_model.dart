@@ -285,6 +285,8 @@ class WhatsAppOutboxPageResult {
   final int page;
   final int limit;
   final List<WhatsAppOutboxMessage> messages;
+  final String? errorMessage;
+  final bool isSuccess;
 
   const WhatsAppOutboxPageResult({
     this.total = 0,
@@ -292,5 +294,7 @@ class WhatsAppOutboxPageResult {
     this.page = 1,
     this.limit = 10,
     this.messages = const [],
+    this.errorMessage,
+    this.isSuccess = true,
   });
 }

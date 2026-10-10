@@ -21,6 +21,46 @@ class ValidationConditionItem {
   });
 }
 
+IconData _getConditionIcon(String text) {
+  final lower = text.toLowerCase();
+  if (lower.contains('كعب') || lower.contains('باركود') || lower.contains('خزينة') || lower.contains('pos') || lower.contains('ماكينة') || lower.contains('توقيت')) {
+    return Icons.qr_code_scanner_rounded;
+  }
+  if (lower.contains('واضحة') || lower.contains('مطموس') || lower.contains('مقروء') || lower.contains('تصوير') || lower.contains('كاميرا') || lower.contains('باهت')) {
+    return Icons.camera_alt_rounded;
+  }
+  if (lower.contains('فرع') || lower.contains('سلسلة') || lower.contains('متجر')) {
+    return Icons.storefront_rounded;
+  }
+  if (lower.contains('تاريخ') || lower.contains('فترة') || lower.contains('يوم')) {
+    return Icons.calendar_month_rounded;
+  }
+  if (lower.contains('مبلغ') || lower.contains('حد أدنى') || lower.contains('إنفاق') || lower.contains('قيمة')) {
+    return Icons.price_check_rounded;
+  }
+  return Icons.rule_folder_rounded;
+}
+
+String _getConditionCategoryTitle(String text) {
+  final lower = text.toLowerCase();
+  if (lower.contains('كعب') || lower.contains('باركود') || lower.contains('خزينة') || lower.contains('pos') || lower.contains('ماكينة')) {
+    return 'بيانات كعب الفاتورة';
+  }
+  if (lower.contains('واضحة') || lower.contains('مطموس') || lower.contains('مقروء') || lower.contains('تصوير') || lower.contains('كاميرا')) {
+    return 'وضوح وتصوير الفاتورة';
+  }
+  if (lower.contains('فرع') || lower.contains('سلسلة') || lower.contains('متجر')) {
+    return 'السلسلة والفرع المعتمد';
+  }
+  if (lower.contains('تاريخ') || lower.contains('فترة') || lower.contains('يوم')) {
+    return 'تاريخ الشراء وفترة الحملة';
+  }
+  if (lower.contains('مبلغ') || lower.contains('حد أدنى') || lower.contains('إنفاق') || lower.contains('قيمة')) {
+    return 'الحد الأدنى للمشتريات';
+  }
+  return 'شرط غير مستوفى';
+}
+
 /// Helper to compile all unfulfilled conditions into a structured list
 List<ValidationConditionItem> buildValidationConditionItems({
   required bool isValid,
@@ -44,19 +84,18 @@ List<ValidationConditionItem> buildValidationConditionItems({
   bool isScreenCapture = false,
   List<String> fraudReasons = const [],
 }) {
-  final List<ValidationConditionItem> items = [];
+  final items = <ValidationConditionItem>[];
 
-  // 0. Anti-Fraud & Physical Medium Verification
-  if (isHandwritten || message.contains('محررة بخط اليد') || message.contains('يدوياً') || fraudReasons.any((r) => r.contains('يدوياً') || r.contains('خط اليد'))) {
+  if (isHandwritten || message.contains('محررة يدوياً') || message.contains('محررة بخط اليد') || fraudReasons.any((r) => r.contains('يدوي') || r.contains('خط اليد'))) {
     items.add(
       const ValidationConditionItem(
-        title: 'فاتورة محررة يدوياً (مخالف للشروط والأحكام)',
-        description: 'تم رفض الفاتورة لأنها مكتوبة بخط اليد أو مسودة يدوية. العرض يشترط حصراً تقديم بون كاشير إلكتروني مطبوع من ماكينة السوبرماركت (Thermal POS Receipt).',
+        title: 'فاتورة محررة يدوياً',
+        description: 'الفاتورة محررة بخط اليد وليست بون كاشير إلكتروني مطبوع من طابعات نقاط البيع (POS).',
         icon: Icons.edit_note_rounded,
         isMet: false,
       ),
     );
-  } else if (isTampered || message.contains('تلاعب') || message.contains('شطب') || fraudReasons.any((r) => r.contains('تلاعب') || r.contains('شطب'))) {
+  } else if (isTampered || fraudReasons.any((r) => r.contains('شطب') || r.contains('تلاعب'))) {
     items.add(
       const ValidationConditionItem(
         title: 'اشتباه في تلاعب أو شطب وتعديل يدوي',
@@ -85,8 +124,18 @@ List<ValidationConditionItem> buildValidationConditionItems({
     );
   }
 
-  // 1. Minimum Spend Condition
-  if (minimumSpend > 0 && targetCompanyTotal < minimumSpend) {
+  // 1. Products inclusion condition (Priority 1 if no target products found)
+  if (!hasTargetProducts || targetCompanyTotal <= 0) {
+    items.add(
+      ValidationConditionItem(
+        title: 'المنتجات المؤهلة للعرض',
+        description: 'لم يتم العثور على أي منتجات تابعة لشركة "$targetCompany" داخل أصناف الفاتورة.',
+        icon: Icons.remove_shopping_cart_rounded,
+        isMet: false,
+      ),
+    );
+  } else if (minimumSpend > 0 && targetCompanyTotal < minimumSpend) {
+    // 2. Minimum Spend Condition (Only if target products DO exist, but spend is below minimum)
     items.add(
       ValidationConditionItem(
         title: 'الحد الأدنى لقيمة المشتريات',
@@ -133,18 +182,6 @@ List<ValidationConditionItem> buildValidationConditionItems({
     );
   }
 
-  // 3. Products inclusion condition
-  if (!hasTargetProducts && targetCompanyTotal <= 0) {
-    items.add(
-      ValidationConditionItem(
-        title: 'المنتجات المؤهلة للعرض',
-        description: 'لم يتم العثور على أي منتجات تابعة لشركة "$targetCompany" داخل أصناف الفاتورة.',
-        icon: Icons.remove_shopping_cart_rounded,
-        isMet: false,
-      ),
-    );
-  }
-
   // 4. Date condition check
   if (message.contains('تاريخ') || message.contains('فترة') || message.contains('منتهي') || message.contains('سابق') || message.contains('لاحق')) {
     items.add(
@@ -157,19 +194,49 @@ List<ValidationConditionItem> buildValidationConditionItems({
     );
   }
 
-  // 5. AI detected specific conditions
+  // 5. AI detected specific conditions (Deduplicated & Cleaned)
+  final seenNormalized = <String>{};
   for (final cond in unfulfilledConditions) {
     final trimmed = cond.trim();
-    if (trimmed.isNotEmpty && !items.any((i) => i.description.contains(trimmed) || trimmed.contains(i.title))) {
-      items.add(
-        ValidationConditionItem(
-          title: 'شرط غير مستوفى',
-          description: trimmed,
-          icon: Icons.rule_folder_rounded,
-          isMet: false,
-        ),
-      );
+    if (trimmed.isEmpty) continue;
+
+    final norm = trimmed.replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+
+    // If no target products exist, skip redundant spend or missing products phrases
+    if ((!hasTargetProducts || targetCompanyTotal <= 0) &&
+        (norm.contains('لا توجد منتجات') ||
+         norm.contains('لم يتم العثور') ||
+         norm.contains('أقل من الحد الأدنى') ||
+         norm.contains('الحد الادنى') ||
+         norm.contains('0 ج.م') ||
+         norm.contains('0ج.م') ||
+         norm.contains('المشروطة في الفاتورة'))) {
+      continue;
     }
+
+    // If spend condition is already covered, skip redundant spend phrases
+    if (targetCompanyTotal > 0 &&
+        targetCompanyTotal < minimumSpend &&
+        (norm.contains('أقل من الحد الأدنى') || norm.contains('الحد الادنى'))) {
+      continue;
+    }
+
+    // Skip if already in items
+    if (items.any((i) => i.description.contains(trimmed) || trimmed.contains(i.description) || trimmed.contains(i.title))) {
+      continue;
+    }
+
+    if (seenNormalized.contains(norm)) continue;
+    seenNormalized.add(norm);
+
+    items.add(
+      ValidationConditionItem(
+        title: _getConditionCategoryTitle(trimmed),
+        description: trimmed,
+        icon: _getConditionIcon(trimmed),
+        isMet: false,
+      ),
+    );
   }
 
   // 6. Fallback if no specific condition was added
@@ -517,6 +584,10 @@ class ReceiptValidationReportDialog extends StatelessWidget {
 
                           // List of Unmet Conditions (Formatted Tiles)
                           ...conditions.map((c) => _buildConditionTile(context, c)),
+
+                          // Smart Promoter Troubleshooting Guidance (إرشادات المروج الذكية)
+                          if (!isDuplicate)
+                            _buildPromoterGuidanceCard(context, strings, colorScheme),
                         ],
                       ),
                     ),
@@ -753,6 +824,129 @@ class ReceiptValidationReportDialog extends StatelessWidget {
       date: receiptDate,
       totalValue: totalValue,
       currencySymbol: currencySymbol,
+    );
+  }
+
+  Widget _buildPromoterGuidanceCard(
+    BuildContext context,
+    AppStrings strings,
+    ColorScheme colorScheme,
+  ) {
+    final isFooterMissing = receiptNumber == null ||
+        receiptNumber!.trim().isEmpty ||
+        branch == null ||
+        branch!.trim().isEmpty ||
+        receiptDate == null ||
+        receiptDate!.trim().isEmpty;
+
+    final isBlurry = conditions.any((c) =>
+        c.description.contains('واضحة') ||
+        c.description.contains('مقروء') ||
+        c.description.contains('مطموس') ||
+        c.description.contains('باهت'));
+
+    final isTargetMismatch = totalValue == null ||
+        totalValue! <= 0 ||
+        conditions.any((c) =>
+            c.description.contains('لم يتم العثور') ||
+            c.description.contains('لا توجد منتجات') ||
+            c.title.contains('المنتجات المؤهلة'));
+
+    return Container(
+      margin: const EdgeInsets.only(top: 12, bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: colorScheme.tertiaryContainer.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: colorScheme.tertiary.withValues(alpha: 0.4),
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.tips_and_updates_rounded, size: 16, color: colorScheme.tertiary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  strings.isAr ? 'إرشادات المروج الذكية لتصحيح الفحص:' : 'Smart Promoter Troubleshooting Tips:',
+                  style: GoogleFonts.cairo(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (isTargetMismatch)
+            _buildGuidanceBullet(
+              icon: Icons.swap_horiz_rounded,
+              color: colorScheme.tertiary,
+              text: strings.isAr
+                  ? 'التأكد من اختيار الحملة المطابقة: تأكد من فحص الفاتورة تحت الحملة الصحيحة للشركة الراعية للعلامة التجارية عبر زر "تبديل الحملة".'
+                  : 'Check Selected Campaign: Ensure the receipt is scanned under the matching brand campaign via "Switch Campaign".',
+            ),
+          if (isFooterMissing)
+            _buildGuidanceBullet(
+              icon: Icons.receipt_long_rounded,
+              color: colorScheme.tertiary,
+              text: strings.isAr
+                  ? 'تصوير كعب الفاتورة كاملاً: تأكد من إظهار الجزء السفلي للبون الذي يحتوي على اسم الفرع، رقم الخزينة (POS)، وتاريخ الشراء والباركود.'
+                  : 'Capture Full Receipt Footer: Include bottom lines showing branch, POS terminal, date, and barcode.',
+            ),
+          if (isBlurry)
+            _buildGuidanceBullet(
+              icon: Icons.camera_enhance_rounded,
+              color: colorScheme.tertiary,
+              text: strings.isAr
+                  ? 'وضوح الصورة والإضاءة: أعد تصوير البون في إضاءة جيدة ومباشرة مع تثبيت اليد لتظهر أسطر المنتجات وأسعارها بوضوح.'
+                  : 'Image Focus & Lighting: Retake photo with steady hands in clear lighting for crisp product names and prices.',
+            ),
+          _buildGuidanceBullet(
+            icon: Icons.auto_awesome_motion_rounded,
+            color: colorScheme.tertiary,
+            text: strings.isAr
+                ? 'الفواتير الطويلة: إذا كان البون طويلاً، يمكنك تصويره على جزأين أو أكثر (أعلى وأسفل) مع ترك سطرين متداخلين بين الصور.'
+                : 'Long Receipts: You can upload up to 4 images per receipt (Top / Bottom) with 2 overlapping lines.',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGuidanceBullet({
+    required IconData icon,
+    required Color color,
+    required String text,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 3),
+            child: Icon(icon, size: 14, color: color),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              text,
+              style: GoogleFonts.cairo(
+                fontSize: 11,
+                height: 1.35,
+                color: Colors.black87,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

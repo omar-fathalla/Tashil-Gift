@@ -12,9 +12,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Admin Auth & Security Tests', () {
-    test('Primary admin credentials constants are defined', () {
+    test('Primary admin email constant is defined and no hardcoded password exists', () {
       expect(kPrimaryAdminEmail, 'support@switchpoint.com');
-      expect(kPrimaryAdminPassword, 'Youniis@!1987');
+      expect(kFallbackAdminEmail, 'support@sw-point.com');
     });
 
     test('Trilingual strings for Admin Security & Auth are defined', () {
@@ -35,7 +35,7 @@ void main() {
       expect(stringsHi.signOutBtn, 'साइन आउट');
     });
 
-    test('SharedPreferences remembers admin credentials', () async {
+    test('SharedPreferences remembers admin email and never stores passwords', () async {
       SharedPreferences.setMockInitialValues({
         'saved_admin_email': 'support@sw-point.com',
         'remember_admin_me': true,
@@ -44,26 +44,19 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('saved_admin_email'), 'support@sw-point.com');
       expect(prefs.getBool('remember_admin_me'), true);
+      expect(prefs.getString('saved_admin_password'), isNull);
+      expect(prefs.getString('active_admin_session'), isNull);
     });
 
-    test('isAdminProvider evaluates correctly with session email', () {
-      final container = ProviderContainer(
-        overrides: [
-          adminSessionEmailProvider.overrideWith((ref) => 'support@sw-point.com'),
-        ],
-      );
-      addTearDown(container.dispose);
-
-      expect(container.read(isAdminProvider), isTrue);
-
-      final unauthorizedContainer = ProviderContainer(
-        overrides: [
-          adminSessionEmailProvider.overrideWith((ref) => 'other@gmail.com'),
-        ],
-      );
-      addTearDown(unauthorizedContainer.dispose);
-
-      expect(unauthorizedContainer.read(isAdminProvider), isFalse);
+    test('isAuthorizedAdminEmail only accepts the two admin accounts trusted by firestore.rules', () {
+      expect(isAuthorizedAdminEmail('support@switchpoint.com'), isTrue);
+      expect(isAuthorizedAdminEmail('support@sw-point.com'), isTrue);
+      expect(isAuthorizedAdminEmail(' Support@SwitchPoint.com '), isTrue);
+      expect(isAuthorizedAdminEmail('admin@switchpoint.com'), isFalse);
+      expect(isAuthorizedAdminEmail('anyone@sw-point.com'), isFalse);
+      expect(isAuthorizedAdminEmail('hacker@gmail.com'), isFalse);
+      expect(isAuthorizedAdminEmail(null), isFalse);
+      expect(isAuthorizedAdminEmail(''), isFalse);
     });
 
     testWidgets('AuthScreen renders Remember Me, prefilled admin email, and has no demo bypass button', (tester) async {

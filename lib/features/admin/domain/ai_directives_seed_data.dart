@@ -1547,6 +1547,28 @@ class AiDirectivesSeedData {
           tags: ['receipt-resolution', 'image-quality', 'discount-tolerance', 'promotional-spend-harmonization', 'air-77'],
           lastUpdated: '2026-10-09',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-78',
+          code: 'PROMOTER_DIAGNOSTIC_GUIDANCE_AND_CONDITION_DEDUPLICATION_STANDARD',
+          orderIndex: 78,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار إرشادات المروج الذكية ومنع تكرار شروط عدم الاستيفاء وتوجيه كعب الفاتورة',
+          titleEn: 'Smart Promoter Diagnostic Guidance & Condition Deduplication Standard',
+          descriptionAr:
+              'معيار حوكمة معماري لواجهة تقرير فحص الفاتورة يضمن دقة ووضوح أسباب الرفض للمروجين الميدانيين: 1) إزالة التكرار الدلالي لبطاقات الشروط غير المستوفاة (Condition Deduplication): عند عدم العثور على منتجات للشركة الراعية (targetCompanyTotal = 0)، يُمنع إظهار 4 بطاقات متكررة (الحد الأدنى 0 / 330، لم يتم العثور على منتجات، لا توجد منتجات، إجمالي المشتريات 0)، بل تُدمج في بطاقة واحدة واضحة وقاطعة. 2) إرشادات المروج الذكية الميدانية (Actionable Promoter Guidance): توفير توجيهات عملية فورية داخل نافذة الفحص لمعالجة أكثر أسباب الرفض شيوعاً بنسبة 80-90%: التأكد من شمول كعب الفاتورة (Store / POS / Date / Barcode)، تحسين جودة وإضاءة الصورة، تقسيم الفواتير الطويلة إلى لقطتين متداخلتين، والتأكد من تطابق الحملة المختارة مع العلامة التجارية للشركة الراعية.',
+          descriptionEn:
+              'Architectural governance standard for receipt audit reporting dialogs ensuring precise, non-redundant feedback for field promoters: 1) Condition Deduplication Invariant: when no qualifying sponsor products are found (targetCompanyTotal = 0), eliminates redundant multi-card outputs (0/330 spend, missing products, no sponsor brand, 0 spend) and consolidates them into a single authoritative card. 2) Actionable Promoter Field Guidance: renders instant context-aware actionable tips addressing 80-90% of field capture issues: capturing complete receipt footers (Store / POS / Date / Barcode), optimizing camera focus/lighting, splitting long thermal receipts across overlapping multi-shots, and verifying active campaign alignment against the target brand.',
+          logicAr:
+              '1. في buildValidationConditionItems: عند targetCompanyTotal <= 0، إضافة بطاقة واحدة فقط لعدم وجود منتجات مؤهلة، وحجب بطاقة الحد الأدنى واستبعاد العبارات المتكررة من unfulfilledConditions.\n2. إبراز كارت "إرشادات المروج الذكية لتصحيح الفحص" بأيقونات واضحة وتوجيهات عملية.\n3. توجيه كعب الفاتورة: تنبيه المروج لضرورة إظهار الجزء السفلي للبون المتضمن لرقم الخزينة والفرع والباركود.\n4. توجيه الحملة المتطابقة: تنبيه المروج للتأكد من اختيار الحملة الصحيحة للشركة الراعية عبر زر "تبديل الحملة".',
+          logicEn:
+              '1. In buildValidationConditionItems: when targetCompanyTotal <= 0, mounts exactly one product eligibility card, suppressing spend threshold cards and filtering redundant phrases from unfulfilledConditions.\n2. Renders Smart Promoter Troubleshooting Guidance card with high-affordance M3 icons and actionable steps.\n3. Receipt Footer Guidance: reminds promoters to capture the bottom POS lines containing store, terminal, date, and barcode.\n4. Campaign Alignment Guidance: advises promoters to ensure the active campaign matches the photographed brand via "Switch Campaign".',
+          exampleInput:
+              'فحص بون كاشير لسائل تنظيف جوي (شركة أرما) أثناء تفعيل حملة "مهرجان ادكو" بالخطأ، مما أدى لعدم وجود منتجات لادكو.',
+          exampleOutput:
+              '1) ظهور بطاقة واحدة دقيقة: "لم يتم العثور على أي منتجات تابعة لشركة ادكو داخل أصناف الفاتورة" بدلاً من 4 بطاقات متكررة. 2) ظهور كارت الإرشادات الذكية ينبه المروج للتأكد من اختيار حملة عروض جوي، وتصوير كعب الفاتورة بوضوح.',
+          tags: ['promoter-guidance', 'condition-deduplication', 'receipt-footer', 'pos-lines', 'campaign-switching', 'air-78'],
+          lastUpdated: '2026-10-10',
+        ),
       ];
 }
 

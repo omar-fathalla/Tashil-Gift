@@ -33,30 +33,20 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   Future<void> _loadSavedCredentials() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      // Clean up any legacy insecure keys
+      await prefs.remove('saved_admin_password');
+      await prefs.remove('active_admin_session');
+
       final savedEmail = prefs.getString('saved_admin_email');
-      final savedPassword = prefs.getString('saved_admin_password');
       final rememberMePref = prefs.getBool('remember_admin_me') ?? true;
-      final activeSession = prefs.getString('active_admin_session');
 
       if (mounted) {
-        // If an active session exists with remember-me, bypass login screen immediately
-        if (rememberMePref && activeSession != null && isAuthorizedAdminEmail(activeSession)) {
-          ref.read(adminSessionEmailProvider.notifier).state = activeSession.toLowerCase();
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
-          );
-          return;
-        }
-
         setState(() {
           _rememberMe = rememberMePref;
           if (savedEmail != null && savedEmail.isNotEmpty) {
             _emailController.text = savedEmail;
           } else {
             _emailController.text = kPrimaryAdminEmail;
-          }
-          if (_rememberMe && savedPassword != null && savedPassword.isNotEmpty) {
-            _passwordController.text = savedPassword;
           }
         });
       }
@@ -82,23 +72,19 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
       await authService.signIn(email, password);
 
-      // Save or clear Remember Me preference
+      // Save or clear Remember Me email preference (never passwords)
       try {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('remember_admin_me', _rememberMe);
         if (_rememberMe) {
           await prefs.setString('saved_admin_email', email);
-          await prefs.setString('saved_admin_password', password);
-          await prefs.setString('active_admin_session', email.toLowerCase());
+          await prefs.setString('active_admin_session', email);
         } else {
           await prefs.remove('saved_admin_email');
-          await prefs.remove('saved_admin_password');
           await prefs.remove('active_admin_session');
         }
+        await prefs.remove('saved_admin_password');
       } catch (_) {}
-
-      // Explicitly update Riverpod session state immediately
-      ref.read(adminSessionEmailProvider.notifier).state = email.toLowerCase();
 
       // On success, navigate to the Admin Dashboard
       if (mounted) {

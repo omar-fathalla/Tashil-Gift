@@ -52,6 +52,37 @@ class WhatsAppGatewayConnectionStatus {
   });
 }
 
+/// Result of live screenshot capture with diagnostics
+class WhatsAppScreenshotResult {
+  final bool isSuccess;
+  final Uint8List? bytes;
+  final String? errorMessage;
+  final int? statusCode;
+
+  const WhatsAppScreenshotResult({
+    required this.isSuccess,
+    this.bytes,
+    this.errorMessage,
+    this.statusCode,
+  });
+
+  factory WhatsAppScreenshotResult.success(Uint8List bytes) => WhatsAppScreenshotResult(
+        isSuccess: true,
+        bytes: bytes,
+        statusCode: 200,
+      );
+
+  factory WhatsAppScreenshotResult.failure({
+    required String errorMessage,
+    int? statusCode,
+  }) =>
+      WhatsAppScreenshotResult(
+        isSuccess: false,
+        errorMessage: errorMessage,
+        statusCode: statusCode,
+      );
+}
+
 /// Core Service for WhatsApp Gateway API Operations, Anti-Spam Pacing, and Batch Dispatching
 class WhatsAppGatewayService {
   static const String _prefsKeyPrefix = 'whatsapp_gateway_config_';
@@ -80,6 +111,21 @@ class WhatsAppGatewayService {
     }
 
     return clean;
+  }
+
+  /// Resolves the effective API endpoint for WAHA / Gateway requests.
+  /// When running on Web over HTTPS, direct HTTP requests to IPs (e.g. http://76.13.14.23:3000)
+  /// are blocked by browser Mixed Content policies.
+  /// In that case, this automatically routes through the same-origin HTTPS proxy (/waha).
+  static String resolveEndpoint(WhatsAppGatewayConfigModel config) {
+    final raw = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    if (kIsWeb) {
+      final isHttps = Uri.base.scheme == 'https';
+      if (isHttps && (raw.startsWith('http://') || raw.isEmpty)) {
+        return '${Uri.base.origin}/waha';
+      }
+    }
+    return raw.isNotEmpty ? raw : 'http://76.13.14.23:3000';
   }
 
   /// Loads configuration from Local Storage with Firestore fallback
@@ -198,7 +244,7 @@ class WhatsAppGatewayService {
           );
 
         case WhatsAppGatewayProvider.waha:
-          final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+          final endpoint = resolveEndpoint(config);
           final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
           final url = Uri.parse('$endpoint/api/sessions/$session');
           final headers = <String, String>{};
@@ -266,7 +312,7 @@ class WhatsAppGatewayService {
     }
     final httpClient = client ?? http.Client();
     try {
-      final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
       final url = Uri.parse('$endpoint/api/$session/chats?limit=100');
       final headers = <String, String>{};
@@ -328,7 +374,7 @@ class WhatsAppGatewayService {
     }
     final httpClient = client ?? http.Client();
     try {
-      final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
       final url = Uri.parse('$endpoint/api/$session/chats?limit=$limit');
       final headers = <String, String>{};
@@ -449,16 +495,31 @@ class WhatsAppGatewayService {
             ),
           );
         }
+        final filteredMessages = (status == 'all' || status.trim().isEmpty)
+            ? messages
+            : messages.where((m) {
+                if (status == 'sent') return m.status == 'sent';
+                if (status == 'received') return m.status == 'received';
+                if (status == 'queue') return m.status == 'queue';
+                if (status == 'unsent') return m.status == 'unsent';
+                if (status == 'invalid') return m.status == 'invalid';
+                if (status == 'expired') return m.status == 'expired';
+                return m.status.toLowerCase() == status.toLowerCase();
+              }).toList();
         return WhatsAppOutboxPageResult(
-          total: messages.length,
+          total: filteredMessages.length,
           totalPages: 1,
           page: 1,
           limit: limit,
-          messages: messages,
+          messages: filteredMessages,
         );
       }
     } catch (e) {
       debugPrint('Error fetching WhatsApp messages list: $e');
+      return WhatsAppOutboxPageResult(
+        isSuccess: false,
+        errorMessage: e.toString(),
+      );
     } finally {
       if (client == null) httpClient.close();
     }
@@ -473,7 +534,7 @@ class WhatsAppGatewayService {
     final httpClient = client ?? http.Client();
     try {
       if (config.provider == WhatsAppGatewayProvider.waha) {
-        final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final endpoint = resolveEndpoint(config);
         final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
         final url = Uri.parse('$endpoint/api/sessions/$session/restart');
         final headers = <String, String>{};
@@ -500,7 +561,7 @@ class WhatsAppGatewayService {
     final httpClient = client ?? http.Client();
     try {
       if (config.provider == WhatsAppGatewayProvider.waha) {
-        final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final endpoint = resolveEndpoint(config);
         final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
         final url = Uri.parse('$endpoint/api/sessions/$session/logout');
         final headers = <String, String>{};
@@ -539,7 +600,7 @@ class WhatsAppGatewayService {
     try {
       switch (config.provider) {
         case WhatsAppGatewayProvider.waha:
-          final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+          final endpoint = resolveEndpoint(config);
           final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
           final url = Uri.parse('$endpoint/api/sendText');
           final headers = <String, String>{
@@ -665,7 +726,7 @@ class WhatsAppGatewayService {
     final httpClient = client ?? http.Client();
     try {
       if (config.provider == WhatsAppGatewayProvider.waha) {
-        final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final endpoint = resolveEndpoint(config);
         final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
         final url = Uri.parse('$endpoint/api/sendImage');
         final headers = <String, String>{
@@ -745,7 +806,7 @@ class WhatsAppGatewayService {
     final httpClient = client ?? http.Client();
     try {
       if (config.provider == WhatsAppGatewayProvider.waha) {
-        final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final endpoint = resolveEndpoint(config);
         final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
         final url = Uri.parse('$endpoint/api/sendPoll');
         final headers = <String, String>{
@@ -799,7 +860,7 @@ class WhatsAppGatewayService {
     if (cleanPhone.isEmpty || config.provider != WhatsAppGatewayProvider.waha) return false;
     final httpClient = client ?? http.Client();
     try {
-      final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
       final url = Uri.parse('$endpoint/api/startTyping');
       final headers = <String, String>{'Content-Type': 'application/json'};
@@ -827,7 +888,7 @@ class WhatsAppGatewayService {
     if (cleanPhone.isEmpty || config.provider != WhatsAppGatewayProvider.waha) return false;
     final httpClient = client ?? http.Client();
     try {
-      final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
       final url = Uri.parse('$endpoint/api/stopTyping');
       final headers = <String, String>{'Content-Type': 'application/json'};
@@ -855,7 +916,7 @@ class WhatsAppGatewayService {
     if (cleanPhone.isEmpty || config.provider != WhatsAppGatewayProvider.waha) return null;
     final httpClient = client ?? http.Client();
     try {
-      final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
       final url = Uri.parse('$endpoint/api/contacts/check-exists?session=$session&phone=$cleanPhone');
       final headers = <String, String>{};
@@ -876,30 +937,93 @@ class WhatsAppGatewayService {
     }
   }
 
-  /// Fetches a live rendered screenshot PNG of the server WhatsApp Web session
-  Future<Uint8List?> fetchLiveScreenshot({
+  /// Fetches a live rendered screenshot PNG of the server WhatsApp Web session with detailed diagnostic error reporting
+  Future<WhatsAppScreenshotResult> fetchLiveScreenshotDetailed({
     required WhatsAppGatewayConfigModel config,
     http.Client? client,
+    bool isAr = true,
   }) async {
-    if (config.provider != WhatsAppGatewayProvider.waha) return null;
+    if (config.provider != WhatsAppGatewayProvider.waha) {
+      return WhatsAppScreenshotResult.failure(
+        errorMessage: isAr
+            ? 'خاصية لقطة الشاشة متاحة حصرياً لسيرفر WAHA الخاص'
+            : 'Live screenshot is only available for WAHA server',
+      );
+    }
     final httpClient = client ?? http.Client();
     try {
-      final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
       final url = Uri.parse('$endpoint/api/screenshot?session=$session');
       final headers = <String, String>{};
       if (config.apiToken.trim().isNotEmpty) headers['X-Api-Key'] = config.apiToken.trim();
       final response = await httpClient.get(url, headers: headers).timeout(const Duration(seconds: 15));
       if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
-        return response.bodyBytes;
+        return WhatsAppScreenshotResult.success(response.bodyBytes);
       }
-      return null;
+
+      // Detailed diagnosis from WAHA response
+      String detailedMsg;
+      final bodyStr = response.body.toLowerCase();
+      if (bodyStr.contains('noweb') || bodyStr.contains('not available for noweb') || bodyStr.contains('no browser')) {
+        detailedMsg = isAr
+            ? 'سيرفر WAHA يعمل بمحرك (NOWEB) الخفيف، وهو لا يتضمن متصفح ويب، لذا لا يدعم التقاط الشاشة.\n(للربط: استخدم كود QR أو رمز الاقتران Pairing Code، أو قم بتشغيل السيرفر بمحرك WEBJS).'
+            : 'WAHA server is running on NOWEB engine (no browser instance), which does not support screenshots. Use QR / Pairing code instead, or switch engine to WEBJS.';
+      } else if (response.statusCode == 401 || response.statusCode == 403) {
+        detailedMsg = isAr
+            ? 'خطأ مصادقة (${response.statusCode}): مفتاح API غير صحيح أو غير مفعل في إعدادات السيرفر.'
+            : 'Authentication error (${response.statusCode}): Invalid or missing API key.';
+      } else if (response.statusCode == 404) {
+        detailedMsg = isAr
+            ? 'الجلسة ($session) غير موجودة أو متوقفة على السيرفر. اضغط على "إعادة تشغيل الجلسة" لتنشيطها.'
+            : 'Session ($session) not found or stopped. Tap "Restart Session" to start it.';
+      } else {
+        detailedMsg = isAr
+            ? 'أعاد السيرفر رمز خطأ (${response.statusCode})${response.body.isNotEmpty ? ": ${response.body}" : ""}'
+            : 'Server returned error (${response.statusCode})${response.body.isNotEmpty ? ": ${response.body}" : ""}';
+      }
+
+      return WhatsAppScreenshotResult.failure(
+        errorMessage: detailedMsg,
+        statusCode: response.statusCode,
+      );
     } catch (e) {
       debugPrint('Error fetching WAHA live screenshot: $e');
-      return null;
+      final err = e.toString();
+      String detailedMsg;
+      if (kIsWeb && config.customEndpointUrl.trim().startsWith('http://')) {
+        detailedMsg = isAr
+            ? 'حظر المتصفح للاتصال (Mixed Content):\nالتطبيق يعمل عبر HTTPS بينما عنوان السيرفر يبدأ بـ HTTP غير المشفر. يمنع المتصفح هذا الطلب لأسباب أمنية. يرجى توفير رابط HTTPS للسيرفر (SSL).'
+            : 'Browser blocked insecure request (Mixed Content): App runs on HTTPS while server endpoint uses HTTP. Please configure HTTPS (SSL) for your server.';
+      } else if (err.contains('XMLHttpRequest') || err.contains('Failed to fetch') || err.contains('ClientException')) {
+        detailedMsg = isAr
+            ? 'تعذر الاتصال بالسيرفر. تأكد من أن السيرفر يعمل وتأكد من تفعيل CORS في إعدادات السيرفر (WAHA_CORS_ORIGIN=*).'
+            : 'Could not connect to server. Ensure the server is online and CORS is enabled (WAHA_CORS_ORIGIN=*).';
+      } else if (err.contains('TimeoutException')) {
+        detailedMsg = isAr
+            ? 'انتهت مهلة انتظار السيرفر (Timeout). قد يكون السيرفر بطيئاً أو غير متاح حالياً.'
+            : 'Connection timed out. Server may be overloaded or unreachable.';
+      } else {
+        detailedMsg = isAr
+            ? 'خطأ أثناء الاتصال بالسيرفر: $e'
+            : 'Connection error: $e';
+      }
+
+      return WhatsAppScreenshotResult.failure(
+        errorMessage: detailedMsg,
+      );
     } finally {
       if (client == null) httpClient.close();
     }
+  }
+
+  /// Fetches a live rendered screenshot PNG of the server WhatsApp Web session
+  Future<Uint8List?> fetchLiveScreenshot({
+    required WhatsAppGatewayConfigModel config,
+    http.Client? client,
+  }) async {
+    final result = await fetchLiveScreenshotDetailed(config: config, client: client);
+    return result.bytes;
   }
 
   /// Fetches the live QR code PNG image for session authorization
@@ -907,7 +1031,7 @@ class WhatsAppGatewayService {
     if (config.provider != WhatsAppGatewayProvider.waha) return null;
     final httpClient = client ?? http.Client();
     try {
-      final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
       final url = Uri.parse('$endpoint/api/$session/auth/qr');
       final headers = <String, String>{};
@@ -939,7 +1063,7 @@ class WhatsAppGatewayService {
 
     final httpClient = client ?? http.Client();
     try {
-      final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
       final url = Uri.parse('$endpoint/api/$session/auth/request-code');
       final headers = <String, String>{
@@ -970,7 +1094,7 @@ class WhatsAppGatewayService {
     if (config.provider != WhatsAppGatewayProvider.waha) return null;
     final httpClient = client ?? http.Client();
     try {
-      final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
       final url = Uri.parse('$endpoint/api/sessions/$session');
       final headers = <String, String>{};
@@ -995,7 +1119,7 @@ class WhatsAppGatewayService {
     if (!config.isConfigured || config.provider != WhatsAppGatewayProvider.waha) return false;
     final httpClient = client ?? http.Client();
     try {
-      final endpoint = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
       final url = Uri.parse('$endpoint/api/sessions/$session/start');
       final headers = <String, String>{};

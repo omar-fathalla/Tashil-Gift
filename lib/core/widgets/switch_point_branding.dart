@@ -52,6 +52,9 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
   final bool showMobileMenu;
   final String? companyLogoUrl;
   final VoidCallback? onMobileMenuPressed;
+  final bool showLanguageSelector;
+  final bool showCountryCurrencySelector;
+  final bool showDarkModeToggle;
 
   const SwitchPointHeader({
     super.key,
@@ -61,6 +64,9 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
     this.showMobileMenu = true,
     this.companyLogoUrl,
     this.onMobileMenuPressed,
+    this.showLanguageSelector = true,
+    this.showCountryCurrencySelector = true,
+    this.showDarkModeToggle = true,
   });
 
   @override
@@ -339,22 +345,26 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
           ),
 
           // Custom Actions (e.g. Preview button)
-          if (customActions != null) ...customActions!,
-
-          const SizedBox(width: 8),
+          if (customActions != null && customActions!.isNotEmpty) ...[
+            ...customActions!,
+            const SizedBox(width: 8),
+          ],
 
           // Language Switcher (العربية / English / हिन्दी)
-          _buildLanguageSelector(context, ref, colorScheme, false, isAr),
-
-          const SizedBox(width: 8),
+          if (showLanguageSelector) ...[
+            _buildLanguageSelector(context, ref, colorScheme, false, isAr),
+            const SizedBox(width: 8),
+          ],
 
           // Country & Currency Selector
-          _buildCountryCurrencySelector(context, ref, colorScheme, false, activeCountry),
-
-          const SizedBox(width: 8),
+          if (showCountryCurrencySelector) ...[
+            _buildCountryCurrencySelector(context, ref, colorScheme, false, activeCountry),
+            const SizedBox(width: 8),
+          ],
 
           // Theme Mode Switcher (Dark / Light)
-          _buildThemeModeButton(ref, colorScheme, isDark, false),
+          if (showDarkModeToggle)
+            _buildThemeModeButton(ref, colorScheme, isDark, false),
         ],
       ),
     );

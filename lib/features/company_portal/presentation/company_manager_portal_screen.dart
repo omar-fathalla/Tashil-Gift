@@ -80,15 +80,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     }
   }
 
-  void _copyPortalLink(BuildContext context, AppStrings strings, String effectiveSlug, [String? eventId]) {
-    if (widget.isAgencyOpsMode) {
-      _copyAgencyOpsLink(context, strings, effectiveSlug);
-    } else {
-      _copyBrandExecutiveLink(context, strings, effectiveSlug);
-    }
-  }
-
-  void _copyAgencyOpsLink(BuildContext context, AppStrings strings, String effectiveSlug, [String? eventId]) {
+  void _copyAgencyOpsLink(BuildContext context, AppStrings strings, String effectiveSlug) {
     final url = AppUrlBuilder.buildAgencyOpsUrl(effectiveSlug);
     Clipboard.setData(ClipboardData(text: url));
     ScaffoldMessenger.of(context).showSnackBar(
@@ -100,7 +92,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     );
   }
 
-  void _copyBrandExecutiveLink(BuildContext context, AppStrings strings, String effectiveSlug, [String? eventId]) {
+  void _copyBrandExecutiveLink(BuildContext context, AppStrings strings, String effectiveSlug) {
     final url = AppUrlBuilder.buildBrandExecutiveUrl(effectiveSlug);
     Clipboard.setData(ClipboardData(text: url));
     ScaffoldMessenger.of(context).showSnackBar(
@@ -112,7 +104,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     );
   }
 
-  void _copyPromoterLink(BuildContext context, AppStrings strings, String effectiveSlug, [String? eventId]) {
+  void _copyPromoterLink(BuildContext context, AppStrings strings, String effectiveSlug) {
     final url = AppUrlBuilder.buildPromoterUrl(effectiveSlug);
     Clipboard.setData(ClipboardData(text: url));
     ScaffoldMessenger.of(context).showSnackBar(
@@ -400,40 +392,10 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
           companyLogoUrl: companyLogoUrl,
           showMobileMenu: isCompact,
           onMobileMenuPressed: isCompact ? () => _scaffoldKey.currentState?.openDrawer() : null,
-          customActions: isCompact
-              ? null
-              : [
-                  // Copy Promoter Link quick button
-                  Tooltip(
-                    message: strings.copyPromoterLink,
-                    child: IconButton.filledTonal(
-                      icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
-                      padding: const EdgeInsets.all(8),
-                      onPressed: () => _copyPromoterLink(context, strings, effectiveSlug, activeEventId),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  // Copy Agency Ops Link quick button
-                  Tooltip(
-                    message: strings.copyAgencyOpsLink,
-                    child: IconButton.filledTonal(
-                      icon: const Icon(Icons.store_mall_directory_rounded, size: 18),
-                      padding: const EdgeInsets.all(8),
-                      onPressed: () => _copyAgencyOpsLink(context, strings, effectiveSlug, activeEventId),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  // Copy Brand Executive Master Link quick button
-                  Tooltip(
-                    message: strings.copyBrandExecutiveLink,
-                    child: IconButton.filledTonal(
-                      icon: const Icon(Icons.business_center_rounded, size: 18),
-                      padding: const EdgeInsets.all(8),
-                      onPressed: () => _copyBrandExecutiveLink(context, strings, effectiveSlug, activeEventId),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
+          showLanguageSelector: false,
+          showCountryCurrencySelector: false,
+          showDarkModeToggle: true,
+          customActions: null,
         ),
 
         // Mobile Drawer for compact smartphone navigation (Opens from Right in RTL, Left in LTR)
@@ -884,20 +846,60 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                               ),
                             ),
                           ),
+                        // 1. Copy Promoter Link Quick Button
                         Tooltip(
                           message: strings.copyPromoterLink,
                           child: IconButton(
                             icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
                             visualDensity: VisualDensity.compact,
-                            onPressed: () => _copyPromoterLink(context, strings, effectiveSlug, activeEventId),
+                            onPressed: () => _copyPromoterLink(context, strings, effectiveSlug),
                           ),
                         ),
+                        // 2. Copy Agency Ops Link Quick Button
                         Tooltip(
-                          message: strings.copyManagerPortalLink,
+                          message: strings.copyAgencyOpsLink,
                           child: IconButton(
-                            icon: const Icon(Icons.share_rounded, size: 18),
+                            icon: const Icon(Icons.store_mall_directory_rounded, size: 18),
                             visualDensity: VisualDensity.compact,
-                            onPressed: () => _copyPortalLink(context, strings, effectiveSlug, activeEventId),
+                            onPressed: () => _copyAgencyOpsLink(context, strings, effectiveSlug),
+                          ),
+                        ),
+                        // 3. Copy Brand Executive Master Link Quick Button
+                        Tooltip(
+                          message: strings.copyBrandExecutiveLink,
+                          child: IconButton(
+                            icon: const Icon(Icons.business_center_rounded, size: 18),
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => _copyBrandExecutiveLink(context, strings, effectiveSlug),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        // 4. Portal Settings & Preferences Button
+                        Tooltip(
+                          message: isAr ? 'الإعدادات وتفضيلات النظام' : (isHi ? 'सेटिंग्स और प्राथमिकताएं' : 'Settings & Preferences'),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: colorScheme.secondaryContainer.withValues(alpha: 0.6),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+                            ),
+                            child: IconButton(
+                              icon: Icon(Icons.tune_rounded, size: 18, color: colorScheme.primary),
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.all(6),
+                              constraints: const BoxConstraints(),
+                              onPressed: () => _showPortalSettingsDialog(
+                                context: context,
+                                strings: strings,
+                                isAr: isAr,
+                                isHi: isHi,
+                                colorScheme: colorScheme,
+                                effectiveSlug: effectiveSlug,
+                                activeEventId: activeEventId,
+                                companyDisplayName: companyName,
+                                companyLogoUrl: companyLogoUrl,
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -1462,7 +1464,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                         tooltip: strings.copyPromoterLink,
                         colorScheme: colorScheme,
                         onTap: () {
-                          _copyPromoterLink(context, strings, effectiveSlug, activeEventId);
+                          _copyPromoterLink(context, strings, effectiveSlug);
                           Navigator.of(context).pop();
                         },
                       ),
@@ -1473,7 +1475,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                         tooltip: strings.copyAgencyOpsLink,
                         colorScheme: colorScheme,
                         onTap: () {
-                          _copyAgencyOpsLink(context, strings, effectiveSlug, activeEventId);
+                          _copyAgencyOpsLink(context, strings, effectiveSlug);
                           Navigator.of(context).pop();
                         },
                       ),
@@ -1484,7 +1486,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                         tooltip: strings.copyBrandExecutiveLink,
                         colorScheme: colorScheme,
                         onTap: () {
-                          _copyBrandExecutiveLink(context, strings, effectiveSlug, activeEventId);
+                          _copyBrandExecutiveLink(context, strings, effectiveSlug);
                           Navigator.of(context).pop();
                         },
                       ),
@@ -1546,6 +1548,321 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// Displays the Material Design 3 Portal Settings Dialog (Language, Currency, Theme & Share Links)
+  void _showPortalSettingsDialog({
+    required BuildContext context,
+    required AppStrings strings,
+    required bool isAr,
+    required bool isHi,
+    required ColorScheme colorScheme,
+    required String effectiveSlug,
+    required String? activeEventId,
+    required String companyDisplayName,
+    required String companyLogoUrl,
+  }) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return Consumer(
+          builder: (context, ref, _) {
+            final activeLangCode = ref.watch(localeProvider).languageCode;
+            final currentAr = activeLangCode == 'ar';
+            final currentHi = activeLangCode == 'hi';
+            final activeCountry = ref.watch(activeCountryProvider);
+            final themeMode = ref.watch(themeModeProvider);
+            final isDark = themeMode == ThemeMode.dark ||
+                (themeMode == ThemeMode.system && Theme.of(context).brightness == Brightness.dark);
+            final dialogTheme = Theme.of(context);
+            final dialogColorScheme = dialogTheme.colorScheme;
+
+            return Directionality(
+              textDirection: currentAr ? TextDirection.rtl : TextDirection.ltr,
+              child: Dialog(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                backgroundColor: dialogColorScheme.surface,
+                elevation: 6,
+                child: Container(
+                  width: 480,
+                  constraints: const BoxConstraints(maxWidth: 520, maxHeight: 680),
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Header
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: dialogColorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Icon(
+                              Icons.tune_rounded,
+                              color: dialogColorScheme.primary,
+                              size: 22,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  currentAr ? 'الإعدادات وتفضيلات النظام' : (currentHi ? 'सेटिंग्स और सिस्टम प्राथमिकताएं' : 'Settings & Preferences'),
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: dialogColorScheme.onSurface,
+                                  ),
+                                ),
+                                Text(
+                                  currentAr ? 'اللغة، العملة، مشاركة الروابط، والمظهر' : (currentHi ? 'भाषा, मुद्रा, पोर्टल लिंक और थीम' : 'Language, Currency, Links & Theme'),
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 11.5,
+                                    color: dialogColorScheme.outline,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded),
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      const Divider(height: 1),
+                      const SizedBox(height: 16),
+
+                      // Scrollable Settings Content
+                      Expanded(
+                        child: SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // 1. Language Section
+                              Text(
+                                currentAr ? 'لغة الواجهة' : (currentHi ? 'ऐप भाषा' : 'Interface Language'),
+                                style: GoogleFonts.cairo(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: dialogColorScheme.onSurface,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: AppLanguage.values.map((lang) {
+                                  final isSelected = activeLangCode == lang.code;
+                                  return ChoiceChip(
+                                    label: Text(
+                                      lang.label,
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 12,
+                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                      ),
+                                    ),
+                                    selected: isSelected,
+                                    onSelected: (selected) {
+                                      if (selected) {
+                                        ref.setLocale(lang.code);
+                                      }
+                                    },
+                                  );
+                                }).toList(),
+                              ),
+                              const SizedBox(height: 18),
+
+                              // 2. Country & Currency Section
+                              Text(
+                                currentAr ? 'الدولة والعملة المعتمدة' : (currentHi ? 'देश और मुद्रा' : 'Country & Currency'),
+                                style: GoogleFonts.cairo(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: dialogColorScheme.onSurface,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: dialogColorScheme.surfaceContainerLow,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: dialogColorScheme.outlineVariant.withValues(alpha: 0.6)),
+                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    value: activeCountry.code,
+                                    isExpanded: true,
+                                    icon: Icon(Icons.keyboard_arrow_down_rounded, color: dialogColorScheme.onSurfaceVariant),
+                                    dropdownColor: dialogColorScheme.surfaceContainerHigh,
+                                    borderRadius: BorderRadius.circular(12),
+                                    items: CountryCurrencyConfig.supportedCountries.map((c) {
+                                      return DropdownMenuItem<String>(
+                                        value: c.code,
+                                        child: Text(
+                                          '${c.name(activeLangCode)} (${c.currencySymbolFor(activeLangCode)})',
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: dialogColorScheme.onSurface,
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                    onChanged: (val) {
+                                      if (val != null) {
+                                        final country = CountryCurrencyConfig.findByCode(val);
+                                        ref.read(activeCountryProvider.notifier).state = country;
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 18),
+
+                              // 3. Quick Share Links Section
+                              Text(
+                                currentAr ? 'روابط المنظومة المباشرة' : (currentHi ? 'पोर्टल लिंक' : 'Direct Portal Links'),
+                                style: GoogleFonts.cairo(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: dialogColorScheme.onSurface,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              _buildSettingsLinkTile(
+                                context: context,
+                                icon: Icons.qr_code_scanner_rounded,
+                                title: currentAr ? 'رابط المتسوق والبروموتر في الفرع' : (currentHi ? 'प्रमोटर और खरीदार लिंक' : 'Promoter & Shopper Link'),
+                                subtitle: AppUrlBuilder.buildPromoterUrl(effectiveSlug),
+                                tooltip: strings.copyPromoterLink,
+                                colorScheme: dialogColorScheme,
+                                onCopy: () => _copyPromoterLink(context, strings, effectiveSlug),
+                              ),
+                              const SizedBox(height: 6),
+                              _buildSettingsLinkTile(
+                                context: context,
+                                icon: Icons.store_mall_directory_rounded,
+                                title: currentAr ? 'رابط عمليات الوكالة وفريق الميدان' : (currentHi ? 'एजेंसी संचालन लिंक' : 'Agency Field Ops Link'),
+                                subtitle: AppUrlBuilder.buildAgencyOpsUrl(effectiveSlug),
+                                tooltip: strings.copyAgencyOpsLink,
+                                colorScheme: dialogColorScheme,
+                                onCopy: () => _copyAgencyOpsLink(context, strings, effectiveSlug),
+                              ),
+                              const SizedBox(height: 6),
+                              _buildSettingsLinkTile(
+                                context: context,
+                                icon: Icons.business_center_rounded,
+                                title: currentAr ? 'رابط مدير الشركة التنفيذي' : (currentHi ? 'कंपनी प्रबंधक लिंक' : 'Brand Executive Link'),
+                                subtitle: AppUrlBuilder.buildBrandExecutiveUrl(effectiveSlug),
+                                tooltip: strings.copyBrandExecutiveLink,
+                                colorScheme: dialogColorScheme,
+                                onCopy: () => _copyBrandExecutiveLink(context, strings, effectiveSlug),
+                              ),
+                              const SizedBox(height: 18),
+
+                              // 4. Theme Mode
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: dialogColorScheme.surfaceContainerLow,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: dialogColorScheme.outlineVariant.withValues(alpha: 0.6)),
+                                ),
+                                child: SwitchListTile(
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                  secondary: Icon(
+                                    isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                                    color: isDark ? Colors.amber : dialogColorScheme.primary,
+                                  ),
+                                  title: Text(
+                                    currentAr
+                                        ? (isDark ? 'الوضع الداكن (Dark Mode)' : 'الوضع الفاتح (Light Mode)')
+                                        : (currentHi
+                                            ? (isDark ? 'डार्क मोड' : 'लाइट मोड')
+                                            : (isDark ? 'Dark Mode' : 'Light Mode')),
+                                    style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                                  ),
+                                  value: isDark,
+                                  onChanged: (val) {
+                                    ref.read(themeModeProvider.notifier).state =
+                                        val ? ThemeMode.dark : ThemeMode.light;
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildSettingsLinkTile({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required String tooltip,
+    required ColorScheme colorScheme,
+    required VoidCallback onCopy,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: colorScheme.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+                ),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.cairo(fontSize: 10, color: colorScheme.outline),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          Tooltip(
+            message: tooltip,
+            child: IconButton.filledTonal(
+              icon: const Icon(Icons.copy_rounded, size: 16),
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.all(6),
+              constraints: const BoxConstraints(),
+              onPressed: onCopy,
+            ),
+          ),
+        ],
       ),
     );
   }

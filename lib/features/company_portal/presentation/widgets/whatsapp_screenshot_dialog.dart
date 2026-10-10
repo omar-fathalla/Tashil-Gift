@@ -54,17 +54,18 @@ class _WhatsAppScreenshotDialogState extends State<WhatsAppScreenshotDialog> {
       _errorMessage = null;
     });
 
-    final bytes = await _service.fetchLiveScreenshot(config: widget.config);
+    final result = await _service.fetchLiveScreenshotDetailed(config: widget.config, isAr: widget.isAr);
     if (mounted) {
       setState(() {
         _isLoading = false;
-        if (bytes != null && bytes.isNotEmpty) {
-          _screenshotBytes = bytes;
+        if (result.isSuccess && result.bytes != null && result.bytes!.isNotEmpty) {
+          _screenshotBytes = result.bytes;
           _capturedAt = DateTime.now();
         } else {
-          _errorMessage = widget.isAr
-              ? 'تعذر التقاط شاشة الواتساب الحية من السيرفر. تأكد من عمل السيرفر وصحة مفتاح API.'
-              : 'Failed to capture live screenshot. Ensure the server is running and API key is valid.';
+          _errorMessage = result.errorMessage ??
+              (widget.isAr
+                  ? 'تعذر التقاط شاشة الواتساب الحية من السيرفر. تأكد من عمل السيرفر وصحة مفتاح API.'
+                  : 'Failed to capture live screenshot. Ensure the server is running and API key is valid.');
         }
       });
     }

@@ -1,9 +1,85 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow read/write access to all collections for development & app operation
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Allow authenticated sessions (including background anonymous and email auth)
+    match /events/{eventId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /receipts_transactions/{txId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /company_gifts/{giftId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /gift_stock_movements/{movementId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /shards/{shardId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /sharded_counters/{counterId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /companies/{companyId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /company_products/{prodId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /chain_products_catalog/{catId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /branches/{branchId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /retail_chains/{chainId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /ai_brain_directives/{directiveId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /system_settings/{settingId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /admins/{adminEmail} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /daily_campaign_branch_sales/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /campaign_stock_settlements/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /marketing_contacts/{contactId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /discovered_products_inbox/{inboxId} {
+      allow read, write: if isAuthenticated();
+    }
+
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -39,6 +40,13 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // Ensure background anonymous auth session if no active user for seamless Firestore/Storage access
+  try {
+    if (FirebaseAuth.instance.currentUser == null) {
+      await FirebaseAuth.instance.signInAnonymously();
+    }
+  } catch (_) {}
 
   // Restore persistent admin session before initial frame render to prevent spurious sign-out
   String? initialAdminSession;
@@ -388,28 +396,35 @@ class AdminAuthGuard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isAdmin = ref.watch(isAdminProvider);
-    if (isAdmin) {
-      return const AdminDashboardScreen();
-    }
+    try {
+      final isAdmin = ref.watch(isAdminProvider);
+      if (isAdmin) {
+        return const AdminDashboardScreen();
+      }
 
-    final authState = ref.watch(authStateStreamProvider);
-    return authState.when(
-      data: (user) {
-        if (user != null && isAuthorizedAdminEmail(user.email)) {
-          return const AdminDashboardScreen();
-        }
-        return const AuthScreen();
-      },
-      loading: () {
-        final sessionEmail = ref.watch(adminSessionEmailProvider);
-        if (sessionEmail != null && isAuthorizedAdminEmail(sessionEmail)) {
-          return const AdminDashboardScreen();
-        }
-        return const AuthScreen();
-      },
-      error: (error, stack) => const AuthScreen(),
-    );
+      final authState = ref.watch(authStateStreamProvider);
+      return authState.when(
+        data: (user) {
+          if (user != null && !user.isAnonymous && isAuthorizedAdminEmail(user.email)) {
+            return const AdminDashboardScreen();
+          }
+          return const AuthScreen();
+        },
+        loading: () {
+          return const Scaffold(
+            backgroundColor: Color(0xFF0F172A),
+            body: Center(
+              child: CircularProgressIndicator(
+                color: Color(0xFF6366F1),
+              ),
+            ),
+          );
+        },
+        error: (error, stack) => const AuthScreen(),
+      );
+    } catch (_) {
+      return const AuthScreen();
+    }
   }
 }
 

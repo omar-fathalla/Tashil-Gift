@@ -198,5 +198,44 @@ void main() {
       expect(screenshot[2], equals(78)); // 'N'
       expect(screenshot[3], equals(71)); // 'G'
     });
+
+    test('Feature 6b: fetchLiveScreenshotDetailed diagnoses NOWEB engine error', () async {
+      final service = WhatsAppGatewayService();
+      final mockClient = MockClient((request) async {
+        return http.Response(
+          '{"statusCode": 400, "message": "The screenshot is not available for NOWEB engine", "error": "Bad Request"}',
+          400,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+
+      final result = await service.fetchLiveScreenshotDetailed(
+        config: baseConfig,
+        client: mockClient,
+        isAr: true,
+      );
+
+      expect(result.isSuccess, isFalse);
+      expect(result.statusCode, equals(400));
+      expect(result.errorMessage, contains('NOWEB'));
+      expect(result.errorMessage, contains('متصفح'));
+    });
+
+    test('Feature 6c: fetchLiveScreenshotDetailed diagnoses 401 Unauthorized', () async {
+      final service = WhatsAppGatewayService();
+      final mockClient = MockClient((request) async {
+        return http.Response('{"message": "Unauthorized"}', 401);
+      });
+
+      final result = await service.fetchLiveScreenshotDetailed(
+        config: baseConfig,
+        client: mockClient,
+        isAr: true,
+      );
+
+      expect(result.isSuccess, isFalse);
+      expect(result.statusCode, equals(401));
+      expect(result.errorMessage, contains('مفتاح API'));
+    });
   });
 }

@@ -89,6 +89,10 @@
     ],
     "rewrites": [
       {
+        "source": "/waha/**",
+        "function": "wahaProxy"
+      },
+      {
         "source": "/portal/**",
         "function": "sharePreview"
       },

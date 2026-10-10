@@ -231,3 +231,77 @@ exports.analyzeReceipt = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError("internal", err.message);
   }
 });
+
+/**
+ * Cloud Function: wahaProxy
+ * Secure HTTPS Reverse Proxy for WAHA (WhatsApp HTTP API).
+ * Eliminates browser Mixed Content blocks (HTTPS -> HTTP) and CORS restrictions on production domains.
+ */
+exports.wahaProxy = functions.https.onRequest(async (req, res) => {
+  // CORS configuration
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH");
+  res.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Api-Key, Accept");
+
+  if (req.method === "OPTIONS") {
+    return res.status(204).send("");
+  }
+
+  try {
+    let targetUrl = req.url || "/";
+    // Strip leading /waha if present in the rewrite path
+    if (targetUrl.startsWith("/waha")) {
+      targetUrl = targetUrl.substring(5);
+    }
+    if (!targetUrl.startsWith("/")) {
+      targetUrl = "/" + targetUrl;
+    }
+
+    const backendUrl = "http://76.13.14.23:3000" + targetUrl;
+
+    const forwardHeaders = {};
+    for (const [key, value] of Object.entries(req.headers)) {
+      const lower = key.toLowerCase();
+      if (lower === "host" || lower === "connection" || lower === "content-length") continue;
+      forwardHeaders[key] = value;
+    }
+
+    // Default to the Tashil WAHA secret token if none provided
+    if (!forwardHeaders["x-api-key"] && !forwardHeaders["X-Api-Key"]) {
+      forwardHeaders["X-Api-Key"] = "tashil_secret_token_2026";
+    }
+
+    let bodyToSend;
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      if (typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
+        bodyToSend = JSON.stringify(req.body);
+        forwardHeaders["Content-Type"] = "application/json";
+      } else if (req.rawBody) {
+        bodyToSend = req.rawBody;
+      } else {
+        bodyToSend = req.body;
+      }
+    }
+
+    const fetchRes = await fetch(backendUrl, {
+      method: req.method,
+      headers: forwardHeaders,
+      body: bodyToSend,
+    });
+
+    res.status(fetchRes.status);
+    const contentType = fetchRes.headers.get("content-type");
+    if (contentType) {
+      res.set("Content-Type", contentType);
+    }
+
+    const arrayBuffer = await fetchRes.arrayBuffer();
+    return res.send(Buffer.from(arrayBuffer));
+  } catch (err) {
+    console.error("WAHA proxy error:", err);
+    return res.status(502).json({
+      error: "WAHA_PROXY_UNAVAILABLE",
+      message: err.message || "Failed to connect to WAHA backend",
+    });
+  }
+});
