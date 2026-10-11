@@ -141,8 +141,18 @@ class ExtractedProductItem {
         json.containsKey('isTargetCompany') && json['isTargetCompany'] != null;
     bool isTarget = json['isTargetCompany'] == true;
 
+    // AIR-79: Clorox is strictly excluded for ADCO (ADCO brand is Clorel / كلوريل)
+    final isAdco = targetCompany != null &&
+        (targetCompany.contains('ادكو') ||
+            targetCompany.contains('إدكو') ||
+            targetCompany.toLowerCase().contains('adco'));
+    final isCloroxName = nameLower.contains('كلوركس') || nameLower.contains('clorox');
+    if (isAdco && isCloroxName) {
+      isTarget = false;
+    }
+
     // Only auto-infer if isTargetCompany was not explicitly set to false
-    if (!hasExplicitIsTarget) {
+    if (!hasExplicitIsTarget && !(isAdco && isCloroxName)) {
       if (targetCompany != null && targetCompany.trim().isNotEmpty) {
         if (nameLower.contains(targetCompany.trim().toLowerCase())) {
           isTarget = true;
@@ -654,7 +664,8 @@ class AiReceiptService {
         '🛑 قاعدة معالجة أسماء الماركات المحرفة أو المقصوصة في طابعات الكاشير (POS Dropped Character Rule - AIR-70):\n'
         'في بونات الكاشير لبعض السلاسل التجارية، قد تحدث أخطاء طباعية أو إسقاط حروف من أسماء العلامات الفرعية:\n'
         '- شركة أدكو (ADCO): تشمل منتجات النظافة والأرضيات والتواليت علامة "سبيد (Speed)"؛ وتطبعها بعض ماكينات الكاشير بحذف حرف الباء مثل: "سيد منظف ارضيات" أو "سيد باودر" أو "سيد 28.00" - يجب احتسابها صنفاً أصيلاً ومعتمداً لشركة أدكو (isTargetCompany = true) وإدراجها في قائمة extractedProducts وجمع قيمتها في targetCompanyTotal.\n'
-        '- علامة "كلوريل (Clorel)" و "فلفيتا (Velveta)" و "ماكسيل ماجيك (Maxel Magic)" و "فيبا (Feba)" و "ديفا (Diva)" هي علامات تابعة لشركة أدكو ويجب استخراج كافة بنودها بعناية دون إسقاط أي صنف منها.\n\n'
+        '- علامة "كلوريل (Clorel)" و "فلفيتا (Velveta)" و "ماكسيل ماجيك (Maxel Magic)" و "فيبا (Feba)" و "ديفا (Diva)" هي علامات تابعة لشركة أدكو ويجب استخراج كافة بنودها بعناية دون إسقاط أي صنف منها.\n'
+        '- 🛑 معيار الحظر القطعي لأصناف كلوركس واستقلاليتها عن أدكو (AIR-79): شركة أدكو (ADCO) تنتج مبيضات وكلور الملابس تحت علامة "كلوريل (Clorel)" حصراً؛ وتتبع علامة "كلوركس (Clorox)" شركة أخرى مستقلة ومنافسة وليست تابعة لأدكو مطلقاً. يُحظر تماماً وبصرامة احتساب أي منتج باسم "كلوركس" (مثل: كلوركس ألوان، كلوركس أبيض، كلوركس جل، كلوركس منظف) كصنف تابع لأدكو (يجب حتماً تعيين isTargetCompany = false واستبعاده كلياً من targetCompanyTotal وعروض أدكو).\n\n'
         '🛑 معيار الحظر الصارم لاحتساب أصناف الشوكولاتة والمالتي باك العامة دون علامة تجارية صريحة (AIR-71):\n'
         '- يُمنع منعاً باتاً افتراض أو تخمين تبعية أي صنف عام مطبوع على بون الكاشير تحت مسمى مبهم أو عام مثل: "مالتي باك شوكولات" أو "مالتي باك شوكولاتة" أو "شوكولاتة مشكلة" أو "بسكويت ويفر" لشركة كادبوري (Cadbury) أو مونديليز (Mondelez) ما لم يُذكر في سطر البون صراحة اسم العلامة المعتمدة التابعة للشركة (مثل: كادبوري، ديري ميلك، مورو، بابلي، أوريو، ماندولين، فليك، سي دي ام، CDM).\n'
         '- يُحظر كلياً الاستناد إلى وجود أصناف كادبوري أخرى بالفاتورة لاعتبار الصنف العام تابعاً لكادبري.\n'
@@ -1758,11 +1769,32 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           result = result.copyWith(extractedProducts: sanitizedProducts);
         }
 
+        // AIR-79: ADCO Tenant Guard - Strictly exclude Clorox items (Clorox is not ADCO; ADCO brand is Clorel)
+        final isAdcoTenant = targetCompany.contains('ادكو') ||
+            targetCompany.contains('إدكو') ||
+            targetCompany.toLowerCase().contains('adco');
+
+        if (isAdcoTenant && result.extractedProducts.isNotEmpty) {
+          final sanitizedProducts = result.extractedProducts.map((p) {
+            final nameLower = p.name.toLowerCase();
+            final isClorox = nameLower.contains('كلوركس') || nameLower.contains('clorox');
+
+            if (isClorox && p.isTargetCompany) {
+              return p.copyWith(isTargetCompany: false);
+            }
+            return p;
+          }).toList();
+
+          result = result.copyWith(extractedProducts: sanitizedProducts);
+        }
+
         // Auto-heal targetCompanyTotal if sum of extracted target products exceeds it (AIR-58)
         final double sumOfExtractedTarget = result.extractedProducts
             .where((p) => p.isTargetCompany)
             .fold<double>(0.0, (sum, p) => sum + (p.price * p.quantity));
-        if (sumOfExtractedTarget > result.targetCompanyTotal || (isMondelezTenant && sumOfExtractedTarget != result.targetCompanyTotal)) {
+        if (sumOfExtractedTarget > result.targetCompanyTotal ||
+            (isMondelezTenant && sumOfExtractedTarget != result.targetCompanyTotal) ||
+            (isAdcoTenant && sumOfExtractedTarget != result.targetCompanyTotal)) {
           result = result.copyWith(targetCompanyTotal: sumOfExtractedTarget);
         }
 

@@ -1569,6 +1569,28 @@ class AiDirectivesSeedData {
           tags: ['promoter-guidance', 'condition-deduplication', 'receipt-footer', 'pos-lines', 'campaign-switching', 'air-78'],
           lastUpdated: '2026-10-10',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-79',
+          code: 'CLOROX_COMPETITOR_EXCLUSION_AND_ADCO_CLOREL_DISAMBIGUATION_STANDARD',
+          orderIndex: 79,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'حوكمة استبعاد أصناف كلوركس وفصلها التام عن مبيضات كلوريل لشركة أدكو',
+          titleEn: 'Clorox Competitor Exclusion & ADCO Clorel Disambiguation Standard',
+          descriptionAr:
+              'معيار حوكمة صارم يمنع محركات الذكاء الاصطناعي ومطابقة الباركود من الخلط بين مبيض الملابس "كلوريل (Clorel)" التابع حصرياً لشركة أدكو (ADCO) ومبيضات "كلوركس (Clorox)" التابعة لشركة كلوركس المستقلة والمنافسة: 1) حظر إدراج أي صنف يحمل اسم "كلوركس" أو "Clorox" ضمن كتالوج أصناف شركة أدكو (company_products) أو قواعد عروضها الترويجية (selectedProductNames). 2) عزل قيمة أصناف كلوركس كلياً بتعيين isTargetCompany = false وتحويلها إلى "صنف عام" واستبعاد قيمتها من targetCompanyTotal لمنع صرف جوائز وهدايا أو تضخيم مبيعات الراعي على منتجات منافسة. 3) التدقيق الفوري والتنقية التلقائية لأسطر الفواتير لتصفية أي سطر يحتوي على كلوركس عند معالجة حملات أدكو.',
+          descriptionEn:
+              'Strict governance standard preventing AI verification engines and barcode catalogs from confusing ADCO\'s proprietary fabric bleach "Clorel (كلوريل)" with competitor "Clorox (كلوركس)": 1) Permanently bans Clorox SKUs from ADCO company catalog (company_products) and campaign promotional rules (selectedProductNames). 2) Strictly isolates Clorox line items by setting isTargetCompany = false, categorizing them as regular items, and excluding their value from targetCompanyTotal to eliminate fraudulent prize disbursements or inflated sponsor sales figures. 3) Enforces deterministic runtime sanitization across AI prompts and post-processing filters to disqualify Clorox items in all ADCO campaigns.',
+          logicAr:
+              '1. تنقية وتطهير كتالوج أدكو وقواعد حملاتها من أي صنف يحمل اسم كلوركس.\n2. في fromReceiptJson و post-processing: عند معالجة شركة أدكو، يتم فحص أسماء المنتجات؛ فإذا احتوى السطر على "كلوركس" أو "clorox" يُلزم النظام بتعيين isTargetCompany = false حتماً.\n3. إعادة احتساب targetCompanyTotal بعد استبعاد أصناف كلوركس.\n4. تعزيز تعليمات Gemini 3.7 Flash بتوجيه صريح يؤكد أن مبيض أدكو هو "كلوريل" فقط وأن كلوركس علامة تتبع شركة أخرى مستقلة.',
+          logicEn:
+              '1. Purges Clorox products from ADCO catalog and campaign promotional rules.\n2. In fromReceiptJson and stream post-processing: when processing ADCO receipts, any line item matching "كلوركس" or "clorox" is strictly assigned isTargetCompany = false.\n3. Dynamically re-calculates targetCompanyTotal by summing verified target products only.\n4. Injects explicit disambiguation into Gemini 3.7 Flash prompts affirming that ADCO\'s bleach is Clorel exclusively, and Clorox belongs to an independent competitor.',
+          exampleInput:
+              'فاتورة فتح الله فرع فلمنج برقم #6 بإجمالي 988 ج.م تضم 6 أصناف لشركة أدكو (827 ج.م) + صنفين كلوركس (كلوركس ألوان 129 ج.م + كلوركس أبيض 32 ج.م = 161 ج.م).',
+          exampleOutput:
+              '1) تعيين isTargetCompany = false لصنفي كلوركس وظهورهما كـ "صنف عام" بدلاً من "مشمول بالعرض". 2) احتساب إجمالي مبيعات أدكو الصافي الدقيق = 827 ج.م (بدلاً من 988 ج.م). 3) استحقاق العميل لكوبونين فئة 50 ج.م لاجتيازه الحد الأدنى لمنتجات أدكو وحدها (827 >= 680 ج.م).',
+          tags: ['clorox-exclusion', 'clorel-disambiguation', 'adco', 'fmcg-governance', 'product-intelligence', 'air-79'],
+          lastUpdated: '2026-10-11',
+        ),
       ];
 }
 
