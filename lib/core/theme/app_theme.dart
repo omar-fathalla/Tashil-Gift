@@ -9,8 +9,8 @@ final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.light);
 /// Comprehensive Material Design 3 (M3) System Theme Manager
 /// Dynamically generates light & dark ColorSchemes from a single seed color.
 class AppTheme {
-  // Default Brand Seed Color: Material Design 3 Default Blue (الأزرق القياسي لماتيريال 3)
-  static const Color defaultSeedColor = Color(0xFF0B57D0);
+  // Default Brand Seed Color: Material Design 3 Dynamic Olive (اللون الزيتي الرسمي لماتيريال 3)
+  static const Color defaultSeedColor = Color(0xFF5C631D);
 
   /// Generates Light M3 ThemeData from a single seed color
   static ThemeData getLightTheme({Color seedColor = defaultSeedColor}) {

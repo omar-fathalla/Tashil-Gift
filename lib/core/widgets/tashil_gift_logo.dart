@@ -17,26 +17,27 @@ class TashilGiftLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final effectiveRadius = borderRadius ?? (size * 0.28);
+    const olivePrimary = Color(0xFF5C631D);
+    const oliveDeep = Color(0xFF444B04);
 
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            colorScheme.primary,
-            Color.lerp(colorScheme.primary, Colors.white, 0.14) ?? colorScheme.primary,
+            olivePrimary,
+            oliveDeep,
           ],
         ),
         borderRadius: BorderRadius.circular(effectiveRadius),
         boxShadow: showShadow
             ? [
                 BoxShadow(
-                  color: colorScheme.primary.withValues(alpha: 0.24),
+                  color: olivePrimary.withValues(alpha: 0.28),
                   blurRadius: size * 0.22,
                   offset: Offset(0, size * 0.06),
                 ),
