@@ -13,6 +13,8 @@ import '../../../core/widgets/game_sound_controls.dart';
 import '../../../core/utils/error_handler.dart';
 import '../../../core/animations/m3_motion.dart';
 import '../../../core/widgets/switch_point_branding.dart';
+import '../../company_portal/domain/whatsapp_gateway_service.dart';
+import '../../company_portal/domain/whatsapp_winner_notification_service.dart';
 import 'winner_celebration_dialog.dart';
 import 'game_demo_banner.dart';
 
@@ -22,6 +24,10 @@ class SpinTheWheelScreen extends ConsumerStatefulWidget {
   final List<String> prizes;
   final int totalChances;
   final bool isDemo;
+  final String? branchId;
+  final String? customerPhone;
+  final String? customerName;
+  final bool? enableWhatsAppWinnerNotification;
 
   const SpinTheWheelScreen({
     super.key,
@@ -30,6 +36,10 @@ class SpinTheWheelScreen extends ConsumerStatefulWidget {
     this.prizes = const [],
     this.totalChances = 1,
     this.isDemo = false,
+    this.branchId,
+    this.customerPhone,
+    this.customerName,
+    this.enableWhatsAppWinnerNotification,
   });
 
   @override
@@ -49,6 +59,12 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
   final List<String> _wonPrizes = [];
   final Map<String, String> _prizeImages = {};
   Timer? _tickTimer;
+  bool _whatsappSent = false;
+  bool? _enableWhatsAppWinnerNotification;
+  String? _resolvedCustomerPhone;
+
+  bool get _isWhatsAppEnabled =>
+      _enableWhatsAppWinnerNotification ?? widget.enableWhatsAppWinnerNotification ?? true;
 
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
@@ -56,7 +72,10 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
   @override
   void initState() {
     super.initState();
+    _resolvedCustomerPhone = widget.customerPhone;
+    _enableWhatsAppWinnerNotification = widget.enableWhatsAppWinnerNotification;
     _loadPrizeImages();
+    _preloadMetadataForWhatsApp();
     _remainingChances = widget.totalChances > 0 ? widget.totalChances : 1;
     final rawList = widget.prizes.isNotEmpty
         ? widget.prizes
@@ -112,6 +131,7 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
     try {
       _remainingChances = (_remainingChances - 1).clamp(0, 999);
       _wonPrizes.add(prize);
+      Future<WhatsAppGatewayResult?>? whatsappFuture;
 
       if (!widget.isDemo && widget.transactionId.isNotEmpty) {
         final firestore = ref.read(firestoreProvider);
@@ -122,19 +142,30 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
           'prizes_won': _wonPrizes,
           'remaining_chances': _remainingChances,
           'event_id': widget.eventId,
-          'claimed_gifts': [{
+          'claimed_gifts': _wonPrizes.map((p) => {
             'giftId': '',
-            'giftName': prize,
+            'giftName': p,
             'quantity': 1,
             'unitValue': 0.0,
-            'isVoucher': false,
-          }],
+            'isVoucher': p.contains('فواتشر') || p.contains('قسيمة') || p.toLowerCase().contains('voucher'),
+          }).toList(),
         });
 
         // Decrement the prize from the campaign's allocated inventory
         if (widget.eventId.isNotEmpty) {
           final giftsService = ref.read(companyGiftsServiceProvider);
-          await giftsService.decrementCampaignPrize(widget.eventId, prize);
+          await giftsService.decrementCampaignPrize(
+            widget.eventId,
+            prize,
+            branchId: widget.branchId,
+            gameType: 'wheel',
+          );
+        }
+
+        // Dispatch celebratory WhatsApp message when all spins are completed
+        if (_remainingChances == 0 && !_whatsappSent) {
+          _whatsappSent = true;
+          whatsappFuture = _dispatchWhatsAppWinnerNotification();
         }
       }
 
@@ -146,6 +177,7 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
       });
 
       final imgUrl = _resolvePrizeImage(prize);
+      final effectivePhone = (_resolvedCustomerPhone ?? widget.customerPhone ?? '').trim();
 
       // Trigger the world-class winner celebration dialog
       await showWinnerCelebrationDialog(
@@ -153,6 +185,10 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
         prizeName: prize,
         remainingChances: _remainingChances,
         imageUrl: imgUrl,
+        recipientPhone: effectivePhone.isNotEmpty ? effectivePhone : null,
+        whatsappDispatchFuture: (_remainingChances == 0 && _isWhatsAppEnabled)
+            ? whatsappFuture
+            : null,
         onNextChance: () {
           if (!mounted) return;
           setState(() {
@@ -161,6 +197,10 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
           });
         },
         onNextCustomer: () {
+          if (!widget.isDemo && !_whatsappSent && _wonPrizes.isNotEmpty) {
+            _whatsappSent = true;
+            unawaited(_dispatchWhatsAppWinnerNotification());
+          }
           // Navigate back to the receipt upload / cashier screen
           Navigator.of(context).pop();
         },
@@ -177,6 +217,46 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
         _isSpinning = false;
       });
     }
+  }
+
+  Future<void> _preloadMetadataForWhatsApp() async {
+    if (widget.isDemo) return;
+    try {
+      final firestore = ref.read(firestoreProvider);
+      if ((_resolvedCustomerPhone == null || _resolvedCustomerPhone!.trim().isEmpty) &&
+          widget.transactionId.isNotEmpty) {
+        final txDoc = await firestore.collection('receipts_transactions').doc(widget.transactionId).get();
+        if (txDoc.exists && mounted) {
+          final data = txDoc.data() ?? {};
+          final phone = (data['customerPhone'] ?? data['customer_phone'] ?? data['phone'] ?? '').toString().trim();
+          if (phone.isNotEmpty) {
+            setState(() => _resolvedCustomerPhone = phone);
+          }
+        }
+      }
+      if (_enableWhatsAppWinnerNotification == null && widget.eventId.isNotEmpty) {
+        final evDoc = await firestore.collection('events').doc(widget.eventId).get();
+        if (evDoc.exists && mounted) {
+          final data = evDoc.data() ?? {};
+          setState(() {
+            _enableWhatsAppWinnerNotification = data['enableWhatsAppWinnerNotification'] != false &&
+                data['enable_whatsapp_winner_notification'] != false;
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<WhatsAppGatewayResult?> _dispatchWhatsAppWinnerNotification() async {
+    if (!_isWhatsAppEnabled || _wonPrizes.isEmpty) return null;
+    return await ref.read(whatsappWinnerNotificationServiceProvider).dispatchForTransaction(
+      transactionId: widget.transactionId,
+      eventId: widget.eventId,
+      prizeName: _wonPrizes.join(' + '),
+      customerPhone: _resolvedCustomerPhone ?? widget.customerPhone,
+      customerName: widget.customerName,
+      isEnabledForCampaign: _isWhatsAppEnabled,
+    );
   }
 
   Future<void> _loadPrizeImages() async {

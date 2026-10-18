@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -11,6 +12,8 @@ import '../../../core/services/game_audio_service.dart';
 import '../../../core/widgets/game_sound_controls.dart';
 import '../../../core/utils/error_handler.dart';
 import '../../../core/widgets/switch_point_branding.dart';
+import '../../company_portal/domain/whatsapp_gateway_service.dart';
+import '../../company_portal/domain/whatsapp_winner_notification_service.dart';
 import 'winner_celebration_dialog.dart';
 import 'game_demo_banner.dart';
 
@@ -20,6 +23,10 @@ class ScratchCardScreen extends ConsumerStatefulWidget {
   final List<String> prizes;
   final int totalChances;
   final bool isDemo;
+  final String? branchId;
+  final String? customerPhone;
+  final String? customerName;
+  final bool? enableWhatsAppWinnerNotification;
 
   const ScratchCardScreen({
     super.key,
@@ -28,6 +35,10 @@ class ScratchCardScreen extends ConsumerStatefulWidget {
     this.prizes = const [],
     this.totalChances = 1,
     this.isDemo = false,
+    this.branchId,
+    this.customerPhone,
+    this.customerName,
+    this.enableWhatsAppWinnerNotification,
   });
 
   @override
@@ -42,6 +53,12 @@ class _ScratchCardScreenState extends ConsumerState<ScratchCardScreen> {
   int _currentRound = 1;
   final List<String> _wonPrizes = [];
   final Map<String, String> _prizeImages = {};
+  bool _whatsappSent = false;
+  bool? _enableWhatsAppWinnerNotification;
+  String? _resolvedCustomerPhone;
+
+  bool get _isWhatsAppEnabled =>
+      _enableWhatsAppWinnerNotification ?? widget.enableWhatsAppWinnerNotification ?? true;
 
   late final List<String> _items;
   late String _prize;
@@ -49,7 +66,10 @@ class _ScratchCardScreenState extends ConsumerState<ScratchCardScreen> {
   @override
   void initState() {
     super.initState();
+    _resolvedCustomerPhone = widget.customerPhone;
+    _enableWhatsAppWinnerNotification = widget.enableWhatsAppWinnerNotification;
     _loadPrizeImages();
+    _preloadMetadataForWhatsApp();
     _remainingChances = widget.totalChances > 0 ? widget.totalChances : 1;
     final rawList = widget.prizes.isNotEmpty
         ? widget.prizes
@@ -57,6 +77,46 @@ class _ScratchCardScreenState extends ConsumerState<ScratchCardScreen> {
     final seen = <String>{};
     _items = rawList.where((p) => p.trim().isNotEmpty && seen.add(p.trim())).toList();
     _prize = _items[Random().nextInt(_items.length)];
+  }
+
+  Future<void> _preloadMetadataForWhatsApp() async {
+    if (widget.isDemo) return;
+    try {
+      final firestore = ref.read(firestoreProvider);
+      if ((_resolvedCustomerPhone == null || _resolvedCustomerPhone!.trim().isEmpty) &&
+          widget.transactionId.isNotEmpty) {
+        final txDoc = await firestore.collection('receipts_transactions').doc(widget.transactionId).get();
+        if (txDoc.exists && mounted) {
+          final data = txDoc.data() ?? {};
+          final phone = (data['customerPhone'] ?? data['customer_phone'] ?? data['phone'] ?? '').toString().trim();
+          if (phone.isNotEmpty) {
+            setState(() => _resolvedCustomerPhone = phone);
+          }
+        }
+      }
+      if (_enableWhatsAppWinnerNotification == null && widget.eventId.isNotEmpty) {
+        final evDoc = await firestore.collection('events').doc(widget.eventId).get();
+        if (evDoc.exists && mounted) {
+          final data = evDoc.data() ?? {};
+          setState(() {
+            _enableWhatsAppWinnerNotification = data['enableWhatsAppWinnerNotification'] != false &&
+                data['enable_whatsapp_winner_notification'] != false;
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<WhatsAppGatewayResult?> _dispatchWhatsAppWinnerNotification() async {
+    if (!_isWhatsAppEnabled || _wonPrizes.isEmpty) return null;
+    return await ref.read(whatsappWinnerNotificationServiceProvider).dispatchForTransaction(
+      transactionId: widget.transactionId,
+      eventId: widget.eventId,
+      prizeName: _wonPrizes.join(' + '),
+      customerPhone: _resolvedCustomerPhone ?? widget.customerPhone,
+      customerName: widget.customerName,
+      isEnabledForCampaign: _isWhatsAppEnabled,
+    );
   }
 
   void _resetDemo() {
@@ -82,6 +142,7 @@ class _ScratchCardScreenState extends ConsumerState<ScratchCardScreen> {
     try {
       _remainingChances = (_remainingChances - 1).clamp(0, 999);
       _wonPrizes.add(_prize);
+      Future<WhatsAppGatewayResult?>? whatsappFuture;
 
       if (!widget.isDemo && widget.transactionId.isNotEmpty) {
         final firestore = ref.read(firestoreProvider);
@@ -92,25 +153,36 @@ class _ScratchCardScreenState extends ConsumerState<ScratchCardScreen> {
           'prizes_won': _wonPrizes,
           'remaining_chances': _remainingChances,
           'event_id': widget.eventId,
-          'claimed_gifts': [{
+          'claimed_gifts': _wonPrizes.map((p) => {
             'giftId': '',
-            'giftName': _prize,
+            'giftName': p,
             'quantity': 1,
             'unitValue': 0.0,
-            'isVoucher': false,
-          }],
+            'isVoucher': p.contains('فواتشر') || p.contains('قسيمة') || p.toLowerCase().contains('voucher'),
+          }).toList(),
         });
 
         // Decrement the prize from the campaign's allocated inventory
         if (widget.eventId.isNotEmpty) {
           final giftsService = ref.read(companyGiftsServiceProvider);
-          await giftsService.decrementCampaignPrize(widget.eventId, _prize, gameType: 'scratch');
+          await giftsService.decrementCampaignPrize(
+            widget.eventId,
+            _prize,
+            branchId: widget.branchId,
+            gameType: 'scratch',
+          );
+        }
+
+        if (_remainingChances == 0 && !_whatsappSent) {
+          _whatsappSent = true;
+          whatsappFuture = _dispatchWhatsAppWinnerNotification();
         }
       }
 
       if (!mounted) return;
 
       final imgUrl = _resolvePrizeImage(_prize);
+      final effectivePhone = (_resolvedCustomerPhone ?? widget.customerPhone ?? '').trim();
 
       // Trigger world-class winner celebration dialog
       await showWinnerCelebrationDialog(
@@ -118,6 +190,10 @@ class _ScratchCardScreenState extends ConsumerState<ScratchCardScreen> {
         prizeName: _prize,
         remainingChances: _remainingChances,
         imageUrl: imgUrl,
+        recipientPhone: effectivePhone.isNotEmpty ? effectivePhone : null,
+        whatsappDispatchFuture: (_remainingChances == 0 && _isWhatsAppEnabled)
+            ? whatsappFuture
+            : null,
         onNextChance: () {
           if (!mounted) return;
           setState(() {
@@ -129,6 +205,10 @@ class _ScratchCardScreenState extends ConsumerState<ScratchCardScreen> {
           _scratcherKey.currentState?.reset();
         },
         onNextCustomer: () {
+          if (!widget.isDemo && !_whatsappSent && _wonPrizes.isNotEmpty) {
+            _whatsappSent = true;
+            unawaited(_dispatchWhatsAppWinnerNotification());
+          }
           Navigator.of(context).pop();
         },
       );

@@ -12,6 +12,8 @@ import '../../../core/utils/error_handler.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../core/widgets/switch_point_branding.dart';
+import '../../company_portal/domain/whatsapp_gateway_service.dart';
+import '../../company_portal/domain/whatsapp_winner_notification_service.dart';
 import 'winner_celebration_dialog.dart';
 import 'game_demo_banner.dart';
 
@@ -26,6 +28,9 @@ class ChooseGiftScreen extends ConsumerStatefulWidget {
   final bool isDemo;
   final String? branchId;
   final Map<String, String>? prizeImages;
+  final String? customerPhone;
+  final String? customerName;
+  final bool? enableWhatsAppWinnerNotification;
 
   const ChooseGiftScreen({
     super.key,
@@ -37,6 +42,9 @@ class ChooseGiftScreen extends ConsumerStatefulWidget {
     this.isDemo = false,
     this.branchId,
     this.prizeImages,
+    this.customerPhone,
+    this.customerName,
+    this.enableWhatsAppWinnerNotification,
   });
 
   @override
@@ -52,6 +60,12 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
   int _currentRound = 1;
   final List<String> _wonPrizes = [];
   Map<String, String> _prizeImages = {};
+  bool _whatsappSent = false;
+  bool? _enableWhatsAppWinnerNotification;
+  String? _resolvedCustomerPhone;
+
+  bool get _isWhatsAppEnabled =>
+      _enableWhatsAppWinnerNotification ?? widget.enableWhatsAppWinnerNotification ?? true;
 
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
@@ -59,10 +73,13 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
   @override
   void initState() {
     super.initState();
+    _resolvedCustomerPhone = widget.customerPhone;
+    _enableWhatsAppWinnerNotification = widget.enableWhatsAppWinnerNotification;
     if (widget.prizeImages != null && widget.prizeImages!.isNotEmpty) {
       _prizeImages = Map.from(widget.prizeImages!);
     }
     _loadEventPrizeImages();
+    _preloadMetadataForWhatsApp();
     _remainingChances = widget.totalChances > 0 ? widget.totalChances : 1;
     final rawPrizes = widget.prizes.isNotEmpty
         ? widget.prizes
@@ -91,6 +108,47 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
   void dispose() {
     _pulseController.dispose();
     super.dispose();
+  }
+
+  Future<void> _preloadMetadataForWhatsApp() async {
+    if (widget.isDemo) return;
+    try {
+      final firestore = ref.read(firestoreProvider);
+      if ((_resolvedCustomerPhone == null || _resolvedCustomerPhone!.trim().isEmpty) &&
+          widget.transactionId.isNotEmpty) {
+        final txDoc = await firestore.collection('receipts_transactions').doc(widget.transactionId).get();
+        if (txDoc.exists && mounted) {
+          final data = txDoc.data() ?? {};
+          final phone = (data['customerPhone'] ?? data['customer_phone'] ?? data['phone'] ?? '').toString().trim();
+          if (phone.isNotEmpty) {
+            setState(() => _resolvedCustomerPhone = phone);
+          }
+        }
+      }
+      if (_enableWhatsAppWinnerNotification == null && widget.eventId.isNotEmpty) {
+        final evDoc = await firestore.collection('events').doc(widget.eventId).get();
+        if (evDoc.exists && mounted) {
+          final data = evDoc.data() ?? {};
+          setState(() {
+            _enableWhatsAppWinnerNotification = data['enableWhatsAppWinnerNotification'] != false &&
+                data['enable_whatsapp_winner_notification'] != false;
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<WhatsAppGatewayResult?> _dispatchWhatsAppWinnerNotification() async {
+    if (!_isWhatsAppEnabled || _wonPrizes.isEmpty) return null;
+    return await ref.read(whatsappWinnerNotificationServiceProvider).dispatchForTransaction(
+      transactionId: widget.transactionId,
+      eventId: widget.eventId,
+      prizeName: _wonPrizes.join(' + '),
+      customerPhone: _resolvedCustomerPhone ?? widget.customerPhone,
+      customerName: widget.customerName,
+      companySlug: widget.companySlug,
+      isEnabledForCampaign: _isWhatsAppEnabled,
+    );
   }
 
   Future<void> _loadEventPrizeImages() async {
@@ -190,6 +248,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
 
       _remainingChances = (_remainingChances - 1).clamp(0, 999);
       _wonPrizes.add(selectedPrize);
+      Future<WhatsAppGatewayResult?>? whatsappFuture;
 
       if (!widget.isDemo && widget.transactionId.isNotEmpty) {
         final firestore = ref.read(firestoreProvider);
@@ -215,13 +274,20 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
             widget.eventId,
             selectedPrize,
             branchId: widget.branchId,
+            gameType: 'chooseGift',
           );
+        }
+
+        if (_remainingChances == 0 && !_whatsappSent) {
+          _whatsappSent = true;
+          whatsappFuture = _dispatchWhatsAppWinnerNotification();
         }
       }
 
       if (!mounted) return;
 
       final imgUrl = _resolvePrizeImage(selectedPrize);
+      final effectivePhone = (_resolvedCustomerPhone ?? widget.customerPhone ?? '').trim();
 
       final isAr = ref.read(localeProvider).languageCode == 'ar';
       await showWinnerCelebrationDialog(
@@ -232,6 +298,10 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
             ? 'اختيار الهدية التالية (متبقي $_remainingChances) 🎁'
             : 'Choose Next Gift ($_remainingChances left) 🎁',
         imageUrl: imgUrl,
+        recipientPhone: effectivePhone.isNotEmpty ? effectivePhone : null,
+        whatsappDispatchFuture: (_remainingChances == 0 && _isWhatsAppEnabled)
+            ? whatsappFuture
+            : null,
         onNextChance: () {
           if (!mounted) return;
           setState(() {
@@ -241,6 +311,10 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
           });
         },
         onNextCustomer: () {
+          if (!widget.isDemo && !_whatsappSent && _wonPrizes.isNotEmpty) {
+            _whatsappSent = true;
+            unawaited(_dispatchWhatsAppWinnerNotification());
+          }
           Navigator.of(context).pop();
         },
       );

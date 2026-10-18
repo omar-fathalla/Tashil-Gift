@@ -14,6 +14,7 @@ import '../../../../core/utils/arabic_numbers_utils.dart';
 import '../../../../core/animations/m3_motion.dart';
 import '../../../../core/constants/country_currency_config.dart';
 import '../../../games/presentation/winner_celebration_dialog.dart';
+import '../../../company_portal/domain/whatsapp_gateway_service.dart';
 import '../../../company_portal/domain/whatsapp_winner_notification_service.dart';
 
 /// Helper for individual voucher serial input in multi-campaign view
@@ -325,10 +326,11 @@ class _UnifiedMultiCampaignClaimScreenState
 
       // Dispatch automated celebratory WhatsApp winner message
       final isAnyCampaignWhatsAppEnabled = widget.qualifiedCampaigns.any((q) => q.campaign.enableWhatsAppWinnerNotification);
+      Future<WhatsAppGatewayResult?>? whatsappFuture;
       if (isAnyCampaignWhatsAppEnabled && widget.customerPhone.isNotEmpty && widget.qualifiedCampaigns.isNotEmpty) {
         final firstCampaign = widget.qualifiedCampaigns.first;
         final combinedPrizeName = allAwardedPrizeSummaries.join(' + ');
-        unawaited(ref.read(whatsappWinnerNotificationServiceProvider).sendWinnerNotification(
+        whatsappFuture = ref.read(whatsappWinnerNotificationServiceProvider).sendWinnerNotification(
           toPhone: widget.customerPhone,
           prizeName: combinedPrizeName,
           customerName: widget.customerName,
@@ -338,7 +340,7 @@ class _UnifiedMultiCampaignClaimScreenState
           receiptNumber: widget.receiptNumber,
           companySlug: firstCampaign.campaign.companySlug,
           isEnabledForCampaign: isAnyCampaignWhatsAppEnabled,
-        ));
+        );
       }
 
       if (!mounted) return;
@@ -354,6 +356,7 @@ class _UnifiedMultiCampaignClaimScreenState
         prizeName: allAwardedPrizeSummaries.join('\n• '),
         isVoucher: widget.qualifiedCampaigns.any((q) => q.resolvedIsVoucher),
         recipientPhone: isAnyCampaignWhatsAppEnabled ? widget.customerPhone : null,
+        whatsappDispatchFuture: whatsappFuture,
         onNextCustomer: () {},
       );
 

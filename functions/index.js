@@ -259,27 +259,27 @@ exports.wahaProxy = functions.https.onRequest(async (req, res) => {
 
     const backendUrl = "http://76.13.14.23:3000" + targetUrl;
 
-    const forwardHeaders = {};
-    for (const [key, value] of Object.entries(req.headers)) {
-      const lower = key.toLowerCase();
-      if (lower === "host" || lower === "connection" || lower === "content-length") continue;
-      forwardHeaders[key] = value;
+    const forwardHeaders = {
+      "x-api-key": req.headers["x-api-key"] || "tashil_secret_token_2026",
+    };
+    if (req.headers["accept"]) {
+      forwardHeaders["accept"] = req.headers["accept"];
     }
-
-    // Default to the Tashil WAHA secret token if none provided
-    if (!forwardHeaders["x-api-key"] && !forwardHeaders["X-Api-Key"]) {
-      forwardHeaders["X-Api-Key"] = "tashil_secret_token_2026";
+    if (req.headers["authorization"]) {
+      forwardHeaders["authorization"] = req.headers["authorization"];
     }
 
     let bodyToSend;
     if (req.method !== "GET" && req.method !== "HEAD") {
-      if (typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
+      if (req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
         bodyToSend = JSON.stringify(req.body);
-        forwardHeaders["Content-Type"] = "application/json";
+        forwardHeaders["content-type"] = "application/json";
       } else if (req.rawBody) {
         bodyToSend = req.rawBody;
-      } else {
+        forwardHeaders["content-type"] = req.headers["content-type"] || "application/json";
+      } else if (req.body) {
         bodyToSend = req.body;
+        forwardHeaders["content-type"] = req.headers["content-type"] || "application/json";
       }
     }
 

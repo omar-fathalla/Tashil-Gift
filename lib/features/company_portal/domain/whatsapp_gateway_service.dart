@@ -20,20 +20,50 @@ class WhatsAppGatewayResult {
   final String? messageId;
   final String? error;
   final int statusCode;
+  final String? recipientPhone;
 
   const WhatsAppGatewayResult({
     required this.isSuccess,
     this.messageId,
     this.error,
     this.statusCode = 200,
+    this.recipientPhone,
   });
 
-  factory WhatsAppGatewayResult.success({String? messageId, int statusCode = 200}) {
-    return WhatsAppGatewayResult(isSuccess: true, messageId: messageId, statusCode: statusCode);
+  factory WhatsAppGatewayResult.success({
+    String? messageId,
+    int statusCode = 200,
+    String? recipientPhone,
+  }) {
+    return WhatsAppGatewayResult(
+      isSuccess: true,
+      messageId: messageId,
+      statusCode: statusCode,
+      recipientPhone: recipientPhone,
+    );
   }
 
-  factory WhatsAppGatewayResult.failure({required String error, int statusCode = 400}) {
-    return WhatsAppGatewayResult(isSuccess: false, error: error, statusCode: statusCode);
+  factory WhatsAppGatewayResult.failure({
+    required String error,
+    int statusCode = 400,
+    String? recipientPhone,
+  }) {
+    return WhatsAppGatewayResult(
+      isSuccess: false,
+      error: error,
+      statusCode: statusCode,
+      recipientPhone: recipientPhone,
+    );
+  }
+
+  WhatsAppGatewayResult withPhone(String phone) {
+    return WhatsAppGatewayResult(
+      isSuccess: isSuccess,
+      messageId: messageId,
+      error: error,
+      statusCode: statusCode,
+      recipientPhone: phone,
+    );
   }
 }
 
@@ -580,6 +610,52 @@ class WhatsAppGatewayService {
     }
   }
 
+  /// Cache of resolved WAHA chatIds (e.g. 225674946170895@lid or 2010...@c.us) keyed by international phone
+  static final Map<String, String> _resolvedWahaChatIds = {};
+
+  /// Resolves the active WAHA chatId (`@lid` or `@c.us`) for a phone number via `/api/contacts/check-exists`.
+  /// Prevents `500 No LID for user` errors on newer WhatsApp Web (`WEBJS`) sessions.
+  Future<({String? chatId, String? error})> _resolveWahaChatId({
+    required http.Client httpClient,
+    required String endpoint,
+    required String session,
+    required Map<String, String> headers,
+    required String cleanPhone,
+  }) async {
+    final cached = _resolvedWahaChatIds[cleanPhone];
+    if (cached != null && cached.isNotEmpty) {
+      return (chatId: cached, error: null);
+    }
+
+    try {
+      final checkUrl = Uri.parse(
+        '$endpoint/api/contacts/check-exists?phone=${Uri.encodeQueryComponent(cleanPhone)}&session=${Uri.encodeQueryComponent(session)}',
+      );
+      final checkHeaders = <String, String>{};
+      if (headers['X-Api-Key'] != null) {
+        checkHeaders['X-Api-Key'] = headers['X-Api-Key']!;
+      }
+      final resp = await httpClient.get(checkUrl, headers: checkHeaders).timeout(const Duration(seconds: 10));
+      if (resp.statusCode == 200) {
+        final data = json.decode(resp.body);
+        if (data is Map) {
+          if (data['numberExists'] == false) {
+            return (chatId: null, error: 'رقم الهاتف (+$cleanPhone) غير مسجل على تطبيق واتساب');
+          }
+          final resolved = data['chatId']?.toString().trim() ?? '';
+          if (resolved.isNotEmpty) {
+            _resolvedWahaChatIds[cleanPhone] = resolved;
+            return (chatId: resolved, error: null);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('WAHA check-exists fallback notice for $cleanPhone: $e');
+    }
+
+    return (chatId: '$cleanPhone@c.us', error: null);
+  }
+
   /// Sends a single message to a phone number via the configured gateway
   Future<WhatsAppGatewayResult> sendSingleMessage({
     required WhatsAppGatewayConfigModel config,
@@ -609,12 +685,27 @@ class WhatsAppGatewayService {
           if (config.apiToken.trim().isNotEmpty) {
             headers['X-Api-Key'] = config.apiToken.trim();
           }
+
+          final resolved = await _resolveWahaChatId(
+            httpClient: httpClient,
+            endpoint: endpoint,
+            session: session,
+            headers: headers,
+            cleanPhone: cleanPhone,
+          );
+          if (resolved.chatId == null) {
+            return WhatsAppGatewayResult.failure(
+              error: resolved.error ?? 'الرقم غير مسجل على واتساب: $toPhone',
+              statusCode: 404,
+            );
+          }
+
           final response = await httpClient.post(
             url,
             headers: headers,
             body: json.encode({
               'session': session,
-              'chatId': '$cleanPhone@c.us',
+              'chatId': resolved.chatId,
               'text': messageText,
             }),
           ).timeout(const Duration(seconds: 15));
@@ -726,7 +817,7 @@ class WhatsAppGatewayService {
     final httpClient = client ?? http.Client();
     try {
       if (config.provider == WhatsAppGatewayProvider.waha) {
-      final endpoint = resolveEndpoint(config);
+        final endpoint = resolveEndpoint(config);
         final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
         final url = Uri.parse('$endpoint/api/sendImage');
         final headers = <String, String>{
@@ -735,9 +826,22 @@ class WhatsAppGatewayService {
         if (config.apiToken.trim().isNotEmpty) {
           headers['X-Api-Key'] = config.apiToken.trim();
         }
+        final resolved = await _resolveWahaChatId(
+          httpClient: httpClient,
+          endpoint: endpoint,
+          session: session,
+          headers: headers,
+          cleanPhone: cleanPhone,
+        );
+        if (resolved.chatId == null) {
+          return WhatsAppGatewayResult.failure(
+            error: resolved.error ?? 'الرقم غير مسجل على واتساب: $toPhone',
+            statusCode: 404,
+          );
+        }
         final body = {
           'session': session,
-          'chatId': '$cleanPhone@c.us',
+          'chatId': resolved.chatId,
           'file': {
             'mimetype': mimeType ?? 'image/jpeg',
             'filename': filename ?? 'offer_poster.jpg',
@@ -806,7 +910,7 @@ class WhatsAppGatewayService {
     final httpClient = client ?? http.Client();
     try {
       if (config.provider == WhatsAppGatewayProvider.waha) {
-      final endpoint = resolveEndpoint(config);
+        final endpoint = resolveEndpoint(config);
         final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
         final url = Uri.parse('$endpoint/api/sendPoll');
         final headers = <String, String>{
@@ -815,9 +919,22 @@ class WhatsAppGatewayService {
         if (config.apiToken.trim().isNotEmpty) {
           headers['X-Api-Key'] = config.apiToken.trim();
         }
+        final resolved = await _resolveWahaChatId(
+          httpClient: httpClient,
+          endpoint: endpoint,
+          session: session,
+          headers: headers,
+          cleanPhone: cleanPhone,
+        );
+        if (resolved.chatId == null) {
+          return WhatsAppGatewayResult.failure(
+            error: resolved.error ?? 'الرقم غير مسجل على واتساب: $toPhone',
+            statusCode: 404,
+          );
+        }
         final body = {
           'session': session,
-          'chatId': '$cleanPhone@c.us',
+          'chatId': resolved.chatId,
           'poll': {
             'name': trimmedTitle,
             'options': cleanOptions,

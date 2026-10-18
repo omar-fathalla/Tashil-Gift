@@ -18,6 +18,7 @@ import '../../../core/widgets/m3_list_tile.dart';
 import '../../admin/domain/event_model.dart';
 import 'winner_celebration_dialog.dart';
 import 'game_demo_banner.dart';
+import '../../company_portal/domain/whatsapp_gateway_service.dart';
 import '../../company_portal/domain/whatsapp_winner_notification_service.dart';
 
 /// Helper model for individual physical voucher card serial slot
@@ -105,6 +106,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
   List<LinkedGiftAllocation>? _resolvedLinkedGifts;
   bool? _requireVoucherSerials;
   bool? _enableWhatsAppWinnerNotification;
+  String? _resolvedCustomerPhone;
 
   bool get _isVoucherSerialsRequired => _requireVoucherSerials ?? widget.requireVoucherSerials ?? false;
   bool get _isWhatsAppWinnerNotificationEnabled =>
@@ -264,6 +266,25 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
   }
 
   Future<void> _fetchRemainingStock() async {
+    if (!widget.isDemo &&
+        (widget.customerPhone == null || widget.customerPhone!.trim().isEmpty) &&
+        widget.transactionId.isNotEmpty) {
+      try {
+        final txDoc = await ref
+            .read(firestoreProvider)
+            .collection('receipts_transactions')
+            .doc(widget.transactionId)
+            .get();
+        if (txDoc.exists && mounted) {
+          final txData = txDoc.data() ?? {};
+          final phone = (txData['customerPhone'] ?? txData['customer_phone'] ?? txData['phone'] ?? '').toString().trim();
+          if (phone.isNotEmpty) {
+            setState(() => _resolvedCustomerPhone = phone);
+          }
+        }
+      } catch (_) {}
+    }
+
     if (widget.eventId.isEmpty) return;
     try {
       final doc = await ref
@@ -564,6 +585,8 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
           ? '$finalPrizeName (عدد $effectiveQuantity)'
           : finalPrizeName;
 
+      Future<WhatsAppGatewayResult?>? whatsappFuture;
+
       if (!widget.isDemo && widget.transactionId.isNotEmpty) {
         final firestore = ref.read(firestoreProvider);
         final claimedGiftsList = finalLinkedGifts.isNotEmpty
@@ -647,10 +670,10 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
         }
 
         // 3. Dispatch automated celebratory WhatsApp message to winner
-        unawaited(_dispatchWhatsAppWinnerNotification(
+        whatsappFuture = _dispatchWhatsAppWinnerNotification(
           displayPrize: displayPrize,
           voucherSerials: allVoucherSerials,
-        ));
+        );
       } else {
         // Demo simulation pause
         await Future.delayed(const Duration(milliseconds: 600));
@@ -666,6 +689,8 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
         }
       });
 
+      final effectivePhone = (_resolvedCustomerPhone ?? widget.customerPhone ?? '').trim();
+
       // 4. Trigger celebration modal
       await showWinnerCelebrationDialog(
         context: context,
@@ -674,7 +699,8 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
         isVoucher: finalIsVoucher,
         linkedGifts: finalLinkedGifts,
         remainingChances: 0,
-        recipientPhone: _isWhatsAppWinnerNotificationEnabled ? widget.customerPhone : null,
+        recipientPhone: effectivePhone.isNotEmpty ? effectivePhone : null,
+        whatsappDispatchFuture: _isWhatsAppWinnerNotificationEnabled ? whatsappFuture : null,
         onNextChance: null,
         onNextCustomer: () {
           Navigator.of(context).pop();
@@ -694,55 +720,32 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
   }
 
   /// Dispatches celebratory WhatsApp message to winner upon gift handover
-  Future<void> _dispatchWhatsAppWinnerNotification({
+  Future<WhatsAppGatewayResult?> _dispatchWhatsAppWinnerNotification({
     required String displayPrize,
     required List<String> voucherSerials,
   }) async {
     if (!_isWhatsAppWinnerNotificationEnabled) {
       debugPrint('WhatsApp winner notification suppressed for disabled campaign: ${widget.eventId}');
-      return;
+      return null;
     }
     try {
-      String phone = (widget.customerPhone ?? '').trim();
-      String name = (widget.customerName ?? '').trim();
-      String retailChain = (widget.retailChainName ?? '').trim();
-      String branch = _resolvedBranchName ?? (widget.branchName ?? '').trim();
-      String company = (widget.companyName ?? '').trim();
-      String receipt = (widget.receiptNumber ?? '').trim();
-      String? slug = widget.companySlug;
-
-      // Fallback: If phone is missing from widget parameters, fetch from receipts_transactions document
-      if (phone.isEmpty && widget.transactionId.isNotEmpty) {
-        final doc = await ref.read(firestoreProvider).collection('receipts_transactions').doc(widget.transactionId).get();
-        if (doc.exists) {
-          final data = doc.data() ?? {};
-          phone = (data['customerPhone'] ?? data['phone'] ?? '').toString();
-          if (name.isEmpty) name = (data['customerName'] ?? '').toString();
-          if (retailChain.isEmpty) retailChain = (data['retail_chain_name'] ?? data['store_chain_detected'] ?? '').toString();
-          if (branch.isEmpty) branch = (data['canonical_branch'] ?? data['branch_detected'] ?? '').toString();
-          if (company.isEmpty) company = (data['targetCompany'] ?? '').toString();
-          if (receipt.isEmpty) receipt = (data['receipt_number'] ?? data['receiptNumber'] ?? '').toString();
-          slug ??= data['companySlug']?.toString();
-        }
-      }
-
-      if (phone.isEmpty) return;
-
-      await ref.read(whatsappWinnerNotificationServiceProvider).sendWinnerNotification(
-        toPhone: phone,
-        prizeName: displayPrize,
-        customerName: name,
-        retailChain: retailChain,
-        branchName: branch,
-        companyName: company,
-        voucherSerials: voucherSerials,
-        receiptNumber: receipt,
+      return await ref.read(whatsappWinnerNotificationServiceProvider).dispatchForTransaction(
         transactionId: widget.transactionId,
-        companySlug: slug,
+        eventId: widget.eventId,
+        prizeName: displayPrize,
+        customerPhone: _resolvedCustomerPhone ?? widget.customerPhone,
+        customerName: widget.customerName,
+        retailChain: widget.retailChainName,
+        branchName: _resolvedBranchName ?? widget.branchName,
+        companyName: widget.companyName,
+        receiptNumber: widget.receiptNumber,
+        companySlug: widget.companySlug,
+        voucherSerials: voucherSerials,
         isEnabledForCampaign: _isWhatsAppWinnerNotificationEnabled,
       );
     } catch (e) {
       debugPrint('Error dispatching WhatsApp winner notification from DirectGiftClaimScreen: $e');
+      return null;
     }
   }
 

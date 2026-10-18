@@ -7,13 +7,14 @@ import '../constants/country_currency_config.dart';
 import '../constants/app_version_config.dart';
 import '../localization/locale_provider.dart';
 import 'm3_action_menu.dart';
+import 'tashil_gift_logo.dart';
 
 /// Company constants & metadata for Switch Point & Tashil Gift System
 class SwitchPointInfo {
   static const String companyName = 'Switch Point';
   static const String companyNameAr = 'سويتش بوينت';
   static const String platformName = 'Tashil Gift';
-  static const String platformSubtitle = 'حلول الترويج والتحقق الذكي متعدد الشركات';
+  static const String platformSubtitle = 'System Admins & Promoters Login Portal';
   static const String websiteUrl = 'https://www.sw-point.com/';
   static const String websiteDisplay = 'www.sw-point.com';
   static const String supportEmail = 'support@sw-point.com';
@@ -64,13 +65,13 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
     this.showMobileMenu = true,
     this.companyLogoUrl,
     this.onMobileMenuPressed,
-    this.showLanguageSelector = true,
-    this.showCountryCurrencySelector = true,
+    this.showLanguageSelector = false,
+    this.showCountryCurrencySelector = false,
     this.showDarkModeToggle = true,
   });
 
   @override
-  Size get preferredSize => const Size.fromHeight(60);
+  Size get preferredSize => const Size.fromHeight(64);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -100,7 +101,7 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
             ),
           ),
           padding: const EdgeInsets.symmetric(
-            horizontal: 10,
+            horizontal: 12,
             vertical: 4,
           ),
           child: Row(
@@ -110,7 +111,7 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
                 const SizedBox(width: 6),
               ],
 
-              // 1. Natural START: Brand Logo + Platform Name + Subtitle (على إيدك اليمين في العربي)
+              // 1. Natural START: Brand 'G' Logo + Platform Name + Subtitle
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
@@ -118,57 +119,33 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       _buildMobileLogo(context, colorScheme),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 10),
                       Flexible(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisAlignment: MainAxisAlignment.center,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    SwitchPointInfo.platformName,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.cairo(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                      color: colorScheme.primary,
-                                      letterSpacing: 0.3,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 5),
-                                Tooltip(
-                                  message: AppVersionConfig.tooltipText,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                    decoration: BoxDecoration(
-                                      color: colorScheme.primaryContainer,
-                                      borderRadius: BorderRadius.circular(5),
-                                    ),
-                                    child: Text(
-                                      AppVersionConfig.versionDisplay,
-                                      style: GoogleFonts.cairo(
-                                        fontSize: 9.5,
-                                        fontWeight: FontWeight.bold,
-                                        color: colorScheme.onPrimaryContainer,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            Text(
+                              SwitchPointInfo.platformName,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.cairo(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.primary,
+                                letterSpacing: 0.3,
+                                height: 1.15,
+                              ),
                             ),
                             Text(
-                              subtitle ?? (isAr ? SwitchPointInfo.companyNameAr : SwitchPointInfo.companyName),
+                              subtitle ?? 'System Admins & Promoters Login Portal',
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,
                               style: GoogleFonts.cairo(
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w600,
                                 color: colorScheme.onSurfaceVariant,
+                                height: 1.15,
                               ),
                             ),
                           ],
@@ -179,48 +156,20 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
                 ),
               ),
 
-              // 2. Middle: In-Store Custom Action Icons (if any)
+              // 2. Middle: Custom Action Icons (if any)
               if (customActions != null && customActions!.isNotEmpty) ...[
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: customActions!,
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: 6),
               ],
 
-              // 3. Natural END: Sleek Menu Button (على إيدك الشمال في العربي)
-              if (showMobileMenu)
-                IconButton(
-                  icon: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: colorScheme.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      Icons.menu_rounded,
-                      size: 22,
-                      color: colorScheme.primary,
-                    ),
-                  ),
-                  tooltip: isAr ? 'القائمة الرئيسية والإعدادات' : 'Menu & Settings',
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.all(4),
-                  onPressed: () {
-                    if (onMobileMenuPressed != null) {
-                      onMobileMenuPressed!();
-                    } else {
-                      SwitchPointMobileMenuSheet.show(
-                        context,
-                        subtitle: subtitle,
-                        companyLogoUrl: companyLogoUrl,
-                        customActions: null,
-                      );
-                    }
-                  },
-                )
-              else
-                const SizedBox(width: 36),
+              // 3. Version & Build Badge + Dark Mode Toggle on Mobile
+              _buildHeaderVersionPill(colorScheme, isMobile: true),
+              const SizedBox(width: 6),
+              if (showDarkModeToggle)
+                _buildThemeModeButton(ref, colorScheme, isDark, true),
             ],
           ),
         ),
@@ -239,101 +188,51 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
         ),
       ),
       padding: const EdgeInsets.symmetric(
-        horizontal: 16,
+        horizontal: 24,
         vertical: 4,
       ),
       child: Row(
         children: [
           if (leading != null) ...[
             leading!,
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
           ],
 
-          // Switch Point Brand Logo & Title (Static, no redirect)
+          // Brand 'G' Logo & Title + Subtitle
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          colorScheme.primary,
-                          colorScheme.tertiary,
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: colorScheme.primary.withValues(alpha: 0.2),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.hub_rounded,
-                      color: Colors.white,
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
+                  const TashilGiftLogo(size: 40),
+                  const SizedBox(width: 12),
                   Flexible(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.center,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                SwitchPointInfo.platformName,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.cairo(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: colorScheme.primary,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 5),
-                            Tooltip(
-                              message: AppVersionConfig.tooltipText,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                decoration: BoxDecoration(
-                                  color: colorScheme.primaryContainer,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  AppVersionConfig.versionDisplay,
-                                  style: GoogleFonts.cairo(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: colorScheme.onPrimaryContainer,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
+                        Text(
+                          SwitchPointInfo.platformName,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.cairo(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: colorScheme.primary,
+                            letterSpacing: 0.3,
+                            height: 1.15,
+                          ),
                         ),
                         Text(
-                          subtitle ?? (isAr ? 'حلول الترويج والتحقق الذكي متعدد الشركات' : (ref.isHindi ? 'स्मार्ट मल्टी-कंपनी प्रचार और एआई सत्यापन' : 'Smart Multi-Company Promotion & AI Verification')),
+                          subtitle ?? 'System Admins & Promoters Login Portal',
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
                           style: GoogleFonts.cairo(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
                             color: colorScheme.onSurfaceVariant,
+                            height: 1.2,
                           ),
                         ),
                       ],
@@ -347,20 +246,22 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
           // Custom Actions (e.g. Preview button)
           if (customActions != null && customActions!.isNotEmpty) ...[
             ...customActions!,
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
           ],
 
-          // Language Switcher (العربية / English / हिन्दी)
           if (showLanguageSelector) ...[
             _buildLanguageSelector(context, ref, colorScheme, false, isAr),
             const SizedBox(width: 8),
           ],
 
-          // Country & Currency Selector
           if (showCountryCurrencySelector) ...[
             _buildCountryCurrencySelector(context, ref, colorScheme, false, activeCountry),
             const SizedBox(width: 8),
           ],
+
+          // Version & Build Pill in Header (Moved from Footer)
+          _buildHeaderVersionPill(colorScheme, isMobile: false),
+          const SizedBox(width: 10),
 
           // Theme Mode Switcher (Dark / Light)
           if (showDarkModeToggle)
@@ -370,37 +271,52 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
     );
   }
 
+  Widget _buildHeaderVersionPill(ColorScheme colorScheme, {required bool isMobile}) {
+    return Tooltip(
+      message: AppVersionConfig.tooltipText,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 8 : 12,
+          vertical: isMobile ? 4 : 6,
+        ),
+        decoration: BoxDecoration(
+          color: colorScheme.primaryContainer.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: colorScheme.primary.withValues(alpha: 0.3),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.verified_outlined,
+              size: isMobile ? 13 : 15,
+              color: colorScheme.primary,
+            ),
+            SizedBox(width: isMobile ? 4 : 6),
+            Text(
+              AppVersionConfig.fullBuildDisplay,
+              style: GoogleFonts.cairo(
+                fontSize: isMobile ? 10.5 : 12,
+                fontWeight: FontWeight.w700,
+                color: colorScheme.onPrimaryContainer,
+                height: 1.1,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildMobileLogo(BuildContext context, ColorScheme colorScheme) {
     return Tooltip(
       message: AppVersionConfig.tooltipText,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
-        child: Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                colorScheme.primary,
-                colorScheme.tertiary,
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: [
-              BoxShadow(
-                color: colorScheme.primary.withValues(alpha: 0.3),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: const Icon(
-            Icons.hub_rounded,
-            color: Colors.white,
-            size: 18,
-          ),
-        ),
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+        child: TashilGiftLogo(size: 34),
       ),
     );
   }
@@ -411,21 +327,32 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
     bool isDark,
     bool isMobile,
   ) {
-    return IconButton(
-      icon: Icon(
-        isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-        color: isDark ? Colors.amber : colorScheme.onSurfaceVariant,
-        size: isMobile ? 18 : 24,
+    return Tooltip(
+      message: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+      child: Material(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+          ),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            ref.read(themeModeProvider.notifier).state =
+                isDark ? ThemeMode.light : ThemeMode.dark;
+          },
+          child: Padding(
+            padding: EdgeInsets.all(isMobile ? 6 : 8),
+            child: Icon(
+              isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+              color: colorScheme.primary,
+              size: isMobile ? 18 : 20,
+            ),
+          ),
+        ),
       ),
-      padding: EdgeInsets.all(isMobile ? 4 : 8),
-      constraints: isMobile ? const BoxConstraints() : null,
-      tooltip: isDark
-          ? 'التحويل للوضع الفاتح (Light Mode)'
-          : 'التحويل للوضع الداكن (Dark Mode)',
-      onPressed: () {
-        ref.read(themeModeProvider.notifier).state =
-            isDark ? ThemeMode.light : ThemeMode.dark;
-      },
     );
   }
 
@@ -615,7 +542,7 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
   }
 }
 
-/// Material Design 3 Persistent Footer for Switch Point Platform (English / LTR Format)
+/// Material Design 3 Persistent Single-Row Footer for Switch Point Platform (English / LTR Format)
 class SwitchPointFooter extends StatelessWidget {
   final bool hideOnMobile;
 
@@ -632,11 +559,10 @@ class SwitchPointFooter extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final isMobile = screenWidth < 600;
-
     return Directionality(
       textDirection: TextDirection.ltr,
       child: Container(
+        width: double.infinity,
         decoration: BoxDecoration(
           color: colorScheme.surfaceContainerLow,
           border: Border(
@@ -646,329 +572,98 @@ class SwitchPointFooter extends StatelessWidget {
             ),
           ),
         ),
-        padding: EdgeInsets.symmetric(
-          horizontal: isMobile ? 12 : 24,
-          vertical: isMobile ? 6 : 14,
+        padding: const EdgeInsets.symmetric(
+          horizontal: 24,
+          vertical: 10,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        child: Wrap(
+          spacing: 14,
+          runSpacing: 8,
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            if (isMobile) ...[
-              // Compact Mobile View: Icons-only single row to minimize footer space
-              Wrap(
-                alignment: WrapAlignment.center,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  // Website Icon Button
-                  _buildMobileIconPill(
-                    context: context,
-                    icon: Icons.public_rounded,
-                    tooltip: 'Website: ${SwitchPointInfo.websiteDisplay}',
-                    url: SwitchPointInfo.websiteUrl,
+            // 1. Copyright Text
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.copyright_rounded,
+                  size: 14,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  SwitchPointInfo.copyright,
+                  style: GoogleFonts.cairo(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: colorScheme.onSurfaceVariant,
                   ),
+                ),
+              ],
+            ),
 
-                  // Email Support Icon Button
-                  _buildMobileIconPill(
-                    context: context,
-                    icon: Icons.mail_outline_rounded,
-                    tooltip: 'Email: ${SwitchPointInfo.supportEmail}',
-                    url: 'mailto:${SwitchPointInfo.supportEmail}',
+            // 2. Powered by Switch Point Smart Systems Badge (links to website)
+            InkWell(
+              onTap: () => SwitchPointInfo.launchLink(SwitchPointInfo.websiteUrl),
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: colorScheme.primary.withValues(alpha: 0.3),
                   ),
-
-                  // WhatsApp Egypt Icon Button
-                  _buildMobileIconPill(
-                    context: context,
-                    icon: Icons.chat_rounded,
-                    badgeText: 'EG',
-                    tooltip: 'WhatsApp Egypt (${SwitchPointInfo.whatsappEgypt})',
-                    url: SwitchPointInfo.whatsappEgyptUrl,
-                    highlightColor: Colors.green.shade600,
-                  ),
-
-                  // WhatsApp UAE Icon Button
-                  _buildMobileIconPill(
-                    context: context,
-                    icon: Icons.chat_rounded,
-                    badgeText: 'UAE',
-                    tooltip: 'WhatsApp UAE (${SwitchPointInfo.whatsappUae})',
-                    url: SwitchPointInfo.whatsappUaeUrl,
-                    highlightColor: Colors.green.shade600,
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 5),
-
-              // Compact Mobile Copyright & Powered By
-              Wrap(
-                alignment: WrapAlignment.center,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 6,
-                runSpacing: 2,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.copyright_rounded,
-                        size: 11,
-                        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
-                      ),
-                      const SizedBox(width: 3),
-                      Text(
-                        '2026 Switch Point',
-                        style: GoogleFonts.cairo(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                          color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
-                        ),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    '•',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: colorScheme.outlineVariant,
-                    ),
-                  ),
-                  InkWell(
-                    onTap: () => SwitchPointInfo.launchLink(SwitchPointInfo.websiteUrl),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 5,
-                            height: 5,
-                            decoration: BoxDecoration(
-                              color: colorScheme.primary,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Powered by Switch Point',
-                            style: GoogleFonts.cairo(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: colorScheme.primary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ] else ...[
-              // Desktop View: Clean & simple contact and links row in English (LTR)
-              Wrap(
-                spacing: 12,
-                runSpacing: 8,
-                alignment: WrapAlignment.center,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  // Website Link
-                  _buildFooterPill(
-                    context: context,
-                    icon: Icons.public_rounded,
-                    label: SwitchPointInfo.websiteDisplay,
-                    url: SwitchPointInfo.websiteUrl,
-                  ),
-
-                  // Email Support
-                  _buildFooterPill(
-                    context: context,
-                    icon: Icons.mail_outline_rounded,
-                    label: SwitchPointInfo.supportEmail,
-                    url: 'mailto:${SwitchPointInfo.supportEmail}',
-                  ),
-
-                  // WhatsApp Egypt Icon Pill
-                  _buildFooterPill(
-                    context: context,
-                    icon: Icons.chat_rounded,
-                    label: 'WhatsApp Egypt',
-                    tooltip: 'Contact via WhatsApp Egypt (${SwitchPointInfo.whatsappEgypt})',
-                    url: SwitchPointInfo.whatsappEgyptUrl,
-                    highlightColor: Colors.green.shade700,
-                  ),
-
-                  // WhatsApp UAE Icon Pill
-                  _buildFooterPill(
-                    context: context,
-                    icon: Icons.chat_rounded,
-                    label: 'WhatsApp UAE',
-                    tooltip: 'Contact via WhatsApp UAE (${SwitchPointInfo.whatsappUae})',
-                    url: SwitchPointInfo.whatsappUaeUrl,
-                    highlightColor: Colors.green.shade700,
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 10),
-              Divider(
-                height: 1,
-                color: colorScheme.outlineVariant.withValues(alpha: 0.3),
-              ),
-              const SizedBox(height: 8),
-
-              // Copyright & Branding Row (LTR)
-              SizedBox(
-                width: double.infinity,
-                child: Wrap(
-                  spacing: 12,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.center,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Copyright Text
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.copyright_rounded,
-                          size: 13,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          SwitchPointInfo.copyright,
-                          style: GoogleFonts.cairo(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
+                    Icon(
+                      Icons.verified_rounded,
+                      size: 14,
+                      color: colorScheme.primary,
                     ),
-
-                    // Powered by Switch Point Badge
-                    InkWell(
-                      onTap: () => SwitchPointInfo.launchLink(SwitchPointInfo.websiteUrl),
-                      borderRadius: BorderRadius.circular(16),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: colorScheme.primaryContainer.withValues(alpha: 0.4),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: colorScheme.primary.withValues(alpha: 0.25),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: colorScheme.primary,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Powered by Switch Point Smart Systems',
-                              style: GoogleFonts.cairo(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: colorScheme.onPrimaryContainer,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    // Version Tag
-                    Tooltip(
-                      message: AppVersionConfig.tooltipText,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
-                        ),
-                        child: Text(
-                          AppVersionConfig.fullBuildDisplay,
-                          style: GoogleFonts.cairo(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w600,
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Powered by Switch Point Smart Systems',
+                      style: GoogleFonts.cairo(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onPrimaryContainer,
                       ),
                     ),
                   ],
                 ),
               ),
-            ],
+            ),
+
+            // 3. Email Support
+            _buildFooterPill(
+              context: context,
+              icon: Icons.mail_outline_rounded,
+              label: SwitchPointInfo.supportEmail,
+              url: 'mailto:${SwitchPointInfo.supportEmail}',
+            ),
+
+            // 4. WhatsApp Egypt Pill (M3 Theme Blue & Google Icon)
+            _buildFooterPill(
+              context: context,
+              icon: Icons.chat_bubble_outline_rounded,
+              label: 'WhatsApp Egypt',
+              tooltip: 'Contact via WhatsApp Egypt (${SwitchPointInfo.whatsappEgypt})',
+              url: SwitchPointInfo.whatsappEgyptUrl,
+            ),
+
+            // 5. WhatsApp UAE Pill (M3 Theme Blue & Google Icon)
+            _buildFooterPill(
+              context: context,
+              icon: Icons.chat_bubble_outline_rounded,
+              label: 'WhatsApp UAE',
+              tooltip: 'Contact via WhatsApp UAE (${SwitchPointInfo.whatsappUae})',
+              url: SwitchPointInfo.whatsappUaeUrl,
+            ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMobileIconPill({
-    required BuildContext context,
-    required IconData icon,
-    required String tooltip,
-    required String url,
-    String? badgeText,
-    Color? highlightColor,
-  }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final iconColor = highlightColor ?? colorScheme.primary;
-
-    return Tooltip(
-      message: tooltip,
-      preferBelow: false,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => SwitchPointInfo.launchLink(url),
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: badgeText != null ? 8 : 7,
-              vertical: 5,
-            ),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: colorScheme.outlineVariant.withValues(alpha: 0.5),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  icon,
-                  size: 15,
-                  color: iconColor,
-                ),
-                if (badgeText != null) ...[
-                  const SizedBox(width: 4),
-                  Text(
-                    badgeText,
-                    style: GoogleFonts.cairo(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
         ),
       ),
     );
@@ -1127,16 +822,7 @@ class SwitchPointMobileMenuSheet extends ConsumerWidget {
                   ),
                   const SizedBox(width: 10),
                 ] else ...[
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [colorScheme.primary, colorScheme.tertiary],
-                      ),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.hub_rounded, color: Colors.white, size: 20),
-                  ),
+                  const TashilGiftLogo(size: 36),
                   const SizedBox(width: 10),
                 ],
                 Expanded(

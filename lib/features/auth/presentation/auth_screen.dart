@@ -5,8 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/firebase_service.dart';
 import '../../../core/utils/error_handler.dart';
 import '../../../core/localization/app_strings.dart';
-import '../../../core/localization/locale_provider.dart';
 import '../../../core/widgets/switch_point_branding.dart';
+import '../../../core/widgets/tashil_gift_logo.dart';
 import '../../admin/presentation/admin_dashboard_screen.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
@@ -131,87 +131,92 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final strings = AppStrings.of(ref);
-    final isAr = ref.isArabic;
+    // Login Portal strictly renders in English (LTR) per user requirements
+    final strings = AppStrings('en');
+    const isAr = false;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return Scaffold(
-      backgroundColor: colorScheme.surface,
-      appBar: SwitchPointHeader(
-        subtitle: strings.authPortalSubtitle,
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final isWideScreen = constraints.maxWidth >= 768;
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Scaffold(
+        backgroundColor: colorScheme.surface,
+        appBar: SwitchPointHeader(
+          subtitle: strings.authPortalSubtitle,
+          showLanguageSelector: false,
+          showCountryCurrencySelector: false,
+          showDarkModeToggle: true,
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isWideScreen = constraints.maxWidth >= 768;
 
-                if (isWideScreen) {
-                  // Full-Height 50/50 Split Screen Layout with Harmonious System Theme
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // 1. Natural Start Half: System Showcase & Pillars (50% of screen)
-                      Expanded(
-                        flex: 1,
-                        child: _buildShowcaseHalf(
+                  if (isWideScreen) {
+                    // Full-Height 50/50 Split Screen Layout with Harmonious M3 Blue System Theme
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // 1. Left Half: System Showcase & Pillars (50% of screen)
+                        Expanded(
+                          flex: 1,
+                          child: _buildShowcaseHalf(
+                            context: context,
+                            colorScheme: colorScheme,
+                            strings: strings,
+                            isAr: isAr,
+                            isTablet: constraints.maxWidth < 1080,
+                          ),
+                        ),
+
+                        // 2. Right Half: Clean Sign-In Pane (50% of screen)
+                        Expanded(
+                          flex: 1,
+                          child: _buildCleanAuthHalf(
+                            context: context,
+                            colorScheme: colorScheme,
+                            strings: strings,
+                            isAr: isAr,
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+
+                  // Mobile View: Login Form on Top, Highlights Below
+                  return SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        _buildCleanAuthHalf(
                           context: context,
                           colorScheme: colorScheme,
                           strings: strings,
                           isAr: isAr,
-                          isTablet: constraints.maxWidth < 1080,
+                          isMobile: true,
                         ),
-                      ),
-
-                      // 2. Natural End Half: Clean Sign-In Pane (50% of screen)
-                      Expanded(
-                        flex: 1,
-                        child: _buildCleanAuthHalf(
+                        _buildShowcaseHalf(
                           context: context,
                           colorScheme: colorScheme,
                           strings: strings,
                           isAr: isAr,
+                          isMobile: true,
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   );
-                }
-
-                // Mobile View: Login Form on Top, Highlights Below
-                return SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      // 1. Mobile Sign-In on Top
-                      _buildCleanAuthHalf(
-                        context: context,
-                        colorScheme: colorScheme,
-                        strings: strings,
-                        isAr: isAr,
-                        isMobile: true,
-                      ),
-                      // 2. System Showcase Below
-                      _buildShowcaseHalf(
-                        context: context,
-                        colorScheme: colorScheme,
-                        strings: strings,
-                        isAr: isAr,
-                        isMobile: true,
-                      ),
-                    ],
-                  ),
-                );
-              },
+                },
+              ),
             ),
-          ),
-          const SwitchPointFooter(),
-        ],
+            const SwitchPointFooter(),
+          ],
+        ),
       ),
     );
   }
 
-  /// 🌟 50% System Showcase & Platform Pillars Pane (Full-Height / Edge-to-Edge)
+  /// 🌟 50% System Showcase & Platform Pillars Pane (Full-Width Symmetrical M3 Blue Layout)
   Widget _buildShowcaseHalf({
     required BuildContext context,
     required ColorScheme colorScheme,
@@ -223,22 +228,15 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
+      width: double.infinity,
       decoration: BoxDecoration(
         color: isDarkMode
             ? colorScheme.surfaceContainerHigh.withValues(alpha: 0.35)
             : colorScheme.surfaceContainerLow,
         border: Border(
-          // Subtle inner divider between the two halves
-          left: !isAr && !isMobile
-              ? BorderSide.none
-              : (isAr && !isMobile
-                  ? BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5), width: 1)
-                  : BorderSide.none),
-          right: isAr && !isMobile
-              ? BorderSide.none
-              : (!isAr && !isMobile
-                  ? BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5), width: 1)
-                  : BorderSide.none),
+          right: !isMobile
+              ? BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5), width: 1)
+              : BorderSide.none,
           top: isMobile
               ? BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.4), width: 1)
               : BorderSide.none,
@@ -247,16 +245,16 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       child: Center(
         child: SingleChildScrollView(
           padding: EdgeInsets.symmetric(
-            horizontal: isMobile ? 20 : (isTablet ? 24 : 40),
-            vertical: isMobile ? 24 : 32,
+            horizontal: isMobile ? 20 : (isTablet ? 24 : 36),
+            vertical: isMobile ? 24 : 28,
           ),
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 680),
+          child: SizedBox(
+            width: double.infinity,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // 1. Top Badges Row
+                // 1. Top Badges Row (Symmetrical M3 Blue Theme)
                 Wrap(
                   spacing: 10,
                   runSpacing: 10,
@@ -265,11 +263,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                       decoration: BoxDecoration(
-                        color: colorScheme.primaryContainer.withValues(alpha: 0.55),
+                        color: colorScheme.primaryContainer.withValues(alpha: 0.6),
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(
-                          color: colorScheme.primary.withValues(alpha: 0.4),
-                          width: 1.2,
+                          color: colorScheme.primary.withValues(alpha: 0.35),
+                          width: 1,
                         ),
                       ),
                       child: Row(
@@ -292,21 +290,21 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       ),
                     ),
 
-                    // Anti-Fraud Governance Badge
+                    // Anti-Fraud Governance Badge (Derived from M3 Blue Theme)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                       decoration: BoxDecoration(
-                        color: Colors.teal.withValues(alpha: 0.12),
+                        color: colorScheme.secondaryContainer.withValues(alpha: 0.65),
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(
-                          color: Colors.teal.withValues(alpha: 0.4),
-                          width: 1.2,
+                          color: colorScheme.primary.withValues(alpha: 0.28),
+                          width: 1,
                         ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.verified_user_rounded, size: 16, color: Colors.teal),
+                          Icon(Icons.verified_user_rounded, size: 16, color: colorScheme.primary),
                           const SizedBox(width: 7),
                           Flexible(
                             child: Text(
@@ -314,7 +312,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                               style: GoogleFonts.cairo(
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.teal.shade800,
+                                color: colorScheme.onSecondaryContainer,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -327,43 +325,18 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
                 const SizedBox(height: 20),
 
-                // 2. Brand Logo & Main Title
+                // 2. Brand 'G' Logo & Main Title
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            colorScheme.primary,
-                            colorScheme.tertiary,
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(18),
-                        boxShadow: [
-                          BoxShadow(
-                            color: colorScheme.primary.withValues(alpha: 0.3),
-                            blurRadius: 14,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.hub_rounded,
-                        color: Colors.white,
-                        size: 30,
-                      ),
-                    ),
+                    const TashilGiftLogo(size: 56),
                     const SizedBox(width: 16),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            isAr ? 'منظومة سويتش بوينت الذكية' : 'Switch Point Smart Platform',
+                            'Switch Point Smart Platform',
                             style: GoogleFonts.cairo(
                               fontSize: isTablet ? 23 : 27,
                               fontWeight: FontWeight.w900,
@@ -371,6 +344,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                               height: 1.15,
                             ),
                           ),
+                          const SizedBox(height: 2),
                           Text(
                             'Tashil Gift • Retail & Brand Promotions',
                             style: GoogleFonts.cairo(
@@ -395,105 +369,200 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     fontSize: isTablet ? 14 : 15,
                     fontWeight: FontWeight.w500,
                     color: colorScheme.onSurfaceVariant,
-                    height: 1.55,
+                    height: 1.5,
                   ),
                 ),
 
-                const SizedBox(height: 24),
+                const SizedBox(height: 22),
 
-                // 4. The 4 Core System Pillars (Spacious Cards without truncation)
+                // 4. The 4 Core System Pillars (100% Full-Width Symmetrical 2x2 Grid)
                 LayoutBuilder(
                   builder: (context, cardConstraints) {
-                    final isSingleCol = cardConstraints.maxWidth < 520 || isMobile;
-                    final cardWidth = isSingleCol
-                        ? double.infinity
-                        : ((cardConstraints.maxWidth - 16) / 2);
+                    final isSingleCol = cardConstraints.maxWidth < 500 || isMobile;
 
-                    return Wrap(
-                      spacing: 16,
-                      runSpacing: 16,
+                    if (isSingleCol) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildPillarCard(
+                            colorScheme: colorScheme,
+                            icon: Icons.campaign_rounded,
+                            title: strings.heroPillar1Title,
+                            description: strings.heroPillar1Desc,
+                          ),
+                          const SizedBox(height: 12),
+                          _buildPillarCard(
+                            colorScheme: colorScheme,
+                            icon: Icons.document_scanner_rounded,
+                            title: strings.heroPillar2Title,
+                            description: strings.heroPillar2Desc,
+                          ),
+                          const SizedBox(height: 12),
+                          _buildPillarCard(
+                            colorScheme: colorScheme,
+                            icon: Icons.redeem_rounded,
+                            title: strings.heroPillar3Title,
+                            description: strings.heroPillar3Desc,
+                          ),
+                          const SizedBox(height: 12),
+                          _buildPillarCard(
+                            colorScheme: colorScheme,
+                            icon: Icons.analytics_rounded,
+                            title: strings.heroPillar4Title,
+                            description: strings.heroPillar4Desc,
+                          ),
+                        ],
+                      );
+                    }
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _buildPillarCard(
-                          colorScheme: colorScheme,
-                          icon: Icons.campaign_rounded,
-                          iconColor: colorScheme.primary,
-                          iconBgColor: colorScheme.primaryContainer.withValues(alpha: 0.45),
-                          title: strings.heroPillar1Title,
-                          description: strings.heroPillar1Desc,
-                          width: cardWidth,
+                        IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(
+                                child: _buildPillarCard(
+                                  colorScheme: colorScheme,
+                                  icon: Icons.campaign_rounded,
+                                  title: strings.heroPillar1Title,
+                                  description: strings.heroPillar1Desc,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: _buildPillarCard(
+                                  colorScheme: colorScheme,
+                                  icon: Icons.document_scanner_rounded,
+                                  title: strings.heroPillar2Title,
+                                  description: strings.heroPillar2Desc,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        _buildPillarCard(
-                          colorScheme: colorScheme,
-                          icon: Icons.document_scanner_rounded,
-                          iconColor: Colors.amber.shade800,
-                          iconBgColor: Colors.amber.withValues(alpha: 0.15),
-                          title: strings.heroPillar2Title,
-                          description: strings.heroPillar2Desc,
-                          width: cardWidth,
-                        ),
-                        _buildPillarCard(
-                          colorScheme: colorScheme,
-                          icon: Icons.card_giftcard_rounded,
-                          iconColor: Colors.teal.shade700,
-                          iconBgColor: Colors.teal.withValues(alpha: 0.15),
-                          title: strings.heroPillar3Title,
-                          description: strings.heroPillar3Desc,
-                          width: cardWidth,
-                        ),
-                        _buildPillarCard(
-                          colorScheme: colorScheme,
-                          icon: Icons.analytics_rounded,
-                          iconColor: Colors.indigo.shade700,
-                          iconBgColor: Colors.indigo.withValues(alpha: 0.15),
-                          title: strings.heroPillar4Title,
-                          description: strings.heroPillar4Desc,
-                          width: cardWidth,
+                        const SizedBox(height: 16),
+                        IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(
+                                child: _buildPillarCard(
+                                  colorScheme: colorScheme,
+                                  icon: Icons.redeem_rounded,
+                                  title: strings.heroPillar3Title,
+                                  description: strings.heroPillar3Desc,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: _buildPillarCard(
+                                  colorScheme: colorScheme,
+                                  icon: Icons.analytics_rounded,
+                                  title: strings.heroPillar4Title,
+                                  description: strings.heroPillar4Desc,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     );
                   },
                 ),
 
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
 
-                // 5. Quick Stats High-Contrast Bar
+                // 5. Full-Width Symmetrical Quick Stats Bar (100% matching width of Pillar Cards)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                   decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHigh.withValues(alpha: 0.6),
+                    color: colorScheme.surfaceContainer,
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
                       color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+                      width: 1,
                     ),
                   ),
-                  child: Wrap(
-                    spacing: 12,
-                    runSpacing: 10,
-                    alignment: WrapAlignment.spaceAround,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      _buildStatPill(
-                        colorScheme: colorScheme,
-                        value: strings.heroStatSpeed,
-                        label: strings.heroStatSpeedLabel,
-                        icon: Icons.speed_rounded,
-                        accentColor: colorScheme.primary,
-                      ),
-                      _buildStatPill(
-                        colorScheme: colorScheme,
-                        value: strings.heroStatAccuracy,
-                        label: strings.heroStatAccuracyLabel,
-                        icon: Icons.check_circle_outline_rounded,
-                        accentColor: Colors.teal.shade700,
-                      ),
-                      _buildStatPill(
-                        colorScheme: colorScheme,
-                        value: strings.heroStatGovernance,
-                        label: strings.heroStatGovernanceLabel,
-                        icon: Icons.verified_rounded,
-                        accentColor: Colors.amber.shade800,
-                      ),
-                    ],
+                  child: LayoutBuilder(
+                    builder: (context, statConstraints) {
+                      if (statConstraints.maxWidth < 460) {
+                        return Wrap(
+                          spacing: 16,
+                          runSpacing: 12,
+                          alignment: WrapAlignment.spaceAround,
+                          children: [
+                            _buildStatPill(
+                              colorScheme: colorScheme,
+                              value: strings.heroStatSpeed,
+                              label: strings.heroStatSpeedLabel,
+                              icon: Icons.speed_rounded,
+                            ),
+                            _buildStatPill(
+                              colorScheme: colorScheme,
+                              value: strings.heroStatAccuracy,
+                              label: strings.heroStatAccuracyLabel,
+                              icon: Icons.check_circle_outline_rounded,
+                            ),
+                            _buildStatPill(
+                              colorScheme: colorScheme,
+                              value: strings.heroStatGovernance,
+                              label: strings.heroStatGovernanceLabel,
+                              icon: Icons.verified_rounded,
+                            ),
+                          ],
+                        );
+                      }
+
+                      return IntrinsicHeight(
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Center(
+                                child: _buildStatPill(
+                                  colorScheme: colorScheme,
+                                  value: strings.heroStatSpeed,
+                                  label: strings.heroStatSpeedLabel,
+                                  icon: Icons.speed_rounded,
+                                ),
+                              ),
+                            ),
+                            VerticalDivider(
+                              width: 24,
+                              thickness: 1,
+                              color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+                            ),
+                            Expanded(
+                              child: Center(
+                                child: _buildStatPill(
+                                  colorScheme: colorScheme,
+                                  value: strings.heroStatAccuracy,
+                                  label: strings.heroStatAccuracyLabel,
+                                  icon: Icons.check_circle_outline_rounded,
+                                ),
+                              ),
+                            ),
+                            VerticalDivider(
+                              width: 24,
+                              thickness: 1,
+                              color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+                            ),
+                            Expanded(
+                              child: Center(
+                                child: _buildStatPill(
+                                  colorScheme: colorScheme,
+                                  value: strings.heroStatGovernance,
+                                  label: strings.heroStatGovernanceLabel,
+                                  icon: Icons.verified_rounded,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ),
               ],
@@ -507,20 +576,16 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   Widget _buildPillarCard({
     required ColorScheme colorScheme,
     required IconData icon,
-    required Color iconColor,
-    required Color iconBgColor,
     required String title,
     required String description,
-    required double width,
   }) {
     return Container(
-      width: width,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.55),
+          color: colorScheme.outlineVariant.withValues(alpha: 0.6),
           width: 1,
         ),
       ),
@@ -529,22 +594,22 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(9),
                 decoration: BoxDecoration(
-                  color: iconBgColor,
+                  color: colorScheme.primaryContainer.withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, size: 20, color: iconColor),
+                child: Icon(icon, size: 20, color: colorScheme.primary),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   title,
                   style: GoogleFonts.cairo(
-                    fontSize: 14,
+                    fontSize: 14.5,
                     fontWeight: FontWeight.bold,
                     color: colorScheme.onSurface,
                     height: 1.25,
@@ -553,11 +618,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Text(
             description,
             style: GoogleFonts.cairo(
-              fontSize: 12,
+              fontSize: 12.5,
               fontWeight: FontWeight.w500,
               color: colorScheme.onSurfaceVariant,
               height: 1.45,
@@ -573,42 +638,44 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     required String value,
     required String label,
     required IconData icon,
-    required Color accentColor,
   }) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          padding: const EdgeInsets.all(6),
+          padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: accentColor.withValues(alpha: 0.15),
+            color: colorScheme.primaryContainer.withValues(alpha: 0.6),
             shape: BoxShape.circle,
           ),
-          child: Icon(icon, size: 16, color: accentColor),
+          child: Icon(icon, size: 18, color: colorScheme.primary),
         ),
-        const SizedBox(width: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              value,
-              style: GoogleFonts.cairo(
-                fontSize: 14.5,
-                fontWeight: FontWeight.w900,
-                color: colorScheme.onSurface,
-                height: 1.1,
+        const SizedBox(width: 10),
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                value,
+                style: GoogleFonts.cairo(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                  color: colorScheme.onSurface,
+                  height: 1.1,
+                ),
               ),
-            ),
-            Text(
-              label,
-              style: GoogleFonts.cairo(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w500,
-                color: colorScheme.onSurfaceVariant,
+              Text(
+                label,
+                style: GoogleFonts.cairo(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );
@@ -662,7 +729,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                         child: Container(
                           padding: const EdgeInsets.all(15),
                           decoration: BoxDecoration(
-                            color: colorScheme.primaryContainer.withValues(alpha: 0.45),
+                            color: colorScheme.primaryContainer.withValues(alpha: 0.55),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
@@ -694,19 +761,21 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 12),
-                      // Security Badge
+                      // Security Badge (Derived from M3 Blue Theme)
                       Center(
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                           decoration: BoxDecoration(
-                            color: Colors.teal.withValues(alpha: 0.1),
+                            color: colorScheme.secondaryContainer.withValues(alpha: 0.6),
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.teal.withValues(alpha: 0.35)),
+                            border: Border.all(
+                              color: colorScheme.primary.withValues(alpha: 0.3),
+                            ),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.shield_rounded, size: 15, color: Colors.teal),
+                              Icon(Icons.shield_rounded, size: 15, color: colorScheme.primary),
                               const SizedBox(width: 7),
                               Flexible(
                                 child: Text(
@@ -714,7 +783,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                   style: GoogleFonts.cairo(
                                     fontSize: 11.5,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.teal.shade800,
+                                    color: colorScheme.onSecondaryContainer,
                                   ),
                                   overflow: TextOverflow.ellipsis,
                                 ),

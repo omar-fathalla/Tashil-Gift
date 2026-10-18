@@ -1420,6 +1420,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         final promoQuantity = resolvedLinkedGifts.isNotEmpty
             ? 1
             : ((currentEvent?.allowMultipleChances ?? false) ? totalChances : 1);
+        final enteredPhone = _customerPhoneController.text.toEnglishDigits().trim();
+        final enteredName = _customerNameController.text.trim();
+        final isWaEnabled = currentEvent?.enableWhatsAppWinnerNotification ?? true;
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => DirectGiftClaimScreen(
@@ -1432,18 +1435,22 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
               isVoucher: resolvedIsVoucher,
               linkedGifts: resolvedLinkedGifts,
               requireVoucherSerials: currentEvent?.requireVoucherSerials ?? false,
-              customerPhone: _customerPhoneController.text.toEnglishDigits().trim(),
-              customerName: _customerNameController.text.trim(),
+              customerPhone: enteredPhone,
+              customerName: enteredName,
               retailChainName: currentEvent?.retailChainName ?? result.storeChainDetected,
               branchName: result.branchDetected,
               companyName: currentEvent?.targetCompany ?? '',
               receiptNumber: receiptNumber,
               companySlug: currentEvent?.companySlug,
+              enableWhatsAppWinnerNotification: isWaEnabled,
             ),
           ),
         );
         _resetFormForNextCustomer();
       } else if (gameType == 'chooseGift') {
+        final enteredPhone = _customerPhoneController.text.toEnglishDigits().trim();
+        final enteredName = _customerNameController.text.trim();
+        final isWaEnabled = currentEvent?.enableWhatsAppWinnerNotification ?? true;
         final candidateGifts = compositeBundle.combinedLinkedGifts.isNotEmpty
             ? compositeBundle.combinedLinkedGifts
                 .map((g) => g.giftName.trim())
@@ -1460,11 +1467,17 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
               prizes: candidateGifts.isNotEmpty ? candidateGifts : prizeNames,
               totalChances: totalChances,
               branchId: resolvedBranchId,
+              customerPhone: enteredPhone,
+              customerName: enteredName,
+              enableWhatsAppWinnerNotification: isWaEnabled,
             ),
           ),
         );
         _resetFormForNextCustomer();
       } else if (gameType == 'scratch' || gameType == 'scratchCard' || (gameType.isEmpty && totalValue >= 500)) {
+        final enteredPhone = _customerPhoneController.text.toEnglishDigits().trim();
+        final enteredName = _customerNameController.text.trim();
+        final isWaEnabled = currentEvent?.enableWhatsAppWinnerNotification ?? true;
         final candidateGifts = compositeBundle.combinedLinkedGifts.isNotEmpty
             ? compositeBundle.combinedLinkedGifts
                 .map((g) => g.giftName.trim())
@@ -1479,11 +1492,18 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
               eventId: currentEventId,
               prizes: candidateGifts.isNotEmpty ? candidateGifts : prizeNames,
               totalChances: totalChances,
+              branchId: resolvedBranchId,
+              customerPhone: enteredPhone,
+              customerName: enteredName,
+              enableWhatsAppWinnerNotification: isWaEnabled,
             ),
           ),
         );
         _resetFormForNextCustomer();
       } else {
+        final enteredPhone = _customerPhoneController.text.toEnglishDigits().trim();
+        final enteredName = _customerNameController.text.trim();
+        final isWaEnabled = currentEvent?.enableWhatsAppWinnerNotification ?? true;
         final candidateGifts = compositeBundle.combinedLinkedGifts.isNotEmpty
             ? compositeBundle.combinedLinkedGifts
                 .map((g) => g.giftName.trim())
@@ -1498,6 +1518,10 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
               eventId: currentEventId,
               prizes: candidateGifts.isNotEmpty ? candidateGifts : prizeNames,
               totalChances: totalChances,
+              branchId: resolvedBranchId,
+              customerPhone: enteredPhone,
+              customerName: enteredName,
+              enableWhatsAppWinnerNotification: isWaEnabled,
             ),
           ),
         );
@@ -2059,6 +2083,14 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                               contentPadding: EdgeInsets.symmetric(
                                 horizontal: 16,
                                 vertical: isMobile ? 14 : 16,
+                              ),
+                              helperText: isAr
+                                  ? '📲 يُنصح بكتابة رقم الهاتف لإرسال تهنئة الهدية للعميل عبر الواتساب فوراً'
+                                  : '📲 Enter phone number for instant WhatsApp gift notification',
+                              helperStyle: GoogleFonts.cairo(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF1E7E34),
                               ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(16),

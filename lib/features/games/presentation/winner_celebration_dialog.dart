@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/animations/m3_motion.dart';
 import '../../../core/services/game_audio_service.dart';
 import '../../admin/domain/event_model.dart';
+import '../../company_portal/domain/whatsapp_gateway_service.dart';
 
 /// Shows a world-class, celebratory M3 Winner Dialog with Confetti and Spring Motion
 Future<void> showWinnerCelebrationDialog({
@@ -19,6 +20,7 @@ Future<void> showWinnerCelebrationDialog({
   List<LinkedGiftAllocation> linkedGifts = const [],
   String? imageUrl,
   String? recipientPhone,
+  Future<WhatsAppGatewayResult?>? whatsappDispatchFuture,
 }) {
   return showGeneralDialog(
     context: context,
@@ -45,6 +47,7 @@ Future<void> showWinnerCelebrationDialog({
         linkedGifts: linkedGifts,
         imageUrl: imageUrl,
         recipientPhone: recipientPhone,
+        whatsappDispatchFuture: whatsappDispatchFuture,
       );
     },
   );
@@ -61,6 +64,7 @@ class WinnerCelebrationDialog extends ConsumerStatefulWidget {
   final List<LinkedGiftAllocation> linkedGifts;
   final String? imageUrl;
   final String? recipientPhone;
+  final Future<WhatsAppGatewayResult?>? whatsappDispatchFuture;
 
   const WinnerCelebrationDialog({
     super.key,
@@ -74,6 +78,7 @@ class WinnerCelebrationDialog extends ConsumerStatefulWidget {
     this.linkedGifts = const [],
     this.imageUrl,
     this.recipientPhone,
+    this.whatsappDispatchFuture,
   });
 
   @override
@@ -97,6 +102,45 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
     // Trigger triumphant win fanfare sound
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(gameAudioServiceProvider).playWinFanfare();
+    });
+
+    // Listen to WhatsApp dispatch completion to show a floating toast alert for the promoter
+    widget.whatsappDispatchFuture?.then((result) {
+      if (!mounted || result == null) return;
+      final phone = (result.recipientPhone ?? widget.recipientPhone ?? '').trim();
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      if (messenger == null) return;
+      if (result.isSuccess) {
+        messenger.showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: const Color(0xFF1B5E20),
+            duration: const Duration(seconds: 4),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            content: Directionality(
+              textDirection: TextDirection.rtl,
+              child: Row(
+                children: [
+                  const Icon(Icons.mark_chat_read_rounded, color: Color(0xFF25D366), size: 22),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      phone.isNotEmpty
+                          ? '✅ تنبيه للمندوبة: تم إرسال تهنئة الهدية للعميل على الواتساب ($phone) 📲'
+                          : '✅ تنبيه للمندوبة: تم إرسال تهنئة الهدية للعميل على الواتساب بنجاح 📲',
+                      style: GoogleFonts.cairo(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
     });
 
     // Spawn 75 diverse festive particles
@@ -254,18 +298,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
 
                         const SizedBox(height: 12),
 
-                        Text(
-                          'لقد فزت بـ:',
-                          style: GoogleFonts.cairo(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-
-                        const SizedBox(height: 10),
-
-                        // 1. Resolve Voucher & Gift Attributes
+                        // 1. Resolve Voucher & Gift Attributes and Render Prize Presentation
                         Builder(
                           builder: (context) {
                             bool resolvedIsVoucher = widget.isVoucher ?? false;
@@ -333,294 +366,547 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                     : resolvedUnitValue.toString())
                                 : '';
 
-                            return Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: resolvedIsVoucher
-                                      ? [
-                                          const Color(0xFFFFD700).withValues(alpha: 0.22),
-                                          colorScheme.primaryContainer.withValues(alpha: 0.55),
-                                        ]
-                                      : [
-                                          const Color(0xFFE8F5E9).withValues(alpha: 0.6),
-                                          colorScheme.primaryContainer.withValues(alpha: 0.4),
-                                        ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                borderRadius: BorderRadius.circular(24),
-                                border: Border.all(
-                                  color: resolvedIsVoucher
-                                      ? const Color(0xFFFFB300)
-                                      : colorScheme.primary.withValues(alpha: 0.3),
-                                  width: resolvedIsVoucher ? 2.0 : 1.5,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: resolvedIsVoucher
-                                        ? const Color(0xFFFFB300).withValues(alpha: 0.25)
-                                        : colorScheme.primary.withValues(alpha: 0.1),
-                                    blurRadius: 16,
-                                    offset: const Offset(0, 4),
+                            return Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: resolvedIsVoucher
+                                          ? [
+                                              const Color(0xFFFFD700).withValues(alpha: 0.22),
+                                              colorScheme.primaryContainer.withValues(alpha: 0.55),
+                                            ]
+                                          : [
+                                              const Color(0xFFE8F5E9).withValues(alpha: 0.6),
+                                              colorScheme.primaryContainer.withValues(alpha: 0.4),
+                                            ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                    borderRadius: BorderRadius.circular(24),
+                                    border: Border.all(
+                                      color: resolvedIsVoucher
+                                          ? const Color(0xFFFFB300)
+                                          : colorScheme.primary.withValues(alpha: 0.3),
+                                      width: resolvedIsVoucher ? 2.0 : 1.5,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: resolvedIsVoucher
+                                            ? const Color(0xFFFFB300).withValues(alpha: 0.25)
+                                            : colorScheme.primary.withValues(alpha: 0.1),
+                                        blurRadius: 16,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
-                              child: Column(
-                                children: [
-                                  // Icon or Product Image Thumbnail
-                                  Builder(
-                                    builder: (context) {
-                                      final effectiveImageUrl = (widget.imageUrl != null && widget.imageUrl!.isNotEmpty)
-                                          ? widget.imageUrl
-                                          : (widget.linkedGifts.isNotEmpty && widget.linkedGifts.first.imageUrl != null && widget.linkedGifts.first.imageUrl!.isNotEmpty
-                                              ? widget.linkedGifts.first.imageUrl
-                                              : null);
+                                  child: Column(
+                                    children: [
+                                      // Prominent Product Image / Gift Graphic
+                                      Builder(
+                                        builder: (context) {
+                                          final effectiveImageUrl = (widget.imageUrl != null && widget.imageUrl!.isNotEmpty)
+                                              ? widget.imageUrl
+                                              : (widget.linkedGifts.isNotEmpty && widget.linkedGifts.first.imageUrl != null && widget.linkedGifts.first.imageUrl!.isNotEmpty
+                                                  ? widget.linkedGifts.first.imageUrl
+                                                  : null);
 
-                                      if (effectiveImageUrl != null && effectiveImageUrl.isNotEmpty) {
-                                        return Container(
-                                          width: 76,
-                                          height: 76,
-                                          decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(20),
-                                            border: Border.all(
-                                              color: resolvedIsVoucher
-                                                  ? const Color(0xFFFF8F00).withValues(alpha: 0.5)
-                                                  : colorScheme.primary.withValues(alpha: 0.5),
-                                              width: 2,
+                                          if (effectiveImageUrl != null && effectiveImageUrl.isNotEmpty) {
+                                            return Container(
+                                              width: double.infinity,
+                                              height: 175,
+                                              decoration: BoxDecoration(
+                                                color: Colors.white,
+                                                borderRadius: BorderRadius.circular(18),
+                                                border: Border.all(
+                                                  color: (resolvedIsVoucher ? const Color(0xFFFFB300) : colorScheme.primary).withValues(alpha: 0.25),
+                                                  width: 1.5,
+                                                ),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: (resolvedIsVoucher ? const Color(0xFFFFB300) : colorScheme.primary).withValues(alpha: 0.08),
+                                                    blurRadius: 10,
+                                                    offset: const Offset(0, 3),
+                                                  ),
+                                                ],
+                                              ),
+                                              child: ClipRRect(
+                                                borderRadius: BorderRadius.circular(16),
+                                                child: Image.network(
+                                                  effectiveImageUrl,
+                                                  fit: BoxFit.contain,
+                                                  errorBuilder: (context, error, stackTrace) => Container(
+                                                    color: resolvedIsVoucher
+                                                        ? const Color(0xFFFF8F00).withValues(alpha: 0.15)
+                                                        : colorScheme.primary.withValues(alpha: 0.1),
+                                                    child: Center(
+                                                      child: Icon(
+                                                        resolvedIsVoucher
+                                                            ? Icons.confirmation_number_rounded
+                                                            : Icons.card_giftcard_rounded,
+                                                        size: 54,
+                                                        color: resolvedIsVoucher ? const Color(0xFFFF8F00) : colorScheme.primary,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          }
+
+                                          return Container(
+                                            width: double.infinity,
+                                            height: 140,
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius: BorderRadius.circular(18),
+                                              border: Border.all(
+                                                color: (resolvedIsVoucher ? const Color(0xFFFFB300) : colorScheme.primary).withValues(alpha: 0.25),
+                                                width: 1.5,
+                                              ),
                                             ),
+                                            child: Center(
+                                              child: Icon(
+                                                resolvedIsVoucher
+                                                    ? Icons.confirmation_number_rounded
+                                                    : Icons.card_giftcard_rounded,
+                                                size: 54,
+                                                color: resolvedIsVoucher ? const Color(0xFFFF8F00) : colorScheme.primary,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                      const SizedBox(height: 14),
+
+                                      // Prize Name Title with "لقد فزت بـ:"
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                                        child: RichText(
+                                          textAlign: TextAlign.center,
+                                          text: TextSpan(
+                                            style: GoogleFonts.cairo(
+                                              fontSize: 20,
+                                              height: 1.3,
+                                            ),
+                                            children: [
+                                              TextSpan(
+                                                text: 'لقد فزت بـ: ',
+                                                style: GoogleFonts.cairo(
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: colorScheme.onSurfaceVariant,
+                                                ),
+                                              ),
+                                              TextSpan(
+                                                text: cleanPrizeName,
+                                                style: GoogleFonts.cairo(
+                                                  fontSize: 22,
+                                                  fontWeight: FontWeight.w900,
+                                                  color: colorScheme.primary,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+
+                                      // PROMINENT VOUCHER MONETARY VALUE BADGE (ONLY for vouchers)
+                                      if (resolvedIsVoucher && formattedVal.isNotEmpty) ...[
+                                        const SizedBox(height: 12),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                                          decoration: BoxDecoration(
+                                            gradient: const LinearGradient(
+                                              colors: [
+                                                Color(0xFFFFB300),
+                                                Color(0xFFFF6D00),
+                                              ],
+                                              begin: Alignment.topLeft,
+                                              end: Alignment.bottomRight,
+                                            ),
+                                            borderRadius: BorderRadius.circular(16),
                                             boxShadow: [
                                               BoxShadow(
-                                                color: (resolvedIsVoucher ? const Color(0xFFFF8F00) : colorScheme.primary).withValues(alpha: 0.2),
-                                                blurRadius: 12,
+                                                color: const Color(0xFFFF8F00).withValues(alpha: 0.45),
+                                                blurRadius: 16,
+                                                spreadRadius: 1,
                                                 offset: const Offset(0, 4),
                                               ),
                                             ],
                                           ),
-                                          child: ClipRRect(
-                                            borderRadius: BorderRadius.circular(18),
-                                            child: Image.network(
-                                              effectiveImageUrl,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (context, error, stackTrace) => Container(
-                                                color: resolvedIsVoucher
-                                                    ? const Color(0xFFFF8F00).withValues(alpha: 0.15)
-                                                    : colorScheme.primary.withValues(alpha: 0.1),
-                                                child: Icon(
-                                                  resolvedIsVoucher
-                                                      ? Icons.confirmation_number_rounded
-                                                      : Icons.card_giftcard_rounded,
-                                                  size: 40,
-                                                  color: resolvedIsVoucher ? const Color(0xFFFF8F00) : colorScheme.primary,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        );
-                                      }
-
-                                      return Container(
-                                        padding: const EdgeInsets.all(12),
-                                        decoration: BoxDecoration(
-                                          color: resolvedIsVoucher
-                                              ? const Color(0xFFFF8F00).withValues(alpha: 0.15)
-                                              : colorScheme.primary.withValues(alpha: 0.1),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: Icon(
-                                          resolvedIsVoucher
-                                              ? Icons.confirmation_number_rounded
-                                              : Icons.card_giftcard_rounded,
-                                          size: 40,
-                                          color: resolvedIsVoucher ? const Color(0xFFFF8F00) : colorScheme.primary,
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                  const SizedBox(height: 10),
-
-                                  // Voucher or Physical Gift Certified Badge
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.8),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          resolvedIsVoucher ? Icons.verified_rounded : Icons.check_circle_rounded,
-                                          size: 14,
-                                          color: resolvedIsVoucher ? const Color(0xFFFF8F00) : colorScheme.primary,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          resolvedIsVoucher ? 'كارت فواتشر مشتريات معتمد' : 'هدية عينية فورية معتمدة',
-                                          style: GoogleFonts.cairo(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                            color: colorScheme.onSurfaceVariant,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-
-                                  // Prize Name Title
-                                  Text(
-                                    cleanPrizeName,
-                                    textAlign: TextAlign.center,
-                                    style: GoogleFonts.cairo(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w900,
-                                      color: colorScheme.onSurface,
-                                      height: 1.3,
-                                    ),
-                                  ),
-
-                                  // PROMINENT VOUCHER MONETARY VALUE BADGE (ONLY for vouchers)
-                                  if (resolvedIsVoucher && formattedVal.isNotEmpty) ...[
-                                    const SizedBox(height: 12),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                                      decoration: BoxDecoration(
-                                        gradient: const LinearGradient(
-                                          colors: [
-                                            Color(0xFFFFB300),
-                                            Color(0xFFFF6D00),
-                                          ],
-                                          begin: Alignment.topLeft,
-                                          end: Alignment.bottomRight,
-                                        ),
-                                        borderRadius: BorderRadius.circular(16),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: const Color(0xFFFF8F00).withValues(alpha: 0.45),
-                                            blurRadius: 16,
-                                            spreadRadius: 1,
-                                            offset: const Offset(0, 4),
-                                          ),
-                                        ],
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(Icons.payments_rounded, color: Colors.white, size: 22),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            'بقيمة $formattedVal ج.م',
-                                            style: GoogleFonts.cairo(
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.w900,
-                                              color: Colors.white,
-                                              letterSpacing: 0.5,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      'صالحة للاستخدام الفوري لدى الكاشير',
-                                      style: GoogleFonts.cairo(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ] else if (!resolvedIsVoucher) ...[
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      'يرجى استلام هديتك من ممثل الشركة في الفرع',
-                                      style: GoogleFonts.cairo(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ],
-
-                                  // Multi-Card Breakdown Display
-                                  if (widget.linkedGifts.length > 1 ||
-                                      (widget.linkedGifts.length == 1 && widget.linkedGifts.first.quantity > 1)) ...[
-                                    const SizedBox(height: 10),
-                                    Wrap(
-                                      spacing: 6,
-                                      runSpacing: 4,
-                                      alignment: WrapAlignment.center,
-                                      children: widget.linkedGifts.map((g) {
-                                        return Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                          decoration: BoxDecoration(
-                                            color: Colors.amber.shade50,
-                                            borderRadius: BorderRadius.circular(8),
-                                            border: Border.all(color: Colors.amber.shade300),
-                                          ),
                                           child: Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              Icon(
-                                                g.isVoucher
-                                                    ? Icons.confirmation_number_rounded
-                                                    : Icons.card_giftcard_rounded,
-                                                size: 13,
-                                                color: Colors.amber.shade900,
-                                              ),
-                                              const SizedBox(width: 4),
+                                              const Icon(Icons.payments_rounded, color: Colors.white, size: 22),
+                                              const SizedBox(width: 8),
                                               Text(
-                                                '${g.quantity} × ${g.giftName}',
+                                                'بقيمة $formattedVal ج.م',
                                                 style: GoogleFonts.cairo(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.amber.shade900,
+                                                  fontSize: 20,
+                                                  fontWeight: FontWeight.w900,
+                                                  color: Colors.white,
+                                                  letterSpacing: 0.5,
                                                 ),
                                               ),
                                             ],
                                           ),
-                                        );
-                                      }).toList(),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          'صالحة للاستخدام الفوري لدى الكاشير',
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: colorScheme.onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ],
+
+                                      // Multi-Card Breakdown Display
+                                      if (widget.linkedGifts.length > 1 ||
+                                          (widget.linkedGifts.length == 1 && widget.linkedGifts.first.quantity > 1)) ...[
+                                        const SizedBox(height: 10),
+                                        Wrap(
+                                          spacing: 6,
+                                          runSpacing: 4,
+                                          alignment: WrapAlignment.center,
+                                          children: widget.linkedGifts.map((g) {
+                                            return Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: Colors.amber.shade50,
+                                                borderRadius: BorderRadius.circular(8),
+                                                border: Border.all(color: Colors.amber.shade300),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    g.isVoucher
+                                                        ? Icons.confirmation_number_rounded
+                                                        : Icons.card_giftcard_rounded,
+                                                    size: 13,
+                                                    color: Colors.amber.shade900,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    '${g.quantity} × ${g.giftName}',
+                                                    style: GoogleFonts.cairo(
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: Colors.amber.shade900,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          }).toList(),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+
+                                // Physical gift claim note placed outside the box in small subtle font
+                                if (!resolvedIsVoucher) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'يرجى استلام هديتك من ممثل الشركة في الفرع',
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w500,
+                                      color: colorScheme.onSurfaceVariant.withValues(alpha: 0.85),
                                     ),
-                                  ],
+                                  ),
                                 ],
-                              ),
+                              ],
                             );
                           },
                         ),
 
-                        if (widget.recipientPhone != null && widget.recipientPhone!.trim().isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF25D366).withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: const Color(0xFF25D366).withValues(alpha: 0.4),
-                                width: 1,
+                        // WhatsApp Status Card (Material Design 3)
+                        const SizedBox(height: 12),
+                        if (widget.remainingChances > 0) ...[
+                          if (widget.recipientPhone != null && widget.recipientPhone!.trim().isNotEmpty)
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF25D366).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: const Color(0xFF25D366).withValues(alpha: 0.55),
+                                  width: 1.4,
+                                ),
                               ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.mark_chat_read_rounded, color: Color(0xFF1E7E34), size: 18),
-                                const SizedBox(width: 8),
-                                Flexible(
-                                  child: Text(
-                                    'تم إرسال إشعار الهدية عبر الواتساب إلى ${widget.recipientPhone!.trim()} 📲',
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.schedule_rounded, color: Color(0xFF145A26), size: 19),
+                                      const SizedBox(width: 8),
+                                      Flexible(
+                                        child: Text(
+                                          'إرسال الواتساب بعد اكتمال باقي السحوبات',
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w800,
+                                            color: const Color(0xFF145A26),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    'سيتم إرسال رسالة التهنئة بكافة الجوائز على الرقم (${widget.recipientPhone!.trim()}) فور استكمال باقي الفرص',
+                                    textAlign: TextAlign.center,
                                     style: GoogleFonts.cairo(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      color: const Color(0xFF1E7E34),
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: const Color(0xFF145A26),
                                     ),
                                   ),
+                                ],
+                              ),
+                            )
+                          else
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.shade50,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: Colors.amber.shade600,
+                                  width: 1.4,
                                 ),
-                              ],
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.phone_missed_rounded, color: Colors.amber.shade900, size: 19),
+                                      const SizedBox(width: 8),
+                                      Flexible(
+                                        child: Text(
+                                          'لم يتم إدخال رقم هاتف العميل',
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w800,
+                                            color: Colors.amber.shade900,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    'لم يتم تسجيل رقم الهاتف عند إدخال الفاتورة، ولن يتم إرسال رسالة التهنئة بالجوائز',
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.amber.shade900,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
+                        ] else ...[
+                          if (widget.recipientPhone == null || widget.recipientPhone!.trim().isEmpty)
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.shade50,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: Colors.amber.shade600,
+                                  width: 1.4,
+                                ),
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.phone_missed_rounded, color: Colors.amber.shade900, size: 19),
+                                      const SizedBox(width: 8),
+                                      Flexible(
+                                        child: Text(
+                                          'لم يتم إدخال رقم هاتف العميل',
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w800,
+                                            color: Colors.amber.shade900,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    'لم يتم إدخال رقم هاتف العميل — لم يتم إرسال رسالة واتساب للعميل بالجوائز',
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.amber.shade900,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          else if (widget.whatsappDispatchFuture != null)
+                            FutureBuilder<WhatsAppGatewayResult?>(
+                              future: widget.whatsappDispatchFuture,
+                              builder: (context, snapshot) {
+                                final isWaiting = snapshot.connectionState == ConnectionState.waiting;
+                                final result = snapshot.data;
+                                final resolvedPhone = (result?.recipientPhone ?? widget.recipientPhone ?? '').trim();
+
+                                final isFailed = !isWaiting && result != null && !result.isSuccess;
+                                final bgColor = isFailed
+                                    ? Colors.amber.shade50
+                                    : const Color(0xFF25D366).withValues(alpha: 0.14);
+                                final borderColor = isFailed
+                                    ? Colors.amber.shade600
+                                    : const Color(0xFF25D366).withValues(alpha: 0.65);
+                                final textColor = isFailed
+                                    ? Colors.amber.shade900
+                                    : const Color(0xFF145A26);
+
+                                return AnimatedContainer(
+                                  duration: const Duration(milliseconds: 280),
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: bgColor,
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: borderColor,
+                                      width: 1.4,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          if (isWaiting)
+                                            const SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Color(0xFF1E7E34),
+                                              ),
+                                            )
+                                          else
+                                            Icon(
+                                              isFailed
+                                                  ? Icons.warning_amber_rounded
+                                                  : Icons.check_circle_rounded,
+                                              color: textColor,
+                                              size: 19,
+                                            ),
+                                          const SizedBox(width: 8),
+                                          Flexible(
+                                            child: Text(
+                                              isWaiting
+                                                  ? 'جاري إرسال رسالة الواتساب...'
+                                                  : (isFailed
+                                                      ? 'تعذر إرسال الواتساب'
+                                                      : 'تم إرسال الواتساب بنجاح'),
+                                              style: GoogleFonts.cairo(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w800,
+                                                color: textColor,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        isWaiting
+                                            ? (resolvedPhone.isNotEmpty
+                                                ? 'يتم الآن إرسال تفاصيل الهدية إلى الرقم ($resolvedPhone)'
+                                                : 'يتم الآن إرسال رسالة تهنئة الهدية للعميل عبر الواتساب')
+                                            : (isFailed
+                                                ? 'تعذر توصيل الرسالة إلى الرقم ($resolvedPhone) — تأكد من تفعيل الرقم على الواتساب'
+                                                : (resolvedPhone.isNotEmpty
+                                                    ? 'تم إرسال رسالة التهنئة وتفاصيل الهدية للعميل على الرقم ($resolvedPhone)'
+                                                    : 'تم إرسال رسالة التهنئة وتفاصيل الهدية للعميل عبر الواتساب')),
+                                        textAlign: TextAlign.center,
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: textColor.withValues(alpha: 0.95),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            )
+                          else
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF25D366).withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: const Color(0xFF25D366).withValues(alpha: 0.65),
+                                  width: 1.4,
+                                ),
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.check_circle_rounded, color: Color(0xFF145A26), size: 19),
+                                      const SizedBox(width: 8),
+                                      Flexible(
+                                        child: Text(
+                                          'تم إرسال الواتساب بنجاح',
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w800,
+                                            color: const Color(0xFF145A26),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    'تم إرسال رسالة التهنئة وتفاصيل الهدية للعميل على الرقم (${widget.recipientPhone!.trim()})',
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: const Color(0xFF145A26),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                         ],
 
                         if (widget.remainingChances > 0) ...[
@@ -654,7 +940,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
 
                         const SizedBox(height: 20),
 
-                        // Action Buttons
+                        // Action Buttons: Mandatory Multi-Chance Draw Enforcement
                         if (widget.remainingChances > 0) ...[
                           M3ActionButton(
                             label: widget.nextChanceLabel ?? 'سحب الفرصة التالية (متبقي ${widget.remainingChances})',
@@ -663,16 +949,6 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                             onPressed: () async {
                               Navigator.of(context).pop();
                               widget.onNextChance?.call();
-                            },
-                          ),
-                          const SizedBox(height: 10),
-                          M3ActionButton(
-                            label: 'إنهاء واستلام الجوائز',
-                            icon: Icons.check_circle_outline_rounded,
-                            variant: M3ButtonVariant.tonal,
-                            onPressed: () async {
-                              Navigator.of(context).pop();
-                              widget.onNextCustomer();
                             },
                           ),
                         ] else ...[
