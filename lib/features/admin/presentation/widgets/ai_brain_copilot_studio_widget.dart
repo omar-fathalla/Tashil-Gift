@@ -14,6 +14,7 @@ import '../../../../core/services/ai_directives_service.dart';
 import '../../../../core/services/ai_model_config_service.dart';
 import '../../../../core/services/voice_recording_service.dart';
 import '../../../../core/utils/clipboard_image_helper.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../domain/ai_directive_model.dart';
 import 'ai_model_switcher_dialog.dart';
 
@@ -795,80 +796,139 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
     final isAr = ref.isArabic;
     final currentDirectives = ref.watch(aiDirectivesStreamProvider).value ?? [];
 
-    return Column(
-      children: [
-        // 1. Studio Status & Quick Chips Toolbar
-        _buildStudioHeaderBar(colorScheme, isAr, currentDirectives.length),
+    return M3ResponsiveBuilder(
+      builder: (context, layout) {
+        final studioColumn = Column(
+          children: [
+            // 1. Studio Status & Quick Chips Toolbar
+            _buildStudioHeaderBar(colorScheme, isAr, currentDirectives.length),
 
-        // 2. Chat Messages Viewport
-        Expanded(
-          child: ListView.builder(
-            controller: _scrollController,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            itemCount: _messages.length + (_isLoading ? 1 : 0),
-            itemBuilder: (context, index) {
-              if (index == _messages.length && _isLoading) {
-                return _buildAiThinkingIndicator(colorScheme, isAr);
-              }
-              final msg = _messages[index];
-              return _buildChatMessageItem(msg, colorScheme, isAr);
-            },
+            // 2. Chat Messages Viewport
+            Expanded(
+              child: ListView.builder(
+                controller: _scrollController,
+                padding: EdgeInsets.symmetric(
+                  horizontal: layout.isDesktop ? M3Spacing.md : M3Spacing.sm,
+                  vertical: M3Spacing.sm,
+                ),
+                itemCount: _messages.length + (_isLoading ? 1 : 0),
+                itemBuilder: (context, index) {
+                  if (index == _messages.length && _isLoading) {
+                    return _buildAiThinkingIndicator(colorScheme, isAr);
+                  }
+                  final msg = _messages[index];
+                  return _buildChatMessageItem(msg, colorScheme, isAr);
+                },
+              ),
+            ),
+
+            // 3. Image Previews Strip (if images attached or downloading)
+            if (_isDownloadingInitialImages)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: M3Spacing.sm,
+                  vertical: M3Spacing.xs,
+                ),
+                color:
+                    colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: M3Spacing.xs),
+                    Text(
+                      isAr
+                          ? 'جاري جلب صورة البون للاستوديو...'
+                          : 'Fetching receipt image...',
+                      style: GoogleFonts.cairo(
+                        fontSize: 12,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (_selectedImages.isNotEmpty)
+              _buildAttachedImagesStrip(colorScheme),
+
+            // 3.4. Draft Voice Note Strip (if recording saved as draft)
+            if (_draftVoiceNote != null)
+              _buildDraftVoiceNoteStrip(
+                  colorScheme, isAr, AppStrings.of(ref)),
+
+            // 3.5. Transcribing audio indicator banner
+            if (_isTranscribingVoice)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: M3Spacing.sm,
+                  vertical: M3Spacing.xs,
+                ),
+                color:
+                    colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: M3Spacing.xs),
+                    Text(
+                      AppStrings.of(ref).transcribingAudio,
+                      style: GoogleFonts.cairo(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // 4. Message Input Bar or Voice Recording Bar
+            if (_isRecordingVoice)
+              _buildVoiceRecordingBar(colorScheme, isAr, AppStrings.of(ref))
+            else
+              _buildMessageInputBar(colorScheme, isAr, AppStrings.of(ref)),
+          ],
+        );
+
+        if (!layout.isDesktop) {
+          return studioColumn;
+        }
+
+        return M3ContentBoundary(
+          maxWidth: 1440.0,
+          padding: EdgeInsets.symmetric(
+            horizontal: layout.margin,
+            vertical: M3Spacing.sm,
           ),
-        ),
-
-        // 3. Image Previews Strip (if images attached or downloading)
-        if (_isDownloadingInitialImages)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-            child: Row(
-              children: [
-                const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
-                const SizedBox(width: 8),
-                Text(
-                  isAr ? 'جاري جلب صورة البون للاستوديو...' : 'Fetching receipt image...',
-                  style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
+          child: Container(
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: colorScheme.shadow.withValues(alpha: 0.03),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
+            clipBehavior: Clip.antiAlias,
+            child: studioColumn,
           ),
-        if (_selectedImages.isNotEmpty) _buildAttachedImagesStrip(colorScheme),
-
-        // 3.4. Draft Voice Note Strip (if recording saved as draft)
-        if (_draftVoiceNote != null)
-          _buildDraftVoiceNoteStrip(colorScheme, isAr, AppStrings.of(ref)),
-
-        // 3.5. Transcribing audio indicator banner
-        if (_isTranscribingVoice)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  AppStrings.of(ref).transcribingAudio,
-                  style: GoogleFonts.cairo(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: colorScheme.primary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-        // 4. Message Input Bar or Voice Recording Bar
-        if (_isRecordingVoice)
-          _buildVoiceRecordingBar(colorScheme, isAr, AppStrings.of(ref))
-        else
-          _buildMessageInputBar(colorScheme, isAr, AppStrings.of(ref)),
-      ],
+        );
+      },
     );
   }
 
