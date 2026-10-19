@@ -254,78 +254,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // 1. Top Badges Row (Symmetrical M3 Blue Theme)
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    // Gemini 3.7 Flash AI Badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: colorScheme.primaryContainer.withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: colorScheme.primary.withValues(alpha: 0.35),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.auto_awesome_rounded, size: 16, color: colorScheme.primary),
-                          const SizedBox(width: 7),
-                          Flexible(
-                            child: Text(
-                              strings.heroGeminiModelBadge,
-                              style: GoogleFonts.cairo(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.bold,
-                                color: colorScheme.onPrimaryContainer,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Anti-Fraud Governance Badge (Derived from M3 Blue Theme)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: colorScheme.secondaryContainer.withValues(alpha: 0.65),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: colorScheme.primary.withValues(alpha: 0.28),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.verified_user_rounded, size: 16, color: colorScheme.primary),
-                          const SizedBox(width: 7),
-                          Flexible(
-                            child: Text(
-                              strings.heroAntiFraudBadge,
-                              style: GoogleFonts.cairo(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.bold,
-                                color: colorScheme.onSecondaryContainer,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 20),
-
-                // 2. Brand 'G' Logo & Main Title
+                // 1. Brand 'G' Logo & Main Title (Start of Showcase Content)
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
@@ -564,6 +493,77 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       );
                     },
                   ),
+                ),
+
+                const SizedBox(height: 18),
+
+                // 6. Badges Row: Gemini 3.8 Flash & 100% Anti-Fraud Single-Resolution
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    // Gemini 3.8 Flash AI Badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primaryContainer.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: colorScheme.primary.withValues(alpha: 0.35),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.auto_awesome_rounded, size: 16, color: colorScheme.primary),
+                          const SizedBox(width: 7),
+                          Flexible(
+                            child: Text(
+                              strings.heroGeminiModelBadge,
+                              style: GoogleFonts.cairo(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.onPrimaryContainer,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Anti-Fraud Governance Badge (Derived from M3 Dynamic Theme)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: colorScheme.secondaryContainer.withValues(alpha: 0.65),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: colorScheme.primary.withValues(alpha: 0.28),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.verified_user_rounded, size: 16, color: colorScheme.primary),
+                          const SizedBox(width: 7),
+                          Flexible(
+                            child: Text(
+                              strings.heroAntiFraudBadge,
+                              style: GoogleFonts.cairo(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.onSecondaryContainer,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

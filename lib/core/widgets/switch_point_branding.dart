@@ -22,7 +22,7 @@ class SwitchPointInfo {
   static const String whatsappEgyptUrl = 'https://wa.me/201211857725';
   static const String whatsappUae = '+971 55 871 5615';
   static const String whatsappUaeUrl = 'https://wa.me/971558715615';
-  static const String copyright = '© 2026 Switch Point. All rights reserved.';
+  static const String copyright = '2026 Switch Point. All rights reserved.';
 
   /// Safe URL launcher helper
   static Future<void> launchLink(String urlString) async {
@@ -87,8 +87,10 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
     final isAr = ref.isArabic;
 
     if (isMobile) {
-      return SafeArea(
-        bottom: false,
+      return Directionality(
+        textDirection: TextDirection.ltr,
+        child: SafeArea(
+          bottom: false,
         child: Container(
           height: 60,
           decoration: BoxDecoration(
@@ -199,10 +201,13 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
             ],
           ),
         ),
-      );
+      ),
+    );
     }
 
-    return Container(
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Container(
       height: 64,
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerLow,
@@ -294,6 +299,7 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
             _buildThemeModeButton(ref, colorScheme, isDark, false),
         ],
       ),
+    ),
     );
   }
 
@@ -608,14 +614,9 @@ class SwitchPointFooter extends StatelessWidget {
           horizontal: 24,
           vertical: 10,
         ),
-        child: Wrap(
-          spacing: 14,
-          runSpacing: 8,
-          alignment: WrapAlignment.center,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            // 1. Copyright Text
-            Row(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final copyrightWidget = Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
@@ -623,7 +624,7 @@ class SwitchPointFooter extends StatelessWidget {
                   size: 14,
                   color: colorScheme.onSurfaceVariant,
                 ),
-                const SizedBox(width: 5),
+                const SizedBox(width: 6),
                 Text(
                   SwitchPointInfo.copyright,
                   style: GoogleFonts.cairo(
@@ -633,69 +634,98 @@ class SwitchPointFooter extends StatelessWidget {
                   ),
                 ),
               ],
-            ),
+            );
 
-            // 2. Powered by Switch Point Smart Systems Badge (links to website)
-            InkWell(
-              onTap: () => SwitchPointInfo.launchLink(SwitchPointInfo.websiteUrl),
-              borderRadius: BorderRadius.circular(20),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                decoration: BoxDecoration(
-                  color: colorScheme.primaryContainer.withValues(alpha: 0.45),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: colorScheme.primary.withValues(alpha: 0.3),
+            final linksWidgets = <Widget>[
+              // 2. Powered by Switch Point Smart Systems Badge (links to website)
+              InkWell(
+                onTap: () => SwitchPointInfo.launchLink(SwitchPointInfo.websiteUrl),
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: colorScheme.primary.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.verified_rounded,
+                        size: 14,
+                        color: colorScheme.primary,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Powered by Switch Point Smart Systems',
+                        style: GoogleFonts.cairo(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.verified_rounded,
-                      size: 14,
-                      color: colorScheme.primary,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Powered by Switch Point Smart Systems',
-                      style: GoogleFonts.cairo(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.onPrimaryContainer,
-                      ),
-                    ),
-                  ],
-                ),
               ),
-            ),
 
-            // 3. Email Support
-            _buildFooterPill(
-              context: context,
-              icon: Icons.mail_outline_rounded,
-              label: SwitchPointInfo.supportEmail,
-              url: 'mailto:${SwitchPointInfo.supportEmail}',
-            ),
+              // 3. Email Support
+              _buildFooterPill(
+                context: context,
+                icon: Icons.mail_outline_rounded,
+                label: SwitchPointInfo.supportEmail,
+                url: 'mailto:${SwitchPointInfo.supportEmail}',
+              ),
 
-            // 4. WhatsApp Egypt Pill (M3 Theme Blue & Google Icon)
-            _buildFooterPill(
-              context: context,
-              icon: Icons.chat_bubble_outline_rounded,
-              label: 'WhatsApp Egypt',
-              tooltip: 'Contact via WhatsApp Egypt (${SwitchPointInfo.whatsappEgypt})',
-              url: SwitchPointInfo.whatsappEgyptUrl,
-            ),
+              // 4. WhatsApp Egypt Pill (M3 Theme Blue & Google Icon)
+              _buildFooterPill(
+                context: context,
+                icon: Icons.chat_bubble_outline_rounded,
+                label: 'WhatsApp Egypt',
+                tooltip: 'Contact via WhatsApp Egypt (${SwitchPointInfo.whatsappEgypt})',
+                url: SwitchPointInfo.whatsappEgyptUrl,
+              ),
 
-            // 5. WhatsApp UAE Pill (M3 Theme Blue & Google Icon)
-            _buildFooterPill(
-              context: context,
-              icon: Icons.chat_bubble_outline_rounded,
-              label: 'WhatsApp UAE',
-              tooltip: 'Contact via WhatsApp UAE (${SwitchPointInfo.whatsappUae})',
-              url: SwitchPointInfo.whatsappUaeUrl,
-            ),
-          ],
+              // 5. WhatsApp UAE Pill (M3 Theme Blue & Google Icon)
+              _buildFooterPill(
+                context: context,
+                icon: Icons.chat_bubble_outline_rounded,
+                label: 'WhatsApp UAE',
+                tooltip: 'Contact via WhatsApp UAE (${SwitchPointInfo.whatsappUae})',
+                url: SwitchPointInfo.whatsappUaeUrl,
+              ),
+            ];
+
+            if (constraints.maxWidth >= 980) {
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  copyrightWidget,
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: linksWidgets,
+                  ),
+                ],
+              );
+            }
+
+            return Wrap(
+              spacing: 14,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                copyrightWidget,
+                ...linksWidgets,
+              ],
+            );
+          },
         ),
       ),
     );
@@ -1211,7 +1241,7 @@ class SwitchPointMobileMenuSheet extends ConsumerWidget {
                     child: Column(
                       children: [
                         Text(
-                          SwitchPointInfo.copyright,
+                          '© ${SwitchPointInfo.copyright}',
                           style: GoogleFonts.cairo(
                             fontSize: 11,
                             color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),

@@ -100,26 +100,51 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 ),
                 Expanded(
                   child: ListView(
-                    children: items.map((item) {
-                      final (idx, icon, title) = item;
-                      final isSelected = _selectedIndex == idx;
-                      return ListTile(
-                        leading: Icon(icon, color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant),
+                    children: [
+                      ...items.map((item) {
+                        final (idx, icon, title) = item;
+                        final isSelected = _selectedIndex == idx;
+                        return ListTile(
+                          leading: Icon(icon, color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant),
+                          title: Text(
+                            title,
+                            style: GoogleFonts.cairo(
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                              color: isSelected ? colorScheme.primary : colorScheme.onSurface,
+                            ),
+                          ),
+                          selected: isSelected,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _selectTab(idx);
+                          },
+                        );
+                      }),
+                      Divider(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                      ListTile(
+                        leading: Icon(Icons.logout_rounded, color: colorScheme.error),
                         title: Text(
-                          title,
+                          strings.signOutBtn,
                           style: GoogleFonts.cairo(
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                            color: isSelected ? colorScheme.primary : colorScheme.onSurface,
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.error,
                           ),
                         ),
-                        selected: isSelected,
+                        subtitle: Text(
+                          strings.systemAdminRole,
+                          style: GoogleFonts.cairo(
+                            fontSize: 11,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         onTap: () {
                           Navigator.pop(ctx);
-                          _selectTab(idx);
+                          _handleSignOut(context, strings);
                         },
-                      );
-                    }).toList(),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -353,11 +378,10 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     }
   }
 
-  Widget _buildProfileMenu(
+  Widget _buildSideMenuProfileButton(
     BuildContext context,
     ColorScheme colorScheme,
     AppStrings strings,
-    bool isMobile,
   ) {
     String sessionEmail = kPrimaryAdminEmail;
     try {
@@ -369,57 +393,55 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     return M3ActionMenu(
       tooltip: strings.adminProfileTooltip,
       anchorBuilder: (context, controller, child) {
-        return InkWell(
-          onTap: () {
-            if (controller.isOpen) {
-              controller.close();
-            } else {
-              controller.open();
-            }
-          },
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: isMobile ? 6 : 10,
-              vertical: isMobile ? 4 : 6,
-            ),
-            decoration: BoxDecoration(
-              color: colorScheme.primaryContainer.withValues(alpha: 0.45),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: colorScheme.primary.withValues(alpha: 0.35),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircleAvatar(
-                  radius: isMobile ? 12 : 14,
-                  backgroundColor: colorScheme.primary,
-                  child: const Icon(
-                    Icons.person_rounded,
-                    color: Colors.white,
-                    size: 16,
-                  ),
+        return Tooltip(
+          message: '${strings.systemAdminRole}\n$sessionEmail',
+          child: InkWell(
+            onTap: () {
+              if (controller.isOpen) {
+                controller.close();
+              } else {
+                controller.open();
+              }
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              width: 68,
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: colorScheme.primary.withValues(alpha: 0.3),
+                  width: 1,
                 ),
-                if (!isMobile) ...[
-                  const SizedBox(width: 6),
-                  Text(
-                    strings.systemAdminRole,
-                    style: GoogleFonts.cairo(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.primary,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircleAvatar(
+                    radius: 14,
+                    backgroundColor: colorScheme.primary,
+                    child: const Icon(
+                      Icons.person_rounded,
+                      color: Colors.white,
+                      size: 16,
                     ),
                   ),
-                  const SizedBox(width: 2),
-                  Icon(
-                    Icons.arrow_drop_down_rounded,
-                    size: 18,
-                    color: colorScheme.primary,
+                  const SizedBox(height: 4),
+                  Text(
+                    strings.systemAdminRole,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.primary,
+                      height: 1.15,
+                    ),
                   ),
                 ],
-              ],
+              ),
             ),
           ),
         );
@@ -520,10 +542,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
-      appBar: SwitchPointHeader(
-        customActions: [
-          _buildProfileMenu(context, colorScheme, strings, isMobile),
-        ],
+      appBar: const SwitchPointHeader(
+        subtitle: 'System Admin and Company Manager Portal',
       ),
       body: Row(
         children: [
@@ -532,20 +552,20 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
             RepaintBoundary(
               child: SizedBox(
                 width: 80,
-                child: LayoutBuilder(
-                  builder: (context, railConstraints) {
-                    return SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      child: ConstrainedBox(
-                         constraints: BoxConstraints(minHeight: railConstraints.maxHeight),
-                        child: IntrinsicHeight(
+                child: Container(
+                  color: colorScheme.surfaceContainerLow,
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
                           child: NavigationRail(
                             selectedIndex: _selectedIndex,
                             onDestinationSelected: _selectTab,
                             labelType: NavigationRailLabelType.all,
                             minWidth: 80,
-                            backgroundColor: colorScheme.surfaceContainerLow,
-                            elevation: 1,
+                            backgroundColor: Colors.transparent,
+                            elevation: 0,
                             indicatorColor: colorScheme.secondaryContainer,
                             selectedIconTheme: IconThemeData(color: colorScheme.onSecondaryContainer, size: 24),
                             unselectedIconTheme: IconThemeData(color: colorScheme.onSurfaceVariant, size: 22),
@@ -650,8 +670,17 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                           ),
                         ),
                       ),
-                    );
-                  },
+                      Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: _buildSideMenuProfileButton(context, colorScheme, strings),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

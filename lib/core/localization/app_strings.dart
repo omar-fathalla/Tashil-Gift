@@ -1124,9 +1124,9 @@ class AppStrings {
     hi: 'प्रचार अभियानों और स्मार्ट रसीद सत्यापन के लिए अग्रणी एआई-संचालित मंच',
   );
   String get heroGeminiModelBadge => _t(
-    ar: 'مدعوم بمحرك Gemini 3.7 Flash',
-    en: 'Powered by Gemini 3.7 Flash',
-    hi: 'Gemini 3.7 Flash द्वारा संचालित',
+    ar: 'مدعوم بمحرك Gemini 3.8 Flash',
+    en: 'Powered by Gemini 3.8 Flash',
+    hi: 'Gemini 3.8 Flash द्वारा संचालित',
   );
   String get heroAntiFraudBadge => _t(
     ar: 'حوكمة وحماية من الاحتيال 100%',
