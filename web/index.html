@@ -1,24 +1,17 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Tashil Gift - Smart Multi-Company Promotion & Validation Platform by Switch Point">
+
+  <!-- Preconnect to Firebase & Google Fonts for faster handshake -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://firestore.googleapis.com">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -45,10 +38,125 @@
   <meta name="twitter:description" content="منظومة إدارة العروض والحملات الترويجية والتحقق الذكي من الفواتير وتوزيع الهدايا">
   <meta name="twitter:image" content="icons/Icon-512.png">
 
-  <title>Tashil Gift</title>
+  <title>Tashil Gift - تسهيل جيفت</title>
   <link rel="manifest" href="manifest.json">
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #F8FAF3;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      overflow: hidden;
+    }
+
+    #app-splash-loader {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background-color: #F8FAF3;
+      z-index: 999999;
+      transition: opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.28s;
+    }
+
+    #app-splash-loader.loaded {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .splash-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 40px;
+      border-radius: 24px;
+      background: #FFFFFF;
+      border: 1px solid rgba(74, 93, 35, 0.14);
+      box-shadow: 0 12px 32px rgba(74, 93, 35, 0.06);
+      max-width: 320px;
+      width: 85%;
+      text-align: center;
+    }
+
+    .splash-logo-badge {
+      width: 64px;
+      height: 64px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, #4A5D23 0%, #637B30 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #FFFFFF;
+      font-size: 28px;
+      font-weight: 900;
+      box-shadow: 0 6px 16px rgba(74, 93, 35, 0.25);
+      margin-bottom: 16px;
+      animation: pulseBadge 1.8s infinite ease-in-out;
+    }
+
+    .splash-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: #1B1C18;
+      margin: 0 0 6px 0;
+    }
+
+    .splash-subtitle {
+      font-size: 13px;
+      color: #5C5F52;
+      margin: 0 0 20px 0;
+    }
+
+    .m3-linear-progress {
+      width: 100%;
+      height: 6px;
+      background-color: #E3E8D8;
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .m3-linear-progress-bar {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 45%;
+      background-color: #4A5D23;
+      border-radius: 999px;
+      animation: m3Indeterminate 1.25s infinite cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    @keyframes m3Indeterminate {
+      0% { right: -45%; width: 35%; }
+      50% { width: 55%; }
+      100% { right: 100%; width: 35%; }
+    }
+
+    @keyframes pulseBadge {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+  </style>
 </head>
 <body>
+  <!-- Instant M3 HTML Splash Screen (Eliminates White Screen) -->
+  <div id="app-splash-loader">
+    <div class="splash-card">
+      <div class="splash-logo-badge">G</div>
+      <h1 class="splash-title">تسهيل جيفت • Tashil Gift</h1>
+      <p class="splash-subtitle">جاري تهيئة بوابة العمليات الذكية...</p>
+      <div class="m3-linear-progress">
+        <div class="m3-linear-progress-bar"></div>
+      </div>
+    </div>
+  </div>
+
   <script>
     // Handle legacy hash URLs (e.g. /#/c/512?event=...) by converting them to clean path URLs before Flutter boots
     (function() {
@@ -60,17 +168,25 @@
         }
       }
     })();
-  </script>
-  <script type="module">
-    // Proactively unregister any legacy service workers and clear CacheStorage on every boot
-    if ('serviceWorker' in navigator) {
-      const registrations = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(registrations.map((registration) => registration.unregister()));
+
+    // Hide the HTML splash loader immediately when Flutter renders its first frame
+    function dismissSplashLoader() {
+      const loader = document.getElementById('app-splash-loader');
+      if (loader && !loader.classList.contains('loaded')) {
+        loader.classList.add('loaded');
+        setTimeout(() => loader.remove(), 350);
+      }
     }
-    if ('caches' in window) {
-      const keys = await caches.keys();
-      await Promise.all(keys.map((key) => caches.delete(key)));
-    }
+
+    window.addEventListener('flutter-first-frame', dismissSplashLoader);
+    // Fallback observer in case flutter-first-frame already fired
+    const observer = new MutationObserver(() => {
+      if (document.querySelector('flutter-view') || document.querySelector('flt-glass-pane')) {
+        dismissSplashLoader();
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
   </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>

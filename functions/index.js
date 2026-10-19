@@ -17,30 +17,44 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
+// In-memory TTL cache (5 minutes) to eliminate repeated Firestore round-trips on hot paths
+const eventPreviewCache = new Map();
+const PREVIEW_CACHE_TTL_MS = 5 * 60 * 1000;
+
 /**
- * Resolves event document from Firestore by eventId or companySlug
+ * Resolves event document from Firestore by eventId or companySlug with in-memory caching
  */
 async function resolveEvent(db, eventIdParam, routeIdentifier) {
+  const cacheKey = `${eventIdParam || ""}:${routeIdentifier || ""}`.toLowerCase();
+  const cached = eventPreviewCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < PREVIEW_CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  let result = null;
   if (eventIdParam) {
     const eventDoc = await db.collection("events").doc(eventIdParam).get();
-    if (eventDoc.exists) return eventDoc.data();
+    if (eventDoc.exists) result = eventDoc.data();
   }
 
-  if (routeIdentifier) {
+  if (!result && routeIdentifier) {
     const directDoc = await db.collection("events").doc(routeIdentifier).get();
-    if (directDoc.exists) return directDoc.data();
+    if (directDoc.exists) {
+      result = directDoc.data();
+    } else {
+      const cleanSlug = routeIdentifier.toLowerCase();
+      const slugQuery = await db
+        .collection("events")
+        .where("companySlug", "==", cleanSlug)
+        .limit(1)
+        .get();
 
-    const cleanSlug = routeIdentifier.toLowerCase();
-    const slugQuery = await db
-      .collection("events")
-      .where("companySlug", "==", cleanSlug)
-      .limit(1)
-      .get();
-
-    if (!slugQuery.empty) return slugQuery.docs[0].data();
+      if (!slugQuery.empty) result = slugQuery.docs[0].data();
+    }
   }
 
-  return null;
+  eventPreviewCache.set(cacheKey, { data: result, timestamp: Date.now() });
+  return result;
 }
 
 /**
@@ -89,7 +103,7 @@ function extractPreviewMetadata(resolvedEvent, query, isManagerPortal) {
 }
 
 /**
- * Builds HTML page template with rich OpenGraph / Twitter meta tags
+ * Builds HTML page template with rich OpenGraph / Twitter meta tags and Instant M3 Splash Loader
  */
 function buildPreviewHtml({ pageTitle, pageDescription, companyLogoUrl }) {
   const escapedTitle = escapeHtml(pageTitle);
@@ -105,6 +119,10 @@ function buildPreviewHtml({ pageTitle, pageDescription, companyLogoUrl }) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapedTitle}</title>
   <meta name="description" content="${escapedDesc}">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://firestore.googleapis.com">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -134,10 +152,123 @@ function buildPreviewHtml({ pageTitle, pageDescription, companyLogoUrl }) {
   <meta name="twitter:image" content="${escapedLogo}">
 
   <link rel="manifest" href="/manifest.json">
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #F8FAF3;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      overflow: hidden;
+    }
+
+    #app-splash-loader {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background-color: #F8FAF3;
+      z-index: 999999;
+      transition: opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.28s;
+    }
+
+    #app-splash-loader.loaded {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .splash-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 40px;
+      border-radius: 24px;
+      background: #FFFFFF;
+      border: 1px solid rgba(74, 93, 35, 0.14);
+      box-shadow: 0 12px 32px rgba(74, 93, 35, 0.06);
+      max-width: 320px;
+      width: 85%;
+      text-align: center;
+    }
+
+    .splash-logo-badge {
+      width: 64px;
+      height: 64px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, #4A5D23 0%, #637B30 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #FFFFFF;
+      font-size: 28px;
+      font-weight: 900;
+      box-shadow: 0 6px 16px rgba(74, 93, 35, 0.25);
+      margin-bottom: 16px;
+      animation: pulseBadge 1.8s infinite ease-in-out;
+    }
+
+    .splash-title {
+      font-size: 17px;
+      font-weight: 800;
+      color: #1B1C18;
+      margin: 0 0 6px 0;
+    }
+
+    .splash-subtitle {
+      font-size: 13px;
+      color: #5C5F52;
+      margin: 0 0 20px 0;
+    }
+
+    .m3-linear-progress {
+      width: 100%;
+      height: 6px;
+      background-color: #E3E8D8;
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .m3-linear-progress-bar {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 45%;
+      background-color: #4A5D23;
+      border-radius: 999px;
+      animation: m3Indeterminate 1.25s infinite cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    @keyframes m3Indeterminate {
+      0% { right: -45%; width: 35%; }
+      50% { width: 55%; }
+      100% { right: 100%; width: 35%; }
+    }
+
+    @keyframes pulseBadge {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+  </style>
 </head>
 <body>
+  <div id="app-splash-loader">
+    <div class="splash-card">
+      <div class="splash-logo-badge">G</div>
+      <h1 class="splash-title">${escapedTitle}</h1>
+      <p class="splash-subtitle">جاري تهيئة البوابة الذكية...</p>
+      <div class="m3-linear-progress">
+        <div class="m3-linear-progress-bar"></div>
+      </div>
+    </div>
+  </div>
+
   <script>
-    // Handle legacy hash URLs (e.g. /#/c/512?event=...) by converting them to clean path URLs before Flutter boots
     (function() {
       var hash = window.location.hash;
       if (hash && (hash.startsWith('#/') || hash.startsWith('#!/'))) {
@@ -147,16 +278,23 @@ function buildPreviewHtml({ pageTitle, pageDescription, companyLogoUrl }) {
         }
       }
     })();
-  </script>
-  <script>
-    // Proactively check and update service worker to avoid stale client-side caches
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(function(registrations) {
-        for (var i = 0; i < registrations.length; i++) {
-          registrations[i].update();
-        }
-      });
+
+    function dismissSplashLoader() {
+      var loader = document.getElementById('app-splash-loader');
+      if (loader && !loader.classList.contains('loaded')) {
+        loader.classList.add('loaded');
+        setTimeout(function() { loader.remove(); }, 350);
+      }
     }
+
+    window.addEventListener('flutter-first-frame', dismissSplashLoader);
+    var observer = new MutationObserver(function() {
+      if (document.querySelector('flutter-view') || document.querySelector('flt-glass-pane')) {
+        dismissSplashLoader();
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
   </script>
   <!-- Flutter Web Bootstrap -->
   <script src="/flutter_bootstrap.js" async></script>
@@ -176,13 +314,32 @@ exports.sharePreview = functions.https.onRequest(async (req, res) => {
     const routeType = pathSegments[0] || "portal"; // portal, c, p, event, ep, share
     const routeIdentifier = pathSegments[1] || query.event || query.company || "";
     const eventIdParam = query.event || "";
-    const isManagerPortal = routeType === "portal" || routeType === "p" || routeType === "ep";
+    const isManagerPortal = routeType === "portal" || routeType === "p" || routeType === "ep" || routeType === "ops" || routeType === "agency";
 
-    const resolvedEvent = await resolveEvent(db, eventIdParam, routeIdentifier);
+    const userAgent = (req.headers["user-agent"] || "").toLowerCase();
+    const isSocialCrawler = /whatsapp|facebookexternalhit|facebot|twitterbot|telegrambot|linkedinbot|slackbot|discordbot|pinterest|bot|crawler|spider|preview/i.test(userAgent);
+
+    let resolvedEvent = null;
+    const cacheKey = `${eventIdParam || ""}:${routeIdentifier || ""}`.toLowerCase();
+    const cached = eventPreviewCache.get(cacheKey);
+
+    if (cached && Date.now() - cached.timestamp < PREVIEW_CACHE_TTL_MS) {
+      resolvedEvent = cached.data;
+    } else if (isSocialCrawler) {
+      // Social crawlers wait for full Firestore OpenGraph metadata
+      resolvedEvent = await resolveEvent(db, eventIdParam, routeIdentifier);
+    } else {
+      // Real user browsers: race Firestore with a 250ms timeout so we never block page load on slow cold-start queries, while warming cache in background
+      resolvedEvent = await Promise.race([
+        resolveEvent(db, eventIdParam, routeIdentifier),
+        new Promise((resolve) => setTimeout(() => resolve(null), 250)),
+      ]);
+    }
+
     const meta = extractPreviewMetadata(resolvedEvent, query, isManagerPortal);
 
     // Set cache control for performance
-    res.set("Cache-Control", "public, max-age=300, s-maxage=600");
+    res.set("Cache-Control", "public, max-age=300, s-maxage=600, stale-while-revalidate=86400");
     res.set("Content-Type", "text/html; charset=utf-8");
 
     res.status(200).send(buildPreviewHtml(meta));

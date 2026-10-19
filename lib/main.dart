@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -36,26 +37,30 @@ void main() async {
     }
   };
 
-  // Initialize Firebase with the mock/configured options.
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  // Initialize Firebase and restore local admin session in parallel for fastest possible boot
+  String? initialAdminSession;
+  await Future.wait([
+    Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    ),
+    () async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final rememberMe = prefs.getBool('remember_admin_me') ?? true;
+        final activeSession = prefs.getString('active_admin_session');
+        if (rememberMe &&
+            activeSession != null &&
+            isAuthorizedAdminEmail(activeSession)) {
+          initialAdminSession = activeSession.toLowerCase();
+        }
+      } catch (_) {}
+    }(),
+  ]);
 
-  // Ensure background anonymous auth session if no active user for seamless Firestore/Storage access
+  // Fire anonymous auth session in the background without blocking initial UI frame render
   try {
     if (FirebaseAuth.instance.currentUser == null) {
-      await FirebaseAuth.instance.signInAnonymously();
-    }
-  } catch (_) {}
-
-  // Restore persistent admin session before initial frame render to prevent spurious sign-out
-  String? initialAdminSession;
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    final rememberMe = prefs.getBool('remember_admin_me') ?? true;
-    final activeSession = prefs.getString('active_admin_session');
-    if (rememberMe && activeSession != null && isAuthorizedAdminEmail(activeSession)) {
-      initialAdminSession = activeSession.toLowerCase();
+      FirebaseAuth.instance.signInAnonymously().ignore();
     }
   } catch (_) {}
   
