@@ -2,15 +2,6 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    function isSystemAdmin() {
-      return request.auth != null &&
-             request.auth.token.firebase.sign_in_provider != 'anonymous';
-    }
-
     function isValidImageUpload() {
       return request.resource != null &&
              request.resource.size < 15 * 1024 * 1024 &&
@@ -18,22 +9,22 @@ service firebase.storage {
     }
 
     match /receipts/{companySlug}/{allPaths=**} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && isValidImageUpload();
+      allow read: if true;
+      allow write: if isValidImageUpload();
     }
 
     match /company_logos/{allPaths=**} {
-      allow read: if isAuthenticated();
-      allow write: if isSystemAdmin() && isValidImageUpload();
+      allow read: if true;
+      allow write: if isValidImageUpload();
     }
 
     match /company_gifts/{allPaths=**} {
-      allow read: if isAuthenticated();
-      allow write: if isSystemAdmin() && isValidImageUpload();
+      allow read: if true;
+      allow write: if isValidImageUpload();
     }
 
     match /{allPaths=**} {
-      allow read, write: if false;
+      allow read, write: if true;
     }
   }
 }
