@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Categories of AI directives and heuristics taught to the agent
 enum AiDirectiveCategory {
@@ -55,18 +56,20 @@ extension AiDirectiveCategoryExt on AiDirectiveCategory {
     }
   }
 
-  Color get color {
+  Color get color => resolveColor(AppTheme.lightTheme.colorScheme);
+
+  Color resolveColor(ColorScheme colorScheme) {
     switch (this) {
       case AiDirectiveCategory.promotionalRules:
-        return const Color(0xFF6750A4);
+        return colorScheme.primary;
       case AiDirectiveCategory.nlpMatching:
-        return const Color(0xFF006C50);
+        return colorScheme.secondary;
       case AiDirectiveCategory.branchGovernance:
-        return const Color(0xFF00639B);
+        return colorScheme.tertiary;
       case AiDirectiveCategory.unitEconomics:
-        return const Color(0xFFB3261E);
+        return colorScheme.onPrimaryFixedVariant;
       case AiDirectiveCategory.fraudSecurity:
-        return const Color(0xFF984061);
+        return colorScheme.onSecondaryFixedVariant;
     }
   }
 

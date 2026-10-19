@@ -76,6 +76,8 @@ class CampaignReportsScreen extends ConsumerStatefulWidget {
 
 class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
     with AutomaticKeepAliveClientMixin {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   @override
   bool get wantKeepAlive => true;
 
@@ -1116,7 +1118,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
               value: '$acceptedInvoices',
               subtitle: isAr ? 'من إجمالي $totalScans فاتورة مفحوصة' : 'out of $totalScans total scanned',
               icon: Icons.receipt_long_rounded,
-              accentColor: Colors.blue.shade700,
+              accentColor: colorScheme.primary,
               badgeText: '$acceptanceRate% ${isAr ? "مقبول" : "valid"}',
               colorScheme: colorScheme,
               tooltip: isAr ? 'عدد الفواتير المستوفية لكافة الشروط والحد الأدنى' : 'Count of validated receipts meeting campaign rules',
@@ -1129,7 +1131,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
               value: '${totalSalesVolume.toStringAsFixed(1)} ${activeCountry.currencySymbol}',
               subtitle: isAr ? 'مبيعات منتجات العرض المعتمدة' : 'Total promotional target revenue',
               icon: Icons.payments_rounded,
-              accentColor: Colors.teal.shade700,
+              accentColor: colorScheme.tertiary,
               badgeText: activeCountry.nameAr,
               colorScheme: colorScheme,
               tooltip: isAr ? 'إجمالي المبيعات المحققة لمنتجات الحملة بالعُملة المحلية' : 'Total sales volume for verified promotional purchases',
@@ -1144,7 +1146,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
                   ? (effectiveFilterCompanyOnly ? 'إجمالي قطع منتجات الشركة بالفواتير' : 'إجمالي القطع المستخرجة بالفواتير')
                   : (isHi ? 'कुल उत्पाद इकाइयाँ' : 'Promotional items sold'),
               icon: Icons.inventory_2_rounded,
-              accentColor: Colors.purple.shade700,
+              accentColor: colorScheme.primary,
               badgeText: isAr ? 'قطع مباعة' : 'Units',
               colorScheme: colorScheme,
               tooltip: isAr
@@ -1159,7 +1161,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
               value: topProductName,
               subtitle: isAr ? 'الصنف صاحب أعلى معدل شراء' : 'Highest quantity purchased item',
               icon: Icons.emoji_events_rounded,
-              accentColor: Colors.amber.shade800,
+              accentColor: colorScheme.onSecondaryFixedVariant,
               badgeText: '🏆 #1',
               colorScheme: colorScheme,
               tooltip: isAr ? 'المنتج الأكثر تكراراً وطلباً في الفواتير المقبولة' : 'The #1 most purchased product in this campaign',
@@ -2188,16 +2190,16 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
                 String rankPrefix = '#${actualRank + 1}';
 
                 if (actualRank == 0) {
-                  rankBadgeColor = const Color(0xFFFFF8E1);
-                  rankTextColor = const Color(0xFFB78103);
+                  rankBadgeColor = colorScheme.primaryContainer;
+                  rankTextColor = colorScheme.primary;
                   rankPrefix = '🥇 #1';
                 } else if (actualRank == 1) {
-                  rankBadgeColor = const Color(0xFFF1F5F9);
-                  rankTextColor = const Color(0xFF64748B);
+                  rankBadgeColor = colorScheme.surfaceContainer;
+                  rankTextColor = colorScheme.onSurfaceVariant;
                   rankPrefix = '🥈 #2';
                 } else if (actualRank == 2) {
-                  rankBadgeColor = const Color(0xFFFDF2E9);
-                  rankTextColor = const Color(0xFFC05621);
+                  rankBadgeColor = colorScheme.secondaryContainer;
+                  rankTextColor = colorScheme.onSecondaryFixedVariant;
                   rankPrefix = '🥉 #3';
                 }
 
@@ -2208,7 +2210,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: actualRank == 0
-                          ? const Color(0xFFD4AF37).withValues(alpha: 0.5)
+                          ? colorScheme.primaryFixedDim.withValues(alpha: 0.5)
                           : colorScheme.outlineVariant.withValues(alpha: 0.4),
                     ),
                   ),
@@ -2266,21 +2268,21 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                               decoration: BoxDecoration(
-                                color: Colors.green.shade50,
+                                color: colorScheme.tertiaryContainer,
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.green.shade300),
+                                border: Border.all(color: colorScheme.tertiaryFixedDim),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.verified_rounded, size: 12, color: Colors.green.shade700),
+                                  Icon(Icons.verified_rounded, size: 12, color: colorScheme.tertiary),
                                   const SizedBox(width: 4),
                                   Text(
                                     isAr ? 'منتج العرض' : 'Target Item',
                                     style: GoogleFonts.cairo(
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.green.shade800,
+                                      color: colorScheme.onTertiaryFixedVariant,
                                     ),
                                   ),
                                 ],
@@ -2328,7 +2330,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
                           minHeight: 6,
                           backgroundColor: colorScheme.surfaceContainerHighest,
                           valueColor: AlwaysStoppedAnimation<Color>(
-                            actualRank == 0 ? const Color(0xFFD4AF37) : (actualRank == 1 ? colorScheme.primary : colorScheme.secondary),
+                            actualRank == 0 ? colorScheme.primaryFixedDim : (actualRank == 1 ? colorScheme.primary : colorScheme.secondary),
                           ),
                         ),
                       ),
@@ -2962,7 +2964,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
       messenger.showSnackBar(
         SnackBar(
           content: Text('${isAr ? "خطأ في تحميل Excel: " : "Excel export error: "}$e'),
-          backgroundColor: Colors.red.shade800,
+          backgroundColor: colorScheme.onErrorContainer,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -3099,7 +3101,7 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
       messenger.showSnackBar(
         SnackBar(
           content: Text('${isAr ? "خطأ في تحميل CSV: " : "CSV export error: "}$e'),
-          backgroundColor: Colors.red.shade800,
+          backgroundColor: colorScheme.onErrorContainer,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -3160,6 +3162,8 @@ class _CampaignEventDetailsCard extends ConsumerStatefulWidget {
 }
 
 class _CampaignEventDetailsCardState extends ConsumerState<_CampaignEventDetailsCard> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   bool _isBranchesExpanded = false;
   String? _selectedChainFilter; // null means 'ALL' (كافة السلاسل)
   String? _lastEventId;
@@ -3268,7 +3272,7 @@ class _CampaignEventDetailsCardState extends ConsumerState<_CampaignEventDetails
     final isAr = widget.isAr;
     final isMobile = widget.isMobile;
 
-    final statusColor = event.isActive ? const Color(0xFF006C50) : const Color(0xFFD97706);
+    final statusColor = event.isActive ? colorScheme.tertiary : colorScheme.secondary;
     final statusText = event.isActive
         ? (isAr ? 'حملة ترويجية نشطة' : 'Active Campaign')
         : (isAr ? 'حملة متوقفة / منتهية' : 'Inactive Campaign');

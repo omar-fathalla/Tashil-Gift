@@ -65,6 +65,8 @@ class CompanyManagerPortalScreen extends ConsumerStatefulWidget {
 }
 
 class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPortalScreen> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _selectedTab = 0;
   final Set<int> _loadedTabs = {0}; // Lazy loading set: only render tabs when requested
@@ -86,7 +88,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('${strings.agencyOpsLinkCopied}: $url'),
-        backgroundColor: Colors.purple.shade700,
+        backgroundColor: colorScheme.primary,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -98,7 +100,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('${strings.brandExecutiveLinkCopied}: $url'),
-        backgroundColor: Colors.indigo.shade700,
+        backgroundColor: colorScheme.primary,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -110,7 +112,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('${strings.promoterLinkCopied}: $url'),
-        backgroundColor: Colors.teal.shade700,
+        backgroundColor: colorScheme.tertiary,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -126,7 +128,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
           title: strings.partnerNavInvoices,
           subtitle: isAr ? 'سجل الفواتير وتدقيق المشتريات' : (isHi ? 'इनवॉइस ऑडिट और लॉग्स' : 'Invoices Audit & Live Logs'),
           tooltip: isAr ? 'متابعة وتدقيق فواتير اليوم المرفوعة من الفروع' : 'Review live receipts from branches',
-          accentColor: const Color(0xFF006C50),
+          accentColor: colorScheme.tertiary,
         ),
         _PortalNavItem(
           index: 1,
@@ -135,7 +137,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
           title: strings.partnerNavBalances,
           subtitle: strings.branchBalancesNavSubtitle,
           tooltip: strings.branchBalancesNavTooltip,
-          accentColor: const Color(0xFF0284C7),
+          accentColor: colorScheme.secondary,
         ),
         _PortalNavItem(
           index: 2,
@@ -144,7 +146,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
           title: strings.partnerNavVouchers,
           subtitle: strings.vouchersNavSubtitle,
           tooltip: strings.vouchersNavTooltip,
-          accentColor: const Color(0xFFD97706),
+          accentColor: colorScheme.secondary,
         ),
         _PortalNavItem(
           index: 3,
@@ -153,7 +155,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
           title: strings.partnerNavSales,
           subtitle: strings.dailyBranchSalesNavSubtitle,
           tooltip: strings.dailyBranchSalesNavTooltip,
-          accentColor: const Color(0xFF2563EB),
+          accentColor: colorScheme.onPrimaryFixedVariant,
         ),
       ];
     }
@@ -166,7 +168,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
         title: strings.partnerNavAnalytics,
         subtitle: isAr ? 'المؤشرات والتحليلات والـ ROI' : (isHi ? 'एनालिटिक्स और प्रदर्शन' : 'KPIs, Analytics & Sales'),
         tooltip: isAr ? 'التقارير والتحليلات التفاعلية الشاملة للشركة' : 'Comprehensive Analytics & Reports',
-        accentColor: const Color(0xFF6750A4),
+        accentColor: colorScheme.primary,
       ),
       _PortalNavItem(
         index: 1,
@@ -175,7 +177,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
         title: strings.partnerNavComparison,
         subtitle: strings.campaignsComparisonNavSubtitle,
         tooltip: strings.campaignsComparisonNavTooltip,
-        accentColor: const Color(0xFF006C51),
+        accentColor: colorScheme.tertiary,
       ),
       _PortalNavItem(
         index: 2,
@@ -184,7 +186,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
         title: strings.partnerNavInvoices,
         subtitle: isAr ? 'سجل الفواتير وتدقيق المنتجات والـ CSV' : (isHi ? 'इनवॉइस ऑडिट और निर्यात' : 'Invoices Audit, Fraud & CSV Export'),
         tooltip: isAr ? 'سجل الفواتير وتدقيق المنتجات والمبيعات وعمليات التصدير' : 'Invoices Log, Product Audit & CSV',
-        accentColor: const Color(0xFF0284C7),
+        accentColor: colorScheme.secondary,
       ),
       _PortalNavItem(
         index: 3,
@@ -193,7 +195,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
         title: strings.partnerNavSales,
         subtitle: strings.dailyBranchSalesNavSubtitle,
         tooltip: strings.dailyBranchSalesNavTooltip,
-        accentColor: const Color(0xFF2563EB),
+        accentColor: colorScheme.onPrimaryFixedVariant,
       ),
       _PortalNavItem(
         index: 4,
@@ -202,7 +204,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
         title: strings.partnerNavBalances,
         subtitle: strings.branchBalancesNavSubtitle,
         tooltip: strings.branchBalancesNavTooltip,
-        accentColor: const Color(0xFF7C3AED),
+        accentColor: colorScheme.primary,
       ),
       _PortalNavItem(
         index: 5,
@@ -211,7 +213,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
         title: strings.partnerNavVouchers,
         subtitle: strings.vouchersNavSubtitle,
         tooltip: strings.vouchersNavTooltip,
-        accentColor: const Color(0xFFD97706),
+        accentColor: colorScheme.secondary,
       ),
       _PortalNavItem(
         index: 6,
@@ -220,7 +222,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
         title: strings.partnerNavPromoter,
         subtitle: strings.livePromoterSimulationNavSubtitle,
         tooltip: strings.livePromoterSimulationNavTooltip,
-        accentColor: const Color(0xFF0D9488),
+        accentColor: colorScheme.tertiary,
       ),
     ];
   }
@@ -1407,7 +1409,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                                         dense: true,
                                         secondary: Icon(
                                           isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
-                                          color: isDark ? Colors.amber : colorScheme.primary,
+                                          color: isDark ? colorScheme.primary : colorScheme.primary,
                                           size: 18,
                                         ),
                                         title: Text(
@@ -1783,7 +1785,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                                   secondary: Icon(
                                     isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
-                                    color: isDark ? Colors.amber : dialogColorScheme.primary,
+                                    color: isDark ? colorScheme.primary : dialogColorScheme.primary,
                                   ),
                                   title: Text(
                                     currentAr

@@ -59,6 +59,8 @@ class InvoicesLogScreen extends ConsumerStatefulWidget {
 }
 
 class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   static const int _pageSize = 25;
   int _currentPage = 0;
   int _mobileLimit = 25;
@@ -538,9 +540,9 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       return Container(
         width: width,
         height: height,
-        color: Colors.grey.shade100,
-        child: const Center(
-          child: Icon(Icons.receipt_long_rounded, size: 28, color: Colors.grey),
+        color: colorScheme.surfaceContainerLow,
+        child: Center(
+          child: Icon(Icons.receipt_long_rounded, size: 28, color: colorScheme.outline),
         ),
       );
     }
@@ -560,16 +562,16 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
               : Container(
                   width: width,
                   height: height,
-                  color: Colors.grey.shade100,
-                  child: const Center(child: Icon(Icons.broken_image_rounded, size: 28, color: Colors.grey)),
+                  color: colorScheme.surfaceContainerLow,
+                  child: Center(child: Icon(Icons.broken_image_rounded, size: 28, color: colorScheme.outline)),
                 ),
         );
       } catch (_) {
         return Container(
           width: width,
           height: height,
-          color: Colors.grey.shade100,
-          child: const Center(child: Icon(Icons.broken_image_rounded, size: 28, color: Colors.grey)),
+          color: colorScheme.surfaceContainerLow,
+          child: Center(child: Icon(Icons.broken_image_rounded, size: 28, color: colorScheme.outline)),
         );
       }
     }
@@ -600,8 +602,8 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
           : Container(
               width: width,
               height: height,
-              color: Colors.grey.shade100,
-              child: const Center(child: Icon(Icons.broken_image_rounded, size: 28, color: Colors.grey)),
+              color: colorScheme.surfaceContainerLow,
+              child: Center(child: Icon(Icons.broken_image_rounded, size: 28, color: colorScheme.outline)),
             ),
     );
   }
@@ -848,7 +850,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
               ),
             ],
           ),
-          backgroundColor: Colors.green.shade700,
+          backgroundColor: colorScheme.onTertiaryFixedVariant,
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 4),
         ),
@@ -944,19 +946,19 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.amber.shade50.withValues(alpha: 0.7),
+                  color: colorScheme.secondaryContainer.withValues(alpha: 0.7),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.amber.shade300),
+                  border: Border.all(color: colorScheme.primaryFixedDim),
                 ),
                 child: Row(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.amber.shade100,
+                        color: colorScheme.secondaryContainer,
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.bolt_rounded, color: Colors.amber.shade900, size: 22),
+                      child: Icon(Icons.bolt_rounded, color: colorScheme.onSecondaryContainer, size: 22),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -968,10 +970,10 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                               Flexible(
                                 child: Text(
                                   strings.quickRecheckTitle,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 13.5,
                                     fontWeight: FontWeight.bold,
-                                    color: Color(0xFF452700),
+                                    color: colorScheme.onSecondaryContainer,
                                   ),
                                 ),
                               ),
@@ -979,12 +981,12 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                                 decoration: BoxDecoration(
-                                  color: Colors.amber.shade200,
+                                  color: colorScheme.secondaryFixedDim,
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
                                   isAr ? '⚡ فوري' : '⚡ Instant',
-                                  style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF452700)),
+                                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: colorScheme.onSecondaryContainer),
                                 ),
                               ),
                             ],
@@ -994,7 +996,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                             isAr
                                 ? 'إعادة التحقق الذكي الفوري من شروط الحملة وعروض الشركة المرتبطة وفق القواعد'
                                 : strings.quickRecheckSubtitle,
-                            style: TextStyle(fontSize: 11, color: Colors.amber.shade900, height: 1.3),
+                            style: TextStyle(fontSize: 11, color: colorScheme.onSecondaryContainer, height: 1.3),
                           ),
                         ],
                       ),
@@ -1164,7 +1166,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                             isAr
                                 ? 'فتح شات تفاعلي مباشر مع Gemini 3.7 Flash لتشخيص سبب الرفض وتدريب الذكاء فوراً واعتماد المعيار'
                                 : 'Interactive chat with Gemini 3.7 Flash to diagnose rejections and deploy new directives',
-                            style: const TextStyle(fontSize: 11, color: Color(0xFF4F378B), height: 1.3),
+                            style: TextStyle(fontSize: 11, color: colorScheme.onPrimaryFixedVariant, height: 1.3),
                           ),
                         ],
                       ),
@@ -1994,10 +1996,10 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
         icon: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.green.shade50,
+            color: colorScheme.tertiaryContainer,
             shape: BoxShape.circle,
           ),
-          child: Icon(Icons.check_circle_rounded, size: 48, color: Colors.green.shade700),
+          child: Icon(Icons.check_circle_rounded, size: 48, color: colorScheme.onTertiaryFixedVariant),
         ),
         title: Text(
           isReassignedToSisterCampaign
@@ -2017,7 +2019,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                         : 'Receipt matches campaign (${winningCampaign?.eventName ?? ""}) and has been successfully approved!')
                     : strings.recheckSuccessMessage,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.cairo(color: Colors.grey.shade700, fontSize: 13.5),
+                style: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant, fontSize: 13.5),
               ),
               const SizedBox(height: 12),
 
@@ -2026,9 +2028,9 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.amber.shade50.withValues(alpha: 0.8),
+                    color: colorScheme.secondaryContainer.withValues(alpha: 0.8),
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.amber.shade300),
+                    border: Border.all(color: colorScheme.primaryFixedDim),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -2038,10 +2040,10 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                           Container(
                             padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
-                              color: Colors.amber.shade200,
+                              color: colorScheme.secondaryFixedDim,
                               shape: BoxShape.circle,
                             ),
-                            child: Icon(Icons.touch_app_rounded, color: Colors.amber.shade900, size: 18),
+                            child: Icon(Icons.touch_app_rounded, color: colorScheme.onSecondaryContainer, size: 18),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
@@ -2050,11 +2052,11 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                               children: [
                                 Text(
                                   isAr ? 'نظام اختيار الهدية (Choice Reward) 🎁' : 'Choice Reward System 🎁',
-                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF452700)),
+                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: colorScheme.onSecondaryContainer),
                                 ),
                                 Text(
                                   isAr ? 'يحق للعميل اختيار هديته من بين الخيارات التالية:' : 'Customer can pick a gift from available choices:',
-                                  style: TextStyle(fontSize: 11, color: Colors.amber.shade900),
+                                  style: TextStyle(fontSize: 11, color: colorScheme.onSecondaryContainer),
                                 ),
                               ],
                             ),
@@ -2071,19 +2073,19 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.amber.shade300),
+                              border: Border.all(color: colorScheme.primaryFixedDim),
                               boxShadow: [
-                                BoxShadow(color: Colors.amber.shade100.withValues(alpha: 0.5), blurRadius: 3, offset: const Offset(0, 1)),
+                                BoxShadow(color: colorScheme.secondaryContainer.withValues(alpha: 0.5), blurRadius: 3, offset: const Offset(0, 1)),
                               ],
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.card_giftcard_rounded, size: 13, color: Colors.amber.shade900),
+                                Icon(Icons.card_giftcard_rounded, size: 13, color: colorScheme.onSecondaryContainer),
                                 const SizedBox(width: 5),
                                 Text(
                                   p,
-                                  style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold, color: const Color(0xFF452700)),
+                                  style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold, color: colorScheme.onSecondaryContainer),
                                 ),
                               ],
                             ),
@@ -2097,18 +2099,18 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
+                    color: colorScheme.secondaryContainer,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.amber.shade300),
+                    border: Border.all(color: colorScheme.primaryFixedDim),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.rotate_right_rounded, color: Colors.amber.shade900, size: 24),
+                      Icon(Icons.rotate_right_rounded, color: colorScheme.onSecondaryContainer, size: 24),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           isAr ? 'آلية الجائزة: عجلة الحظ 🎡 (قم بتدوير العجلة لتحديد الهدية)' : 'Wheel of Fortune 🎡 (Spin wheel to pick gift)',
-                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12.5, color: const Color(0xFF452700)),
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12.5, color: colorScheme.onSecondaryContainer),
                         ),
                       ),
                     ],
@@ -2118,18 +2120,18 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.indigo.shade50,
+                    color: colorScheme.primaryContainer,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.indigo.shade200),
+                    border: Border.all(color: colorScheme.primaryFixedDim),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.auto_awesome_rounded, color: Colors.indigo.shade700, size: 24),
+                      Icon(Icons.auto_awesome_rounded, color: colorScheme.primary, size: 24),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           isAr ? 'آلية الجائزة: كارت الخربشة ✨ (قم بالخربشة لكشف الهدية)' : 'Scratch Card ✨ (Scratch to reveal gift)',
-                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12.5, color: Colors.indigo.shade900),
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12.5, color: colorScheme.onPrimaryContainer),
                         ),
                       ),
                     ],
@@ -2141,14 +2143,14 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.purple.shade50,
+                      color: colorScheme.primaryContainer,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.purple.shade200),
+                      border: Border.all(color: colorScheme.primaryFixedDim),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.card_giftcard_rounded, color: Colors.purple.shade700, size: 20),
+                        Icon(Icons.card_giftcard_rounded, color: colorScheme.primary, size: 20),
                         const SizedBox(width: 8),
                         Flexible(
                           child: Text(
@@ -2156,7 +2158,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                             style: GoogleFonts.cairo(
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
-                              color: Colors.purple.shade900,
+                              color: colorScheme.onPrimaryContainer,
                             ),
                           ),
                         ),
@@ -2171,7 +2173,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                     ? 'تم تحديث حالة الفاتورة ونقلها تلقائياً إلى قسم "الفواتير المقبولة" وحذف سبب الرفض.'
                     : 'Status updated: Moved automatically to "Accepted Invoices" and rejection reason cleared.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
+                style: TextStyle(fontSize: 11.5, color: colorScheme.outline),
               ),
             ],
           ),
@@ -2203,7 +2205,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                   style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
                 ),
                 style: FilledButton.styleFrom(
-                  backgroundColor: Colors.purple.shade700,
+                  backgroundColor: colorScheme.primary,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                 ),
@@ -2229,7 +2231,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                   style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
                 ),
                 style: FilledButton.styleFrom(
-                  backgroundColor: Colors.amber.shade800,
+                  backgroundColor: colorScheme.onSecondaryFixedVariant,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                 ),
@@ -2255,7 +2257,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                   style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
                 ),
                 style: FilledButton.styleFrom(
-                  backgroundColor: Colors.indigo.shade700,
+                  backgroundColor: colorScheme.primary,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                 ),
@@ -2286,7 +2288,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                   style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
                 ),
                 style: FilledButton.styleFrom(
-                  backgroundColor: Colors.green.shade700,
+                  backgroundColor: colorScheme.onTertiaryFixedVariant,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                 ),
@@ -2305,8 +2307,8 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                 style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
               ),
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.green.shade800,
-                side: BorderSide(color: Colors.green.shade400),
+                foregroundColor: colorScheme.onTertiaryFixedVariant,
+                side: BorderSide(color: colorScheme.tertiaryFixedDim),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               ),
@@ -2337,10 +2339,10 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
         icon: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.orange.shade50,
+            color: colorScheme.secondaryContainer,
             shape: BoxShape.circle,
           ),
-          child: Icon(Icons.warning_amber_rounded, size: 48, color: Colors.orange.shade800),
+          child: Icon(Icons.warning_amber_rounded, size: 48, color: colorScheme.onSecondaryFixedVariant),
         ),
         title: Text(
           strings.recheckStillRejectedMessage,
@@ -2360,13 +2362,13 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                     children: [
                       Padding(
                         padding: const EdgeInsets.only(top: 5),
-                        child: Icon(Icons.circle, size: 6, color: Colors.orange.shade800),
+                        child: Icon(Icons.circle, size: 6, color: colorScheme.onSecondaryFixedVariant),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           r,
-                          style: TextStyle(fontSize: 12.5, color: Colors.grey.shade900, height: 1.3),
+                          style: TextStyle(fontSize: 12.5, color: colorScheme.onSurface, height: 1.3),
                         ),
                       ),
                     ],
@@ -3049,7 +3051,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
             value: '${totalPromoSales.toStringAsFixed(1)} ${activeCountry.currencySymbol}',
             subtitle: isAr ? 'قيمة مشتريات المنتجات المعتمدة' : (isHi ? 'प्रचार बिक्री' : 'Verified promotional purchases'),
             icon: Icons.payments_rounded,
-            accentColor: Colors.teal.shade700,
+            accentColor: colorScheme.onTertiaryFixedVariant,
             badgeText: activeCountry.nameAr,
             colorScheme: colorScheme,
             tooltip: isAr ? 'إجمالي المبيعات المحققة لمنتجات الحملة بالعُملة المحلية' : 'Total promotional sales volume',
@@ -3060,7 +3062,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
             value: '$totalItems',
             subtitle: isAr ? 'الكميات المستخرجة من الفواتير' : (isHi ? 'कुल उत्पाद' : 'Total items detected in receipts'),
             icon: Icons.inventory_2_rounded,
-            accentColor: Colors.purple.shade700,
+            accentColor: colorScheme.primary,
             badgeText: isAr ? 'قطع مباعة' : (isHi ? 'उत्पाद' : 'Units'),
             colorScheme: colorScheme,
             tooltip: isAr ? 'إجمالي عدد القطع والمنتجات المستخرجة بالفحص' : 'Total product units extracted from receipts',
@@ -3071,7 +3073,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
             value: avgSpeed > 0 ? '${avgSpeed.toStringAsFixed(2)}s' : '⚡ <2.0s',
             subtitle: isAr ? 'زمن تحليل الفاتورة بـ Gemini AI' : (isHi ? 'एआई गति' : 'Gemini AI receipt audit latency'),
             icon: Icons.bolt_rounded,
-            accentColor: Colors.amber.shade800,
+            accentColor: colorScheme.onSecondaryFixedVariant,
             badgeText: '⚡ Gemini AI',
             colorScheme: colorScheme,
             tooltip: isAr ? 'متوسط الوقت المستغرق لتحليل الفاتورة ومطابقة الأصناف' : 'Average AI processing latency',
@@ -3626,8 +3628,8 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                     color: isSel
                         ? colorScheme.primary.withValues(alpha: 0.15)
                         : (isActive
-                            ? Colors.green.withValues(alpha: 0.12)
-                            : Colors.grey.withValues(alpha: 0.15)),
+                            ? colorScheme.tertiary.withValues(alpha: 0.12)
+                            : colorScheme.outline.withValues(alpha: 0.15)),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -3635,7 +3637,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                     size: 15,
                     color: isSel
                         ? colorScheme.primary
-                        : (isActive ? Colors.green.shade700 : colorScheme.outline),
+                        : (isActive ? colorScheme.onTertiaryFixedVariant : colorScheme.outline),
                   ),
                 ),
                 isSelected: isSel,
@@ -3647,7 +3649,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                         margin: const EdgeInsetsDirectional.only(end: 6),
                         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                         decoration: BoxDecoration(
-                          color: Colors.grey.withValues(alpha: 0.15),
+                          color: colorScheme.outline.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
@@ -3843,7 +3845,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                   decoration: BoxDecoration(
                     color: isCurrent
                         ? colorScheme.primary.withValues(alpha: 0.15)
-                        : (count > 0 ? Colors.green.withValues(alpha: 0.12) : colorScheme.surfaceContainerHighest),
+                        : (count > 0 ? colorScheme.tertiary.withValues(alpha: 0.12) : colorScheme.surfaceContainerHighest),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -3853,7 +3855,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                       fontWeight: FontWeight.bold,
                       color: isCurrent
                           ? colorScheme.primary
-                          : (count > 0 ? Colors.green.shade800 : colorScheme.onSurfaceVariant),
+                          : (count > 0 ? colorScheme.onTertiaryFixedVariant : colorScheme.onSurfaceVariant),
                     ),
                   ),
                 ),
@@ -4157,7 +4159,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                         const SizedBox(width: 8),
                         IconButton(
                           tooltip: strings.clearFiltersBtn,
-                          icon: const Icon(Icons.filter_alt_off_rounded, color: Colors.red),
+                          icon: Icon(Icons.filter_alt_off_rounded, color: colorScheme.error),
                           onPressed: _resetFilters,
                         ),
                       ],
@@ -4366,7 +4368,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                           ),
                           const SizedBox(width: 8),
                           ChoiceChip(
-                            avatar: const Icon(Icons.check_circle_rounded, size: 15, color: Colors.green),
+                            avatar: Icon(Icons.check_circle_rounded, size: 15, color: colorScheme.tertiary),
                             label: Text(isAr ? 'النشطة حالياً' : 'Active Now'),
                             selected: filterStatus == 'active',
                             onSelected: (_) => setModalState(() => filterStatus = filterStatus == 'active' ? 'all' : 'active'),
@@ -4374,7 +4376,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                           ),
                           const SizedBox(width: 8),
                           ChoiceChip(
-                            avatar: Icon(Icons.history_rounded, size: 15, color: Colors.grey.shade600),
+                            avatar: Icon(Icons.history_rounded, size: 15, color: colorScheme.outline),
                             label: Text(isAr ? 'المنتهية' : 'Ended'),
                             selected: filterStatus == 'expired',
                             onSelected: (_) => setModalState(() => filterStatus = filterStatus == 'expired' ? 'all' : 'expired'),
@@ -4544,10 +4546,10 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                                                 Container(
                                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                                   decoration: BoxDecoration(
-                                                    color: isActive ? Colors.green.shade50 : Colors.grey.shade100,
+                                                    color: isActive ? colorScheme.tertiaryContainer : colorScheme.surfaceContainerLow,
                                                     borderRadius: BorderRadius.circular(8),
                                                     border: Border.all(
-                                                      color: isActive ? Colors.green.shade300 : Colors.grey.shade300,
+                                                      color: isActive ? colorScheme.tertiaryFixedDim : colorScheme.outlineVariant,
                                                     ),
                                                   ),
                                                   child: Row(
@@ -4557,7 +4559,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                                                         width: 6,
                                                         height: 6,
                                                         decoration: BoxDecoration(
-                                                          color: isActive ? Colors.green.shade700 : Colors.grey.shade600,
+                                                          color: isActive ? colorScheme.onTertiaryFixedVariant : colorScheme.outline,
                                                           shape: BoxShape.circle,
                                                         ),
                                                       ),
@@ -4567,7 +4569,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                                                         style: TextStyle(
                                                           fontSize: 10,
                                                           fontWeight: FontWeight.bold,
-                                                          color: isActive ? Colors.green.shade900 : Colors.grey.shade700,
+                                                          color: isActive ? colorScheme.onTertiaryContainer : colorScheme.onSurfaceVariant,
                                                         ),
                                                       ),
                                                     ],
@@ -4811,7 +4813,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                               children: [
                                 Row(
                                   children: [
-                                    const Icon(Icons.info_outline_rounded, size: 14, color: Colors.blueAccent),
+                                    Icon(Icons.info_outline_rounded, size: 14, color: colorScheme.primary),
                                     const SizedBox(width: 6),
                                     Text(
                                       isAr ? 'أين تجد هذه الأرقام في الفاتورة الورقية؟' : 'Where to find them on receipt:',
@@ -4928,7 +4930,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.search_off_rounded, size: 40, color: Colors.orange.shade400),
+                                        Icon(Icons.search_off_rounded, size: 40, color: colorScheme.secondary),
                                         const SizedBox(height: 8),
                                         Text(
                                           isAr
@@ -4988,8 +4990,8 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                                   decoration: BoxDecoration(
                                                     color: isValid
-                                                        ? Colors.green.withValues(alpha: 0.12)
-                                                        : Colors.red.withValues(alpha: 0.12),
+                                                        ? colorScheme.tertiary.withValues(alpha: 0.12)
+                                                        : colorScheme.error.withValues(alpha: 0.12),
                                                     borderRadius: BorderRadius.circular(6),
                                                   ),
                                                   child: Text(
@@ -4999,7 +5001,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                                                     style: TextStyle(
                                                       fontSize: 11,
                                                       fontWeight: FontWeight.bold,
-                                                      color: isValid ? Colors.green.shade800 : Colors.red.shade800,
+                                                      color: isValid ? colorScheme.onTertiaryFixedVariant : colorScheme.onErrorContainer,
                                                     ),
                                                   ),
                                                 ),
@@ -5064,7 +5066,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                                                     SnackBar(
                                                       content: Row(
                                                         children: [
-                                                          const Icon(Icons.check_circle_rounded, color: Colors.greenAccent),
+                                                          Icon(Icons.check_circle_rounded, color: colorScheme.tertiaryFixedDim),
                                                           const SizedBox(width: 8),
                                                           Text(
                                                             isAr
@@ -5818,13 +5820,13 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
     Color rankColor;
     if (rank == 1) {
       rankPrefix = '🥇 #1';
-      rankColor = const Color(0xFFD4AF37);
+      rankColor = colorScheme.primaryFixedDim;
     } else if (rank == 2) {
       rankPrefix = '🥈 #2';
-      rankColor = const Color(0xFF9E9E9E);
+      rankColor = colorScheme.outline;
     } else if (rank == 3) {
       rankPrefix = '🥉 #3';
-      rankColor = const Color(0xFFCD7F32);
+      rankColor = colorScheme.secondary;
     } else {
       rankPrefix = '#$rank';
       rankColor = colorScheme.onSurfaceVariant;
@@ -6248,7 +6250,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
     final bool isExplicitlyRejected = inv['is_valid'] == false || inv['status'] == 'rejected' || inv['isValid'] == false || ((inv['unfulfilled_conditions'] as List?)?.isNotEmpty ?? false);
     final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((inv['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
 
-    final statusColor = isValid ? const Color(0xFF00897B) : const Color(0xFFD32F2F);
+    final statusColor = isValid ? colorScheme.tertiary : colorScheme.error;
     final statusText = isValid
         ? (isAr ? 'مقبولة' : 'Accepted')
         : (isAr ? 'مرفوضة' : 'Rejected');
@@ -6298,8 +6300,8 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
             decoration: BoxDecoration(
               color: durationSec <= 2.0
-                  ? Colors.green.shade50
-                  : (durationSec <= 3.5 ? Colors.teal.shade50 : Colors.amber.shade50),
+                  ? colorScheme.tertiaryContainer
+                  : (durationSec <= 3.5 ? colorScheme.tertiaryContainer : colorScheme.secondaryContainer),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
@@ -6307,7 +6309,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
               style: TextStyle(
                 fontSize: 9.5,
                 fontWeight: FontWeight.bold,
-                color: durationSec <= 2.0 ? Colors.green.shade900 : Colors.amber.shade900,
+                color: durationSec <= 2.0 ? colorScheme.onTertiaryContainer : colorScheme.onSecondaryContainer,
               ),
             ),
           ),
@@ -7928,7 +7930,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.check_circle_rounded, size: 16, color: Colors.green.shade700),
+            Icon(Icons.check_circle_rounded, size: 16, color: colorScheme.onTertiaryFixedVariant),
             const SizedBox(width: 8),
             Text(
               isAr

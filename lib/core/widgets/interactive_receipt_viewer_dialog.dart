@@ -280,19 +280,20 @@ class _InteractiveReceiptViewerDialogState
         );
 
         if (context.mounted) {
+          final cs = Theme.of(context).colorScheme;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              backgroundColor: const Color(0xFF10B981),
+              backgroundColor: cs.primary,
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               content: Row(
                 children: [
-                  const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                  Icon(Icons.check_circle_rounded, color: cs.onPrimary, size: 20),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       isAr ? 'تم تحميل الفاتورة بنجاح: $fileName' : 'Invoice downloaded successfully: $fileName',
-                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: Colors.white),
+                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: cs.onPrimary),
                     ),
                   ),
                 ],
@@ -304,19 +305,20 @@ class _InteractiveReceiptViewerDialogState
       } else {
         await _openImageInBrowser();
         if (context.mounted) {
+          final cs = Theme.of(context).colorScheme;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              backgroundColor: const Color(0xFF6366F1),
+              backgroundColor: cs.secondary,
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               content: Row(
                 children: [
-                  const Icon(Icons.open_in_new_rounded, color: Colors.white, size: 20),
+                  Icon(Icons.open_in_new_rounded, color: cs.onSecondary, size: 20),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       isAr ? 'تم فتح صورة الفاتورة في نافذة جديدة لحفظها' : 'Receipt opened in a new tab to save',
-                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: Colors.white),
+                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: cs.onSecondary),
                     ),
                   ),
                 ],
@@ -328,14 +330,15 @@ class _InteractiveReceiptViewerDialogState
       }
     } catch (e) {
       if (context.mounted) {
+        final cs = Theme.of(context).colorScheme;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: const Color(0xFFEF4444),
+            backgroundColor: cs.error,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             content: Text(
               isAr ? 'تعذر تحميل الفاتورة، يرجى المحاولة مرة أخرى' : 'Failed to download receipt, please try again',
-              style: GoogleFonts.cairo(color: Colors.white),
+              style: GoogleFonts.cairo(color: cs.onError),
             ),
           ),
         );
@@ -352,6 +355,7 @@ class _InteractiveReceiptViewerDialogState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final isAr = Localizations.localeOf(context).languageCode == 'ar';
     final screenSize = MediaQuery.of(context).size;
     final isMobile = screenSize.width < 768;
@@ -373,15 +377,15 @@ class _InteractiveReceiptViewerDialogState
           width: isMobile ? double.infinity : 860,
           height: isMobile ? screenSize.height * 0.92 : 820,
           decoration: BoxDecoration(
-            color: const Color(0xFF1E1E2C),
+            color: colorScheme.surfaceContainerHigh,
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.15),
+              color: colorScheme.outlineVariant,
               width: 1.2,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.6),
+                color: colorScheme.shadow.withValues(alpha: 0.4),
                 blurRadius: 32,
                 offset: const Offset(0, 12),
               ),
@@ -400,7 +404,7 @@ class _InteractiveReceiptViewerDialogState
                     // Viewport Container
                     Positioned.fill(
                       child: Container(
-                        color: const Color(0xFF12121A),
+                        color: colorScheme.surfaceContainerLowest,
                         child: GestureDetector(
                           onDoubleTapDown: (details) => _doubleTapDetails = details,
                           onDoubleTap: _handleDoubleTap,
@@ -434,14 +438,14 @@ class _InteractiveReceiptViewerDialogState
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.65),
+                          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.9),
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                          border: Border.all(color: colorScheme.outlineVariant),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.touch_app_rounded, size: 14, color: Color(0xFF64B5F6)),
+                            Icon(Icons.touch_app_rounded, size: 14, color: colorScheme.primary),
                             const SizedBox(width: 6),
                             Text(
                               isAr
@@ -449,7 +453,7 @@ class _InteractiveReceiptViewerDialogState
                                   : 'Double tap to zoom • Drag to pan',
                               style: GoogleFonts.cairo(
                                 fontSize: 11,
-                                color: Colors.white70,
+                                color: colorScheme.onSurfaceVariant,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -479,12 +483,13 @@ class _InteractiveReceiptViewerDialogState
 
   /// Top Header Bar with Receipt Meta, Price & Actions
   Widget _buildHeader(ThemeData theme, bool isAr, String storeDisplay) {
+    final colorScheme = theme.colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFF262638),
+        color: colorScheme.surfaceContainer,
         border: Border(
-          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+          bottom: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
         ),
       ),
       child: Row(
@@ -493,23 +498,12 @@ class _InteractiveReceiptViewerDialogState
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF6366F1), Color(0xFF4F46E5)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+              color: colorScheme.primaryContainer,
               borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF6366F1).withValues(alpha: 0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
             ),
-            child: const Icon(
+            child: Icon(
               Icons.receipt_long_rounded,
-              color: Colors.white,
+              color: colorScheme.onPrimaryContainer,
               size: 20,
             ),
           ),
@@ -533,7 +527,7 @@ class _InteractiveReceiptViewerDialogState
                         style: GoogleFonts.cairo(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                          color: colorScheme.onSurface,
                           letterSpacing: 0.3,
                         ),
                         maxLines: 1,
@@ -549,10 +543,10 @@ class _InteractiveReceiptViewerDialogState
                           padding: const EdgeInsets.all(4.0),
                           child: Tooltip(
                             message: isAr ? 'نسخ رقم الفاتورة' : 'Copy Receipt Number',
-                            child: const Icon(
+                            child: Icon(
                               Icons.copy_rounded,
                               size: 14,
-                              color: Color(0xFF818CF8),
+                              color: colorScheme.primary,
                             ),
                           ),
                         ),
@@ -569,7 +563,7 @@ class _InteractiveReceiptViewerDialogState
                     ].join(' • '),
                     style: GoogleFonts.cairo(
                       fontSize: 12,
-                      color: Colors.white60,
+                      color: colorScheme.onSurfaceVariant,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -584,10 +578,10 @@ class _InteractiveReceiptViewerDialogState
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                color: colorScheme.primaryContainer,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.4),
+                  color: colorScheme.primary.withValues(alpha: 0.35),
                 ),
               ),
               child: Text(
@@ -595,7 +589,7 @@ class _InteractiveReceiptViewerDialogState
                 style: GoogleFonts.cairo(
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
-                  color: const Color(0xFF34D399),
+                  color: colorScheme.onPrimaryContainer,
                 ),
               ),
             ),
@@ -605,9 +599,9 @@ class _InteractiveReceiptViewerDialogState
           // Delete Action if authorized
           if (widget.canDelete && widget.onDelete != null) ...[
             IconButton.filledTonal(
-              icon: const Icon(Icons.delete_outline_rounded, size: 19, color: Color(0xFFEF4444)),
+              icon: Icon(Icons.delete_outline_rounded, size: 19, color: colorScheme.onErrorContainer),
               style: IconButton.styleFrom(
-                backgroundColor: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                backgroundColor: colorScheme.errorContainer,
               ),
               onPressed: () {
                 Navigator.of(context).pop();
@@ -621,21 +615,21 @@ class _InteractiveReceiptViewerDialogState
           // Download / Save Action
           IconButton.filledTonal(
             icon: _isDownloading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Color(0xFF34D399),
+                      color: colorScheme.onPrimaryContainer,
                     ),
                   )
-                : const Icon(
+                : Icon(
                     Icons.download_rounded,
                     size: 20,
-                    color: Color(0xFF34D399),
+                    color: colorScheme.onPrimaryContainer,
                   ),
             style: IconButton.styleFrom(
-              backgroundColor: const Color(0xFF10B981).withValues(alpha: 0.15),
+              backgroundColor: colorScheme.primaryContainer,
             ),
             onPressed: _isDownloading ? null : () => _downloadImage(context, isAr),
             tooltip: isAr ? 'تحميل وحفظ الفاتورة على الجهاز' : 'Download and Save Invoice',
@@ -644,9 +638,9 @@ class _InteractiveReceiptViewerDialogState
 
           // Close Button
           IconButton.filledTonal(
-            icon: const Icon(Icons.close_rounded, size: 20, color: Colors.white70),
+            icon: Icon(Icons.close_rounded, size: 20, color: colorScheme.onSurfaceVariant),
             style: IconButton.styleFrom(
-              backgroundColor: Colors.white.withValues(alpha: 0.08),
+              backgroundColor: colorScheme.surfaceContainerHighest,
             ),
             onPressed: () => Navigator.of(context).pop(),
             tooltip: isAr ? 'إغلاق المعاينة' : 'Close Preview',
@@ -658,20 +652,21 @@ class _InteractiveReceiptViewerDialogState
 
   /// Floating Glassmorphic Toolbar with Zoom, Pan, Rotate, and Fullscreen Controls
   Widget _buildControlsToolbar(ThemeData theme, bool isAr) {
+    final colorScheme = theme.colorScheme;
     final zoomPercent = (_currentScale * 100).round();
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E2E).withValues(alpha: 0.92),
+        color: colorScheme.surfaceContainerHigh.withValues(alpha: 0.95),
         borderRadius: BorderRadius.circular(30),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.18),
+          color: colorScheme.outlineVariant,
           width: 1.2,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.5),
+            color: colorScheme.shadow.withValues(alpha: 0.25),
             blurRadius: 20,
             offset: const Offset(0, 6),
           ),
@@ -682,6 +677,7 @@ class _InteractiveReceiptViewerDialogState
         children: [
           // ── Zoom In Button ──
           _buildToolbarButton(
+            colorScheme: colorScheme,
             icon: Icons.zoom_in_rounded,
             tooltip: isAr ? 'تكبير (Zoom In)' : 'Zoom In',
             onPressed: _zoomIn,
@@ -691,6 +687,7 @@ class _InteractiveReceiptViewerDialogState
 
           // ── Zoom Out Button ──
           _buildToolbarButton(
+            colorScheme: colorScheme,
             icon: Icons.zoom_out_rounded,
             tooltip: isAr ? 'تصغير (Zoom Out)' : 'Zoom Out',
             onPressed: _zoomOut,
@@ -705,16 +702,16 @@ class _InteractiveReceiptViewerDialogState
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
+                color: colorScheme.secondaryContainer,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                border: Border.all(color: colorScheme.outlineVariant),
               ),
               child: Text(
                 '$zoomPercent%',
                 style: GoogleFonts.cairo(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: colorScheme.onSecondaryContainer,
                 ),
               ),
             ),
@@ -724,12 +721,13 @@ class _InteractiveReceiptViewerDialogState
           Container(
             height: 20,
             width: 1,
-            color: Colors.white.withValues(alpha: 0.15),
+            color: colorScheme.outlineVariant,
           ),
           const SizedBox(width: 6),
 
           // ── Reset Zoom / Fit Screen Button ──
           _buildToolbarButton(
+            colorScheme: colorScheme,
             icon: Icons.fit_screen_rounded,
             tooltip: isAr ? 'إعادة ضبط الحجم الطبيعي' : 'Reset / Fit to Screen',
             onPressed: _resetZoom,
@@ -739,6 +737,7 @@ class _InteractiveReceiptViewerDialogState
 
           // ── Rotate 90° Button ──
           _buildToolbarButton(
+            colorScheme: colorScheme,
             icon: Icons.rotate_right_rounded,
             tooltip: isAr ? 'تدوير 90 درجة' : 'Rotate 90°',
             onPressed: _rotateClockwise,
@@ -750,10 +749,11 @@ class _InteractiveReceiptViewerDialogState
             Container(
               height: 20,
               width: 1,
-              color: Colors.white.withValues(alpha: 0.15),
+              color: colorScheme.outlineVariant,
             ),
             const SizedBox(width: 4),
             _buildToolbarButton(
+              colorScheme: colorScheme,
               icon: isAr ? Icons.chevron_right_rounded : Icons.chevron_left_rounded,
               tooltip: isAr ? 'الجزء السابق' : 'Previous Part',
               onPressed: _currentPartIndex > 0
@@ -766,10 +766,10 @@ class _InteractiveReceiptViewerDialogState
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                color: colorScheme.primaryContainer,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: const Color(0xFF818CF8).withValues(alpha: 0.3),
+                  color: colorScheme.primary.withValues(alpha: 0.35),
                 ),
               ),
               child: Text(
@@ -779,11 +779,12 @@ class _InteractiveReceiptViewerDialogState
                 style: GoogleFonts.cairo(
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
-                  color: const Color(0xFF818CF8),
+                  color: colorScheme.onPrimaryContainer,
                 ),
               ),
             ),
             _buildToolbarButton(
+              colorScheme: colorScheme,
               icon: isAr ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
               tooltip: isAr ? 'الجزء التالي' : 'Next Part',
               onPressed: _currentPartIndex < _activeUrls.length - 1
@@ -799,16 +800,17 @@ class _InteractiveReceiptViewerDialogState
           Container(
             height: 20,
             width: 1,
-            color: Colors.white.withValues(alpha: 0.15),
+            color: colorScheme.outlineVariant,
           ),
           const SizedBox(width: 6),
 
           // ── Download Button ──
           _buildToolbarButton(
+            colorScheme: colorScheme,
             icon: Icons.download_rounded,
             tooltip: isAr ? 'تحميل وحفظ الفاتورة على جهازك' : 'Download and Save Invoice',
             isLoading: _isDownloading,
-            iconColor: const Color(0xFF34D399),
+            iconColor: colorScheme.primary,
             onPressed: () => _downloadImage(context, isAr),
           ),
 
@@ -816,6 +818,7 @@ class _InteractiveReceiptViewerDialogState
           if (_currentImageUrl.startsWith('http')) ...[
             const SizedBox(width: 4),
             _buildToolbarButton(
+              colorScheme: colorScheme,
               icon: Icons.open_in_new_rounded,
               tooltip: isAr ? 'فتح الصورة بالدقة الكاملة في المتصفح' : 'Open Full Resolution in Browser',
               onPressed: _openImageInBrowser,
@@ -827,12 +830,14 @@ class _InteractiveReceiptViewerDialogState
   }
 
   Widget _buildToolbarButton({
+    required ColorScheme colorScheme,
     required IconData icon,
     required String tooltip,
     required VoidCallback onPressed,
     Color? iconColor,
     bool isLoading = false,
   }) {
+    final fg = iconColor ?? colorScheme.onSurface;
     return Tooltip(
       message: tooltip,
       child: Material(
@@ -840,7 +845,7 @@ class _InteractiveReceiptViewerDialogState
         child: InkWell(
           onTap: isLoading ? null : onPressed,
           borderRadius: BorderRadius.circular(20),
-          hoverColor: Colors.white.withValues(alpha: 0.12),
+          hoverColor: colorScheme.primary.withValues(alpha: 0.12),
           child: Padding(
             padding: const EdgeInsets.all(8.0),
             child: isLoading
@@ -849,13 +854,13 @@ class _InteractiveReceiptViewerDialogState
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: iconColor ?? Colors.white,
+                      color: fg,
                     ),
                   )
                 : Icon(
                     icon,
                     size: 20,
-                    color: iconColor ?? Colors.white,
+                    color: fg,
                   ),
           ),
         ),
@@ -865,8 +870,9 @@ class _InteractiveReceiptViewerDialogState
 
   /// Builds image with Base64, URL, Loading Progress, and Error Fallback support
   Widget _buildReceiptImage(ThemeData theme, bool isAr) {
+    final colorScheme = theme.colorScheme;
     if (_currentImageUrl.isEmpty) {
-      return _buildErrorState(isAr, 'لا توجد صورة مسجلة لهذه الفاتورة');
+      return _buildErrorState(colorScheme, isAr, 'لا توجد صورة مسجلة لهذه الفاتورة');
     }
 
     if (_currentImageUrl.startsWith('data:image')) {
@@ -875,10 +881,10 @@ class _InteractiveReceiptViewerDialogState
         return Image.memory(
           bytes,
           fit: BoxFit.contain,
-          errorBuilder: (ctx, err, stackTrace) => _buildErrorState(isAr, 'تعذر معالجة بيانات الصورة'),
+          errorBuilder: (ctx, err, stackTrace) => _buildErrorState(colorScheme, isAr, 'تعذر معالجة بيانات الصورة'),
         );
       } catch (_) {
-        return _buildErrorState(isAr, 'صيغة بيانات الصورة غير صحيحة');
+        return _buildErrorState(colorScheme, isAr, 'صيغة بيانات الصورة غير صحيحة');
       }
     }
 
@@ -901,7 +907,7 @@ class _InteractiveReceiptViewerDialogState
                 child: CircularProgressIndicator(
                   value: value,
                   strokeWidth: 3,
-                  color: const Color(0xFF6366F1),
+                  color: colorScheme.primary,
                 ),
               ),
               const SizedBox(height: 16),
@@ -909,7 +915,7 @@ class _InteractiveReceiptViewerDialogState
                 isAr ? 'جاري تحميل صورة الفاتورة...' : 'Loading receipt image...',
                 style: GoogleFonts.cairo(
                   fontSize: 13,
-                  color: Colors.white70,
+                  color: colorScheme.onSurfaceVariant,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -918,23 +924,24 @@ class _InteractiveReceiptViewerDialogState
         );
       },
       errorBuilder: (context, error, stackTrace) => _buildErrorState(
+        colorScheme,
         isAr,
         'تعذر تحميل صورة الفاتورة الأصلية',
       ),
     );
   }
 
-  Widget _buildErrorState(bool isAr, String message) {
+  Widget _buildErrorState(ColorScheme colorScheme, bool isAr, String message) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32.0),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               Icons.broken_image_rounded,
               size: 56,
-              color: Color(0xFFEF4444),
+              color: colorScheme.error,
             ),
             const SizedBox(height: 14),
             Text(
@@ -942,7 +949,7 @@ class _InteractiveReceiptViewerDialogState
               style: GoogleFonts.cairo(
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
-                color: const Color(0xFFEF4444),
+                color: colorScheme.error,
               ),
               textAlign: TextAlign.center,
             ),
@@ -951,7 +958,7 @@ class _InteractiveReceiptViewerDialogState
               isAr
                 ? 'قد يكون السبب قيود اتصال الشبكة أو انتهاء صلاحية الرابط'
                 : 'Network issue or expired image link',
-              style: GoogleFonts.cairo(fontSize: 12, color: Colors.white60),
+              style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
             if (_currentImageUrl.startsWith('http')) ...[

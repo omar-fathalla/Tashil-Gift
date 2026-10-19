@@ -60,6 +60,8 @@ class RuleConflictIssue {
 }
 
 class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _eventNameController;
   late final TextEditingController _targetCompanyController;
@@ -413,7 +415,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   } catch (e) {
                     if (ctx.mounted) {
                       ScaffoldMessenger.of(ctx).showSnackBar(
-                        SnackBar(content: Text('حدث خطأ: $e'), backgroundColor: Colors.red),
+                        SnackBar(content: Text('حدث خطأ: $e'), backgroundColor: colorScheme.error),
                       );
                     }
                   } finally {
@@ -468,7 +470,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               'تم استيراد واعتماد ${result.totalBranchesCount} فرعاً عبر ${result.chainIds.length} سلاسل تجارية في الحملة بنجاح! ✓',
               style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
             ),
-            backgroundColor: Colors.teal.shade700,
+            backgroundColor: colorScheme.onTertiaryFixedVariant,
             duration: const Duration(seconds: 4),
           ),
         );
@@ -579,7 +581,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   } catch (e) {
                     if (ctx.mounted) {
                       ScaffoldMessenger.of(ctx).showSnackBar(
-                        SnackBar(content: Text('حدث خطأ: $e'), backgroundColor: Colors.red),
+                        SnackBar(content: Text('حدث خطأ: $e'), backgroundColor: colorScheme.error),
                       );
                     }
                   } finally {
@@ -1621,7 +1623,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('تم توزيع المخزون المتاح بالتساوي على ${_selectedBranchIds.length} فرع.', style: GoogleFonts.cairo()),
-        backgroundColor: Colors.green.shade800,
+        backgroundColor: colorScheme.onTertiaryFixedVariant,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -1727,7 +1729,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('✨ تم تحليل وهيكلة قواعد العرض وتحديث البرومبت بنجاح!'),
-          backgroundColor: Colors.teal.shade700,
+          backgroundColor: colorScheme.onTertiaryFixedVariant,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -1781,7 +1783,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
             AppStrings.of(ref).syncPromptSuccessMsg,
             style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
           ),
-          backgroundColor: Colors.teal.shade700,
+          backgroundColor: colorScheme.onTertiaryFixedVariant,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -1799,7 +1801,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               isAr ? 'صنف هدية كلير غير متوفر في مخزون هدايا الشركة حالياً' : 'Clear gift is not in company stock',
               style: GoogleFonts.cairo(),
             ),
-            backgroundColor: Colors.orange.shade800,
+            backgroundColor: colorScheme.onSecondaryFixedVariant,
           ),
         );
         return;
@@ -1830,7 +1832,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               isAr ? 'صنف هدية تريزيمي غير متوفر في مخزون هدايا الشركة حالياً' : 'Tresemme gift is not in company stock',
               style: GoogleFonts.cairo(),
             ),
-            backgroundColor: Colors.orange.shade800,
+            backgroundColor: colorScheme.onSecondaryFixedVariant,
           ),
         );
         return;
@@ -1861,7 +1863,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               isAr ? 'صنف هدية تريزيمي غير متوفر في مخزون هدايا الشركة حالياً' : 'Tresemme gift is not in company stock',
               style: GoogleFonts.cairo(),
             ),
-            backgroundColor: Colors.orange.shade800,
+            backgroundColor: colorScheme.onSecondaryFixedVariant,
           ),
         );
         return;
@@ -2297,7 +2299,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                 if (item.unitSize.isNotEmpty)
                                   Text(item.unitSize, style: const TextStyle(fontSize: 11)),
                                 if (item.referencePrice != null && item.referencePrice! > 0)
-                                  Text('${item.referencePrice} ج.م', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.teal)),
+                                  Text('${item.referencePrice} ج.م', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorScheme.tertiary)),
                               ],
                             ),
                             onChanged: (val) {
@@ -2451,13 +2453,13 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.teal.shade50,
+                      color: colorScheme.tertiaryContainer,
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.teal.shade300),
+                      border: Border.all(color: colorScheme.tertiaryFixedDim),
                     ),
                     child: Text(
                       '${displayItems.length} صنف',
-                      style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.teal.shade900),
+                      style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.onTertiaryContainer),
                     ),
                   ),
                 ],
@@ -2584,7 +2586,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                           style: GoogleFonts.cairo(
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
-                                            color: Colors.teal.shade800,
+                                            color: colorScheme.onTertiaryFixedVariant,
                                           ),
                                         ),
                                     ],
@@ -2871,13 +2873,13 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
                             color: selectedProductIds.isNotEmpty
-                                ? Colors.teal.shade50
-                                : Colors.grey.shade50,
+                                ? colorScheme.tertiaryContainer
+                                : colorScheme.surface,
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
                               color: selectedProductIds.isNotEmpty
-                                  ? Colors.teal.shade300
-                                  : Colors.grey.shade300,
+                                  ? colorScheme.tertiaryFixedDim
+                                  : colorScheme.outlineVariant,
                             ),
                           ),
                           child: Column(
@@ -2888,7 +2890,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                   Icon(
                                     Icons.inventory_2_rounded,
                                     size: 18,
-                                    color: selectedProductIds.isNotEmpty ? Colors.teal.shade800 : Colors.grey.shade700,
+                                    color: selectedProductIds.isNotEmpty ? colorScheme.onTertiaryFixedVariant : colorScheme.onSurfaceVariant,
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
@@ -2899,7 +2901,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                       style: GoogleFonts.cairo(
                                         fontSize: 12,
                                         fontWeight: FontWeight.bold,
-                                        color: selectedProductIds.isNotEmpty ? Colors.teal.shade900 : Colors.grey.shade800,
+                                        color: selectedProductIds.isNotEmpty ? colorScheme.onTertiaryContainer : colorScheme.onSurfaceVariant,
                                       ),
                                     ),
                                   ),
@@ -2966,9 +2968,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                       return Container(
                                         padding: const EdgeInsetsDirectional.only(start: 8, end: 4, top: 2, bottom: 2),
                                         decoration: BoxDecoration(
-                                          color: Colors.teal.shade50,
+                                          color: colorScheme.tertiaryContainer,
                                           borderRadius: BorderRadius.circular(8),
-                                          border: Border.all(color: Colors.teal.shade300),
+                                          border: Border.all(color: colorScheme.tertiaryFixedDim),
                                         ),
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
@@ -2978,7 +2980,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                               style: GoogleFonts.cairo(
                                                 fontSize: 11,
                                                 fontWeight: FontWeight.bold,
-                                                color: Colors.teal.shade900,
+                                                color: colorScheme.onTertiaryContainer,
                                               ),
                                             ),
                                             const SizedBox(width: 4),
@@ -3053,7 +3055,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                                   child: Icon(
                                                     Icons.cancel_rounded,
                                                     size: 15,
-                                                    color: Colors.red.shade700,
+                                                    color: colorScheme.onErrorContainer,
                                                   ),
                                                 ),
                                               ),
@@ -3067,14 +3069,14 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                       decoration: BoxDecoration(
                                         color: Colors.white,
                                         borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: Colors.teal.shade300),
+                                        border: Border.all(color: colorScheme.tertiaryFixedDim),
                                       ),
                                       child: Text(
                                         'إجمالي: ${selectedProductNames.length} صنف و ${selectedBarcodes.length} باركود',
                                         style: GoogleFonts.cairo(
                                           fontSize: 11,
                                           fontWeight: FontWeight.bold,
-                                          color: Colors.teal.shade900,
+                                          color: colorScheme.onTertiaryContainer,
                                         ),
                                       ),
                                     ),
@@ -3102,16 +3104,16 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: Colors.blue.shade50.withValues(alpha: 0.5),
+                            color: colorScheme.primaryContainer.withValues(alpha: 0.5),
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.blue.shade200),
+                            border: Border.all(color: colorScheme.primaryFixedDim),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 strings.requiredBrandsLabel,
-                                style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.blue.shade900),
+                                style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold, color: colorScheme.onPrimaryContainer),
                               ),
                               const SizedBox(height: 6),
                               Wrap(
@@ -3186,20 +3188,20 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.amber.shade50.withValues(alpha: 0.5),
+                            color: colorScheme.secondaryContainer.withValues(alpha: 0.5),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.amber.shade200),
+                            border: Border.all(color: colorScheme.secondaryFixedDim),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.tune_rounded, size: 16, color: Color(0xFFB45309)),
+                                  Icon(Icons.tune_rounded, size: 16, color: colorScheme.onSecondaryFixedVariant),
                                   const SizedBox(width: 6),
                                   Text(
                                     'نطاق القيمة المالية وسماحية الخصم:',
-                                    style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF92400E)),
+                                    style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.onSecondaryFixedVariant),
                                   ),
                                 ],
                               ),
@@ -3290,7 +3292,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                               const SizedBox(height: 8),
                               Text(
                                 '💡 تتيح السماحية قبول الفواتير حتى لو انخفض الصافي بعد الخصومات (مثال: 95 ج.م بدلاً من 100 ج.م)',
-                                style: GoogleFonts.cairo(fontSize: 10.5, color: Colors.brown.shade700),
+                                style: GoogleFonts.cairo(fontSize: 10.5, color: colorScheme.onSecondaryFixedVariant),
                               ),
                               const SizedBox(height: 8),
                               // Quick range suggestion chips
@@ -3300,7 +3302,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                 children: [
                                   ActionChip(
                                     backgroundColor: Colors.white,
-                                    label: const Text('🏷️ نطاق 95 - 139 ج.م (فواتشر 25)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF0F766E))),
+                                    label: Text('🏷️ نطاق 95 - 139 ج.م (فواتشر 25)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorScheme.onTertiaryFixedVariant)),
                                     onPressed: () {
                                       setDialogState(() {
                                         minSpendController.text = '95';
@@ -3315,7 +3317,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                   ),
                                   ActionChip(
                                     backgroundColor: Colors.white,
-                                    label: const Text('🏷️ نطاق 140 - 189 ج.م (فواتشر 50)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFFB45309))),
+                                    label: Text('🏷️ نطاق 140 - 189 ج.م (فواتشر 50)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorScheme.onSecondaryFixedVariant)),
                                     onPressed: () {
                                       setDialogState(() {
                                         minSpendController.text = '140';
@@ -3330,7 +3332,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                   ),
                                   ActionChip(
                                     backgroundColor: Colors.white,
-                                    label: const Text('🏷️ نطاق 190+ ج.م (فواتشر 75)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF1D4ED8))),
+                                    label: Text('🏷️ نطاق 190+ ج.م (فواتشر 75)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorScheme.onPrimaryFixedVariant)),
                                     onPressed: () {
                                       setDialogState(() {
                                         minSpendController.text = '190';
@@ -3451,11 +3453,11 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                     value: 'directGift',
                                     child: Row(
                                       children: [
-                                        const Icon(Icons.redeem_rounded, size: 16, color: Colors.teal),
+                                        Icon(Icons.redeem_rounded, size: 16, color: colorScheme.tertiary),
                                         const SizedBox(width: 6),
                                         Text(
                                           '🎁 هدية فورية مباشرة (Direct Gift)',
-                                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: Colors.teal.shade800),
+                                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: colorScheme.onTertiaryFixedVariant),
                                         ),
                                       ],
                                     ),
@@ -3464,11 +3466,11 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                     value: 'scratch',
                                     child: Row(
                                       children: [
-                                        const Icon(Icons.style_rounded, size: 16, color: Colors.purple),
+                                        Icon(Icons.style_rounded, size: 16, color: colorScheme.primary),
                                         const SizedBox(width: 6),
                                         Text(
                                           '🎟️ كارت خربش واكسب (Scratch Card)',
-                                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: Colors.purple.shade800),
+                                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: colorScheme.onPrimaryFixedVariant),
                                         ),
                                       ],
                                     ),
@@ -3477,11 +3479,11 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                     value: 'wheel',
                                     child: Row(
                                       children: [
-                                        const Icon(Icons.casino_rounded, size: 16, color: Colors.indigo),
+                                        Icon(Icons.casino_rounded, size: 16, color: colorScheme.primary),
                                         const SizedBox(width: 6),
                                         Text(
                                           '🎡 عجلة الحظ (Spin The Wheel)',
-                                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: Colors.indigo.shade800),
+                                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: colorScheme.onPrimaryFixedVariant),
                                         ),
                                       ],
                                     ),
@@ -3490,11 +3492,11 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                     value: 'chooseGift',
                                     child: Row(
                                       children: [
-                                        const Icon(Icons.grid_view_rounded, size: 16, color: Colors.orange),
+                                        Icon(Icons.grid_view_rounded, size: 16, color: colorScheme.secondary),
                                         const SizedBox(width: 6),
                                         Text(
                                           '📦 اختر هديتك (Choose Gift)',
-                                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: Colors.orange.shade800),
+                                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: colorScheme.onSecondaryFixedVariant),
                                         ),
                                       ],
                                     ),
@@ -3519,13 +3521,13 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
                             color: isVoucherMatch
-                                ? Colors.teal.shade50.withValues(alpha: 0.5)
-                                : Colors.amber.shade50.withValues(alpha: 0.5),
+                                ? colorScheme.tertiaryContainer.withValues(alpha: 0.5)
+                                : colorScheme.secondaryContainer.withValues(alpha: 0.5),
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
                               color: isVoucherMatch
-                                  ? Colors.teal.shade300
-                                  : Colors.amber.shade300,
+                                  ? colorScheme.tertiaryFixedDim
+                                  : colorScheme.primaryFixedDim,
                             ),
                           ),
                           child: Column(
@@ -3536,7 +3538,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                   Icon(
                                     Icons.inventory_2_rounded,
                                     size: 16,
-                                    color: isVoucherMatch ? Colors.teal.shade800 : Colors.amber.shade900,
+                                    color: isVoucherMatch ? colorScheme.onTertiaryFixedVariant : colorScheme.onSecondaryContainer,
                                   ),
                                   const SizedBox(width: 6),
                                   Expanded(
@@ -3545,7 +3547,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                       style: GoogleFonts.cairo(
                                         fontSize: 12,
                                         fontWeight: FontWeight.bold,
-                                        color: isVoucherMatch ? Colors.teal.shade900 : Colors.amber.shade900,
+                                        color: isVoucherMatch ? colorScheme.onTertiaryContainer : colorScheme.onSecondaryContainer,
                                       ),
                                     ),
                                   ),
@@ -3566,14 +3568,14 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                     decoration: BoxDecoration(
                                       color: Colors.white,
                                       borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: Colors.grey.shade300),
+                                      border: Border.all(color: colorScheme.outlineVariant),
                                     ),
                                     child: Row(
                                       children: [
                                         Icon(
                                           isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
                                           size: 16,
-                                          color: isVoucher ? Colors.amber.shade800 : Colors.teal.shade700,
+                                          color: isVoucher ? colorScheme.onSecondaryFixedVariant : colorScheme.onTertiaryFixedVariant,
                                         ),
                                         const SizedBox(width: 6),
                                         Expanded(
@@ -3589,7 +3591,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                                 isVoucher
                                                     ? 'فئة: ${alloc.unitValue.toInt()} ج.م × ${alloc.quantity} = ${(alloc.unitValue * alloc.quantity).toInt()} ج.م'
                                                     : 'هدية عينية × ${alloc.quantity}',
-                                                style: GoogleFonts.cairo(fontSize: 10.5, color: Colors.grey.shade700),
+                                                style: GoogleFonts.cairo(fontSize: 10.5, color: colorScheme.onSurfaceVariant),
                                               ),
                                             ],
                                           ),
@@ -3617,7 +3619,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                           ),
                                         ),
                                         IconButton(
-                                          icon: const Icon(Icons.add_circle_outline, size: 18, color: Colors.teal),
+                                          icon: Icon(Icons.add_circle_outline, size: 18, color: colorScheme.tertiary),
                                           visualDensity: VisualDensity.compact,
                                           padding: EdgeInsets.zero,
                                           constraints: const BoxConstraints(),
@@ -3629,7 +3631,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                         ),
                                         const SizedBox(width: 6),
                                         IconButton(
-                                          icon: const Icon(Icons.close_rounded, size: 16, color: Colors.red),
+                                          icon: Icon(Icons.close_rounded, size: 16, color: colorScheme.error),
                                           visualDensity: VisualDensity.compact,
                                           padding: EdgeInsets.zero,
                                           constraints: const BoxConstraints(),
@@ -3652,8 +3654,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   decoration: BoxDecoration(
                                     color: isVoucherMatch
-                                        ? Colors.teal.shade100.withValues(alpha: 0.6)
-                                        : Colors.amber.shade100.withValues(alpha: 0.8),
+                                        ? colorScheme.tertiaryContainer.withValues(alpha: 0.6)
+                                        : colorScheme.secondaryContainer.withValues(alpha: 0.8),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Row(
@@ -3662,7 +3664,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                       Icon(
                                         isVoucherMatch ? Icons.check_circle_rounded : Icons.info_outline_rounded,
                                         size: 14,
-                                        color: isVoucherMatch ? Colors.teal.shade800 : Colors.amber.shade900,
+                                        color: isVoucherMatch ? colorScheme.onTertiaryFixedVariant : colorScheme.onSecondaryContainer,
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
@@ -3674,7 +3676,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                         style: GoogleFonts.cairo(
                                           fontSize: 10.5,
                                           fontWeight: FontWeight.bold,
-                                          color: isVoucherMatch ? Colors.teal.shade900 : Colors.amber.shade900,
+                                          color: isVoucherMatch ? colorScheme.onTertiaryContainer : colorScheme.onSecondaryContainer,
                                         ),
                                       ),
                                     ],
@@ -4149,7 +4151,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(strings.campaignDeletedSuccess),
-              backgroundColor: Colors.red.shade700,
+              backgroundColor: colorScheme.onErrorContainer,
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -4165,7 +4167,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(strings.operationFailed(e.toString())),
-              backgroundColor: Colors.red.shade900,
+              backgroundColor: colorScheme.onErrorContainer,
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -4195,10 +4197,10 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.green.shade100,
+                color: colorScheme.tertiaryContainer,
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.check_circle_rounded, color: Colors.green.shade800, size: 28),
+              child: Icon(Icons.check_circle_rounded, color: colorScheme.onTertiaryFixedVariant, size: 28),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -4227,27 +4229,27 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.teal.withValues(alpha: 0.08),
+                    color: colorScheme.tertiary.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.teal.withValues(alpha: 0.3)),
+                    border: Border.all(color: colorScheme.tertiary.withValues(alpha: 0.3)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.campaign_rounded, size: 18, color: Colors.teal.shade800),
+                          Icon(Icons.campaign_rounded, size: 18, color: colorScheme.onTertiaryFixedVariant),
                           const SizedBox(width: 6),
                           Text(
                             isAr ? 'رابط البروموتر والعميل (Client Submission):' : 'Promoter & Client Link:',
-                            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.teal.shade900),
+                            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12, color: colorScheme.onTertiaryContainer),
                           ),
                         ],
                       ),
                       const SizedBox(height: 6),
                       SelectableText(
                         promoterUrl,
-                        style: GoogleFonts.sourceCodePro(fontSize: 12, color: Colors.teal.shade900, fontWeight: FontWeight.w600),
+                        style: GoogleFonts.sourceCodePro(fontSize: 12, color: colorScheme.onTertiaryContainer, fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 8),
                       Align(
@@ -4260,7 +4262,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             ScaffoldMessenger.of(ctx).showSnackBar(
                               SnackBar(
                                 content: Text(isAr ? 'تم نسخ رابط البروموتر بنجاح!' : 'Promoter Link Copied!'),
-                                backgroundColor: Colors.teal.shade700,
+                                backgroundColor: colorScheme.onTertiaryFixedVariant,
                                 duration: const Duration(seconds: 2),
                               ),
                             );
@@ -4275,27 +4277,27 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.indigo.withValues(alpha: 0.08),
+                    color: colorScheme.primary.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.indigo.withValues(alpha: 0.3)),
+                    border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.storefront_rounded, size: 18, color: Colors.indigo.shade800),
+                          Icon(Icons.storefront_rounded, size: 18, color: colorScheme.onPrimaryFixedVariant),
                           const SizedBox(width: 6),
                           Text(
                             isAr ? 'رابط لوحة مدير وشريك الشركة (Partner Portal):' : 'Company Manager Portal Link:',
-                            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.indigo.shade900),
+                            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12, color: colorScheme.onPrimaryContainer),
                           ),
                         ],
                       ),
                       const SizedBox(height: 6),
                       SelectableText(
                         managerUrl,
-                        style: GoogleFonts.sourceCodePro(fontSize: 12, color: Colors.indigo.shade900, fontWeight: FontWeight.w600),
+                        style: GoogleFonts.sourceCodePro(fontSize: 12, color: colorScheme.onPrimaryContainer, fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 8),
                       Align(
@@ -4308,7 +4310,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             ScaffoldMessenger.of(ctx).showSnackBar(
                               SnackBar(
                                 content: Text(isAr ? 'تم نسخ رابط لوحة المدير بنجاح!' : 'Manager Portal Link Copied!'),
-                                backgroundColor: Colors.indigo.shade700,
+                                backgroundColor: colorScheme.primary,
                                 duration: const Duration(seconds: 2),
                               ),
                             );
@@ -4689,12 +4691,12 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                         const SizedBox(height: 8),
                                         Row(
                                           children: [
-                                            Icon(Icons.campaign_rounded, size: 15, color: Colors.teal.shade700),
+                                            Icon(Icons.campaign_rounded, size: 15, color: colorScheme.onTertiaryFixedVariant),
                                             const SizedBox(width: 6),
                                             Expanded(
                                               child: Text(
                                                 'البروموتر: $promoterUrl',
-                                                style: GoogleFonts.sourceCodePro(fontSize: 11, color: Colors.teal.shade900),
+                                                style: GoogleFonts.sourceCodePro(fontSize: 11, color: colorScheme.onTertiaryContainer),
                                                 overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
@@ -4704,14 +4706,14 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                                 ScaffoldMessenger.of(context).showSnackBar(
                                                   SnackBar(
                                                     content: Text('تم نسخ رابط البروموتر: $promoterUrl'),
-                                                    backgroundColor: Colors.teal.shade700,
+                                                    backgroundColor: colorScheme.onTertiaryFixedVariant,
                                                     behavior: SnackBarBehavior.floating,
                                                   ),
                                                 );
                                               },
                                               child: Padding(
                                                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                                child: Icon(Icons.copy_rounded, size: 14, color: Colors.teal.shade700),
+                                                child: Icon(Icons.copy_rounded, size: 14, color: colorScheme.onTertiaryFixedVariant),
                                               ),
                                             ),
                                           ],
@@ -4719,12 +4721,12 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                         const SizedBox(height: 4),
                                         Row(
                                           children: [
-                                            Icon(Icons.storefront_rounded, size: 15, color: Colors.indigo.shade700),
+                                            Icon(Icons.storefront_rounded, size: 15, color: colorScheme.primary),
                                             const SizedBox(width: 6),
                                             Expanded(
                                               child: Text(
                                                 'لوحة المدير: $managerUrl',
-                                                style: GoogleFonts.sourceCodePro(fontSize: 11, color: Colors.indigo.shade900),
+                                                style: GoogleFonts.sourceCodePro(fontSize: 11, color: colorScheme.onPrimaryContainer),
                                                 overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
@@ -4734,14 +4736,14 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                                 ScaffoldMessenger.of(context).showSnackBar(
                                                   SnackBar(
                                                     content: Text('تم نسخ رابط لوحة المدير: $managerUrl'),
-                                                    backgroundColor: Colors.indigo.shade700,
+                                                    backgroundColor: colorScheme.primary,
                                                     behavior: SnackBarBehavior.floating,
                                                   ),
                                                 );
                                               },
                                               child: Padding(
                                                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                                child: Icon(Icons.copy_rounded, size: 14, color: Colors.indigo.shade700),
+                                                child: Icon(Icons.copy_rounded, size: 14, color: colorScheme.primary),
                                               ),
                                             ),
                                           ],
@@ -5093,16 +5095,16 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: Colors.green.shade100,
+                                          color: colorScheme.tertiaryContainer,
                                           borderRadius: BorderRadius.circular(6),
-                                          border: Border.all(color: Colors.green.shade400),
+                                          border: Border.all(color: colorScheme.tertiaryFixedDim),
                                         ),
                                         child: Text(
                                           'جاهز للرفع والتخزين',
                                           style: GoogleFonts.cairo(
                                             fontSize: 10,
                                             fontWeight: FontWeight.bold,
-                                            color: Colors.green.shade800,
+                                            color: colorScheme.onTertiaryFixedVariant,
                                           ),
                                         ),
                                       ),
@@ -5163,13 +5165,13 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                             _companyLogoUrl = '';
                                           });
                                         },
-                                        icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.red),
+                                        icon: Icon(Icons.delete_outline_rounded, size: 16, color: colorScheme.error),
                                         label: Text(
                                           'إزالة اللوجو',
-                                          style: GoogleFonts.cairo(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold),
+                                          style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.error, fontWeight: FontWeight.bold),
                                         ),
                                         style: OutlinedButton.styleFrom(
-                                          side: BorderSide(color: Colors.red.withValues(alpha: 0.4)),
+                                          side: BorderSide(color: colorScheme.error.withValues(alpha: 0.4)),
                                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                         ),
@@ -5613,7 +5615,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       SizedBox(
                         width: 44,
                         child: IconButton(
-                          icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.red),
+                          icon: Icon(Icons.delete_outline_rounded, size: 18, color: colorScheme.error),
                           tooltip: 'استبعاد هذا المنتج',
                           onPressed: () => _toggleProductSelection(item['name']!),
                           visualDensity: VisualDensity.compact,
@@ -5838,12 +5840,12 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: _requireVoucherSerials
-            ? Colors.amber.shade50.withValues(alpha: 0.55)
+            ? colorScheme.secondaryContainer.withValues(alpha: 0.55)
             : colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: _requireVoucherSerials
-              ? Colors.amber.shade400
+              ? colorScheme.primaryFixedDim
               : colorScheme.outlineVariant.withValues(alpha: 0.4),
           width: _requireVoucherSerials ? 1.5 : 1,
         ),
@@ -5855,7 +5857,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: _requireVoucherSerials
-                  ? Colors.amber.shade700
+                  ? colorScheme.secondary
                   : colorScheme.surfaceContainerHighest,
               shape: BoxShape.circle,
             ),
@@ -5889,8 +5891,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
                         color: _requireVoucherSerials
-                            ? Colors.red.shade100
-                            : Colors.green.shade100,
+                            ? colorScheme.errorContainer
+                            : colorScheme.tertiaryContainer,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -5899,8 +5901,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                           color: _requireVoucherSerials
-                              ? Colors.red.shade900
-                              : Colors.green.shade900,
+                              ? colorScheme.onErrorContainer
+                              : colorScheme.onTertiaryContainer,
                         ),
                       ),
                     ),
@@ -5923,7 +5925,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           const SizedBox(width: 8),
           Switch.adaptive(
             value: _requireVoucherSerials,
-            activeTrackColor: Colors.amber.shade700,
+            activeTrackColor: colorScheme.secondary,
             onChanged: (val) {
               setState(() {
                 _requireVoucherSerials = val;
@@ -5945,12 +5947,12 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: _allowComplementaryReceipts
-            ? Colors.indigo.shade50.withValues(alpha: 0.55)
+            ? colorScheme.primaryContainer.withValues(alpha: 0.55)
             : colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: _allowComplementaryReceipts
-              ? Colors.indigo.shade400
+              ? colorScheme.primary
               : colorScheme.outlineVariant.withValues(alpha: 0.4),
           width: _allowComplementaryReceipts ? 1.5 : 1,
         ),
@@ -5962,7 +5964,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: _allowComplementaryReceipts
-                  ? Colors.indigo.shade700
+                  ? colorScheme.primary
                   : colorScheme.surfaceContainerHighest,
               shape: BoxShape.circle,
             ),
@@ -5996,8 +5998,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
                         color: _allowComplementaryReceipts
-                            ? Colors.green.shade100
-                            : Colors.grey.shade200,
+                            ? colorScheme.tertiaryContainer
+                            : colorScheme.surfaceContainer,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -6006,8 +6008,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                           color: _allowComplementaryReceipts
-                              ? Colors.green.shade900
-                              : Colors.grey.shade700,
+                              ? colorScheme.onTertiaryContainer
+                              : colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ),
@@ -6030,7 +6032,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           const SizedBox(width: 8),
           Switch.adaptive(
             value: _allowComplementaryReceipts,
-            activeTrackColor: Colors.indigo.shade700,
+            activeTrackColor: colorScheme.primary,
             onChanged: (val) {
               setState(() {
                 _allowComplementaryReceipts = val;
@@ -6048,18 +6050,18 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     bool isMobile,
   ) {
     final isEnabled = _enableWhatsAppWinnerNotification;
-    final primaryColor = Colors.teal.shade700;
+    final primaryColor = colorScheme.onTertiaryFixedVariant;
     return Container(
       margin: const EdgeInsets.only(top: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isEnabled
-            ? Colors.teal.shade50.withValues(alpha: 0.55)
+            ? colorScheme.tertiaryContainer.withValues(alpha: 0.55)
             : colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isEnabled
-              ? Colors.teal.shade400
+              ? colorScheme.tertiaryFixedDim
               : colorScheme.outlineVariant.withValues(alpha: 0.4),
           width: isEnabled ? 1.5 : 1,
         ),
@@ -6105,8 +6107,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
                         color: isEnabled
-                            ? Colors.green.shade100
-                            : Colors.grey.shade200,
+                            ? colorScheme.tertiaryContainer
+                            : colorScheme.surfaceContainer,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -6115,8 +6117,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                           color: isEnabled
-                              ? Colors.green.shade900
-                              : Colors.grey.shade700,
+                              ? colorScheme.onTertiaryContainer
+                              : colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ),
@@ -6357,16 +6359,16 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.amber.shade50,
+                color: colorScheme.secondaryContainer,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.amber.shade400, width: 1.5),
+                border: Border.all(color: colorScheme.primaryFixedDim, width: 1.5),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.warning_amber_rounded, color: Colors.amber.shade900, size: 22),
+                      Icon(Icons.warning_amber_rounded, color: colorScheme.onSecondaryContainer, size: 22),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -6374,7 +6376,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                           style: GoogleFonts.cairo(
                             fontSize: 13.5,
                             fontWeight: FontWeight.bold,
-                            color: const Color(0xFF451A03),
+                            color: colorScheme.onSecondaryContainer,
                           ),
                         ),
                       ),
@@ -6388,7 +6390,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.7),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.amber.shade200),
+                        border: Border.all(color: colorScheme.secondaryFixedDim),
                       ),
                       child: Row(
                         children: [
@@ -6401,14 +6403,14 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                   style: GoogleFonts.cairo(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 12.5,
-                                    color: const Color(0xFF451A03),
+                                    color: colorScheme.onSecondaryContainer,
                                   ),
                                 ),
                                 Text(
                                   conflict.description,
                                   style: GoogleFonts.cairo(
                                     fontSize: 11.5,
-                                    color: Colors.amber.shade900,
+                                    color: colorScheme.onSecondaryContainer,
                                   ),
                                 ),
                               ],
@@ -6417,7 +6419,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                           if (conflict.onResolve != null && conflict.suggestedFixLabel != null)
                             FilledButton.tonal(
                               style: FilledButton.styleFrom(
-                                backgroundColor: Colors.amber.shade800,
+                                backgroundColor: colorScheme.onSecondaryFixedVariant,
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -6466,12 +6468,12 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        side: BorderSide(color: Colors.teal.shade700.withValues(alpha: 0.5)),
+                        side: BorderSide(color: colorScheme.onTertiaryFixedVariant.withValues(alpha: 0.5)),
                       ),
-                      icon: const Icon(Icons.add_rounded, size: 16, color: Colors.teal),
+                      icon: Icon(Icons.add_rounded, size: 16, color: colorScheme.tertiary),
                       label: Text(
                         strings.addCustomRuleBtn,
-                        style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.teal.shade800),
+                        style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold, color: colorScheme.onTertiaryFixedVariant),
                       ),
                       onPressed: () => _showAddOrEditPromotionalRuleDialog(context),
                     ),
@@ -6483,27 +6485,27 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.amber.shade50.withValues(alpha: 0.6),
+                    color: colorScheme.secondaryContainer.withValues(alpha: 0.6),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.amber.shade300),
+                    border: Border.all(color: colorScheme.primaryFixedDim),
                   ),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
                       isExpanded: true,
                       hint: Row(
                         children: [
-                          const Icon(Icons.flash_on_rounded, size: 18, color: Colors.amber),
+                          Icon(Icons.flash_on_rounded, size: 18, color: colorScheme.secondary),
                           const SizedBox(width: 8),
                           Text(
                             '⚡ نماذج عروض وقواعد شائعة جاهزة (إدراج فوري بنقرة واحدة)...',
-                            style: GoogleFonts.cairo(fontSize: 12.5, fontWeight: FontWeight.bold, color: const Color(0xFF451A03)),
+                            style: GoogleFonts.cairo(fontSize: 12.5, fontWeight: FontWeight.bold, color: colorScheme.onSecondaryContainer),
                           ),
                         ],
                       ),
-                      items: const [
+                      items: [
                         DropdownMenuItem(
                           value: 'oral_bundle_range_all',
-                          child: Text('✨🦷 إدراج حزم العناية بالفم الثلاثة بنطاق الأسعار والخصومات (95-140-190 ج.م)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Colors.teal)),
+                          child: Text('✨🦷 إدراج حزم العناية بالفم الثلاثة بنطاق الأسعار والخصومات (95-140-190 ج.م)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: colorScheme.tertiary)),
                         ),
                         DropdownMenuItem(
                           value: 'oral_bundle_100',
@@ -6664,7 +6666,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               const Spacer(),
               if (_promotionalRules.isNotEmpty)
                 TextButton.icon(
-                  style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                  style: TextButton.styleFrom(foregroundColor: colorScheme.error),
                   icon: const Icon(Icons.clear_all_rounded, size: 16),
                   label: Text('مسح الكل', style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold)),
                   onPressed: () {
@@ -6722,13 +6724,13 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.teal.shade50,
+              color: colorScheme.tertiaryContainer,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.teal.shade200),
+              border: Border.all(color: colorScheme.tertiaryFixedDim),
             ),
             child: Row(
               children: [
-                Icon(Icons.check_circle_rounded, color: Colors.teal.shade800, size: 20),
+                Icon(Icons.check_circle_rounded, color: colorScheme.onTertiaryFixedVariant, size: 20),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -6736,7 +6738,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     style: GoogleFonts.cairo(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: Colors.teal.shade900,
+                      color: colorScheme.onTertiaryContainer,
                     ),
                   ),
                 ),
@@ -6775,8 +6777,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     const SizedBox(width: 6),
                     FilledButton.tonalIcon(
                       style: FilledButton.styleFrom(
-                        backgroundColor: Colors.teal.shade700.withValues(alpha: 0.12),
-                        foregroundColor: Colors.teal.shade800,
+                        backgroundColor: colorScheme.onTertiaryFixedVariant.withValues(alpha: 0.12),
+                        foregroundColor: colorScheme.onTertiaryFixedVariant,
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
@@ -6833,18 +6835,18 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     switch (rule.rewardType) {
       case 'voucher':
         icon = Icons.confirmation_number_rounded;
-        badgeColor = Colors.amber.shade800;
+        badgeColor = colorScheme.onSecondaryFixedVariant;
         typeLabel = strings.voucherRewardLabel;
         break;
       case 'game_spin':
         icon = Icons.casino_rounded;
-        badgeColor = Colors.purple.shade700;
+        badgeColor = colorScheme.primary;
         typeLabel = strings.gameSpinRewardLabel;
         break;
       case 'free_product':
       default:
         icon = Icons.card_giftcard_rounded;
-        badgeColor = Colors.teal.shade700;
+        badgeColor = colorScheme.onTertiaryFixedVariant;
         typeLabel = strings.freeProductRewardLabel;
         break;
     }
@@ -6913,7 +6915,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isLinkedToInventory
-              ? Colors.teal.shade300
+              ? colorScheme.tertiaryFixedDim
               : colorScheme.outlineVariant.withValues(alpha: 0.6),
           width: isLinkedToInventory ? 1.5 : 1.0,
         ),
@@ -6971,12 +6973,12 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                             decoration: BoxDecoration(
                               color: rule.gameType == 'directGift'
-                                  ? Colors.teal.shade100
+                                  ? colorScheme.tertiaryContainer
                                   : (rule.gameType == 'scratch'
-                                      ? Colors.purple.shade100
+                                      ? colorScheme.primaryContainer
                                       : (rule.gameType == 'wheel'
-                                          ? Colors.indigo.shade100
-                                          : Colors.orange.shade100)),
+                                          ? colorScheme.primaryContainer
+                                          : colorScheme.secondaryContainer)),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Row(
@@ -6992,12 +6994,12 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                               : Icons.grid_view_rounded)),
                                   size: 11,
                                   color: rule.gameType == 'directGift'
-                                      ? Colors.teal.shade900
+                                      ? colorScheme.onTertiaryContainer
                                       : (rule.gameType == 'scratch'
-                                          ? Colors.purple.shade900
+                                          ? colorScheme.onPrimaryContainer
                                           : (rule.gameType == 'wheel'
-                                              ? Colors.indigo.shade900
-                                              : Colors.orange.shade900)),
+                                              ? colorScheme.onPrimaryContainer
+                                              : colorScheme.onSecondaryContainer)),
                                 ),
                                 const SizedBox(width: 3),
                                 Text(
@@ -7012,12 +7014,12 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                     fontSize: 10.5,
                                     fontWeight: FontWeight.bold,
                                     color: rule.gameType == 'directGift'
-                                        ? Colors.teal.shade900
+                                        ? colorScheme.onTertiaryContainer
                                         : (rule.gameType == 'scratch'
-                                            ? Colors.purple.shade900
+                                            ? colorScheme.onPrimaryContainer
                                             : (rule.gameType == 'wheel'
-                                                ? Colors.indigo.shade900
-                                                : Colors.orange.shade900)),
+                                                ? colorScheme.onPrimaryContainer
+                                                : colorScheme.onSecondaryContainer)),
                                   ),
                                 ),
                               ],
@@ -7027,7 +7029,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                             decoration: BoxDecoration(
-                              color: Colors.purple.shade100,
+                              color: colorScheme.primaryContainer,
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
@@ -7035,7 +7037,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                               style: TextStyle(
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.purple.shade900,
+                                color: colorScheme.onPrimaryContainer,
                               ),
                             ),
                           )
@@ -7043,7 +7045,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                             decoration: BoxDecoration(
-                              color: Colors.blue.shade100,
+                              color: colorScheme.primaryContainer,
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
@@ -7051,7 +7053,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                               style: TextStyle(
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.blue.shade900,
+                                color: colorScheme.onPrimaryContainer,
                               ),
                             ),
                           )
@@ -7059,7 +7061,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                             decoration: BoxDecoration(
-                              color: Colors.indigo.shade100,
+                              color: colorScheme.primaryContainer,
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
@@ -7067,7 +7069,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                               style: TextStyle(
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.indigo.shade900,
+                                color: colorScheme.onPrimaryContainer,
                               ),
                             ),
                           ),
@@ -7075,7 +7077,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                             decoration: BoxDecoration(
-                              color: Colors.teal.shade100,
+                              color: colorScheme.tertiaryContainer,
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
@@ -7083,7 +7085,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                               style: TextStyle(
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.teal.shade900,
+                                color: colorScheme.onTertiaryContainer,
                               ),
                             ),
                           ),
@@ -7091,8 +7093,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                           decoration: BoxDecoration(
                             color: isLinkedToInventory
-                                ? Colors.teal.shade100
-                                : Colors.amber.shade100,
+                                ? colorScheme.tertiaryContainer
+                                : colorScheme.secondaryContainer,
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Row(
@@ -7104,8 +7106,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                     : Icons.help_outline_rounded,
                                 size: 12,
                                 color: isLinkedToInventory
-                                    ? Colors.teal.shade800
-                                    : Colors.amber.shade900,
+                                    ? colorScheme.onTertiaryFixedVariant
+                                    : colorScheme.onSecondaryContainer,
                               ),
                               const SizedBox(width: 3),
                               Text(
@@ -7116,8 +7118,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                   fontSize: 10.5,
                                   fontWeight: FontWeight.bold,
                                   color: isLinkedToInventory
-                                      ? Colors.teal.shade900
-                                      : Colors.amber.shade900,
+                                      ? colorScheme.onTertiaryContainer
+                                      : colorScheme.onSecondaryContainer,
                                 ),
                               ),
                             ],
@@ -7129,12 +7131,12 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.edit_note_rounded, size: 22, color: Colors.teal),
+                icon: Icon(Icons.edit_note_rounded, size: 22, color: colorScheme.tertiary),
                 tooltip: strings.editRuleTitle,
                 onPressed: () => _showAddOrEditPromotionalRuleDialog(context, ruleIndex: index),
               ),
               IconButton(
-                icon: const Icon(Icons.delete_outline_rounded, size: 20, color: Colors.redAccent),
+                icon: Icon(Icons.delete_outline_rounded, size: 20, color: colorScheme.error),
                 tooltip: strings.deleteRuleTooltip,
                 onPressed: () {
                   setState(() {
@@ -7162,13 +7164,13 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.teal.shade50.withValues(alpha: 0.85),
+                  color: colorScheme.tertiaryContainer.withValues(alpha: 0.85),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.teal.shade200),
+                  border: Border.all(color: colorScheme.tertiaryFixedDim),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.format_list_bulleted_rounded, size: 16, color: Colors.teal.shade800),
+                    Icon(Icons.format_list_bulleted_rounded, size: 16, color: colorScheme.onTertiaryFixedVariant),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -7176,7 +7178,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         style: GoogleFonts.cairo(
                           fontSize: 11.5,
                           fontWeight: FontWeight.bold,
-                          color: Colors.teal.shade900,
+                          color: colorScheme.onTertiaryContainer,
                         ),
                       ),
                     ),
@@ -7184,7 +7186,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: Colors.teal.shade700,
+                        color: colorScheme.onTertiaryFixedVariant,
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Row(
@@ -7212,13 +7214,13 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
             const SizedBox(height: 6),
             Row(
               children: [
-                Icon(Icons.all_inclusive_rounded, size: 14, color: Colors.blue.shade700),
+                Icon(Icons.all_inclusive_rounded, size: 14, color: colorScheme.primary),
                 const SizedBox(width: 4),
                 Text(
                   strings.multipliersAllowedLabel,
                   style: GoogleFonts.cairo(
                     fontSize: 11,
-                    color: Colors.blue.shade700,
+                    color: colorScheme.primary,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -7232,13 +7234,13 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: isLinkedToInventory
-                  ? Colors.teal.shade50.withValues(alpha: 0.5)
-                  : Colors.amber.shade50.withValues(alpha: 0.5),
+                  ? colorScheme.tertiaryContainer.withValues(alpha: 0.5)
+                  : colorScheme.secondaryContainer.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
                 color: isLinkedToInventory
-                    ? Colors.teal.shade300
-                    : Colors.amber.shade300,
+                    ? colorScheme.tertiaryFixedDim
+                    : colorScheme.primaryFixedDim,
               ),
             ),
             child: Column(
@@ -7249,7 +7251,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     Icon(
                       Icons.inventory_2_rounded,
                       size: 16,
-                      color: isLinkedToInventory ? Colors.teal.shade800 : Colors.amber.shade900,
+                      color: isLinkedToInventory ? colorScheme.onTertiaryFixedVariant : colorScheme.onSecondaryContainer,
                     ),
                     const SizedBox(width: 6),
                     Expanded(
@@ -7258,7 +7260,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         style: GoogleFonts.cairo(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: isLinkedToInventory ? Colors.teal.shade900 : Colors.amber.shade900,
+                          color: isLinkedToInventory ? colorScheme.onTertiaryContainer : colorScheme.onSecondaryContainer,
                         ),
                       ),
                     ),
@@ -7286,7 +7288,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                 content: Text(
                                   'تم تفكيك الفواتشر تلقائياً: ${decomposed.map((d) => '${d.quantity} × ${d.giftName}').join(' + ')}',
                                 ),
-                                backgroundColor: Colors.teal.shade700,
+                                backgroundColor: colorScheme.onTertiaryFixedVariant,
                                 behavior: SnackBarBehavior.floating,
                               ),
                             );
@@ -7296,7 +7298,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                 content: Text(
                                   'لم نتمكن من مطابقة فئات الفواتشر في المخزون بدقة مع $effectiveVoucherAmount ج.م',
                                 ),
-                                backgroundColor: Colors.orange.shade800,
+                                backgroundColor: colorScheme.onSecondaryFixedVariant,
                                 behavior: SnackBarBehavior.floating,
                               ),
                             );
@@ -7306,21 +7308,21 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: Colors.amber.shade100,
+                            color: colorScheme.secondaryContainer,
                             borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: Colors.amber.shade400),
+                            border: Border.all(color: colorScheme.primaryFixedDim),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.auto_awesome_rounded, size: 13, color: Colors.amber.shade900),
+                              Icon(Icons.auto_awesome_rounded, size: 13, color: colorScheme.onSecondaryContainer),
                               const SizedBox(width: 4),
                               Text(
                                 '${strings.autoDecomposeLabel} (${effectiveVoucherAmount.toInt()} ج.م)',
                                 style: TextStyle(
                                   fontSize: 10.5,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.amber.shade900,
+                                  color: colorScheme.onSecondaryContainer,
                                 ),
                               ),
                             ],
@@ -7343,7 +7345,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.teal.shade200),
+                        border: Border.all(color: colorScheme.tertiaryFixedDim),
                       ),
                       child: Row(
                         children: [
@@ -7352,7 +7354,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                 ? Icons.confirmation_number_rounded
                                 : Icons.card_giftcard_rounded,
                             size: 16,
-                            color: alloc.isVoucher ? Colors.amber.shade800 : Colors.teal.shade700,
+                            color: alloc.isVoucher ? colorScheme.onSecondaryFixedVariant : colorScheme.onTertiaryFixedVariant,
                           ),
                           const SizedBox(width: 6),
                           Expanded(
@@ -7367,7 +7369,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                 if (alloc.isVoucher && alloc.unitValue > 0)
                                   Text(
                                     'فئة: ${alloc.unitValue.toInt()} ج.م × ${alloc.quantity} = ${alloc.totalMonetaryValue.toInt()} ج.م',
-                                    style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                                    style: TextStyle(fontSize: 10, color: colorScheme.onSurfaceVariant),
                                   ),
                               ],
                             ),
@@ -7394,7 +7396,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(2),
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade200,
+                                color: colorScheme.surfaceContainer,
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: const Icon(Icons.remove, size: 14),
@@ -7422,7 +7424,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(2),
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade200,
+                                color: colorScheme.surfaceContainer,
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: const Icon(Icons.add, size: 14),
@@ -7430,7 +7432,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                           ),
                           const SizedBox(width: 4),
                           IconButton(
-                            icon: const Icon(Icons.close_rounded, size: 16, color: Colors.redAccent),
+                            icon: Icon(Icons.close_rounded, size: 16, color: colorScheme.error),
                             visualDensity: VisualDensity.compact,
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(),
@@ -7463,8 +7465,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                 : Icons.info_outline_rounded,
                             size: 14,
                             color: (rule.totalVoucherValue - effectiveVoucherAmount).abs() < 0.01
-                                ? Colors.teal.shade800
-                                : Colors.amber.shade900,
+                                ? colorScheme.onTertiaryFixedVariant
+                                : colorScheme.onSecondaryContainer,
                           ),
                           const SizedBox(width: 4),
                           Text(
@@ -7474,8 +7476,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
                               color: (rule.totalVoucherValue - effectiveVoucherAmount).abs() < 0.01
-                                  ? Colors.teal.shade900
-                                  : Colors.amber.shade900,
+                                  ? colorScheme.onTertiaryContainer
+                                  : colorScheme.onSecondaryContainer,
                             ),
                           ),
                         ],
@@ -7497,7 +7499,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       fontSize: 11.5,
                       color: rule.linkedGifts.isEmpty
                           ? colorScheme.onSurfaceVariant
-                          : Colors.teal.shade900,
+                          : colorScheme.onTertiaryContainer,
                       fontWeight: rule.linkedGifts.isEmpty ? FontWeight.normal : FontWeight.bold,
                     ),
                   ),
@@ -7507,11 +7509,11 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     fillColor: Colors.white,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
+                      borderSide: BorderSide(color: colorScheme.outlineVariant),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
+                      borderSide: BorderSide(color: colorScheme.outlineVariant),
                     ),
                   ),
                   items: [
@@ -7531,7 +7533,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             Icon(
                               isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
                               size: 15,
-                              color: isVoucher ? Colors.amber.shade800 : Colors.teal.shade700,
+                              color: isVoucher ? colorScheme.onSecondaryFixedVariant : colorScheme.onTertiaryFixedVariant,
                             ),
                             const SizedBox(width: 6),
                             Expanded(
@@ -7546,7 +7548,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                                 decoration: BoxDecoration(
-                                  color: Colors.amber.shade100,
+                                  color: colorScheme.secondaryContainer,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
@@ -7554,7 +7556,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                   style: TextStyle(
                                     fontSize: 9.5,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.amber.shade900,
+                                    color: colorScheme.onSecondaryContainer,
                                   ),
                                 ),
                               ),
@@ -7644,21 +7646,21 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   Icon(
                     isAlreadyAdded ? Icons.check_circle_rounded : Icons.storefront_rounded,
                     size: 18,
-                    color: isAlreadyAdded ? Colors.green : colorScheme.primary,
+                    color: isAlreadyAdded ? colorScheme.tertiary : colorScheme.primary,
                   ),
                   const SizedBox(width: 8),
                   Text(
                     chain.name,
                     style: GoogleFonts.cairo(
                       fontWeight: FontWeight.bold,
-                      color: isAlreadyAdded ? Colors.green.shade700 : colorScheme.onSurface,
+                      color: isAlreadyAdded ? colorScheme.onTertiaryFixedVariant : colorScheme.onSurface,
                     ),
                   ),
                   const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                     decoration: BoxDecoration(
-                      color: isAlreadyAdded ? Colors.green.withValues(alpha: 0.15) : colorScheme.secondaryContainer,
+                      color: isAlreadyAdded ? colorScheme.tertiary.withValues(alpha: 0.15) : colorScheme.secondaryContainer,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -7666,7 +7668,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       style: GoogleFonts.cairo(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: isAlreadyAdded ? Colors.green.shade800 : colorScheme.onSecondaryContainer,
+                        color: isAlreadyAdded ? colorScheme.onTertiaryFixedVariant : colorScheme.onSecondaryContainer,
                       ),
                     ),
                   ),
@@ -7859,7 +7861,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                           ),
                           IconButton(
                             tooltip: 'إزالة هذه السلسلة من الحملة',
-                            icon: const Icon(Icons.close_rounded, color: Colors.redAccent),
+                            icon: Icon(Icons.close_rounded, color: colorScheme.error),
                             onPressed: () {
                               setState(() {
                                 final idx = _selectedRetailChainIds.indexOf(chainId);
@@ -8650,19 +8652,19 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   static Color _getGovernorateColor(String gov, ColorScheme colorScheme) {
     switch (gov) {
       case _govAlexandria:
-        return const Color(0xFF0284C7); // Sky blue
+        return colorScheme.primary; // Sky blue
       case _govCairoGiza:
-        return const Color(0xFF8B5CF6); // Royal purple
+        return colorScheme.primary; // Royal purple
       case _govNorthCoast:
-        return const Color(0xFF0D9488); // Teal
+        return colorScheme.tertiary; // Teal
       case _govBeheira:
-        return const Color(0xFF16A34A); // Emerald green
+        return colorScheme.tertiary; // Emerald green
       case _govGharbiaDelta:
-        return const Color(0xFFEA580C); // Warm amber-orange
+        return colorScheme.onSecondaryFixedVariant; // Warm amber-orange
       case _govCanalDamietta:
-        return const Color(0xFF2563EB); // Deep marine blue
+        return colorScheme.primary; // Deep marine blue
       case _govUpperEgypt:
-        return const Color(0xFFD97706); // Golden sun
+        return colorScheme.secondary; // Golden sun
       default:
         return colorScheme.primary;
     }
@@ -8997,7 +8999,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                 '• مخصص بحملات أخرى: ${gift.allocatedInOtherCampaigns}',
                                 style: GoogleFonts.cairo(
                                   fontSize: 11,
-                                  color: Colors.orange.shade800,
+                                  color: colorScheme.onSecondaryFixedVariant,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -9018,7 +9020,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
                                 color: remainingInCampaign > 0
-                                    ? Colors.green.shade700
+                                    ? colorScheme.onTertiaryFixedVariant
                                     : (remainingInCampaign == 0 && totalAllocatedInThisEvent > 0
                                         ? colorScheme.primary
                                         : colorScheme.error),
@@ -9224,7 +9226,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                               style: GoogleFonts.cairo(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
-                                color: remaining > 0 ? Colors.green.shade700 : colorScheme.error,
+                                color: remaining > 0 ? colorScheme.onTertiaryFixedVariant : colorScheme.error,
                               ),
                             ),
                           ],

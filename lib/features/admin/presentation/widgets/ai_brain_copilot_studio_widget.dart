@@ -36,6 +36,8 @@ class AiBrainCoPilotStudioWidget extends ConsumerStatefulWidget {
 }
 
 class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudioWidget> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   final TextEditingController _promptController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final List<AiBrainChatMessage> _messages = [];
@@ -204,7 +206,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(strings.micPermissionDenied, style: GoogleFonts.cairo()),
-            backgroundColor: Colors.red.shade700,
+            backgroundColor: colorScheme.onErrorContainer,
           ),
         );
       }
@@ -256,7 +258,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(strings.recordingTooShort, style: GoogleFonts.cairo()),
-            backgroundColor: Colors.amber.shade800,
+            backgroundColor: colorScheme.onSecondaryFixedVariant,
           ),
         );
       }
@@ -374,7 +376,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
             ),
           ],
         ),
-        backgroundColor: const Color(0xFF6750A4),
+        backgroundColor: colorScheme.primary,
         duration: const Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -397,7 +399,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(strings.recordingTooShort, style: GoogleFonts.cairo()),
-            backgroundColor: Colors.amber.shade800,
+            backgroundColor: colorScheme.onSecondaryFixedVariant,
           ),
         );
       }
@@ -424,7 +426,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
               ),
             ],
           ),
-          backgroundColor: const Color(0xFF10B981),
+          backgroundColor: colorScheme.tertiary,
           duration: const Duration(seconds: 2),
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -624,7 +626,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: const Color(0xFF10B981),
+            backgroundColor: colorScheme.tertiary,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             content: Row(
@@ -843,10 +845,10 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
             color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
             child: Row(
               children: [
-                const SizedBox(
+                SizedBox(
                   width: 14,
                   height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF6750A4)),
+                  child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary),
                 ),
                 const SizedBox(width: 10),
                 Text(
@@ -895,9 +897,9 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.green.shade50,
+                      color: colorScheme.tertiaryContainer,
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.green.shade300),
+                      border: Border.all(color: colorScheme.tertiaryFixedDim),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -905,8 +907,8 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                         Container(
                           width: 8,
                           height: 8,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF10B981),
+                          decoration: BoxDecoration(
+                            color: colorScheme.tertiary,
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -916,11 +918,11 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                           style: GoogleFonts.cairo(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
-                            color: Colors.green.shade900,
+                            color: colorScheme.onTertiaryContainer,
                           ),
                         ),
                         const SizedBox(width: 4),
-                        Icon(Icons.tune_rounded, size: 13, color: Colors.green.shade900),
+                        Icon(Icons.tune_rounded, size: 13, color: colorScheme.onTertiaryContainer),
                       ],
                     ),
                   ),
@@ -968,13 +970,13 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
             child: Row(
               children: [
                 ActionChip(
-                  avatar: const Icon(Icons.analytics_rounded, size: 15, color: Color(0xFF6750A4)),
+                  avatar: Icon(Icons.analytics_rounded, size: 15, color: colorScheme.primary),
                   label: Text(
                     isAr ? '📊 تحليل اتجاهات الرفض (Trends)' : '📊 Rejection Trends',
-                    style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold, color: const Color(0xFF6750A4)),
+                    style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold, color: colorScheme.primary),
                   ),
-                  backgroundColor: const Color(0xFF6750A4).withValues(alpha: 0.08),
-                  side: BorderSide(color: const Color(0xFF6750A4).withValues(alpha: 0.3)),
+                  backgroundColor: colorScheme.primary.withValues(alpha: 0.08),
+                  side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.3)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   onPressed: _isLoading ? null : _handleAnalyzeRejectionTrends,
                 ),
@@ -1017,15 +1019,15 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF6750A4), Color(0xFF4F378B)],
+                gradient: LinearGradient(
+                  colors: [colorScheme.primary, colorScheme.onPrimaryFixedVariant],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF6750A4).withValues(alpha: 0.3),
+                    color: colorScheme.primary.withValues(alpha: 0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -1114,7 +1116,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.bolt_rounded, size: 13, color: Color(0xFF10B981)),
+                              Icon(Icons.bolt_rounded, size: 13, color: colorScheme.tertiary),
                               const SizedBox(width: 4),
                               Text(
                                 '${msg.modelNameUsed ?? "Gemini"} • ${msg.durationSeconds != null ? "${msg.durationSeconds!.toStringAsFixed(1)}s" : "< 1s"}',
@@ -1174,10 +1176,10 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF6750A4).withValues(alpha: 0.5), width: 1.5),
+        border: Border.all(color: colorScheme.primary.withValues(alpha: 0.5), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6750A4).withValues(alpha: 0.08),
+            color: colorScheme.primary.withValues(alpha: 0.08),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -1190,7 +1192,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: const Color(0xFF6750A4).withValues(alpha: 0.06),
+              color: colorScheme.primary.withValues(alpha: 0.06),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(15),
                 topRight: Radius.circular(15),
@@ -1202,7 +1204,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6750A4),
+                    color: colorScheme.primary,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -1304,16 +1306,16 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                         child: Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: Colors.amber.shade50,
+                            color: colorScheme.secondaryContainer,
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.amber.shade300),
+                            border: Border.all(color: colorScheme.primaryFixedDim),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 isAr ? 'قبل تطبيق القاعدة (مدخل):' : 'Before / Input:',
-                                style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+                                style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: colorScheme.onSecondaryContainer),
                               ),
                               const SizedBox(height: 2),
                               Text(directive.exampleInput, style: GoogleFonts.cairo(fontSize: 11.5)),
@@ -1326,16 +1328,16 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                         child: Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: Colors.green.shade50,
+                            color: colorScheme.tertiaryContainer,
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.green.shade300),
+                            border: Border.all(color: colorScheme.tertiaryFixedDim),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 isAr ? 'بعد تطبيق القاعدة (المخرج):' : 'After / Output:',
-                                style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green.shade900),
+                                style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: colorScheme.onTertiaryContainer),
                               ),
                               const SizedBox(height: 2),
                               Text(directive.exampleOutput, style: GoogleFonts.cairo(fontSize: 11.5)),
@@ -1375,8 +1377,8 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                           style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
                         ),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF6750A4),
-                          side: const BorderSide(color: Color(0xFF6750A4)),
+                          foregroundColor: colorScheme.primary,
+                          side: BorderSide(color: colorScheme.primary),
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
@@ -1390,21 +1392,21 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                           ? Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                               decoration: BoxDecoration(
-                                color: Colors.green.shade50,
+                                color: colorScheme.tertiaryContainer,
                                 borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: Colors.green.shade300),
+                                border: Border.all(color: colorScheme.tertiaryFixedDim),
                               ),
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 18),
+                                  Icon(Icons.check_circle_rounded, color: colorScheme.tertiary, size: 18),
                                   const SizedBox(width: 6),
                                   Text(
                                     isAr ? 'معتمد في السحابة ✅' : 'Deployed ✅',
                                     style: GoogleFonts.cairo(
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.green.shade900,
+                                      color: colorScheme.onTertiaryContainer,
                                     ),
                                   ),
                                 ],
@@ -1426,7 +1428,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                                 style: GoogleFonts.cairo(fontSize: 12.5, fontWeight: FontWeight.bold),
                               ),
                               style: FilledButton.styleFrom(
-                                backgroundColor: const Color(0xFF6750A4),
+                                backgroundColor: colorScheme.primary,
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                               ),
@@ -1449,7 +1451,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
     final estimatedPrize = res['estimatedPrize']?.toString() ?? '';
     final matchedItems = (res['matchedItems'] as List?)?.map((e) => e.toString()).toList() ?? [];
 
-    final statusColor = isEligible ? const Color(0xFF10B981) : Colors.amber.shade800;
+    final statusColor = isEligible ? colorScheme.tertiary : colorScheme.onSecondaryFixedVariant;
 
     return Container(
       width: double.infinity,
@@ -1530,12 +1532,12 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: Colors.green.shade100,
+                    color: colorScheme.tertiaryContainer,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
                     item,
-                    style: GoogleFonts.cairo(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.green.shade900),
+                    style: GoogleFonts.cairo(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorScheme.onTertiaryContainer),
                   ),
                 );
               }).toList(),
@@ -1558,7 +1560,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
               color: colorScheme.primaryContainer,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.psychology_rounded, size: 20, color: Color(0xFF6750A4)),
+            child: Icon(Icons.psychology_rounded, size: 20, color: colorScheme.primary),
           ),
           const SizedBox(width: 12),
           Container(
@@ -1765,14 +1767,14 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.subtitles_rounded, size: 14, color: Color(0xFF10B981)),
+                      Icon(Icons.subtitles_rounded, size: 14, color: colorScheme.tertiary),
                       const SizedBox(width: 6),
                       Text(
                         isAr ? 'تفريغ الصوت الذكي (Gemini Transcription):' : 'Spoken Voice Transcription:',
                         style: GoogleFonts.cairo(
                           fontSize: 10.5,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF10B981),
+                          color: colorScheme.tertiary,
                         ),
                       ),
                     ],
@@ -1804,10 +1806,10 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: colorScheme.surface,
-        border: Border(top: BorderSide(color: Colors.red.withValues(alpha: 0.4))),
+        border: Border(top: BorderSide(color: colorScheme.error.withValues(alpha: 0.4))),
         boxShadow: [
           BoxShadow(
-            color: Colors.red.withValues(alpha: 0.08),
+            color: colorScheme.error.withValues(alpha: 0.08),
             blurRadius: 12,
             offset: const Offset(0, -3),
           ),
@@ -1825,10 +1827,10 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.red.shade50,
+                    color: colorScheme.errorContainer,
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.delete_outline_rounded, color: Colors.red.shade700, size: 22),
+                  child: Icon(Icons.delete_outline_rounded, color: colorScheme.onErrorContainer, size: 22),
                 ),
               ),
             ),
@@ -1841,7 +1843,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                 decoration: BoxDecoration(
                   color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                  border: Border.all(color: colorScheme.error.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
@@ -1855,11 +1857,11 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                           width: 12,
                           height: 12,
                           decoration: BoxDecoration(
-                            color: Colors.red.shade600,
+                            color: colorScheme.error,
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.red.withValues(alpha: val * 0.6),
+                                color: colorScheme.error.withValues(alpha: val * 0.6),
                                 blurRadius: 6,
                                 spreadRadius: 2,
                               ),
@@ -1876,7 +1878,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                       style: GoogleFonts.sourceCodePro(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: Colors.red.shade700,
+                        color: colorScheme.onErrorContainer,
                       ),
                     ),
                     const SizedBox(width: 14),
@@ -1892,7 +1894,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                             width: 3,
                             height: h,
                             decoration: BoxDecoration(
-                              color: const Color(0xFF6750A4).withValues(alpha: 0.8),
+                              color: colorScheme.primary.withValues(alpha: 0.8),
                               borderRadius: BorderRadius.circular(2),
                             ),
                           );
@@ -1926,7 +1928,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                   style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFD97706),
+                  backgroundColor: colorScheme.secondary,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -1947,8 +1949,8 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                   style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
                 ),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF6750A4),
-                  side: const BorderSide(color: Color(0xFF6750A4)),
+                  foregroundColor: colorScheme.primary,
+                  side: BorderSide(color: colorScheme.primary),
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                 ),
@@ -1963,7 +1965,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                 icon: const Icon(Icons.send_rounded, size: 20),
                 onPressed: _finishRecordingAndSendVoiceNote,
                 style: IconButton.styleFrom(
-                  backgroundColor: const Color(0xFF6750A4),
+                  backgroundColor: colorScheme.primary,
                   foregroundColor: Colors.white,
                 ),
               ),
@@ -1993,17 +1995,17 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF6750A4).withValues(alpha: 0.08),
+        color: colorScheme.primary.withValues(alpha: 0.08),
         border: Border(
-          top: BorderSide(color: const Color(0xFF6750A4).withValues(alpha: 0.3)),
-          bottom: BorderSide(color: const Color(0xFF6750A4).withValues(alpha: 0.15)),
+          top: BorderSide(color: colorScheme.primary.withValues(alpha: 0.3)),
+          bottom: BorderSide(color: colorScheme.primary.withValues(alpha: 0.15)),
         ),
       ),
       child: Row(
         children: [
           // Play / Pause circular action button
           Material(
-            color: const Color(0xFF6750A4),
+            color: colorScheme.primary,
             shape: const CircleBorder(),
             elevation: 1,
             child: InkWell(
@@ -2029,7 +2031,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.graphic_eq_rounded, size: 16, color: Color(0xFF6750A4)),
+                    Icon(Icons.graphic_eq_rounded, size: 16, color: colorScheme.primary),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -2037,7 +2039,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                         style: GoogleFonts.cairo(
                           fontSize: 11.5,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF6750A4),
+                          color: colorScheme.primary,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -2049,7 +2051,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                       style: GoogleFonts.sourceCodePro(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: const Color(0xFF6750A4),
+                        color: colorScheme.primary,
                       ),
                     ),
                   ],
@@ -2060,8 +2062,8 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                   child: LinearProgressIndicator(
                     value: isThisPlaying ? progress : 0.0,
                     minHeight: 4,
-                    backgroundColor: const Color(0xFF6750A4).withValues(alpha: 0.2),
-                    valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF6750A4)),
+                    backgroundColor: colorScheme.primary.withValues(alpha: 0.2),
+                    valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
                   ),
                 ),
               ],
@@ -2078,10 +2080,10 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
               child: Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: Colors.red.shade50,
+                  color: colorScheme.errorContainer,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.close_rounded, size: 16, color: Colors.red.shade700),
+                child: Icon(Icons.close_rounded, size: 16, color: colorScheme.onErrorContainer),
               ),
             ),
           ),
@@ -2110,7 +2112,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
             const SizedBox(width: 4),
             IconButton(
               icon: const Icon(Icons.mic_rounded, size: 24),
-              color: const Color(0xFF6750A4),
+              color: colorScheme.primary,
               tooltip: strings.voiceRecordTooltip,
               onPressed: _isLoading || _isTranscribingVoice ? null : _startVoiceRecording,
             ),
@@ -2150,7 +2152,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
                   : const Icon(Icons.send_rounded, size: 20),
               onPressed: (_isLoading || _isTranscribingVoice) ? null : () => _handleSendMessage(),
               style: IconButton.styleFrom(
-                backgroundColor: const Color(0xFF6750A4),
+                backgroundColor: colorScheme.primary,
                 foregroundColor: Colors.white,
               ),
             ),

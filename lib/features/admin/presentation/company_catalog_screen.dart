@@ -35,6 +35,8 @@ class CompanyCatalogScreen extends ConsumerStatefulWidget {
 }
 
 class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   // Card 1: Registration Form
   final _regFormKey = GlobalKey<FormState>();
   final _regCompanyNameController = TextEditingController();
@@ -107,7 +109,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Row(
             children: [
-              const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+              Icon(Icons.warning_amber_rounded, color: colorScheme.secondary, size: 28),
               const SizedBox(width: 10),
               Text(
                 'كود الشركة مسجل مسبقاً',
@@ -179,7 +181,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                 ),
               ],
             ),
-            backgroundColor: Colors.green.shade800,
+            backgroundColor: colorScheme.onTertiaryFixedVariant,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
@@ -694,7 +696,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: Row(
               children: [
-                const Icon(Icons.edit_note_rounded, color: Colors.blueAccent, size: 26),
+                Icon(Icons.edit_note_rounded, color: colorScheme.primary, size: 26),
                 const SizedBox(width: 8),
                 Text('تعديل بيانات الشركة', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 16)),
               ],
@@ -706,7 +708,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                 children: [
                   Text(
                     'يمكنك تعديل اسم الشركة أو كودها الرقمي، وسيتم تحديث كافة المنتجات والباركودات التابعة لها تلقائياً:',
-                    style: GoogleFonts.cairo(fontSize: 13, color: Colors.grey.shade700),
+                    style: GoogleFonts.cairo(fontSize: 13, color: colorScheme.onSurfaceVariant),
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
@@ -841,7 +843,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                             messenger.showSnackBar(
                               SnackBar(
                                 content: Text('تم تعديل بيانات شركة "$newName" بنجاح!'),
-                                backgroundColor: Colors.green.shade800,
+                                backgroundColor: colorScheme.onTertiaryFixedVariant,
                               ),
                             );
                           }
@@ -887,7 +889,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
             child: const Text('إلغاء'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(backgroundColor: colorScheme.error),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('حذف نهائي'),
           ),
@@ -942,7 +944,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        icon: const Icon(Icons.delete_sweep_rounded, color: Colors.red, size: 44),
+        icon: Icon(Icons.delete_sweep_rounded, color: colorScheme.error, size: 44),
         title: Text('مسح كافة منتجات "$name"؟', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 17)),
         content: Text(
           'هل أنت متأكد من حذف كافة المنتجات والأصناف المسجلة لشركة "$name" من قاعدة البيانات دفعة واحدة؟\n\nستتمكن بعد ذلك من إعادة رفع أو إدخال المنتجات والباركودات بشكل صحيح من ملف الإكسيل دون تكرار.\n(ملاحظة: لن يتم حذف الشركة نفسها، بل المنتجات فقط).',
@@ -955,7 +957,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
           ),
           FilledButton.icon(
             style: FilledButton.styleFrom(
-              backgroundColor: Colors.red.shade700,
+              backgroundColor: colorScheme.onErrorContainer,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             ),
@@ -982,7 +984,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const CircularProgressIndicator(color: Colors.red),
+                CircularProgressIndicator(color: colorScheme.error),
                 const SizedBox(height: 16),
                 Text(
                   'جاري مسح كافة منتجات "$name" من الـ Firebase...',
@@ -1033,7 +1035,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        icon: const Icon(Icons.cleaning_services_rounded, color: Colors.teal, size: 40),
+        icon: Icon(Icons.cleaning_services_rounded, color: colorScheme.tertiary, size: 40),
         title: Text('تدقيق وفحص التكرار لشركة "${company.name}"', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 16)),
         content: Text(
           'سيقوم النظام الآن بفحص وتدقيق كافة الأصناف والباركودات المسجلة لشركة "${company.name}"، والتأكد من عدم وجود أي أصناف مكررة، وحذف أي سجلات زائدة وتصحيح العداد بدقة.\n\nهل ترغب في بدء الفحص الآن؟',
@@ -1046,7 +1048,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
           ),
           FilledButton.icon(
             style: FilledButton.styleFrom(
-              backgroundColor: Colors.teal.shade700,
+              backgroundColor: colorScheme.onTertiaryFixedVariant,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             ),
@@ -1907,8 +1909,8 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                     _stagedProducts.clear();
                     _aiDetectionSummary = '';
                   }),
-                  icon: const Icon(Icons.clear_all_rounded, color: Colors.red),
-                  label: const Text('مسح القائمة', style: TextStyle(color: Colors.red)),
+                  icon: Icon(Icons.clear_all_rounded, color: colorScheme.error),
+                  label: Text('مسح القائمة', style: TextStyle(color: colorScheme.error)),
                 ),
               ],
             ),
@@ -2009,45 +2011,45 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                              color: Colors.blue.withValues(alpha: 0.1),
+                              color: colorScheme.primary.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                              border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3)),
                             ),
                             child: Text(
                               'الفئة: $pCategory',
-                              style: GoogleFonts.cairo(fontSize: 11, color: Colors.blue.shade800),
+                              style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onPrimaryFixedVariant),
                             ),
                           ),
                         if (pUnitSize.isNotEmpty)
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                              color: Colors.purple.withValues(alpha: 0.1),
+                              color: colorScheme.primary.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.purple.withValues(alpha: 0.3)),
+                              border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3)),
                             ),
                             child: Text(
                               'الحجم: $pUnitSize',
-                              style: GoogleFonts.cairo(fontSize: 11, color: Colors.purple.shade800),
+                              style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onPrimaryFixedVariant),
                             ),
                           ),
                         if (pPrice != null)
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                              color: Colors.green.withValues(alpha: 0.1),
+                              color: colorScheme.tertiary.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                              border: Border.all(color: colorScheme.tertiary.withValues(alpha: 0.3)),
                             ),
                             child: Text(
                               'السعر: $pPrice ${activeCountry.currencySymbol}',
-                              style: GoogleFonts.cairo(fontSize: 11, color: Colors.green.shade800),
+                              style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onTertiaryFixedVariant),
                             ),
                           ),
                       ],
                     ),
                     trailing: IconButton(
-                      icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                      icon: Icon(Icons.delete_outline_rounded, color: colorScheme.error, size: 20),
                       onPressed: () => setState(() => _stagedProducts.removeAt(index)),
                     ),
                   );
@@ -2078,7 +2080,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                   ),
                   style: FilledButton.styleFrom(
                     minimumSize: const Size(double.infinity, 50),
-                    backgroundColor: Colors.green.shade800,
+                    backgroundColor: colorScheme.onTertiaryFixedVariant,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
@@ -2441,21 +2443,21 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
+                    color: colorScheme.secondaryContainer,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.amber.shade300),
+                    border: Border.all(color: colorScheme.primaryFixedDim),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.warning_amber_rounded, size: 14, color: Colors.amber.shade800),
+                      Icon(Icons.warning_amber_rounded, size: 14, color: colorScheme.onSecondaryFixedVariant),
                       const SizedBox(width: 4),
                       Text(
                         '$emptyCompanies شركة بدون أصناف',
                         style: GoogleFonts.cairo(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: Colors.amber.shade900,
+                          color: colorScheme.onSecondaryContainer,
                         ),
                       ),
                     ],
@@ -2465,14 +2467,14 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.check_circle_rounded, size: 16, color: Colors.green.shade700),
+                    Icon(Icons.check_circle_rounded, size: 16, color: colorScheme.onTertiaryFixedVariant),
                     const SizedBox(width: 4),
                     Text(
                       'كافة الشركات موثقة بأصناف',
                       style: GoogleFonts.cairo(
                         fontSize: 11.5,
                         fontWeight: FontWeight.bold,
-                        color: Colors.green.shade800,
+                        color: colorScheme.onTertiaryFixedVariant,
                       ),
                     ),
                   ],
@@ -2957,21 +2959,21 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                       ? Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
                           decoration: BoxDecoration(
-                            color: Colors.green.shade50,
+                            color: colorScheme.tertiaryContainer,
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.green.shade300, width: 1.0),
+                            border: Border.all(color: colorScheme.tertiaryFixedDim, width: 1.0),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.check_circle_rounded, size: 12, color: Colors.green.shade700),
+                              Icon(Icons.check_circle_rounded, size: 12, color: colorScheme.onTertiaryFixedVariant),
                               const SizedBox(width: 4),
                               Text(
                                 'موثقة ومكتملة',
                                 style: GoogleFonts.cairo(
                                   fontSize: 10.5,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.green.shade800,
+                                  color: colorScheme.onTertiaryFixedVariant,
                                 ),
                               ),
                             ],
@@ -2980,21 +2982,21 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                       : Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
                           decoration: BoxDecoration(
-                            color: Colors.amber.shade50,
+                            color: colorScheme.secondaryContainer,
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.amber.shade400, width: 1.0),
+                            border: Border.all(color: colorScheme.primaryFixedDim, width: 1.0),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.warning_amber_rounded, size: 12, color: Colors.amber.shade800),
+                              Icon(Icons.warning_amber_rounded, size: 12, color: colorScheme.onSecondaryFixedVariant),
                               const SizedBox(width: 4),
                               Text(
                                 'بحاجة لأصناف',
                                 style: GoogleFonts.cairo(
                                   fontSize: 10.5,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.amber.shade900,
+                                  color: colorScheme.onSecondaryContainer,
                                 ),
                               ),
                             ],
@@ -3202,22 +3204,22 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                Colors.amber.shade50,
-                Colors.orange.shade50,
+                colorScheme.secondaryContainer,
+                colorScheme.secondaryContainer,
               ],
             ),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.amber.shade300),
+            border: Border.all(color: colorScheme.primaryFixedDim),
           ),
           child: Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.amber.shade100,
+                  color: colorScheme.secondaryContainer,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(Icons.auto_awesome_rounded, color: Colors.amber.shade900, size: 22),
+                child: Icon(Icons.auto_awesome_rounded, color: colorScheme.onSecondaryContainer, size: 22),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -3229,14 +3231,14 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                       style: GoogleFonts.cairo(
                         fontWeight: FontWeight.bold,
                         fontSize: 13.5,
-                        color: Colors.amber.shade900,
+                        color: colorScheme.onSecondaryContainer,
                       ),
                     ),
                     Text(
                       strings.discoveredProductsPendingSubtitle,
                       style: GoogleFonts.cairo(
                         fontSize: 11.5,
-                        color: Colors.amber.shade900,
+                        color: colorScheme.onSecondaryContainer,
                       ),
                     ),
                   ],
@@ -3259,7 +3261,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                   style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
                 ),
                 style: FilledButton.styleFrom(
-                  backgroundColor: Colors.amber.shade900,
+                  backgroundColor: colorScheme.onSecondaryContainer,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -3306,7 +3308,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                     : null,
                 label: _isAiAnalyzing ? 'جاري الفحص...' : 'فحص واكتشاف الأصناف',
                 tooltip: 'فحص فواتير المشتريات تلقائياً لاكتشاف أي أصناف جديدة لم تسجل بعد لـ (${selectedCompany.name}) ومراجعتها واعتمادها',
-                iconColor: Colors.amber.shade800,
+                iconColor: colorScheme.onSecondaryFixedVariant,
                 onPressed: _isAiAnalyzing ? null : () => _scanAndReviewDiscoveredProductsForCompany(selectedCompany),
               ),
               _buildM3GroupDivider(colorScheme),
@@ -3350,8 +3352,8 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                 icon: Icons.cleaning_services_rounded,
                 label: 'تدقيق ومنع التكرار',
                 tooltip: 'تدقيق وفحص كافة أصناف (${selectedCompany.name}) المسجلة وحذف أي أصناف مكررة فوراً وتصحيح العداد',
-                iconColor: Colors.teal.shade700,
-                textColor: Colors.teal.shade900,
+                iconColor: colorScheme.onTertiaryFixedVariant,
+                textColor: colorScheme.onTertiaryContainer,
                 onPressed: () => _auditAndDeduplicateCompany(selectedCompany),
               ),
               _buildM3GroupDivider(colorScheme),
@@ -3362,9 +3364,9 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                 icon: Icons.delete_sweep_rounded,
                 label: 'مسح كل المنتجات',
                 tooltip: 'مسح وحذف كافة المنتجات والأصناف المسجلة لـ (${selectedCompany.name}) من الـ Firebase دفعة واحدة',
-                iconColor: Colors.red.shade700,
-                textColor: Colors.red.shade700,
-                hoverColor: Colors.red.shade50,
+                iconColor: colorScheme.onErrorContainer,
+                textColor: colorScheme.onErrorContainer,
+                hoverColor: colorScheme.errorContainer,
                 onPressed: () => _deleteAllProductsForCompany(selectedCompany.slug, selectedCompany.name),
               ),
               _buildM3GroupDivider(colorScheme),
@@ -3374,8 +3376,8 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                 colorScheme: colorScheme,
                 icon: Icons.delete_outline_rounded,
                 tooltip: 'حذف شركة (${selectedCompany.name}) وجميع أصنافها الموثقة من النظام نهائياً',
-                iconColor: Colors.red.shade700,
-                hoverColor: Colors.red.shade50,
+                iconColor: colorScheme.onErrorContainer,
+                hoverColor: colorScheme.errorContainer,
                 onPressed: () => _deleteCompanyFromFirebase(selectedCompany.slug, selectedCompany.name),
               ),
             ],
@@ -3569,7 +3571,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                 alignment: Alignment.center,
                 child: Text(
                   'حدث خطأ أثناء تحميل المنتجات: ${snapshot.error}',
-                  style: const TextStyle(color: Colors.red),
+                  style: TextStyle(color: colorScheme.error),
                 ),
               );
             }
@@ -3681,19 +3683,19 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                                   message: 'مسح وحذف كافة الـ $totalCompanyItems منتج المسجلة لهذه الشركة دفعة واحدة من قاعدة البيانات',
                                   child: OutlinedButton.icon(
                                     onPressed: () => _deleteAllProductsForCompany(selectedCompany.slug, selectedCompany.name),
-                                    icon: const Icon(Icons.delete_sweep_rounded, size: 15, color: Colors.red),
+                                    icon: Icon(Icons.delete_sweep_rounded, size: 15, color: colorScheme.error),
                                     label: Text(
                                       'مسح كل الـ $totalCompanyItems منتج',
                                       style: GoogleFonts.cairo(
                                         fontSize: 11,
                                         fontWeight: FontWeight.bold,
-                                        color: Colors.red.shade700,
+                                        color: colorScheme.onErrorContainer,
                                       ),
                                     ),
                                     style: OutlinedButton.styleFrom(
                                       visualDensity: VisualDensity.compact,
-                                      side: BorderSide(color: Colors.red.shade300),
-                                      backgroundColor: Colors.red.shade50.withValues(alpha: 0.7),
+                                      side: BorderSide(color: colorScheme.errorContainer),
+                                      backgroundColor: colorScheme.errorContainer.withValues(alpha: 0.7),
                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                     ),
@@ -3715,7 +3717,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                                   'تم تحميل كافة المنتجات',
                                   style: GoogleFonts.cairo(
                                     fontSize: 12,
-                                    color: Colors.green.shade700,
+                                    color: colorScheme.onTertiaryFixedVariant,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
@@ -3727,7 +3729,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                       M3LinearProgress(
                         value: progressRatio,
                         height: 6,
-                        color: hasMore ? colorScheme.primary : Colors.green.shade600,
+                        color: hasMore ? colorScheme.primary : colorScheme.tertiary,
                       ),
                     ],
                   ),
@@ -3820,7 +3822,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                           ],
                         ),
                         trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                          icon: Icon(Icons.delete_outline_rounded, color: colorScheme.error, size: 20),
                           tooltip: 'حذف هذا الصنف وباركوده من النظام نهائياً',
                           onPressed: () async {
                             final messenger = ScaffoldMessenger.of(context);

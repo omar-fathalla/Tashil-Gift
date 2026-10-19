@@ -32,11 +32,25 @@ class AppTheme {
     return _buildM3Theme(colorScheme: colorScheme);
   }
 
-  /// Backwards-compatible lightTheme getter defaulting to Purple seed
+  /// Backwards-compatible lightTheme getter defaulting to M3 Dynamic Olive seed
   static ThemeData get lightTheme => getLightTheme(seedColor: defaultSeedColor);
 
-  /// Backwards-compatible darkTheme getter defaulting to Purple seed
+  /// Backwards-compatible darkTheme getter defaulting to M3 Dynamic Olive seed
   static ThemeData get darkTheme => getDarkTheme(seedColor: defaultSeedColor);
+
+  /// Official Material Design 3 Dynamic Tonal Series derived strictly from active [ColorScheme].
+  /// Used for charts, multi-series comparisons, wheel segments, and category badges.
+  static List<Color> getDynamicPalette(ColorScheme colorScheme) => [
+        colorScheme.primary,
+        colorScheme.secondary,
+        colorScheme.tertiary,
+        colorScheme.onPrimaryFixedVariant,
+        colorScheme.onSecondaryFixedVariant,
+        colorScheme.onTertiaryFixedVariant,
+        colorScheme.primaryFixedDim,
+        colorScheme.secondaryFixedDim,
+        colorScheme.tertiaryFixedDim,
+      ];
 
   /// Internal builder establishing full Material Design 3 component specifications
   static ThemeData _buildM3Theme({required ColorScheme colorScheme}) {
@@ -49,6 +63,7 @@ class AppTheme {
       colorScheme: colorScheme,
       brightness: colorScheme.brightness,
       scaffoldBackgroundColor: colorScheme.surface,
+      dividerColor: colorScheme.outlineVariant.withValues(alpha: 0.5),
       textTheme: cairoTextTheme.apply(
         bodyColor: colorScheme.onSurface,
         displayColor: colorScheme.onSurface,
@@ -80,6 +95,19 @@ class AppTheme {
         ),
         clipBehavior: Clip.antiAlias,
         margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+      ),
+
+      // M3 Divider Specification
+      dividerTheme: DividerThemeData(
+        color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        thickness: 1,
+      ),
+
+      // M3 ProgressIndicator Specification
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: colorScheme.primary,
+        linearTrackColor: colorScheme.surfaceContainerHighest,
+        circularTrackColor: colorScheme.surfaceContainerHighest,
       ),
 
       // M3 Button Theme Specifications
@@ -137,6 +165,47 @@ class AppTheme {
         ),
       ),
 
+      // M3 SegmentedButton Specification
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: SegmentedButton.styleFrom(
+          selectedBackgroundColor: colorScheme.secondaryContainer,
+          selectedForegroundColor: colorScheme.onSecondaryContainer,
+          backgroundColor: colorScheme.surfaceContainerLow,
+          foregroundColor: colorScheme.onSurfaceVariant,
+          side: BorderSide(color: colorScheme.outlineVariant),
+          textStyle: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+        ),
+      ),
+
+      // M3 Switch, Checkbox & Radio Specifications
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return colorScheme.onPrimary;
+          return colorScheme.outline;
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return colorScheme.primary;
+          return colorScheme.surfaceContainerHighest;
+        }),
+      ),
+
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return colorScheme.primary;
+          return Colors.transparent;
+        }),
+        checkColor: WidgetStatePropertyAll(colorScheme.onPrimary),
+        side: BorderSide(color: colorScheme.outline, width: 1.5),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      ),
+
+      radioTheme: RadioThemeData(
+        fillColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return colorScheme.primary;
+          return colorScheme.onSurfaceVariant;
+        }),
+      ),
+
       // M3 FloatingActionButton Theme Specification
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: colorScheme.primaryContainer,
@@ -191,6 +260,23 @@ class AppTheme {
         ),
       ),
 
+      // M3 BottomSheet & DatePicker Theme Specifications
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: colorScheme.surfaceContainerLow,
+        surfaceTintColor: colorScheme.surfaceTint,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+      ),
+
+      datePickerTheme: DatePickerThemeData(
+        backgroundColor: colorScheme.surfaceContainerHigh,
+        surfaceTintColor: colorScheme.surfaceTint,
+        headerBackgroundColor: colorScheme.primaryContainer,
+        headerForegroundColor: colorScheme.onPrimaryContainer,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      ),
+
       // M3 Chips Theme Specification
       chipTheme: ChipThemeData(
         backgroundColor: colorScheme.surfaceContainerLow,
@@ -211,7 +297,32 @@ class AppTheme {
         side: BorderSide(color: colorScheme.outlineVariant),
       ),
 
-      // M3 NavigationRail & NavigationBar Specifications
+      // M3 Badge & Tooltip Specifications
+      badgeTheme: BadgeThemeData(
+        backgroundColor: colorScheme.primary,
+        textColor: colorScheme.onPrimary,
+        textStyle: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
+      ),
+
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: colorScheme.inverseSurface,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        textStyle: GoogleFonts.cairo(
+          color: colorScheme.onInverseSurface,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+
+      // M3 NavigationRail, NavigationDrawer & NavigationBar Specifications
+      navigationDrawerTheme: NavigationDrawerThemeData(
+        backgroundColor: colorScheme.surfaceContainerLow,
+        indicatorColor: colorScheme.secondaryContainer,
+        surfaceTintColor: colorScheme.surfaceTint,
+      ),
+
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: colorScheme.surfaceContainerLow,
         indicatorColor: colorScheme.secondaryContainer,

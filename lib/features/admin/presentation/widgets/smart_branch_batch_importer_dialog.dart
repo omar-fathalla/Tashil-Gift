@@ -57,6 +57,8 @@ class SmartBranchBatchImporterDialog extends ConsumerStatefulWidget {
 }
 
 class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatchImporterDialog> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   int _activeTab = 0; // 0: Text, 1: Excel, 2: Image
   final _textController = TextEditingController();
 
@@ -238,7 +240,7 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('تنبيه: $e', style: GoogleFonts.cairo()),
-            backgroundColor: Colors.red.shade800,
+            backgroundColor: colorScheme.onErrorContainer,
           ),
         );
       }
@@ -323,7 +325,7 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
               'تم تسجيل وتوثيق $registeredCount فرعاً جديداً في النظام بنجاح! ✓',
               style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
             ),
-            backgroundColor: Colors.teal.shade700,
+            backgroundColor: colorScheme.onTertiaryFixedVariant,
           ),
         );
       }
@@ -332,7 +334,7 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('حدث خطأ أثناء التسجيل: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: colorScheme.error,
           ),
         );
       }
@@ -364,7 +366,7 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
               ),
             ],
           ),
-          backgroundColor: Colors.teal.shade800,
+          backgroundColor: colorScheme.onTertiaryFixedVariant,
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 4),
         ),
@@ -424,7 +426,7 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
               'تم توثيق وتسجيل فرع "$arabicName" في النظام بنجاح! ✓',
               style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
             ),
-            backgroundColor: Colors.teal.shade700,
+            backgroundColor: colorScheme.onTertiaryFixedVariant,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -432,7 +434,7 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ أثناء تسجيل الفرع: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('خطأ أثناء تسجيل الفرع: $e'), backgroundColor: colorScheme.error),
         );
       }
     }
@@ -489,7 +491,7 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
               'تم تسجيل سلسلة "$chainName" في النظام بنجاح! ✓ تحولت فروعها تلقائياً إلى فروع جديدة مهيأة للتسجيل.',
               style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
             ),
-            backgroundColor: Colors.purple.shade700,
+            backgroundColor: colorScheme.primary,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -497,7 +499,7 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('حدث خطأ أثناء تسجيل السلسلة: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('حدث خطأ أثناء تسجيل السلسلة: $e'), backgroundColor: colorScheme.error),
         );
       }
     } finally {
@@ -569,7 +571,7 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
               'تم تسجيل $registeredCount سلاسل جديدة في النظام بنجاح! ✓ أصبحت كافة الفروع جاهزة للتسجيل الآن.',
               style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
             ),
-            backgroundColor: Colors.purple.shade700,
+            backgroundColor: colorScheme.primary,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -577,7 +579,7 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('حدث خطأ أثناء تسجيل السلاسل: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('حدث خطأ أثناء تسجيل السلاسل: $e'), backgroundColor: colorScheme.error),
         );
       }
     } finally {
@@ -794,7 +796,7 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
                     Icon(
                       _excelBytes != null ? Icons.task_alt_rounded : Icons.cloud_upload_rounded,
                       size: 48,
-                      color: _excelBytes != null ? Colors.teal : colorScheme.primary,
+                      color: _excelBytes != null ? colorScheme.tertiary : colorScheme.primary,
                     ),
                     const SizedBox(height: 12),
                     Text(
@@ -826,17 +828,17 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: Colors.teal.shade50,
+                    color: colorScheme.tertiaryContainer,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.teal.shade200),
+                    border: Border.all(color: colorScheme.tertiaryFixedDim),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.bolt_rounded, size: 14, color: Colors.teal),
+                      Icon(Icons.bolt_rounded, size: 14, color: colorScheme.tertiary),
                       const SizedBox(width: 4),
                       Text(
                         'Gemini 3.7 Flash Vision',
-                        style: GoogleFonts.cairo(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.teal.shade900),
+                        style: GoogleFonts.cairo(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorScheme.onTertiaryContainer),
                       ),
                     ],
                   ),
@@ -860,7 +862,7 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
                     Icon(
                       _imageBytes != null ? Icons.image_rounded : Icons.add_photo_alternate_rounded,
                       size: 48,
-                      color: _imageBytes != null ? Colors.purple : colorScheme.primary,
+                      color: _imageBytes != null ? colorScheme.primary : colorScheme.primary,
                     ),
                     const SizedBox(height: 12),
                     Text(
@@ -933,16 +935,16 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
           // 1. KPI Row
           Row(
             children: [
-              _buildKpiBadge('إجمالي الفروع', '${summary.totalCount}', Colors.blue),
+              _buildKpiBadge('إجمالي الفروع', '${summary.totalCount}', colorScheme.primary),
               const SizedBox(width: 8),
-              _buildKpiBadge('متطابق بالسيستم ✓', '${summary.matchedCount}', Colors.teal),
+              _buildKpiBadge('متطابق بالسيستم ✓', '${summary.matchedCount}', colorScheme.tertiary),
               const SizedBox(width: 8),
-              _buildKpiBadge('فروع جديدة ⚠️', '${summary.newBranchesCount}', Colors.amber.shade800),
+              _buildKpiBadge('فروع جديدة ⚠️', '${summary.newBranchesCount}', colorScheme.onSecondaryFixedVariant),
               const SizedBox(width: 8),
               if (summary.unknownChainsCount > 0)
-                _buildKpiBadge('سلاسل غير مسجلة ❌', '${summary.unknownChainsCount}', Colors.red.shade700)
+                _buildKpiBadge('سلاسل غير مسجلة ❌', '${summary.unknownChainsCount}', colorScheme.onErrorContainer)
               else
-                _buildKpiBadge('سلاسل مكتشفة 🏢', '${summary.matchedChainNames.length}', Colors.purple),
+                _buildKpiBadge('سلاسل مكتشفة 🏢', '${summary.matchedChainNames.length}', colorScheme.primary),
             ],
           ),
           const SizedBox(height: 12),
@@ -968,8 +970,8 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
                     // Copy WhatsApp / Email Request Button
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.teal.shade800,
-                        side: BorderSide(color: Colors.teal.shade400),
+                        foregroundColor: colorScheme.onTertiaryFixedVariant,
+                        side: BorderSide(color: colorScheme.tertiaryFixedDim),
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                         visualDensity: VisualDensity.compact,
                       ),
@@ -985,8 +987,8 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
                     if (summary.unknownChainsCount > 0)
                       FilledButton.tonalIcon(
                         style: FilledButton.styleFrom(
-                          backgroundColor: Colors.purple.shade50,
-                          foregroundColor: Colors.purple.shade900,
+                          backgroundColor: colorScheme.primaryContainer,
+                          foregroundColor: colorScheme.onPrimaryContainer,
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                           visualDensity: VisualDensity.compact,
                         ),
@@ -1004,8 +1006,8 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
                     if (summary.newBranchesCount > 0)
                       FilledButton.tonalIcon(
                         style: FilledButton.styleFrom(
-                          backgroundColor: Colors.amber.shade100,
-                          foregroundColor: Colors.amber.shade900,
+                          backgroundColor: colorScheme.secondaryContainer,
+                          foregroundColor: colorScheme.onSecondaryContainer,
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                           visualDensity: VisualDensity.compact,
                         ),
@@ -1103,7 +1105,7 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
                           alignment: Alignment.center,
                           child: Text(
                             '${item.rawItem.rowNumber}',
-                            style: GoogleFonts.cairo(fontSize: 11, color: Colors.grey.shade600),
+                            style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.outline),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -1112,13 +1114,13 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
+                            color: colorScheme.primaryContainer,
                             borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: Colors.blue.shade200),
+                            border: Border.all(color: colorScheme.primaryFixedDim),
                           ),
                           child: Text(
                             item.canonicalChainName.isNotEmpty ? item.canonicalChainName : item.rawItem.rawChain,
-                            style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.blue.shade900),
+                            style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold, color: colorScheme.onPrimaryContainer),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -1136,18 +1138,18 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
                                   ),
                                   if (item.matchedBranchName != null && item.matchedBranchName != item.rawItem.rawBranch) ...[
                                     const SizedBox(width: 6),
-                                    const Icon(Icons.arrow_forward_rounded, size: 12, color: Colors.grey),
+                                    Icon(Icons.arrow_forward_rounded, size: 12, color: colorScheme.outline),
                                     const SizedBox(width: 6),
                                     Text(
                                       item.matchedBranchName!,
-                                      style: GoogleFonts.cairo(fontSize: 12, color: Colors.teal.shade800, fontWeight: FontWeight.w600),
+                                      style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onTertiaryFixedVariant, fontWeight: FontWeight.w600),
                                     ),
                                   ],
                                 ],
                               ),
                               Text(
                                 'المدينة: ${item.suggestedCity} • النص الأصلي: ${item.rawItem.rawChain} - ${item.rawItem.rawBranch}',
-                                style: GoogleFonts.cairo(fontSize: 10.5, color: Colors.grey.shade600),
+                                style: GoogleFonts.cairo(fontSize: 10.5, color: colorScheme.outline),
                               ),
                             ],
                           ),
@@ -1162,7 +1164,7 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
                               const SizedBox(width: 6),
                               ElevatedButton.icon(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.purple.shade700,
+                                  backgroundColor: colorScheme.primary,
                                   foregroundColor: Colors.white,
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   visualDensity: VisualDensity.compact,
@@ -1180,8 +1182,8 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
                               const SizedBox(width: 6),
                               OutlinedButton.icon(
                                 style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.teal.shade800,
-                                  side: BorderSide(color: Colors.teal.shade300),
+                                  foregroundColor: colorScheme.onTertiaryFixedVariant,
+                                  side: BorderSide(color: colorScheme.tertiaryFixedDim),
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   visualDensity: VisualDensity.compact,
                                 ),
@@ -1236,7 +1238,7 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.list_alt_rounded, size: 16, color: Colors.blue),
+                  Icon(Icons.list_alt_rounded, size: 16, color: colorScheme.primary),
                   const SizedBox(width: 8),
                   Text('عرض: كل الفروع (${summary.totalCount})'),
                 ],
@@ -1247,7 +1249,7 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.check_circle_rounded, size: 16, color: Colors.teal),
+                  Icon(Icons.check_circle_rounded, size: 16, color: colorScheme.tertiary),
                   const SizedBox(width: 8),
                   Text('المتطابقة بالسيستم (${summary.matchedCount})'),
                 ],
@@ -1258,7 +1260,7 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.info_outline_rounded, size: 16, color: Colors.amber.shade900),
+                  Icon(Icons.info_outline_rounded, size: 16, color: colorScheme.onSecondaryContainer),
                   const SizedBox(width: 8),
                   Text('فروع جديدة (${summary.newBranchesCount})'),
                 ],
@@ -1270,11 +1272,11 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.warning_amber_rounded, size: 16, color: Colors.red),
+                    Icon(Icons.warning_amber_rounded, size: 16, color: colorScheme.error),
                     const SizedBox(width: 8),
                     Text(
                       'سلاسل غير مسجلة (${summary.unknownChainsCount})',
-                      style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                      style: TextStyle(color: colorScheme.error, fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
@@ -1314,16 +1316,16 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
-            color: Colors.teal.shade50,
+            color: colorScheme.tertiaryContainer,
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: Colors.teal.shade300),
+            border: Border.all(color: colorScheme.tertiaryFixedDim),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.check_circle_rounded, size: 13, color: Colors.teal),
+              Icon(Icons.check_circle_rounded, size: 13, color: colorScheme.tertiary),
               const SizedBox(width: 4),
-              Text('متطابق بدقة ✓', style: GoogleFonts.cairo(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.teal.shade900)),
+              Text('متطابق بدقة ✓', style: GoogleFonts.cairo(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorScheme.onTertiaryContainer)),
             ],
           ),
         );
@@ -1331,16 +1333,16 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
-            color: Colors.blue.shade50,
+            color: colorScheme.primaryContainer,
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: Colors.blue.shade300),
+            border: Border.all(color: colorScheme.primaryFixedDim),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.auto_awesome_rounded, size: 13, color: Colors.blue),
+              Icon(Icons.auto_awesome_rounded, size: 13, color: colorScheme.primary),
               const SizedBox(width: 4),
-              Text('مطابقة ذكية', style: GoogleFonts.cairo(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.blue.shade900)),
+              Text('مطابقة ذكية', style: GoogleFonts.cairo(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorScheme.onPrimaryContainer)),
             ],
           ),
         );
@@ -1348,16 +1350,16 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
-            color: Colors.amber.shade50,
+            color: colorScheme.secondaryContainer,
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: Colors.amber.shade300),
+            border: Border.all(color: colorScheme.primaryFixedDim),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.info_outline_rounded, size: 13, color: Colors.amber.shade900),
+              Icon(Icons.info_outline_rounded, size: 13, color: colorScheme.onSecondaryContainer),
               const SizedBox(width: 4),
-              Text('فرع جديد', style: GoogleFonts.cairo(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.amber.shade900)),
+              Text('فرع جديد', style: GoogleFonts.cairo(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorScheme.onSecondaryContainer)),
             ],
           ),
         );
@@ -1365,16 +1367,16 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
-            color: Colors.red.shade50,
+            color: colorScheme.errorContainer,
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: Colors.red.shade300),
+            border: Border.all(color: colorScheme.errorContainer),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.warning_amber_rounded, size: 13, color: Colors.red),
+              Icon(Icons.warning_amber_rounded, size: 13, color: colorScheme.error),
               const SizedBox(width: 4),
-              Text('سلسلة غير معروفة', style: GoogleFonts.cairo(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.red.shade900)),
+              Text('سلسلة غير معروفة', style: GoogleFonts.cairo(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorScheme.onErrorContainer)),
             ],
           ),
         );

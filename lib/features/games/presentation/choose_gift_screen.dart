@@ -53,6 +53,8 @@ class ChooseGiftScreen extends ConsumerStatefulWidget {
 
 class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
     with TickerProviderStateMixin {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   late final List<String> _items;
   int? _selectedGiftIndex;
   bool _isConfirming = false;
@@ -220,15 +222,14 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
   }
 
   Color _getPrizeAccentColor(BuildContext context, int index) {
+    final cs = Theme.of(context).colorScheme;
     final colors = [
-      Theme.of(context).colorScheme.primary,
-      Theme.of(context).colorScheme.tertiary,
-      Colors.teal,
-      Colors.indigo,
-      Colors.deepPurple,
-      Colors.amber.shade800,
-      Colors.pink.shade600,
-      Colors.blue.shade700,
+      cs.primary,
+      cs.tertiary,
+      cs.secondary,
+      cs.onPrimaryFixedVariant,
+      cs.onTertiaryFixedVariant,
+      cs.onSecondaryFixedVariant,
     ];
     return colors[index % colors.length];
   }
@@ -347,54 +348,57 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
     if (_wonPrizes.isEmpty) {
       final shouldLeave = await showDialog<bool>(
         context: context,
-        builder: (dialogCtx) => Directionality(
-          textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
-          child: AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            icon: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade50,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.arrow_back_rounded, color: Colors.amber.shade800, size: 30),
-            ),
-            title: Text(
-              isAr ? 'العودة لشاشة رفع الفواتير' : 'Return to Upload Receipts',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 17),
-            ),
-            content: Text(
-              isAr
-                  ? 'هل أنت متأكد من العودة دون اختيار أي هدية؟\n\nلن يتم تسجيل صرف أي هدية لهذه الفاتورة، ولن تُحتسب في المخزون، ويمكنك إعادة فحصها أو رفعها لاحقاً.'
-                  : 'Are you sure you want to return without choosing any gift?\n\nNo gift will be recorded or deducted for this receipt, and you can re-scan it later.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.cairo(fontSize: 13.5, height: 1.5),
-            ),
-            actionsAlignment: MainAxisAlignment.spaceBetween,
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogCtx).pop(false),
-                child: Text(
-                  isAr ? 'البقاء واختيار هدية' : 'Stay & Pick Gift',
-                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+        builder: (dialogCtx) {
+          final dCs = Theme.of(dialogCtx).colorScheme;
+          return Directionality(
+            textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              icon: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: dCs.secondaryContainer,
+                  shape: BoxShape.circle,
                 ),
+                child: Icon(Icons.arrow_back_rounded, color: dCs.secondary, size: 30),
               ),
-              FilledButton.tonalIcon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.red.shade50,
-                  foregroundColor: Colors.red.shade700,
-                ),
-                onPressed: () => Navigator.of(dialogCtx).pop(true),
-                icon: const Icon(Icons.exit_to_app_rounded, size: 18),
-                label: Text(
-                  isAr ? 'نعم، إلغاء والعودة' : 'Yes, Cancel & Return',
-                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
-                ),
+              title: Text(
+                isAr ? 'العودة لشاشة رفع الفواتير' : 'Return to Upload Receipts',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 17),
               ),
-            ],
-          ),
-        ),
+              content: Text(
+                isAr
+                    ? 'هل أنت متأكد من العودة دون اختيار أي هدية؟\n\nلن يتم تسجيل صرف أي هدية لهذه الفاتورة، ولن تُحتسب في المخزون، ويمكنك إعادة فحصها أو رفعها لاحقاً.'
+                    : 'Are you sure you want to return without choosing any gift?\n\nNo gift will be recorded or deducted for this receipt, and you can re-scan it later.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.cairo(fontSize: 13.5, height: 1.5),
+              ),
+              actionsAlignment: MainAxisAlignment.spaceBetween,
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(false),
+                  child: Text(
+                    isAr ? 'البقاء واختيار هدية' : 'Stay & Pick Gift',
+                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                FilledButton.tonalIcon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: dCs.errorContainer,
+                    foregroundColor: dCs.onErrorContainer,
+                  ),
+                  onPressed: () => Navigator.of(dialogCtx).pop(true),
+                  icon: const Icon(Icons.exit_to_app_rounded, size: 18),
+                  label: Text(
+                    isAr ? 'نعم، إلغاء والعودة' : 'Yes, Cancel & Return',
+                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       );
 
       if (shouldLeave != true) return;
@@ -415,49 +419,52 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
     } else {
       final shouldLeave = await showDialog<bool>(
         context: context,
-        builder: (dialogCtx) => Directionality(
-          textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
-          child: AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            icon: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.check_circle_outline_rounded, color: Colors.blue.shade700, size: 30),
-            ),
-            title: Text(
-              isAr ? 'إنهاء الاختيار والعودة' : 'Finish & Exit',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 17),
-            ),
-            content: Text(
-              isAr
-                  ? 'لقد قمت باختيار (${_wonPrizes.length}) من إجمالي ($totalChances) هدايا.\n\nهل تريد إنهاء الجلسة والعودة بالهدايا التي تم اختيارها بالفعل؟'
-                  : 'You have chosen (${_wonPrizes.length}) of ($totalChances) gifts.\n\nDo you want to finish and exit with the chosen gifts?',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.cairo(fontSize: 13.5, height: 1.5),
-            ),
-            actionsAlignment: MainAxisAlignment.spaceBetween,
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogCtx).pop(false),
-                child: Text(
-                  isAr ? 'متابعة بقية الهدايا' : 'Continue Picking',
-                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+        builder: (dialogCtx) {
+          final dCs = Theme.of(dialogCtx).colorScheme;
+          return Directionality(
+            textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              icon: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: dCs.primaryContainer,
+                  shape: BoxShape.circle,
                 ),
+                child: Icon(Icons.check_circle_outline_rounded, color: dCs.primary, size: 30),
               ),
-              FilledButton(
-                onPressed: () => Navigator.of(dialogCtx).pop(true),
-                child: Text(
-                  isAr ? 'نعم، اكتفيت بالهدايا' : 'Yes, Exit Now',
-                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+              title: Text(
+                isAr ? 'إنهاء الاختيار والعودة' : 'Finish & Exit',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 17),
+              ),
+              content: Text(
+                isAr
+                    ? 'لقد قمت باختيار (${_wonPrizes.length}) من إجمالي ($totalChances) هدايا.\n\nهل تريد إنهاء الجلسة والعودة بالهدايا التي تم اختيارها بالفعل؟'
+                    : 'You have chosen (${_wonPrizes.length}) of ($totalChances) gifts.\n\nDo you want to finish and exit with the chosen gifts?',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.cairo(fontSize: 13.5, height: 1.5),
+              ),
+              actionsAlignment: MainAxisAlignment.spaceBetween,
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(false),
+                  child: Text(
+                    isAr ? 'متابعة بقية الهدايا' : 'Continue Picking',
+                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(true),
+                  child: Text(
+                    isAr ? 'نعم، اكتفيت بالهدايا' : 'Yes, Exit Now',
+                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       );
 
       if (shouldLeave == true && mounted) {
@@ -650,12 +657,12 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                               ),
                               borderRadius: BorderRadius.circular(isMobile ? 16 : 22),
                               border: Border.all(
-                                color: totalChances > 1 ? const Color(0xFFFFB300) : colorScheme.primary.withValues(alpha: 0.3),
+                                color: totalChances > 1 ? colorScheme.primary : colorScheme.primary.withValues(alpha: 0.3),
                                 width: totalChances > 1 ? 2.0 : 1.2,
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: (totalChances > 1 ? const Color(0xFFFFB300) : colorScheme.primary).withValues(alpha: 0.12),
+                                  color: colorScheme.primary.withValues(alpha: 0.12),
                                   blurRadius: 14,
                                   offset: const Offset(0, 4),
                                 ),
@@ -679,13 +686,13 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                       decoration: BoxDecoration(
                                         gradient: LinearGradient(
                                           colors: totalChances > 1
-                                              ? [const Color(0xFFFF8F00), const Color(0xFFFFA000)]
+                                              ? [colorScheme.primary, colorScheme.onPrimaryFixedVariant]
                                               : [colorScheme.primary, colorScheme.primary.withValues(alpha: 0.85)],
                                         ),
                                         borderRadius: BorderRadius.circular(30),
                                         boxShadow: [
                                           BoxShadow(
-                                            color: (totalChances > 1 ? const Color(0xFFFF8F00) : colorScheme.primary).withValues(alpha: 0.35),
+                                            color: colorScheme.primary.withValues(alpha: 0.35),
                                             blurRadius: 8,
                                             offset: const Offset(0, 2),
                                           ),
@@ -763,10 +770,10 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                                 vertical: isMobile ? 4 : 6,
                                               ),
                                               decoration: BoxDecoration(
-                                                color: Colors.red.shade50.withValues(alpha: 0.95),
+                                                color: colorScheme.errorContainer,
                                                 borderRadius: BorderRadius.circular(20),
                                                 border: Border.all(
-                                                  color: Colors.red.shade200,
+                                                  color: colorScheme.error.withValues(alpha: 0.3),
                                                 ),
                                               ),
                                               child: Row(
@@ -775,13 +782,13 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                                   Icon(
                                                     Icons.exit_to_app_rounded,
                                                     size: isMobile ? 13 : 15,
-                                                    color: Colors.red.shade700,
+                                                    color: colorScheme.onErrorContainer,
                                                   ),
                                                   const SizedBox(width: 4),
                                                   Text(
                                                     isAr ? 'عودة للفواتير' : 'Back to Receipts',
                                                     style: GoogleFonts.cairo(
-                                                      color: Colors.red.shade700,
+                                                      color: colorScheme.onErrorContainer,
                                                       fontWeight: FontWeight.bold,
                                                       fontSize: isMobile ? 10.5 : 12,
                                                     ),
@@ -870,15 +877,15 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                           color: isCurrent
                                               ? colorScheme.primary
                                               : isCompleted
-                                                  ? Colors.green.shade600
-                                                  : Colors.grey.shade200,
+                                                  ? colorScheme.tertiary
+                                                  : colorScheme.surfaceContainerHighest,
                                           borderRadius: BorderRadius.circular(16),
                                           border: Border.all(
                                             color: isCurrent
                                                 ? colorScheme.primary
                                                 : isCompleted
-                                                    ? Colors.green.shade700
-                                                    : Colors.grey.shade300,
+                                                    ? colorScheme.tertiary
+                                                    : colorScheme.outlineVariant,
                                           ),
                                         ),
                                         child: Row(
@@ -891,7 +898,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                                       ? Icons.radio_button_checked_rounded
                                                       : Icons.radio_button_unchecked_rounded,
                                               size: isMobile ? 13 : 15,
-                                              color: isCompleted || isCurrent ? Colors.white : Colors.grey.shade600,
+                                              color: isCompleted || isCurrent ? Colors.white : colorScheme.onSurfaceVariant,
                                             ),
                                             const SizedBox(width: 5),
                                             Text(
@@ -905,7 +912,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                               style: GoogleFonts.cairo(
                                                 fontSize: isMobile ? 10 : 11.5,
                                                 fontWeight: FontWeight.bold,
-                                                color: isCompleted || isCurrent ? Colors.white : Colors.grey.shade700,
+                                                color: isCompleted || isCurrent ? Colors.white : colorScheme.onSurfaceVariant,
                                               ),
                                             ),
                                           ],
@@ -921,13 +928,13 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                     decoration: BoxDecoration(
-                                      color: Colors.green.shade50,
+                                      color: colorScheme.tertiaryContainer,
                                       borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: Colors.green.shade300),
+                                      border: Border.all(color: colorScheme.tertiary.withValues(alpha: 0.4)),
                                     ),
                                     child: Row(
                                       children: [
-                                        Icon(Icons.inventory_2_rounded, size: 16, color: Colors.green.shade800),
+                                        Icon(Icons.inventory_2_rounded, size: 16, color: colorScheme.onTertiaryContainer),
                                         const SizedBox(width: 6),
                                         Expanded(
                                           child: Text(
@@ -937,7 +944,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                             style: GoogleFonts.cairo(
                                               fontSize: isMobile ? 10.5 : 12,
                                               fontWeight: FontWeight.bold,
-                                              color: Colors.green.shade900,
+                                              color: colorScheme.onTertiaryContainer,
                                             ),
                                           ),
                                         ),
@@ -1000,7 +1007,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                           border: Border.all(
                                             color: isSelected
                                                 ? colorScheme.primary
-                                                : Colors.grey.shade200,
+                                                : colorScheme.surfaceContainerHighest,
                                             width: isSelected ? 2.5 : 1.2,
                                           ),
                                           boxShadow: [
@@ -1086,7 +1093,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                                   decoration: BoxDecoration(
                                                     color: isSelected
                                                         ? colorScheme.primaryContainer.withValues(alpha: 0.85)
-                                                        : const Color(0xFFF8F9FA),
+                                                        : colorScheme.surfaceContainerLow,
                                                     borderRadius: BorderRadius.vertical(
                                                       bottom: Radius.circular(isMobile ? 16 : 20),
                                                     ),
@@ -1094,7 +1101,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                                       top: BorderSide(
                                                         color: isSelected
                                                             ? colorScheme.primary.withValues(alpha: 0.3)
-                                                            : Colors.grey.shade200,
+                                                            : colorScheme.surfaceContainerHighest,
                                                         width: 1,
                                                       ),
                                                     ),
@@ -1203,7 +1210,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                                   border: Border.all(
                                                     color: isSelected
                                                         ? colorScheme.primary
-                                                        : Colors.grey.shade300,
+                                                        : colorScheme.outlineVariant,
                                                     width: 1.5,
                                                   ),
                                                   boxShadow: [

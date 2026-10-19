@@ -33,6 +33,8 @@ class WhatsAppLiveOutboxView extends StatefulWidget {
 }
 
 class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   final _service = WhatsAppGatewayService();
 
   String _selectedStatus = 'all';
@@ -131,7 +133,7 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
                 : (widget.isAr ? 'فشل إعادة الإرسال: ${result.error}' : 'Resend failed: ${result.error}'),
             style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
           ),
-          backgroundColor: result.isSuccess ? const Color(0xFF198754) : Colors.red,
+          backgroundColor: result.isSuccess ? colorScheme.tertiary : colorScheme.error,
         ),
       );
       if (result.isSuccess) {
@@ -195,10 +197,10 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFF25D366).withValues(alpha: 0.15),
+                color: colorScheme.tertiary.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF198754), size: 22),
+              child: Icon(Icons.chat_bubble_outline_rounded, color: colorScheme.tertiary, size: 22),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -274,7 +276,7 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
             child: Text(widget.isAr ? 'إغلاق' : 'Close', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
           ),
           FilledButton.icon(
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF198754)),
+            style: FilledButton.styleFrom(backgroundColor: colorScheme.tertiary),
             icon: const Icon(Icons.refresh_rounded, size: 18),
             label: Text(widget.isAr ? 'إعادة الإرسال' : 'Resend', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
             onPressed: () {
@@ -355,19 +357,19 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
       case 'sent':
-        return const Color(0xFF198754);
+        return colorScheme.tertiary;
       case 'received':
-        return Colors.teal.shade700;
+        return colorScheme.onTertiaryFixedVariant;
       case 'queue':
-        return Colors.blue.shade700;
+        return colorScheme.primary;
       case 'unsent':
-        return Colors.orange.shade800;
+        return colorScheme.onSecondaryFixedVariant;
       case 'invalid':
-        return Colors.red.shade700;
+        return colorScheme.onErrorContainer;
       case 'expired':
-        return Colors.grey.shade700;
+        return colorScheme.onSurfaceVariant;
       default:
-        return Colors.blueGrey;
+        return colorScheme.onSurfaceVariant;
     }
   }
 
@@ -422,7 +424,7 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
               ),
               const SizedBox(height: 18),
               FilledButton.icon(
-                style: FilledButton.styleFrom(backgroundColor: const Color(0xFF198754)),
+                style: FilledButton.styleFrom(backgroundColor: colorScheme.tertiary),
                 icon: const Icon(Icons.settings_suggest_rounded, size: 18),
                 label: Text(widget.isAr ? 'ضبط إعدادات البوابة الآن' : 'Configure Gateway Now', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
                 onPressed: widget.onOpenSettings,
@@ -545,31 +547,31 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
       _StatCardData(
         title: widget.isAr ? 'المرسلة بنجاح' : 'Sent',
         count: '$sent',
-        color: const Color(0xFF198754),
+        color: colorScheme.tertiary,
         icon: Icons.mark_chat_read_rounded,
       ),
       _StatCardData(
         title: widget.isAr ? 'في الانتظار' : 'In Queue',
         count: '$queue',
-        color: Colors.blue.shade700,
+        color: colorScheme.primary,
         icon: Icons.hourglass_top_rounded,
       ),
       _StatCardData(
         title: widget.isAr ? 'لم تُرسل' : 'Unsent',
         count: '$unsent',
-        color: Colors.orange.shade800,
+        color: colorScheme.onSecondaryFixedVariant,
         icon: Icons.pause_circle_outline_rounded,
       ),
       _StatCardData(
         title: widget.isAr ? 'أرقام خاطئة' : 'Invalid',
         count: '$invalid',
-        color: Colors.red.shade700,
+        color: colorScheme.onErrorContainer,
         icon: Icons.highlight_off_rounded,
       ),
       _StatCardData(
         title: widget.isAr ? 'منتهية الصلاحية' : 'Expired',
         count: '$expired',
-        color: Colors.grey.shade700,
+        color: colorScheme.onSurfaceVariant,
         icon: Icons.timer_off_outlined,
       ),
     ];
@@ -1094,7 +1096,7 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
                                       IconButton(
                                         icon: const Icon(Icons.refresh_rounded, size: 18),
                                         tooltip: widget.isAr ? 'إعادة الإرسال' : 'Resend',
-                                        color: const Color(0xFF198754),
+                                        color: colorScheme.tertiary,
                                         onPressed: () => _resendMessage(msg),
                                       ),
                                     ],
@@ -1191,7 +1193,7 @@ class _WhatsAppLiveOutboxViewState extends State<WhatsAppLiveOutboxView> {
                           onPressed: () => _showMessageDetails(msg, cs),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.refresh_rounded, size: 18, color: Color(0xFF198754)),
+                          icon: Icon(Icons.refresh_rounded, size: 18, color: colorScheme.tertiary),
                           onPressed: () => _resendMessage(msg),
                         ),
                       ],

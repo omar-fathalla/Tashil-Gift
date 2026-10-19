@@ -32,6 +32,8 @@ class WhatsAppQrPairingDialog extends StatefulWidget {
 }
 
 class _WhatsAppQrPairingDialogState extends State<WhatsAppQrPairingDialog> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   final WhatsAppGatewayService _service = WhatsAppGatewayService();
   final TextEditingController _phoneController = TextEditingController();
 
@@ -311,11 +313,11 @@ class _WhatsAppQrPairingDialogState extends State<WhatsAppQrPairingDialog> {
   Color _getStatusColor(ColorScheme cs) {
     switch (_sessionStatus) {
       case 'WORKING':
-        return Colors.green;
+        return colorScheme.tertiary;
       case 'SCAN_QR_CODE':
         return cs.primary;
       case 'STARTING':
-        return Colors.amber.shade700;
+        return colorScheme.secondary;
       case 'FAILED':
       case 'STOPPED':
         return cs.error;
@@ -423,10 +425,10 @@ class _WhatsAppQrPairingDialogState extends State<WhatsAppQrPairingDialog> {
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: const Color(0xFF25D366).withValues(alpha: 0.15),
+            color: colorScheme.tertiary.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(14),
           ),
-          child: const Icon(Icons.qr_code_scanner_rounded, color: Color(0xFF25D366), size: 26),
+          child: Icon(Icons.qr_code_scanner_rounded, color: colorScheme.tertiary, size: 26),
         ),
         const SizedBox(width: 14),
         Expanded(
@@ -518,16 +520,16 @@ class _WhatsAppQrPairingDialogState extends State<WhatsAppQrPairingDialog> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.green.withValues(alpha: 0.08),
+        color: colorScheme.tertiary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+        border: Border.all(color: colorScheme.tertiary.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: const BoxDecoration(
-              color: Colors.green,
+            decoration: BoxDecoration(
+              color: colorScheme.tertiary,
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.check_rounded, color: Colors.white, size: 40),
@@ -535,7 +537,7 @@ class _WhatsAppQrPairingDialogState extends State<WhatsAppQrPairingDialog> {
           const SizedBox(height: 16),
           Text(
             widget.strings.pairingSuccessTitle,
-            style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green.shade800),
+            style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.bold, color: colorScheme.onTertiaryFixedVariant),
           ),
           const SizedBox(height: 6),
           Text(
@@ -556,7 +558,7 @@ class _WhatsAppQrPairingDialogState extends State<WhatsAppQrPairingDialog> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.phone_iphone_rounded, color: Color(0xFF25D366), size: 22),
+                Icon(Icons.phone_iphone_rounded, color: colorScheme.tertiary, size: 22),
                 const SizedBox(width: 10),
                 Text(
                   _connectedPhone ?? widget.config.connectedPhoneNumber ?? 'WhatsApp Connected',
@@ -578,7 +580,7 @@ class _WhatsAppQrPairingDialogState extends State<WhatsAppQrPairingDialog> {
             children: [
               FilledButton.icon(
                 style: FilledButton.styleFrom(
-                  backgroundColor: Colors.green.shade700,
+                  backgroundColor: colorScheme.onTertiaryFixedVariant,
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 ),
                 onPressed: () => Navigator.of(context).pop(),
@@ -637,7 +639,7 @@ class _WhatsAppQrPairingDialogState extends State<WhatsAppQrPairingDialog> {
                     const SizedBox(height: 14),
                     Text(
                       widget.isAr ? 'جارٍ جلب رمز الـ QR...' : 'Fetching QR code...',
-                      style: GoogleFonts.cairo(fontSize: 12, color: Colors.grey.shade700),
+                      style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
                     ),
                   ],
                 )

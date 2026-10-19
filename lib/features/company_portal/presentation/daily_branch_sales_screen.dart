@@ -296,7 +296,7 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
         cell.cellStyle = xl.CellStyle(
           bold: true,
           horizontalAlign: xl.HorizontalAlign.Center,
-          backgroundColorHex: xl.ExcelColor.fromHexString('#006C50'),
+          backgroundColorHex: xl.ExcelColor.fromHexString('#5C631D'),
           fontColorHex: xl.ExcelColor.fromHexString('#FFFFFF'),
         );
       }

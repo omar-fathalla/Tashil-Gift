@@ -411,11 +411,12 @@ class AdminAuthGuard extends ConsumerWidget {
           return const AuthScreen();
         },
         loading: () {
-          return const Scaffold(
-            backgroundColor: Color(0xFF0F172A),
+          final colorScheme = Theme.of(context).colorScheme;
+          return Scaffold(
+            backgroundColor: colorScheme.surface,
             body: Center(
               child: CircularProgressIndicator(
-                color: Color(0xFF6366F1),
+                color: colorScheme.primary,
               ),
             ),
           );

@@ -1904,7 +1904,7 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
         cell.cellStyle = xl.CellStyle(
           bold: true,
           horizontalAlign: xl.HorizontalAlign.Center,
-          backgroundColorHex: xl.ExcelColor.fromHexString(_isHeadToHeadMode ? '#1565C0' : '#006C50'),
+          backgroundColorHex: xl.ExcelColor.fromHexString(_isHeadToHeadMode ? '#3B665A' : '#5C631D'),
           fontColorHex: xl.ExcelColor.fromHexString('#FFFFFF'),
         );
       }

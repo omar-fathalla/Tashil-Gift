@@ -112,7 +112,7 @@ class _OptimisticReceiptScannerCardState
         borderRadius: BorderRadius.circular(20),
         side: BorderSide(
           color: widget.isCompleted
-              ? Colors.green.shade400
+              ? colorScheme.primary
               : colorScheme.primary.withValues(alpha: 0.4),
           width: 1.5,
         ),
@@ -143,9 +143,7 @@ class _OptimisticReceiptScannerCardState
                                 ? Icons.verified_rounded
                                 : Icons.auto_awesome_rounded,
                             size: 18,
-                            color: widget.isCompleted
-                                ? Colors.green.shade600
-                                : colorScheme.primary,
+                            color: colorScheme.primary,
                           ),
                           const SizedBox(width: 6),
                           Expanded(
@@ -196,7 +194,7 @@ class _OptimisticReceiptScannerCardState
             M3LinearProgress(
               value: widget.isCompleted ? 1.0 : _progressFraction,
               height: 6.0,
-              color: widget.isCompleted ? Colors.green.shade500 : colorScheme.primary,
+              color: colorScheme.primary,
             ),
 
             const SizedBox(height: 14),
@@ -215,7 +213,7 @@ class _OptimisticReceiptScannerCardState
       width: 72,
       height: 94,
       decoration: BoxDecoration(
-        color: Colors.black,
+        color: colorScheme.inverseSurface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: colorScheme.primary.withValues(alpha: 0.6),
@@ -242,10 +240,10 @@ class _OptimisticReceiptScannerCardState
               )
             else
               Container(
-                color: Colors.grey.shade900,
-                child: const Icon(
+                color: colorScheme.surfaceContainerHighest,
+                child: Icon(
                   Icons.receipt_long_rounded,
-                  color: Colors.white54,
+                  color: colorScheme.onSurfaceVariant,
                   size: 32,
                 ),
               ),
@@ -274,14 +272,14 @@ class _OptimisticReceiptScannerCardState
                           colors: [
                             colorScheme.primary.withValues(alpha: 0.0),
                             colorScheme.primary,
-                            const Color(0xFF67E8F9), // vibrant cyan highlight
+                            colorScheme.primaryContainer,
                             colorScheme.primary,
                             colorScheme.primary.withValues(alpha: 0.0),
                           ],
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF22D3EE).withValues(alpha: 0.8),
+                            color: colorScheme.primaryContainer.withValues(alpha: 0.8),
                             blurRadius: 8,
                             spreadRadius: 1.5,
                           ),
@@ -296,10 +294,10 @@ class _OptimisticReceiptScannerCardState
             if (widget.isCompleted)
               Container(
                 color: Colors.black.withValues(alpha: 0.45),
-                child: const Center(
+                child: Center(
                   child: Icon(
                     Icons.check_circle_rounded,
-                    color: Colors.greenAccent,
+                    color: colorScheme.primaryContainer,
                     size: 36,
                   ),
                 ),
@@ -319,12 +317,10 @@ class _OptimisticReceiptScannerCardState
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: isDark
-            ? Colors.green.shade900.withValues(alpha: 0.35)
-            : Colors.green.shade50,
+        color: colorScheme.primaryContainer.withValues(alpha: isDark ? 0.45 : 0.7),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
-          color: Colors.green.shade400.withValues(alpha: 0.5),
+          color: colorScheme.primary.withValues(alpha: 0.4),
           width: 0.8,
         ),
       ),
@@ -334,7 +330,7 @@ class _OptimisticReceiptScannerCardState
           Icon(
             Icons.speed_rounded,
             size: 13,
-            color: Colors.green.shade700,
+            color: colorScheme.onPrimaryContainer,
           ),
           const SizedBox(width: 4),
           Text(
@@ -342,7 +338,7 @@ class _OptimisticReceiptScannerCardState
             style: GoogleFonts.cairo(
               fontSize: 10.5,
               fontWeight: FontWeight.bold,
-              color: Colors.green.shade800,
+              color: colorScheme.onPrimaryContainer,
             ),
           ),
         ],
@@ -373,14 +369,14 @@ class _OptimisticReceiptScannerCardState
             padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
             decoration: BoxDecoration(
               color: isDone
-                  ? Colors.green.withValues(alpha: 0.12)
+                  ? colorScheme.primaryContainer.withValues(alpha: 0.65)
                   : (isActive
-                      ? colorScheme.primaryContainer.withValues(alpha: 0.5)
+                      ? colorScheme.secondaryContainer.withValues(alpha: 0.65)
                       : colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: isDone
-                    ? Colors.green.shade400
+                    ? colorScheme.primary.withValues(alpha: 0.6)
                     : (isActive
                         ? colorScheme.primary
                         : colorScheme.outlineVariant.withValues(alpha: 0.4)),
@@ -391,10 +387,10 @@ class _OptimisticReceiptScannerCardState
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (isDone)
-                  const Icon(
+                  Icon(
                     Icons.check_circle_rounded,
                     size: 13,
-                    color: Colors.green,
+                    color: colorScheme.primary,
                   )
                 else if (isActive)
                   SizedBox(
@@ -421,7 +417,7 @@ class _OptimisticReceiptScannerCardState
                           ? FontWeight.bold
                           : FontWeight.w500,
                       color: isDone
-                          ? Colors.green.shade800
+                          ? colorScheme.onPrimaryContainer
                           : (isActive
                               ? colorScheme.primary
                               : colorScheme.onSurfaceVariant),

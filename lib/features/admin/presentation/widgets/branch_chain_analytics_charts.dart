@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../core/constants/country_currency_config.dart';
 import '../../../../core/widgets/m3_progress_indicators.dart';
 import '../../../../core/widgets/m3_list_tile.dart';
@@ -29,23 +30,22 @@ class BranchChartItem {
 
 /// Palette generator for M3 harmonized chart sections
 class M3ChartPalette {
-  static const List<Color> colors = [
-    Color(0xFF6750A4), // Primary Deep Purple
-    Color(0xFF006C51), // Emerald Green
-    Color(0xFF7D5260), // Tertiary Mauve
-    Color(0xFF00639B), // Ocean Blue
-    Color(0xFF904A42), // Rust Amber
-    Color(0xFF5E5C71), // Slate
-    Color(0xFF386A20), // Olive Leaf
-    Color(0xFF7C5800), // Golden Honey
-    Color(0xFF006874), // Cyan Teal
-    Color(0xFF8B4A60), // Berry
-    Color(0xFF4A6267), // Steel
-    Color(0xFF535D72), // Twilight
-  ];
+  static List<Color> get colors =>
+      AppTheme.getDynamicPalette(AppTheme.lightTheme.colorScheme);
 
-  static Color getColor(int index) {
-    return colors[index % colors.length];
+  static Color getColor(int index, [ColorScheme? colorScheme]) {
+    final cs = colorScheme ?? AppTheme.lightTheme.colorScheme;
+    final dynamicPalette = [
+      cs.primary,
+      cs.tertiary,
+      cs.secondary,
+      cs.onPrimaryContainer,
+      cs.onTertiaryContainer,
+      cs.onSecondaryContainer,
+      cs.inversePrimary,
+      cs.outline,
+    ];
+    return dynamicPalette[index % dynamicPalette.length];
   }
 }
 
@@ -867,7 +867,7 @@ class BranchChainLeaderboardList extends StatelessWidget {
               Row(
                 children: [
                   // Rank Medal / Badge
-                  _buildRankBadge(rank: rank, color: item.color),
+                  _buildRankBadge(rank: rank, color: item.color, colorScheme: colorScheme),
                   const SizedBox(width: 10),
 
                   // Branch / Chain Name
@@ -975,15 +975,19 @@ class BranchChainLeaderboardList extends StatelessWidget {
     );
   }
 
-  Widget _buildRankBadge({required int rank, required Color color}) {
+  Widget _buildRankBadge({
+    required int rank,
+    required Color color,
+    required ColorScheme colorScheme,
+  }) {
     if (rank == 1) {
       return Container(
         width: 32,
         height: 32,
         decoration: BoxDecoration(
-          color: Colors.amber.shade50,
+          color: colorScheme.secondaryContainer,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.amber.shade300),
+          border: Border.all(color: colorScheme.primaryFixedDim),
         ),
         child: const Center(
           child: Text('🥇', style: TextStyle(fontSize: 16)),
@@ -994,9 +998,9 @@ class BranchChainLeaderboardList extends StatelessWidget {
         width: 32,
         height: 32,
         decoration: BoxDecoration(
-          color: Colors.blueGrey.shade50,
+          color: colorScheme.primaryContainer,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.blueGrey.shade300),
+          border: Border.all(color: colorScheme.primaryFixedDim),
         ),
         child: const Center(
           child: Text('🥈', style: TextStyle(fontSize: 16)),
@@ -1007,9 +1011,9 @@ class BranchChainLeaderboardList extends StatelessWidget {
         width: 32,
         height: 32,
         decoration: BoxDecoration(
-          color: Colors.brown.shade50,
+          color: colorScheme.secondaryContainer,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.brown.shade300),
+          border: Border.all(color: colorScheme.secondaryFixedDim),
         ),
         child: const Center(
           child: Text('🥉', style: TextStyle(fontSize: 16)),
@@ -1092,14 +1096,14 @@ class BranchPerformanceKpiRow extends StatelessWidget {
                     : (isAr ? 'الفرع الأعلى مبيعاً' : (isHi ? 'शीर्ष आउटलेट' : 'Top Outlet')),
                 value: BranchChainBarChart.cleanBranchDisplayName(topEntityName, isChain: isChainMode, isAr: isAr),
                 subtitle: '${NumberFormat('#,##0.#').format(topEntityRevenue)} ${activeCountry.currencySymbol}',
-                color: Colors.amber.shade800,
+                color: colorScheme.onSecondaryFixedVariant,
               ),
               const SizedBox(height: 8),
               _buildMiniKpi(
                 icon: Icons.query_stats_rounded,
                 title: isAr ? 'متوسط مبيعات المنفذ' : (isHi ? 'औसत आउटलेट बिक्री' : 'Avg Outlet Sales'),
                 value: '${NumberFormat('#,##0.#').format(avgRevenuePerEntity)} ${activeCountry.currencySymbol}',
-                color: Colors.teal.shade700,
+                color: colorScheme.tertiary,
               ),
             ],
           );
@@ -1127,7 +1131,7 @@ class BranchPerformanceKpiRow extends StatelessWidget {
                     : (isAr ? 'الفرع الأعلى مبيعاً' : (isHi ? 'शीर्ष आउटलेट' : 'Top Outlet')),
                 value: BranchChainBarChart.cleanBranchDisplayName(topEntityName, isChain: isChainMode, isAr: isAr),
                 subtitle: '${NumberFormat('#,##0.#').format(topEntityRevenue)} ${activeCountry.currencySymbol}',
-                color: Colors.amber.shade800,
+                color: colorScheme.onSecondaryFixedVariant,
               ),
             ),
             const SizedBox(width: 10),
@@ -1137,7 +1141,7 @@ class BranchPerformanceKpiRow extends StatelessWidget {
                 icon: Icons.query_stats_rounded,
                 title: isAr ? 'متوسط مبيعات المنفذ' : (isHi ? 'औसत आउटलेट बिक्री' : 'Avg Outlet Sales'),
                 value: '${NumberFormat('#,##0.#').format(avgRevenuePerEntity)} ${activeCountry.currencySymbol}',
-                color: Colors.teal.shade700,
+                color: colorScheme.tertiary,
               ),
             ),
           ],

@@ -34,6 +34,8 @@ class WhatsAppGatewaySettingsDialog extends StatefulWidget {
 }
 
 class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsDialog> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   final _service = WhatsAppGatewayService();
   late WhatsAppGatewayProvider _selectedProvider;
   late final TextEditingController _instanceIdController;
@@ -391,7 +393,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
       builder: (ctx) => AlertDialog(
         title: Row(
           children: [
-            const Icon(Icons.celebration_rounded, color: Color(0xFF25D366)),
+            Icon(Icons.celebration_rounded, color: colorScheme.tertiary),
             const SizedBox(width: 8),
             Text(
               widget.isAr ? 'إرسال رسالة فوز تجريبية' : 'Test Winner Notification',
@@ -429,7 +431,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
             child: Text(widget.isAr ? 'إلغاء' : 'Cancel', style: GoogleFonts.cairo()),
           ),
           FilledButton.icon(
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF25D366)),
+            style: FilledButton.styleFrom(backgroundColor: colorScheme.tertiary),
             onPressed: () => Navigator.of(ctx).pop(true),
             icon: const Icon(Icons.send_rounded, size: 18),
             label: Text(widget.isAr ? 'إرسال الآن' : 'Send Now', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
@@ -468,7 +470,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
             widget.isAr ? 'تم إرسال رسالة التهنئة بنجاح إلى $targetPhone 📲' : 'Test winner notification sent to $targetPhone',
             style: GoogleFonts.cairo(),
           ),
-          backgroundColor: const Color(0xFF1E7E34),
+          backgroundColor: colorScheme.onTertiaryFixedVariant,
         ),
       );
     } else {
@@ -980,10 +982,10 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF25D366).withValues(alpha: 0.15),
+                            color: colorScheme.tertiary.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(Icons.card_giftcard_rounded, color: Color(0xFF1E7E34), size: 20),
+                          child: Icon(Icons.card_giftcard_rounded, color: colorScheme.onTertiaryFixedVariant, size: 20),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -1005,7 +1007,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                         ),
                         Switch(
                           value: _autoNotifyWinnersOnGiftHandover,
-                          activeTrackColor: const Color(0xFF25D366),
+                          activeTrackColor: colorScheme.tertiary,
                           onChanged: (val) => setState(() => _autoNotifyWinnersOnGiftHandover = val),
                         ),
                       ],
@@ -1075,7 +1077,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                           ),
                           FilledButton.icon(
                             style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF25D366),
+                              backgroundColor: colorScheme.tertiary,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1112,10 +1114,10 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF25D366).withValues(alpha: 0.15),
+                              color: colorScheme.tertiary.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Icon(Icons.qr_code_scanner_rounded, color: Color(0xFF25D366), size: 24),
+                            child: Icon(Icons.qr_code_scanner_rounded, color: colorScheme.tertiary, size: 24),
                           ),
                           const SizedBox(width: 12),
                           Expanded(

@@ -103,6 +103,8 @@ class CompanyPrizesStockReportScreen extends ConsumerStatefulWidget {
 
 class _CompanyPrizesStockReportScreenState
     extends ConsumerState<CompanyPrizesStockReportScreen> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   // Search & Filter State
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
@@ -251,7 +253,7 @@ class _CompanyPrizesStockReportScreenState
                 ),
               ],
             ),
-            backgroundColor: const Color(0xFF107C41),
+            backgroundColor: colorScheme.tertiary,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -261,7 +263,7 @@ class _CompanyPrizesStockReportScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${isAr ? "خطأ في تصدير Excel: " : "Excel export error: "}$e'),
-          backgroundColor: Colors.red.shade800,
+          backgroundColor: colorScheme.onErrorContainer,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -530,7 +532,7 @@ class _CompanyPrizesStockReportScreenState
                                 child: _buildDialogKpiCell(
                                   label: strings.currentBranchRemaining,
                                   value: '$currentRemaining $unitLabel',
-                                  color: currentRemaining <= 0 ? const Color(0xFFB3261E) : const Color(0xFF006C50),
+                                  color: currentRemaining <= 0 ? colorScheme.error : colorScheme.tertiary,
                                   colorScheme: colorScheme,
                                 ),
                               ),
@@ -543,7 +545,7 @@ class _CompanyPrizesStockReportScreenState
                               children: [
                                 Row(
                                   children: [
-                                    Icon(Icons.warehouse_rounded, size: 15, color: Colors.blue[700]),
+                                    Icon(Icons.warehouse_rounded, size: 15, color: colorScheme.onPrimaryFixedVariant),
                                     const SizedBox(width: 6),
                                     Text(
                                       strings.availableMasterStockLabel,
@@ -554,12 +556,12 @@ class _CompanyPrizesStockReportScreenState
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: Colors.blue.withValues(alpha: 0.12),
+                                    color: colorScheme.primary.withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
                                     '$masterAvailable $unitLabel ${isAr ? 'متاح بالمخزن' : 'available'}',
-                                    style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue[800]),
+                                    style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: colorScheme.onPrimaryFixedVariant),
                                   ),
                                 ),
                               ],
@@ -581,13 +583,13 @@ class _CompanyPrizesStockReportScreenState
                             style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
                           ),
                           ActionChip(
-                            avatar: const Icon(Icons.bolt_rounded, size: 16, color: Colors.red),
+                            avatar: Icon(Icons.bolt_rounded, size: 16, color: colorScheme.error),
                             label: Text(
                               strings.zeroAllocationBtn,
-                              style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red[800]),
+                              style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: colorScheme.onErrorContainer),
                             ),
-                            backgroundColor: Colors.red.withValues(alpha: 0.1),
-                            side: BorderSide(color: Colors.red.withValues(alpha: 0.3)),
+                            backgroundColor: colorScheme.error.withValues(alpha: 0.1),
+                            side: BorderSide(color: colorScheme.error.withValues(alpha: 0.3)),
                             onPressed: isSaving
                                 ? null
                                 : () {
@@ -693,13 +695,13 @@ class _CompanyPrizesStockReportScreenState
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: effectiveAdd > 0
-                            ? Colors.green.withValues(alpha: 0.12)
-                            : (effectiveAdd < 0 ? Colors.orange.withValues(alpha: 0.12) : colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)),
+                            ? colorScheme.tertiary.withValues(alpha: 0.12)
+                            : (effectiveAdd < 0 ? colorScheme.secondary.withValues(alpha: 0.12) : colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
                           color: effectiveAdd > 0
-                              ? Colors.green.withValues(alpha: 0.4)
-                              : (effectiveAdd < 0 ? Colors.orange.withValues(alpha: 0.4) : colorScheme.outlineVariant.withValues(alpha: 0.3)),
+                              ? colorScheme.tertiary.withValues(alpha: 0.4)
+                              : (effectiveAdd < 0 ? colorScheme.secondary.withValues(alpha: 0.4) : colorScheme.outlineVariant.withValues(alpha: 0.3)),
                         ),
                       ),
                       child: Row(
@@ -707,7 +709,7 @@ class _CompanyPrizesStockReportScreenState
                           Icon(
                             effectiveAdd >= 0 ? Icons.check_circle_rounded : Icons.info_outline_rounded,
                             size: 20,
-                            color: effectiveAdd > 0 ? Colors.green[800] : (effectiveAdd < 0 ? Colors.orange[900] : colorScheme.outline),
+                            color: effectiveAdd > 0 ? colorScheme.onTertiaryFixedVariant : (effectiveAdd < 0 ? colorScheme.onSecondaryContainer : colorScheme.outline),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
@@ -723,7 +725,7 @@ class _CompanyPrizesStockReportScreenState
                                   style: GoogleFonts.cairo(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w900,
-                                    color: effectiveAdd > 0 ? Colors.green[900] : (effectiveAdd < 0 ? Colors.orange[900] : colorScheme.onSurface),
+                                    color: effectiveAdd > 0 ? colorScheme.onTertiaryContainer : (effectiveAdd < 0 ? colorScheme.onSecondaryContainer : colorScheme.onSurface),
                                   ),
                                 ),
                                 if (effectiveAdd < 0)
@@ -731,7 +733,7 @@ class _CompanyPrizesStockReportScreenState
                                     isAr
                                         ? 'سيتم إرجاع ${effectiveAdd.abs()} $unitLabel إلى رصيد المخزن المركزي للشركة'
                                         : '${effectiveAdd.abs()} $unitLabel will return to master stock',
-                                    style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.orange[900]),
+                                    style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: colorScheme.onSecondaryContainer),
                                   ),
                               ],
                             ),
@@ -810,7 +812,7 @@ class _CompanyPrizesStockReportScreenState
                                       ),
                                     ],
                                   ),
-                                  backgroundColor: Colors.green[700],
+                                  backgroundColor: colorScheme.onTertiaryFixedVariant,
                                   behavior: SnackBarBehavior.floating,
                                 ),
                               );
@@ -944,10 +946,10 @@ class _CompanyPrizesStockReportScreenState
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.purple.withValues(alpha: 0.15),
+                      color: colorScheme.primary.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    child: Icon(Icons.tune_rounded, color: Colors.purple[800], size: 24),
+                    child: Icon(Icons.tune_rounded, color: colorScheme.onPrimaryFixedVariant, size: 24),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -1041,13 +1043,13 @@ class _CompanyPrizesStockReportScreenState
                             ),
                             const Spacer(),
                             ActionChip(
-                              avatar: const Icon(Icons.refresh_rounded, size: 14, color: Colors.red),
+                              avatar: Icon(Icons.refresh_rounded, size: 14, color: colorScheme.error),
                               label: Text(
                                 strings.zeroAllAllocationsBtn,
-                                style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red[800]),
+                                style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.bold, color: colorScheme.onErrorContainer),
                               ),
-                              backgroundColor: Colors.red.withValues(alpha: 0.1),
-                              side: BorderSide(color: Colors.red.withValues(alpha: 0.25)),
+                              backgroundColor: colorScheme.error.withValues(alpha: 0.1),
+                              side: BorderSide(color: colorScheme.error.withValues(alpha: 0.25)),
                               onPressed: isSaving
                                   ? null
                                   : () {
@@ -1109,7 +1111,7 @@ class _CompanyPrizesStockReportScreenState
                                       if (claimed > 0)
                                         Text(
                                           '${isAr ? 'تم صرف:' : 'Awarded:'} $claimed $unitLabel',
-                                          style: GoogleFonts.cairo(fontSize: 11, color: Colors.orange[800], fontWeight: FontWeight.bold),
+                                          style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSecondaryFixedVariant, fontWeight: FontWeight.bold),
                                         ),
                                     ],
                                   ),
@@ -1138,8 +1140,8 @@ class _CompanyPrizesStockReportScreenState
                                   child: IconButton.filledTonal(
                                     icon: const Icon(Icons.backspace_outlined, size: 16),
                                     style: IconButton.styleFrom(
-                                      backgroundColor: Colors.red.withValues(alpha: 0.1),
-                                      foregroundColor: Colors.red[700],
+                                      backgroundColor: colorScheme.error.withValues(alpha: 0.1),
+                                      foregroundColor: colorScheme.onErrorContainer,
                                     ),
                                     onPressed: isSaving
                                         ? null
@@ -1200,7 +1202,7 @@ class _CompanyPrizesStockReportScreenState
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(strings.allocationsSavedSuccess),
-                                  backgroundColor: const Color(0xFF006C50),
+                                  backgroundColor: colorScheme.tertiary,
                                   behavior: SnackBarBehavior.floating,
                                 ),
                               );
@@ -1229,7 +1231,7 @@ class _CompanyPrizesStockReportScreenState
                     style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
                   ),
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.purple[700],
+                    backgroundColor: colorScheme.onPrimaryFixedVariant,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -1365,14 +1367,14 @@ class _CompanyPrizesStockReportScreenState
                           Column(
                             children: [
                               Text(isAr ? 'المخصص بالحملات' : 'Campaign Alloc', style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant)),
-                              Text('${gift.totalQuantity - gift.availableQuantity}', style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.orange[800])),
+                              Text('${gift.totalQuantity - gift.availableQuantity}', style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold, color: colorScheme.onSecondaryFixedVariant)),
                             ],
                           ),
                           Container(width: 1, height: 28, color: colorScheme.outlineVariant),
                           Column(
                             children: [
                               Text(isAr ? 'المتاح بالمستودع' : 'Warehouse Avail', style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant)),
-                              Text('${gift.availableQuantity}', style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green[800])),
+                              Text('${gift.availableQuantity}', style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold, color: colorScheme.onTertiaryFixedVariant)),
                             ],
                           ),
                         ],
@@ -1419,12 +1421,12 @@ class _CompanyPrizesStockReportScreenState
                                         Container(
                                           padding: const EdgeInsets.all(10),
                                           decoration: BoxDecoration(
-                                            color: Colors.green.withValues(alpha: 0.15),
+                                            color: colorScheme.tertiary.withValues(alpha: 0.15),
                                             borderRadius: BorderRadius.circular(10),
                                           ),
                                           child: Text(
                                             '#${batch.batchNumber}',
-                                            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: Colors.green[800], fontSize: 13),
+                                            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: colorScheme.onTertiaryFixedVariant, fontSize: 13),
                                           ),
                                         ),
                                         const SizedBox(width: 12),
@@ -1490,8 +1492,8 @@ class _CompanyPrizesStockReportScreenState
                               itemBuilder: (context, idx) {
                                 final m = movements[idx];
                                 final isAdd = m.isAddition;
-                                final color = isAdd ? Colors.green[800] : (m.movementType == 'campaign_allocation' ? Colors.orange[900] : Colors.red[800]);
-                                final bgColor = isAdd ? Colors.green.withValues(alpha: 0.12) : (m.movementType == 'campaign_allocation' ? Colors.orange.withValues(alpha: 0.12) : Colors.red.withValues(alpha: 0.12));
+                                final color = isAdd ? colorScheme.onTertiaryFixedVariant : (m.movementType == 'campaign_allocation' ? colorScheme.onSecondaryContainer : colorScheme.onErrorContainer);
+                                final bgColor = isAdd ? colorScheme.tertiary.withValues(alpha: 0.12) : (m.movementType == 'campaign_allocation' ? colorScheme.secondary.withValues(alpha: 0.12) : colorScheme.error.withValues(alpha: 0.12));
 
                                 return Container(
                                   padding: const EdgeInsets.all(14),
@@ -2420,54 +2422,54 @@ class _CompanyPrizesStockReportScreenState
       _buildStatCard(
         colorScheme: colorScheme,
         icon: Icons.inventory_2_rounded,
-        iconColor: const Color(0xFF6750A4),
+        iconColor: colorScheme.primary,
         title: strings.totalAllocatedGifts,
         value: '$totalAllocated',
         badgeText: isAr ? 'إجمالي المعتمد' : (isHi ? 'कुल' : 'Total Coded'),
-        badgeColor: const Color(0xFF6750A4).withValues(alpha: 0.12),
-        badgeTextColor: const Color(0xFF6750A4),
+        badgeColor: colorScheme.primary.withValues(alpha: 0.12),
+        badgeTextColor: colorScheme.primary,
         subtitle: isAr ? 'شاملاً كافة الحملات والمخزون' : 'Across all campaigns',
       ),
       _buildStatCard(
         colorScheme: colorScheme,
         icon: Icons.card_giftcard_rounded,
-        iconColor: const Color(0xFF00639B),
+        iconColor: colorScheme.primary,
         title: strings.awardedGiftsCount,
         value: '$totalClaimed',
         badgeText: '${(depletionRate * 100).toStringAsFixed(0)}% ${strings.depletionRateLabel}',
-        badgeColor: const Color(0xFF00639B).withValues(alpha: 0.12),
-        badgeTextColor: const Color(0xFF00639B),
+        badgeColor: colorScheme.primary.withValues(alpha: 0.12),
+        badgeTextColor: colorScheme.primary,
         subtitle: isAr ? 'هدايا تم تسليمها للعملاء الفائزين' : 'Claimed by shoppers',
       ),
       _buildStatCard(
         colorScheme: colorScheme,
         icon: Icons.verified_rounded,
         iconColor: totalRemaining <= 0
-            ? const Color(0xFFB3261E)
-            : (totalRemaining < 20 ? const Color(0xFFD97706) : const Color(0xFF006C50)),
+            ? colorScheme.error
+            : (totalRemaining < 20 ? colorScheme.secondary : colorScheme.tertiary),
         title: strings.remainingStockBalance,
         value: '$totalRemaining',
         badgeText: totalRemaining <= 0
             ? strings.stockDepletedBadge
             : (totalRemaining < 20 ? strings.stockLowBadge : strings.stockHealthyBadge),
         badgeColor: (totalRemaining <= 0
-                ? const Color(0xFFB3261E)
-                : (totalRemaining < 20 ? const Color(0xFFD97706) : const Color(0xFF006C50)))
+                ? colorScheme.error
+                : (totalRemaining < 20 ? colorScheme.secondary : colorScheme.tertiary))
             .withValues(alpha: 0.12),
         badgeTextColor: totalRemaining <= 0
-            ? const Color(0xFFB3261E)
-            : (totalRemaining < 20 ? const Color(0xFFD97706) : const Color(0xFF006C50)),
+            ? colorScheme.error
+            : (totalRemaining < 20 ? colorScheme.secondary : colorScheme.tertiary),
         subtitle: isAr ? 'الرصيد المتاح للسحب الآن' : 'Available in live wheels',
       ),
       _buildStatCard(
         colorScheme: colorScheme,
         icon: Icons.storefront_rounded,
-        iconColor: const Color(0xFF006874),
+        iconColor: colorScheme.tertiary,
         title: strings.coveredOutletsCount,
         value: '$coveredBranches',
         badgeText: '$campaignsCount ${isAr ? 'فعاليات' : 'Campaigns'}',
-        badgeColor: const Color(0xFF006874).withValues(alpha: 0.12),
-        badgeTextColor: const Color(0xFF006874),
+        badgeColor: colorScheme.tertiary.withValues(alpha: 0.12),
+        badgeTextColor: colorScheme.tertiary,
         subtitle: isAr ? 'موزعة عبر الفروع والسلاسل' : 'Active retail outlets',
       ),
     ];
@@ -3034,22 +3036,22 @@ class _CompanyPrizesStockReportScreenState
     Color themeColor;
     IconData icon;
     if (movement.movementType == 'supply_batch') {
-      themeColor = Colors.green[800]!;
+      themeColor = colorScheme.onTertiaryFixedVariant;
       icon = Icons.add_shopping_cart_rounded;
     } else if (movement.movementType.startsWith('adjustment')) {
-      themeColor = isAdd ? Colors.teal[800]! : Colors.amber[900]!;
+      themeColor = isAdd ? colorScheme.onTertiaryFixedVariant : colorScheme.onSecondaryContainer;
       icon = Icons.tune_rounded;
     } else if (isAlloc) {
-      themeColor = Colors.orange[800]!;
+      themeColor = colorScheme.onSecondaryFixedVariant;
       icon = Icons.campaign_rounded;
     } else if (isReturn) {
-      themeColor = Colors.blue[800]!;
+      themeColor = colorScheme.onPrimaryFixedVariant;
       icon = Icons.replay_rounded;
     } else if (isClaim) {
-      themeColor = Colors.purple[800]!;
+      themeColor = colorScheme.onPrimaryFixedVariant;
       icon = Icons.card_giftcard_rounded;
     } else {
-      themeColor = isAdd ? Colors.green[800]! : Colors.red[800]!;
+      themeColor = isAdd ? colorScheme.onTertiaryFixedVariant : colorScheme.onErrorContainer;
       icon = isAdd ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded;
     }
 
@@ -3277,7 +3279,7 @@ class _CompanyPrizesStockReportScreenState
                 _buildMiniStatCard(
                   colorScheme: colorScheme,
                   icon: Icons.inventory_2_rounded,
-                  iconColor: Colors.blue[700]!,
+                  iconColor: colorScheme.onPrimaryFixedVariant,
                   title: isAr ? 'إجمالي دفعات التوريد' : 'Total Supply Batches',
                   value: '$totalBatchesCount ${isAr ? 'دفعات' : 'batches'}',
                   subtitle: '+ $totalBatchesQty ${isAr ? 'قطع/كروت واردة' : 'inward items'}',
@@ -3285,7 +3287,7 @@ class _CompanyPrizesStockReportScreenState
                 _buildMiniStatCard(
                   colorScheme: colorScheme,
                   icon: Icons.tune_rounded,
-                  iconColor: Colors.amber[800]!,
+                  iconColor: colorScheme.onSecondaryFixedVariant,
                   title: isAr ? 'إجمالي التسويات الجردية' : 'Total Adjustments',
                   value: '$totalAdjustmentsCount ${isAr ? 'تسوية' : 'adjustments'}',
                   subtitle: '${totalAdjustmentsDelta >= 0 ? '+' : ''}$totalAdjustmentsDelta ${isAr ? 'صافي التعديل' : 'net delta'}',
@@ -3293,7 +3295,7 @@ class _CompanyPrizesStockReportScreenState
                 _buildMiniStatCard(
                   colorScheme: colorScheme,
                   icon: Icons.receipt_long_rounded,
-                  iconColor: Colors.green[700]!,
+                  iconColor: colorScheme.onTertiaryFixedVariant,
                   title: isAr ? 'إجمالي الحركات الموثقة' : 'Total Movements Logged',
                   value: '${allMovements.length} ${isAr ? 'حركة' : 'logs'}',
                   subtitle: isAr ? 'سجل رقابي غير قابل للتعديل' : 'Immutable audit trail',
@@ -3451,8 +3453,8 @@ class _CompanyPrizesStockReportScreenState
     required List<EventModel> events,
   }) {
     final statusColor = gift.isOutOfStock
-        ? const Color(0xFFB3261E)
-        : (gift.isLowStock ? const Color(0xFFD97706) : const Color(0xFF006C50));
+        ? colorScheme.error
+        : (gift.isLowStock ? colorScheme.secondary : colorScheme.tertiary);
     final statusLabel = gift.isOutOfStock
         ? strings.stockDepletedBadge
         : (gift.isLowStock ? strings.stockLowBadge : strings.stockHealthyBadge);
@@ -3483,7 +3485,7 @@ class _CompanyPrizesStockReportScreenState
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: isVoucher
-              ? const Color(0xFFD97706).withValues(alpha: 0.35)
+              ? colorScheme.secondary.withValues(alpha: 0.35)
               : colorScheme.outlineVariant.withValues(alpha: 0.5),
         ),
       ),
@@ -3499,14 +3501,14 @@ class _CompanyPrizesStockReportScreenState
                 height: 44,
                 decoration: BoxDecoration(
                   color: isVoucher
-                      ? const Color(0xFFD97706).withValues(alpha: 0.12)
+                      ? colorScheme.secondary.withValues(alpha: 0.12)
                       : colorScheme.primaryContainer,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Center(
                   child: Icon(
                     isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
-                    color: isVoucher ? const Color(0xFFD97706) : colorScheme.primary,
+                    color: isVoucher ? colorScheme.secondary : colorScheme.primary,
                     size: 24,
                   ),
                 ),
@@ -3533,16 +3535,16 @@ class _CompanyPrizesStockReportScreenState
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFD97706).withValues(alpha: 0.12),
+                              color: colorScheme.secondary.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.35)),
+                              border: Border.all(color: colorScheme.secondary.withValues(alpha: 0.35)),
                             ),
                             child: Text(
                               'فئة ${denom.toInt()} ج.م',
                               style: GoogleFonts.cairo(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w900,
-                                color: const Color(0xFFB45309),
+                                color: colorScheme.onSecondaryFixedVariant,
                               ),
                             ),
                           ),
@@ -3707,9 +3709,9 @@ class _CompanyPrizesStockReportScreenState
                     backgroundColor: colorScheme.surfaceContainerHighest,
                     valueColor: AlwaysStoppedAnimation<Color>(
                       gift.depletionRate > 0.85
-                          ? const Color(0xFFB3261E)
+                          ? colorScheme.error
                           : (gift.depletionRate > 0.60
-                              ? const Color(0xFFD97706)
+                              ? colorScheme.secondary
                               : colorScheme.primary),
                     ),
                   ),
@@ -3749,12 +3751,12 @@ class _CompanyPrizesStockReportScreenState
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: entry.value <= 0
-                              ? const Color(0xFFB3261E).withValues(alpha: 0.08)
+                              ? colorScheme.error.withValues(alpha: 0.08)
                               : colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
                             color: entry.value <= 0
-                                ? const Color(0xFFB3261E).withValues(alpha: 0.3)
+                                ? colorScheme.error.withValues(alpha: 0.3)
                                 : colorScheme.outlineVariant.withValues(alpha: 0.4),
                           ),
                         ),
@@ -3765,7 +3767,7 @@ class _CompanyPrizesStockReportScreenState
                               Icons.store_rounded,
                               size: 13,
                               color: entry.value <= 0
-                                  ? const Color(0xFFB3261E)
+                                  ? colorScheme.error
                                   : colorScheme.primary,
                             ),
                             const SizedBox(width: 4),
@@ -3785,7 +3787,7 @@ class _CompanyPrizesStockReportScreenState
                               ),
                               decoration: BoxDecoration(
                                 color: entry.value <= 0
-                                    ? const Color(0xFFB3261E)
+                                    ? colorScheme.error
                                     : colorScheme.primary,
                                 borderRadius: BorderRadius.circular(6),
                               ),
@@ -4198,7 +4200,7 @@ class _CompanyPrizesStockReportScreenState
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: branchRemaining <= 0
-                        ? const Color(0xFFB3261E).withValues(alpha: 0.12)
+                        ? colorScheme.error.withValues(alpha: 0.12)
                         : colorScheme.primaryContainer,
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -4210,7 +4212,7 @@ class _CompanyPrizesStockReportScreenState
                           fontSize: 16,
                           fontWeight: FontWeight.w900,
                           color: branchRemaining <= 0
-                              ? const Color(0xFFB3261E)
+                              ? colorScheme.error
                               : colorScheme.primary,
                         ),
                       ),
@@ -4221,7 +4223,7 @@ class _CompanyPrizesStockReportScreenState
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                           color: branchRemaining <= 0
-                              ? const Color(0xFFB3261E)
+                              ? colorScheme.error
                               : colorScheme.primary,
                         ),
                       ),
@@ -4238,18 +4240,18 @@ class _CompanyPrizesStockReportScreenState
               margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFFD97706).withValues(alpha: 0.08),
+                color: colorScheme.secondary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: const Color(0xFFD97706).withValues(alpha: 0.3),
+                  color: colorScheme.secondary.withValues(alpha: 0.3),
                 ),
               ),
               child: Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.confirmation_number_rounded,
                     size: 16,
-                    color: Color(0xFFD97706),
+                    color: colorScheme.secondary,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -4258,7 +4260,7 @@ class _CompanyPrizesStockReportScreenState
                       style: GoogleFonts.cairo(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: const Color(0xFFB45309),
+                        color: colorScheme.onSecondaryFixedVariant,
                       ),
                     ),
                   ),
@@ -4293,7 +4295,7 @@ class _CompanyPrizesStockReportScreenState
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: isVoucher
-                              ? const Color(0xFFD97706).withValues(alpha: 0.3)
+                              ? colorScheme.secondary.withValues(alpha: 0.3)
                               : colorScheme.outlineVariant.withValues(alpha: 0.4),
                         ),
                       ),
@@ -4303,8 +4305,8 @@ class _CompanyPrizesStockReportScreenState
                             isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
                             size: 18,
                             color: isVoucher
-                                ? const Color(0xFFD97706)
-                                : (rem <= 0 ? const Color(0xFFB3261E) : colorScheme.primary),
+                                ? colorScheme.secondary
+                                : (rem <= 0 ? colorScheme.error : colorScheme.primary),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
@@ -4328,7 +4330,7 @@ class _CompanyPrizesStockReportScreenState
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                                         decoration: BoxDecoration(
-                                          color: const Color(0xFFD97706).withValues(alpha: 0.12),
+                                          color: colorScheme.secondary.withValues(alpha: 0.12),
                                           borderRadius: BorderRadius.circular(6),
                                         ),
                                         child: Text(
@@ -4336,7 +4338,7 @@ class _CompanyPrizesStockReportScreenState
                                           style: GoogleFonts.cairo(
                                             fontSize: 9,
                                             fontWeight: FontWeight.w900,
-                                            color: const Color(0xFFB45309),
+                                            color: colorScheme.onSecondaryFixedVariant,
                                           ),
                                         ),
                                       ),
@@ -4373,8 +4375,8 @@ class _CompanyPrizesStockReportScreenState
                             label: isAr ? 'المتبقي' : 'Left',
                             value: '${p['remaining']}',
                             color: rem <= 0
-                                ? const Color(0xFFB3261E)
-                                : const Color(0xFF006C50),
+                                ? colorScheme.error
+                                : colorScheme.tertiary,
                             isHighlight: true,
                             colorScheme: colorScheme,
                           ),
@@ -4472,8 +4474,8 @@ class _CompanyPrizesStockReportScreenState
                                       style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
                                     ),
                                     style: FilledButton.styleFrom(
-                                      backgroundColor: Colors.purple.withValues(alpha: 0.12),
-                                      foregroundColor: Colors.purple[800],
+                                      backgroundColor: colorScheme.primary.withValues(alpha: 0.12),
+                                      foregroundColor: colorScheme.onPrimaryFixedVariant,
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                       visualDensity: VisualDensity.compact,
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -4690,12 +4692,12 @@ class _CompanyPrizesStockReportScreenState
                   decoration: BoxDecoration(
                     color: _isAllTime
                         ? colorScheme.surface
-                        : (isSelectedToday ? colorScheme.primaryContainer : Colors.indigo.shade50),
+                        : (isSelectedToday ? colorScheme.primaryContainer : colorScheme.primaryContainer),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: _isAllTime
                           ? colorScheme.outlineVariant
-                          : (isSelectedToday ? colorScheme.primary : Colors.indigo.shade300),
+                          : (isSelectedToday ? colorScheme.primary : colorScheme.primaryFixedDim),
                       width: 1.5,
                     ),
                   ),
@@ -4707,7 +4709,7 @@ class _CompanyPrizesStockReportScreenState
                         size: 16,
                         color: _isAllTime
                             ? colorScheme.onSurfaceVariant
-                            : (isSelectedToday ? colorScheme.primary : Colors.indigo.shade900),
+                            : (isSelectedToday ? colorScheme.primary : colorScheme.onPrimaryContainer),
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -4719,7 +4721,7 @@ class _CompanyPrizesStockReportScreenState
                           fontWeight: FontWeight.bold,
                           color: _isAllTime
                               ? colorScheme.onSurfaceVariant
-                              : (isSelectedToday ? colorScheme.onPrimaryContainer : Colors.indigo.shade900),
+                              : (isSelectedToday ? colorScheme.onPrimaryContainer : colorScheme.onPrimaryContainer),
                         ),
                       ),
                       if (isSelectedToday) ...[
@@ -4852,7 +4854,7 @@ class _CompanyPrizesStockReportScreenState
               child: _buildMiniStatCard(
                 colorScheme: colorScheme,
                 icon: Icons.confirmation_number_rounded,
-                iconColor: Colors.amber.shade800,
+                iconColor: colorScheme.onSecondaryFixedVariant,
                 title: _isAllTime
                     ? (isAr ? 'إجمالي قيمة الفواتشرات' : 'Total Vouchers Value')
                     : (isAr ? 'قيمة فواتشرات هذا اليوم' : 'Vouchers Value On Date'),
@@ -4865,7 +4867,7 @@ class _CompanyPrizesStockReportScreenState
               child: _buildMiniStatCard(
                 colorScheme: colorScheme,
                 icon: Icons.receipt_long_rounded,
-                iconColor: Colors.teal.shade700,
+                iconColor: colorScheme.onTertiaryFixedVariant,
                 title: _isAllTime
                     ? (isAr ? 'إجمالي الفواتير الفائزة' : 'Total Winning Invoices')
                     : (isAr ? 'فواتير هذا اليوم' : 'Invoices On Date'),
@@ -5299,10 +5301,10 @@ class _CompanyPrizesStockReportScreenState
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: campaignGiftsOnDate > 0 ? Colors.teal.shade50 : colorScheme.surface,
+                        color: campaignGiftsOnDate > 0 ? colorScheme.tertiaryContainer : colorScheme.surface,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: campaignGiftsOnDate > 0 ? Colors.teal.shade300 : colorScheme.outlineVariant.withValues(alpha: 0.4),
+                          color: campaignGiftsOnDate > 0 ? colorScheme.tertiaryFixedDim : colorScheme.outlineVariant.withValues(alpha: 0.4),
                         ),
                       ),
                       child: Row(
@@ -5311,7 +5313,7 @@ class _CompanyPrizesStockReportScreenState
                           Icon(
                             Icons.bolt_rounded,
                             size: 13,
-                            color: campaignGiftsOnDate > 0 ? Colors.teal.shade800 : colorScheme.outline,
+                            color: campaignGiftsOnDate > 0 ? colorScheme.onTertiaryFixedVariant : colorScheme.outline,
                           ),
                           const SizedBox(width: 4),
                           Text(
@@ -5323,7 +5325,7 @@ class _CompanyPrizesStockReportScreenState
                             style: GoogleFonts.cairo(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
-                              color: campaignGiftsOnDate > 0 ? Colors.teal.shade900 : colorScheme.onSurfaceVariant,
+                              color: campaignGiftsOnDate > 0 ? colorScheme.onTertiaryContainer : colorScheme.onSurfaceVariant,
                             ),
                           ),
                           if (campaignVouchersValueOnDate > 0) ...[
@@ -5332,7 +5334,7 @@ class _CompanyPrizesStockReportScreenState
                               style: GoogleFonts.cairo(
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.amber.shade900,
+                                color: colorScheme.onSecondaryContainer,
                               ),
                             ),
                           ],
@@ -5440,10 +5442,10 @@ class _CompanyPrizesStockReportScreenState
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                       decoration: BoxDecoration(
-                                        color: bGiftsOnDate > 0 ? Colors.teal.shade50 : colorScheme.surface,
+                                        color: bGiftsOnDate > 0 ? colorScheme.tertiaryContainer : colorScheme.surface,
                                         borderRadius: BorderRadius.circular(10),
                                         border: Border.all(
-                                          color: bGiftsOnDate > 0 ? Colors.teal.shade300 : colorScheme.outlineVariant.withValues(alpha: 0.4),
+                                          color: bGiftsOnDate > 0 ? colorScheme.tertiaryFixedDim : colorScheme.outlineVariant.withValues(alpha: 0.4),
                                         ),
                                       ),
                                       child: Row(
@@ -5452,7 +5454,7 @@ class _CompanyPrizesStockReportScreenState
                                           Icon(
                                             Icons.bolt_rounded,
                                             size: 14,
-                                            color: bGiftsOnDate > 0 ? Colors.teal.shade800 : colorScheme.outline,
+                                            color: bGiftsOnDate > 0 ? colorScheme.onTertiaryFixedVariant : colorScheme.outline,
                                           ),
                                           const SizedBox(width: 4),
                                           Text(
@@ -5464,7 +5466,7 @@ class _CompanyPrizesStockReportScreenState
                                             style: GoogleFonts.cairo(
                                               fontSize: 11,
                                               fontWeight: FontWeight.bold,
-                                              color: bGiftsOnDate > 0 ? Colors.teal.shade900 : colorScheme.onSurfaceVariant,
+                                              color: bGiftsOnDate > 0 ? colorScheme.onTertiaryContainer : colorScheme.onSurfaceVariant,
                                             ),
                                           ),
                                           if (bVouchersValueOnDate > 0) ...[
@@ -5474,7 +5476,7 @@ class _CompanyPrizesStockReportScreenState
                                               style: GoogleFonts.cairo(
                                                 fontSize: 10.5,
                                                 fontWeight: FontWeight.bold,
-                                                color: Colors.amber.shade900,
+                                                color: colorScheme.onSecondaryContainer,
                                               ),
                                             ),
                                           ],
@@ -5506,7 +5508,7 @@ class _CompanyPrizesStockReportScreenState
                                               borderRadius: BorderRadius.circular(16),
                                               border: Border.all(
                                                 color: prizeGiftsOnDate > 0
-                                                    ? (isVoucher ? Colors.amber.shade400 : colorScheme.primary.withValues(alpha: 0.5))
+                                                    ? (isVoucher ? colorScheme.primaryFixedDim : colorScheme.primary.withValues(alpha: 0.5))
                                                     : colorScheme.outlineVariant.withValues(alpha: 0.4),
                                                 width: prizeGiftsOnDate > 0 ? 1.5 : 1.0,
                                               ),
@@ -5529,7 +5531,7 @@ class _CompanyPrizesStockReportScreenState
                                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                                       decoration: BoxDecoration(
                                                         color: isVoucher
-                                                            ? (prizeGiftsOnDate > 0 ? Colors.amber.shade600 : Colors.amber.shade100)
+                                                            ? (prizeGiftsOnDate > 0 ? colorScheme.secondary : colorScheme.secondaryContainer)
                                                             : (prizeGiftsOnDate > 0 ? colorScheme.primary : colorScheme.surfaceContainerHighest),
                                                         borderRadius: BorderRadius.circular(12),
                                                       ),
@@ -5546,7 +5548,7 @@ class _CompanyPrizesStockReportScreenState
                                                               fontSize: 9.5,
                                                               fontWeight: FontWeight.bold,
                                                               color: isVoucher
-                                                                  ? (prizeGiftsOnDate > 0 ? Colors.white : Colors.amber.shade900)
+                                                                  ? (prizeGiftsOnDate > 0 ? Colors.white : colorScheme.onSecondaryContainer)
                                                                   : (prizeGiftsOnDate > 0 ? colorScheme.onPrimary : colorScheme.onSurfaceVariant),
                                                               height: 1.1,
                                                             ),
@@ -5557,7 +5559,7 @@ class _CompanyPrizesStockReportScreenState
                                                               fontSize: 13,
                                                               fontWeight: FontWeight.w900,
                                                               color: isVoucher
-                                                                  ? (prizeGiftsOnDate > 0 ? Colors.white : Colors.amber.shade900)
+                                                                  ? (prizeGiftsOnDate > 0 ? Colors.white : colorScheme.onSecondaryContainer)
                                                                   : (prizeGiftsOnDate > 0 ? colorScheme.onPrimary : colorScheme.onSurface),
                                                               height: 1.2,
                                                             ),
@@ -5577,7 +5579,7 @@ class _CompanyPrizesStockReportScreenState
                                                               Icon(
                                                                 isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
                                                                 size: 18,
-                                                                color: isVoucher ? Colors.amber.shade800 : colorScheme.primary,
+                                                                color: isVoucher ? colorScheme.onSecondaryFixedVariant : colorScheme.primary,
                                                               ),
                                                               const SizedBox(width: 6),
                                                               Expanded(
@@ -5610,7 +5612,7 @@ class _CompanyPrizesStockReportScreenState
                                                     _buildBranchQtyPill(
                                                       label: isAr ? 'المتبقي' : 'Left',
                                                       value: '${prize.remainingQuantity}',
-                                                      color: prize.remainingQuantity <= 0 ? const Color(0xFFB3261E) : const Color(0xFF006C50),
+                                                      color: prize.remainingQuantity <= 0 ? colorScheme.error : colorScheme.tertiary,
                                                       isHighlight: true,
                                                       colorScheme: colorScheme,
                                                     ),
@@ -5639,14 +5641,14 @@ class _CompanyPrizesStockReportScreenState
                                                   Container(
                                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                                     decoration: BoxDecoration(
-                                                      color: Colors.amber.shade50,
+                                                      color: colorScheme.secondaryContainer,
                                                       borderRadius: BorderRadius.circular(8),
-                                                      border: Border.all(color: Colors.amber.shade200),
+                                                      border: Border.all(color: colorScheme.secondaryFixedDim),
                                                     ),
                                                     child: Row(
                                                       mainAxisSize: MainAxisSize.min,
                                                       children: [
-                                                        Icon(Icons.payments_rounded, size: 14, color: Colors.amber.shade900),
+                                                        Icon(Icons.payments_rounded, size: 14, color: colorScheme.onSecondaryContainer),
                                                         const SizedBox(width: 6),
                                                         Text(
                                                           prizeVouchersValueOnDate > 0
@@ -5655,7 +5657,7 @@ class _CompanyPrizesStockReportScreenState
                                                           style: GoogleFonts.cairo(
                                                             fontSize: 11,
                                                             fontWeight: FontWeight.bold,
-                                                            color: Colors.amber.shade900,
+                                                            color: colorScheme.onSecondaryContainer,
                                                           ),
                                                         ),
                                                       ],

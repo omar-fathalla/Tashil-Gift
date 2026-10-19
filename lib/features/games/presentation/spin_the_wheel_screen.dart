@@ -312,11 +312,10 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
     final baseColors = [
       colorScheme.primary,
       colorScheme.tertiary,
-      const Color(0xFF6750A4),
-      const Color(0xFF006C50),
-      const Color(0xFFB3261E),
-      const Color(0xFF00639B),
-      const Color(0xFF7D5260),
+      colorScheme.secondary,
+      colorScheme.onPrimaryFixedVariant,
+      colorScheme.onTertiaryFixedVariant,
+      colorScheme.onSecondaryFixedVariant,
     ];
 
     List<Color> result = [];
@@ -458,7 +457,7 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: const Color(0xFFFFD700),
+                                  color: colorScheme.primaryContainer,
                                   width: 6,
                                 ),
                                 boxShadow: [
@@ -476,11 +475,11 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
                                   duration: const Duration(seconds: 14), // 14 seconds of thrilling, realistic spin
                                   rotationCount: 16, // 16 full revolutions starting fast and decelerating smoothly
                                   curve: FortuneCurve.spin,
-                                  indicators: const [
+                                  indicators: [
                                     FortuneIndicator(
                                       alignment: Alignment.topCenter,
                                       child: TriangleIndicator(
-                                        color: Color(0xFFFFD700),
+                                        color: colorScheme.primaryContainer,
                                         elevation: 8,
                                       ),
                                     ),
@@ -517,14 +516,14 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
                             ),
                           ),
 
-                            // Center Golden Hub
+                            // Center Hub
                             Container(
                               width: 54,
                               height: 54,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                gradient: const RadialGradient(
-                                  colors: [Color(0xFFFFEA00), Color(0xFFFF8F00)],
+                                gradient: RadialGradient(
+                                  colors: [colorScheme.primaryContainer, colorScheme.primary],
                                 ),
                                 border: Border.all(color: Colors.white, width: 3),
                                 boxShadow: [

@@ -368,10 +368,10 @@ class CampaignBriefDialog extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: event.isActive ? Colors.green.shade50 : Colors.grey.shade100,
+                  color: event.isActive ? colorScheme.tertiaryContainer : colorScheme.surfaceContainer,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: event.isActive ? Colors.green.shade300 : Colors.grey.shade400,
+                    color: event.isActive ? colorScheme.tertiaryFixedDim : colorScheme.outline,
                   ),
                 ),
                 child: Row(
@@ -382,7 +382,7 @@ class CampaignBriefDialog extends ConsumerWidget {
                       height: 6,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: event.isActive ? Colors.green.shade700 : Colors.grey.shade600,
+                        color: event.isActive ? colorScheme.tertiary : colorScheme.onSurfaceVariant,
                       ),
                     ),
                     const SizedBox(width: 5),
@@ -391,7 +391,7 @@ class CampaignBriefDialog extends ConsumerWidget {
                       style: GoogleFonts.cairo(
                         fontSize: 10.5,
                         fontWeight: FontWeight.bold,
-                        color: event.isActive ? Colors.green.shade900 : Colors.grey.shade700,
+                        color: event.isActive ? colorScheme.onTertiaryContainer : colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -487,7 +487,7 @@ class CampaignBriefDialog extends ConsumerWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isVoucher
-              ? Colors.amber.shade400.withValues(alpha: 0.6)
+              ? colorScheme.primaryFixedDim.withValues(alpha: 0.6)
               : colorScheme.outlineVariant.withValues(alpha: 0.6),
           width: 1.2,
         ),
@@ -509,13 +509,13 @@ class CampaignBriefDialog extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: isVoucher ? Colors.amber.shade100 : Colors.teal.shade100,
+                  color: isVoucher ? colorScheme.secondaryContainer : colorScheme.tertiaryContainer,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
                   isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
                   size: 18,
-                  color: isVoucher ? Colors.amber.shade900 : Colors.teal.shade900,
+                  color: isVoucher ? colorScheme.onSecondaryContainer : colorScheme.onTertiaryContainer,
                 ),
               ),
               const SizedBox(width: 10),
@@ -539,10 +539,10 @@ class CampaignBriefDialog extends ConsumerWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
                           decoration: BoxDecoration(
-                            color: isVoucher ? Colors.amber.shade50 : Colors.teal.shade50,
+                            color: isVoucher ? colorScheme.secondaryContainer : colorScheme.tertiaryContainer,
                             borderRadius: BorderRadius.circular(6),
                             border: Border.all(
-                              color: isVoucher ? Colors.amber.shade300 : Colors.teal.shade300,
+                              color: isVoucher ? colorScheme.primaryFixedDim : colorScheme.tertiaryFixedDim,
                             ),
                           ),
                           child: Text(
@@ -550,7 +550,7 @@ class CampaignBriefDialog extends ConsumerWidget {
                             style: GoogleFonts.cairo(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
-                              color: isVoucher ? Colors.amber.shade900 : Colors.teal.shade900,
+                              color: isVoucher ? colorScheme.onSecondaryContainer : colorScheme.onTertiaryContainer,
                             ),
                           ),
                         ),
@@ -558,16 +558,16 @@ class CampaignBriefDialog extends ConsumerWidget {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
                             decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
+                              color: colorScheme.primaryContainer,
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.blue.shade300),
+                              border: Border.all(color: colorScheme.primaryFixedDim),
                             ),
                             child: Text(
                               'مضاعفة الهدايا مع زيادة الكمية',
                               style: GoogleFonts.cairo(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.blue.shade900,
+                                color: colorScheme.onPrimaryContainer,
                               ),
                             ),
                           ),
@@ -624,13 +624,13 @@ class CampaignBriefDialog extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
             decoration: BoxDecoration(
               color: isVoucher
-                  ? Colors.amber.shade50.withValues(alpha: 0.6)
-                  : Colors.teal.shade50.withValues(alpha: 0.6),
+                  ? colorScheme.secondaryContainer.withValues(alpha: 0.6)
+                  : colorScheme.tertiaryContainer.withValues(alpha: 0.6),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
                 color: isVoucher
-                    ? Colors.amber.shade200
-                    : Colors.teal.shade200,
+                    ? colorScheme.secondaryFixedDim
+                    : colorScheme.tertiaryFixedDim,
               ),
             ),
             child: Row(
@@ -639,7 +639,7 @@ class CampaignBriefDialog extends ConsumerWidget {
                 Icon(
                   isVoucher ? Icons.payments_rounded : Icons.redeem_rounded,
                   size: 16,
-                  color: isVoucher ? Colors.amber.shade900 : Colors.teal.shade900,
+                  color: isVoucher ? colorScheme.onSecondaryContainer : colorScheme.onTertiaryContainer,
                 ),
                 const SizedBox(width: 8),
                 Text(
@@ -647,7 +647,7 @@ class CampaignBriefDialog extends ConsumerWidget {
                   style: GoogleFonts.cairo(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: isVoucher ? Colors.amber.shade900 : Colors.teal.shade900,
+                    color: isVoucher ? colorScheme.onSecondaryContainer : colorScheme.onTertiaryContainer,
                   ),
                 ),
                 Expanded(
@@ -656,7 +656,7 @@ class CampaignBriefDialog extends ConsumerWidget {
                     style: GoogleFonts.cairo(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: isVoucher ? Colors.amber.shade900 : Colors.teal.shade900,
+                      color: isVoucher ? colorScheme.onSecondaryContainer : colorScheme.onTertiaryContainer,
                     ),
                   ),
                 ),
@@ -674,9 +674,9 @@ class CampaignBriefDialog extends ConsumerWidget {
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
                   decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
+                    color: colorScheme.secondaryContainer,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.amber.shade300),
+                    border: Border.all(color: colorScheme.primaryFixedDim),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -684,7 +684,7 @@ class CampaignBriefDialog extends ConsumerWidget {
                       Icon(
                         g.isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
                         size: 12,
-                        color: Colors.amber.shade900,
+                        color: colorScheme.onSecondaryContainer,
                       ),
                       const SizedBox(width: 4),
                       Text(
@@ -692,7 +692,7 @@ class CampaignBriefDialog extends ConsumerWidget {
                         style: GoogleFonts.cairo(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: Colors.amber.shade900,
+                          color: colorScheme.onSecondaryContainer,
                         ),
                       ),
                     ],

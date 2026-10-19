@@ -70,6 +70,8 @@ class UnifiedMultiCampaignClaimScreen extends ConsumerStatefulWidget {
 class _UnifiedMultiCampaignClaimScreenState
     extends ConsumerState<UnifiedMultiCampaignClaimScreen>
     with SingleTickerProviderStateMixin {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   late AnimationController _animController;
   late Animation<double> _scaleAnimation;
   late Animation<double> _fadeAnimation;
@@ -205,7 +207,7 @@ class _UnifiedMultiCampaignClaimScreenState
                 dupCheck.rejectionMessage,
                 style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
               ),
-              backgroundColor: Colors.amber.shade900,
+              backgroundColor: colorScheme.onSecondaryContainer,
               behavior: SnackBarBehavior.floating,
               duration: const Duration(seconds: 5),
             ),
@@ -530,7 +532,7 @@ class _UnifiedMultiCampaignClaimScreenState
                         onPressed: (_isClaiming || _isClaimed) ? null : _handleConfirmAllDisbursals,
                         style: FilledButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 16),
-                          backgroundColor: Colors.green.shade700,
+                          backgroundColor: colorScheme.tertiary,
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(18),
@@ -673,16 +675,16 @@ class _UnifiedMultiCampaignClaimScreenState
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.green.shade100,
+                    color: colorScheme.tertiaryContainer,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.green.shade400),
+                    border: Border.all(color: colorScheme.tertiaryFixedDim),
                   ),
                   child: Text(
                     isAr ? 'مؤهل للفوز' : 'Qualified',
                     style: GoogleFonts.cairo(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      color: Colors.green.shade800,
+                      color: colorScheme.onTertiaryFixedVariant,
                     ),
                   ),
                 ),
@@ -704,12 +706,12 @@ class _UnifiedMultiCampaignClaimScreenState
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: isVoucher
-                            ? Colors.amber.shade50.withValues(alpha: 0.5)
+                            ? colorScheme.secondaryContainer.withValues(alpha: 0.5)
                             : colorScheme.surface,
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
                           color: isVoucher
-                              ? Colors.amber.shade300
+                              ? colorScheme.primaryFixedDim
                               : colorScheme.primary.withValues(alpha: 0.2),
                         ),
                       ),
@@ -720,7 +722,7 @@ class _UnifiedMultiCampaignClaimScreenState
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
                               color: isVoucher
-                                  ? Colors.amber.shade100
+                                  ? colorScheme.secondaryContainer
                                   : colorScheme.primary.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(10),
                             ),
@@ -729,7 +731,7 @@ class _UnifiedMultiCampaignClaimScreenState
                                   ? Icons.confirmation_number_outlined
                                   : Icons.redeem_rounded,
                               size: 22,
-                              color: isVoucher ? Colors.amber.shade900 : colorScheme.primary,
+                              color: isVoucher ? colorScheme.onSecondaryContainer : colorScheme.primary,
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -754,7 +756,7 @@ class _UnifiedMultiCampaignClaimScreenState
                                       child: Icon(
                                         Icons.check_circle_outline_rounded,
                                         size: 13,
-                                        color: Colors.green.shade700,
+                                        color: colorScheme.tertiary,
                                       ),
                                     ),
                                     const SizedBox(width: 4),
@@ -783,10 +785,10 @@ class _UnifiedMultiCampaignClaimScreenState
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                     margin: const EdgeInsets.only(bottom: 2),
                                     decoration: BoxDecoration(
-                                      color: g.isVoucher ? Colors.amber.shade50 : colorScheme.surfaceContainerHighest,
+                                      color: g.isVoucher ? colorScheme.secondaryContainer : colorScheme.surfaceContainerHighest,
                                       borderRadius: BorderRadius.circular(6),
                                       border: Border.all(
-                                        color: g.isVoucher ? Colors.amber.shade200 : colorScheme.outlineVariant,
+                                        color: g.isVoucher ? colorScheme.secondaryFixedDim : colorScheme.outlineVariant,
                                       ),
                                     ),
                                     child: Text(
@@ -794,7 +796,7 @@ class _UnifiedMultiCampaignClaimScreenState
                                       style: GoogleFonts.cairo(
                                         fontSize: 10.5,
                                         fontWeight: FontWeight.bold,
-                                        color: g.isVoucher ? Colors.amber.shade900 : colorScheme.onSurface,
+                                        color: g.isVoucher ? colorScheme.onSecondaryContainer : colorScheme.onSurface,
                                       ),
                                     ),
                                   );
@@ -810,12 +812,12 @@ class _UnifiedMultiCampaignClaimScreenState
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: q.resolvedIsVoucher
-                          ? Colors.amber.shade50.withValues(alpha: 0.5)
+                          ? colorScheme.secondaryContainer.withValues(alpha: 0.5)
                           : colorScheme.surface,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
                         color: q.resolvedIsVoucher
-                            ? Colors.amber.shade300
+                            ? colorScheme.primaryFixedDim
                             : colorScheme.primary.withValues(alpha: 0.2),
                       ),
                     ),
@@ -826,7 +828,7 @@ class _UnifiedMultiCampaignClaimScreenState
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
                             color: q.resolvedIsVoucher
-                                ? Colors.amber.shade100
+                                ? colorScheme.secondaryContainer
                                 : colorScheme.primary.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(10),
                           ),
@@ -835,7 +837,7 @@ class _UnifiedMultiCampaignClaimScreenState
                                 ? Icons.confirmation_number_outlined
                                 : Icons.redeem_rounded,
                             size: 22,
-                            color: q.resolvedIsVoucher ? Colors.amber.shade900 : colorScheme.primary,
+                            color: q.resolvedIsVoucher ? colorScheme.onSecondaryContainer : colorScheme.primary,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -860,7 +862,7 @@ class _UnifiedMultiCampaignClaimScreenState
                                     child: Icon(
                                       Icons.check_circle_outline_rounded,
                                       size: 13,
-                                      color: Colors.green.shade700,
+                                      color: colorScheme.tertiary,
                                     ),
                                   ),
                                   const SizedBox(width: 4),
@@ -894,7 +896,7 @@ class _UnifiedMultiCampaignClaimScreenState
                                         style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
                                       ),
                                       visualDensity: VisualDensity.compact,
-                                      backgroundColor: g.isVoucher ? Colors.amber.shade50 : colorScheme.surface,
+                                      backgroundColor: g.isVoucher ? colorScheme.secondaryContainer : colorScheme.surface,
                                       side: BorderSide(color: colorScheme.outlineVariant),
                                       padding: EdgeInsets.zero,
                                     );

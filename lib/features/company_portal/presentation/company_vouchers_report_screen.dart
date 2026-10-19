@@ -117,6 +117,8 @@ class CompanyVouchersReportScreen extends ConsumerStatefulWidget {
 
 class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersReportScreen>
     with AutomaticKeepAliveClientMixin {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   @override
   bool get wantKeepAlive => true;
 
@@ -1777,9 +1779,9 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                               decoration: BoxDecoration(
                                 color: branchRate >= 0.8
-                                    ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                                    ? colorScheme.tertiary.withValues(alpha: 0.15)
                                     : (branchRate >= 0.4
-                                        ? const Color(0xFFF59E0B).withValues(alpha: 0.15)
+                                        ? colorScheme.secondary.withValues(alpha: 0.15)
                                         : colorScheme.outlineVariant.withValues(alpha: 0.3)),
                                 borderRadius: BorderRadius.circular(6),
                               ),
@@ -1789,9 +1791,9 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                   color: branchRate >= 0.8
-                                      ? const Color(0xFF047857)
+                                      ? colorScheme.onTertiaryFixedVariant
                                       : (branchRate >= 0.4
-                                          ? const Color(0xFFB45309)
+                                          ? colorScheme.onSecondaryFixedVariant
                                           : colorScheme.onSurfaceVariant),
                                 ),
                               ),
@@ -1955,7 +1957,7 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                   title: isAr ? 'الميزانية الكلية' : 'Total Budget',
                   value: _formatMoney(totalBudget, isAr: isAr),
                   subvalue: isAr ? '$totalAllocated قسيمة' : '$totalAllocated vouchers',
-                  color: const Color(0xFF6366F1),
+                  color: colorScheme.primary,
                   colorScheme: colorScheme,
                 ),
               ),
@@ -1965,7 +1967,7 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                   title: isAr ? 'القيمة المصروفة' : 'Claimed Value',
                   value: _formatMoney(claimedBudget, isAr: isAr),
                   subvalue: isAr ? '$totalClaimed مصروفة' : '$totalClaimed claimed',
-                  color: const Color(0xFF10B981),
+                  color: colorScheme.tertiary,
                   colorScheme: colorScheme,
                 ),
               ),
@@ -1975,7 +1977,7 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                   title: isAr ? 'الرصيد المتبقي' : 'Remaining Value',
                   value: _formatMoney(remainingBudget, isAr: isAr),
                   subvalue: isAr ? '$totalRemaining متبقية' : '$totalRemaining left',
-                  color: const Color(0xFFF59E0B),
+                  color: colorScheme.secondary,
                   colorScheme: colorScheme,
                 ),
               ),
@@ -2008,9 +2010,9 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                         fontSize: 12,
                         fontWeight: FontWeight.w900,
                         color: depletionRate >= 0.8
-                            ? const Color(0xFF047857)
+                            ? colorScheme.onTertiaryFixedVariant
                             : (depletionRate >= 0.4
-                                ? const Color(0xFFB45309)
+                                ? colorScheme.onSecondaryFixedVariant
                                 : colorScheme.primary),
                       ),
                     ),
@@ -2025,9 +2027,9 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                     backgroundColor: colorScheme.surfaceContainerHighest,
                     valueColor: AlwaysStoppedAnimation<Color>(
                       depletionRate >= 0.8
-                          ? const Color(0xFF10B981)
+                          ? colorScheme.tertiary
                           : (depletionRate >= 0.4
-                              ? const Color(0xFFF59E0B)
+                              ? colorScheme.secondary
                               : colorScheme.primary),
                     ),
                   ),
@@ -2066,7 +2068,7 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFD97706).withValues(alpha: 0.12),
+                      color: colorScheme.secondary.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -2074,7 +2076,7 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                       style: GoogleFonts.cairo(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w900,
-                        color: const Color(0xFFD97706),
+                        color: colorScheme.secondary,
                       ),
                     ),
                   ),
@@ -2098,9 +2100,9 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
                                 color: rate >= 0.8
-                                    ? const Color(0xFF047857)
+                                    ? colorScheme.onTertiaryFixedVariant
                                     : (rate >= 0.4
-                                        ? const Color(0xFFB45309)
+                                        ? colorScheme.onSecondaryFixedVariant
                                         : colorScheme.primary),
                               ),
                             ),
@@ -2115,9 +2117,9 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                             backgroundColor: colorScheme.surfaceContainerHighest,
                             valueColor: AlwaysStoppedAnimation<Color>(
                               rate >= 0.8
-                                  ? const Color(0xFF10B981)
+                                  ? colorScheme.tertiary
                                   : (rate >= 0.4
-                                      ? const Color(0xFFF59E0B)
+                                      ? colorScheme.secondary
                                       : colorScheme.primary),
                             ),
                           ),
@@ -2299,7 +2301,7 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                           for (final d in denoms)
                             _buildHeaderCell(
                               icon: Icons.confirmation_number_outlined,
-                              iconColor: const Color(0xFFB45309),
+                              iconColor: colorScheme.onSecondaryFixedVariant,
                               title: 'فئة ${d.label}',
                               subtitle: isAr ? '(مخصص • صرف • متبقي)' : '(alloc • out • left)',
                               colorScheme: colorScheme,
@@ -2312,25 +2314,25 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                           ),
                           _buildHeaderCell(
                             icon: Icons.account_balance_wallet_outlined,
-                            iconColor: const Color(0xFF006C50),
+                            iconColor: colorScheme.tertiary,
                             title: isAr ? 'ميزانية الفرع' : 'Branch Budget',
                             colorScheme: colorScheme,
                           ),
                           _buildHeaderCell(
                             icon: Icons.shopping_bag_outlined,
-                            iconColor: const Color(0xFF00639B),
+                            iconColor: colorScheme.primary,
                             title: isAr ? 'المنصرف' : 'Disbursed',
                             colorScheme: colorScheme,
                           ),
                           _buildHeaderCell(
                             icon: Icons.savings_outlined,
-                            iconColor: const Color(0xFF006874),
+                            iconColor: colorScheme.tertiary,
                             title: isAr ? 'المتبقي' : 'Remaining',
                             colorScheme: colorScheme,
                           ),
                           _buildHeaderCell(
                             icon: Icons.analytics_outlined,
-                            iconColor: const Color(0xFFD97706),
+                            iconColor: colorScheme.secondary,
                             title: isAr ? 'نسبة الاستهلاك' : 'Depletion',
                             colorScheme: colorScheme,
                           ),
@@ -2453,7 +2455,7 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.place_rounded, size: 16, color: Color(0xFFD97706)),
+                Icon(Icons.place_rounded, size: 16, color: colorScheme.secondary),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -2504,7 +2506,7 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                         style: GoogleFonts.cairo(
                           fontWeight: FontWeight.w900,
                           fontSize: 11.5,
-                          color: const Color(0xFFB45309),
+                          color: colorScheme.onSecondaryFixedVariant,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -2564,7 +2566,7 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF006C50).withValues(alpha: 0.08),
+                  color: colorScheme.tertiary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -2572,7 +2574,7 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                   style: GoogleFonts.cairo(
                     fontWeight: FontWeight.w900,
                     fontSize: 11.5,
-                    color: const Color(0xFF006C50),
+                    color: colorScheme.tertiary,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -2592,7 +2594,7 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
               style: GoogleFonts.cairo(
                 fontWeight: FontWeight.bold,
                 fontSize: 11.5,
-                color: const Color(0xFF00639B),
+                color: colorScheme.primary,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -2611,8 +2613,8 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: branchRemaining <= 0
-                      ? const Color(0xFFB3261E).withValues(alpha: 0.1)
-                      : const Color(0xFF006874).withValues(alpha: 0.08),
+                      ? colorScheme.error.withValues(alpha: 0.1)
+                      : colorScheme.tertiary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -2621,10 +2623,10 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                     fontWeight: FontWeight.w900,
                     fontSize: 12,
                     color: branchRemaining <= 0
-                        ? const Color(0xFFB3261E)
+                        ? colorScheme.error
                         : (branchRemaining < 10
-                            ? const Color(0xFFD97706)
-                            : const Color(0xFF006874)),
+                            ? colorScheme.secondary
+                            : colorScheme.tertiary),
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -2651,10 +2653,10 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                       backgroundColor: colorScheme.surfaceContainerHighest,
                       valueColor: AlwaysStoppedAnimation<Color>(
                         branchRemaining <= 0
-                            ? const Color(0xFFB3261E)
+                            ? colorScheme.error
                             : (branchDepletion > 0.75
-                                ? const Color(0xFFD97706)
-                                : const Color(0xFF006C50)),
+                                ? colorScheme.secondary
+                                : colorScheme.tertiary),
                       ),
                     ),
                   ),
@@ -2721,12 +2723,12 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFD97706).withValues(alpha: 0.14),
+                          color: colorScheme.secondary.withValues(alpha: 0.14),
                           borderRadius: BorderRadius.circular(14),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.table_chart_rounded,
-                          color: Color(0xFFD97706),
+                          color: colorScheme.secondary,
                           size: 22,
                         ),
                       ),
@@ -2904,7 +2906,7 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
               isAr ? '✅ تم تحميل تقرير قسائم المشتريات بنجاح ($fileName)' : '✅ Vouchers Report downloaded successfully ($fileName)',
               style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
             ),
-            backgroundColor: const Color(0xFF006C50),
+            backgroundColor: colorScheme.tertiary,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -2916,7 +2918,7 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
             isAr ? '⚠️ تعذر تصدير تقرير Excel: $e' : '⚠️ Failed to export Excel report: $e',
             style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
           ),
-          backgroundColor: Colors.red.shade700,
+          backgroundColor: colorScheme.onErrorContainer,
           behavior: SnackBarBehavior.floating,
         ),
       );

@@ -20,6 +20,8 @@ class RetailChainsScreen extends ConsumerStatefulWidget {
 }
 
 class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   // Card 1: Chain Form Controllers
   final _chainFormKey = GlobalKey<FormState>();
   final _chainNameController = TextEditingController();
@@ -229,7 +231,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
             SnackBar(
               content: Text('تم حذف سلسلة "${chain.name}" وفروعها بنجاح'),
               behavior: SnackBarBehavior.floating,
-              backgroundColor: Colors.green.shade800,
+              backgroundColor: colorScheme.onTertiaryFixedVariant,
             ),
           );
         }
@@ -371,7 +373,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
             SnackBar(
               content: Text('تم حذف "${branch.branchName}" بنجاح'),
               behavior: SnackBarBehavior.floating,
-              backgroundColor: Colors.green.shade800,
+              backgroundColor: colorScheme.onTertiaryFixedVariant,
             ),
           );
         }
@@ -624,7 +626,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.verified_rounded, size: 14, color: Colors.green),
+                                Icon(Icons.verified_rounded, size: 14, color: colorScheme.tertiary),
                                 const SizedBox(width: 4),
                                 Text(
                                   '${strings.confidenceScoreLabel}: ${(result.confidenceScore * 100).toInt()}%',
@@ -1156,10 +1158,10 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Colors.teal.withValues(alpha: 0.15),
+                          color: colorScheme.tertiary.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(Icons.verified_user_rounded, color: Colors.teal, size: 24),
+                        child: Icon(Icons.verified_user_rounded, color: colorScheme.tertiary, size: 24),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -1178,7 +1180,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                               strings.hasSmartSignatureBadge,
                               style: GoogleFonts.cairo(
                                 fontSize: 12,
-                                color: Colors.teal.shade800,
+                                color: colorScheme.onTertiaryFixedVariant,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -1346,8 +1348,8 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        Colors.deepPurple.shade700,
-                        Colors.purple.shade600,
+                        colorScheme.primary,
+                        colorScheme.primary,
                       ],
                     ),
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -1397,10 +1399,10 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  color: Colors.deepPurple.withValues(alpha: 0.08),
+                  color: colorScheme.primary.withValues(alpha: 0.08),
                   child: Row(
                     children: [
-                      const Icon(Icons.receipt_long_rounded, size: 16, color: Colors.deepPurple),
+                      Icon(Icons.receipt_long_rounded, size: 16, color: colorScheme.primary),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -1410,7 +1412,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                           style: GoogleFonts.cairo(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: Colors.deepPurple.shade900,
+                            color: colorScheme.onPrimaryContainer,
                           ),
                         ),
                       ),
@@ -1473,7 +1475,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                       ),
                       FilledButton.icon(
                         style: FilledButton.styleFrom(
-                          backgroundColor: Colors.deepPurple,
+                          backgroundColor: colorScheme.primary,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1489,7 +1491,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                backgroundColor: Colors.teal.shade700,
+                                backgroundColor: colorScheme.onTertiaryFixedVariant,
                                 content: Text(
                                   isAr
                                       ? '✅ تم دمج البيانات التكميلية واعتماد البصمة الذكية لـ (${branch.branchName}) بنجاح!'
@@ -1525,10 +1527,10 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
           icon: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.deepPurple.withValues(alpha: 0.15),
+              color: colorScheme.primary.withValues(alpha: 0.15),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.done_all_rounded, color: Colors.deepPurple, size: 32),
+            child: Icon(Icons.done_all_rounded, color: colorScheme.primary, size: 32),
           ),
           title: Text(
             isAr ? 'دمج بيانات جميع الفروع المرصودة' : 'Merge All Detected Branch Metadata',
@@ -1574,14 +1576,14 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
               child: Text(isAr ? 'إلغاء' : 'Cancel', style: GoogleFonts.cairo()),
             ),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Colors.deepPurple),
+              style: FilledButton.styleFrom(backgroundColor: colorScheme.primary),
               onPressed: () async {
                 Navigator.of(ctx).pop();
                 final count = await ref.read(retailChainsServiceProvider).applyAllPendingEnrichments();
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      backgroundColor: Colors.teal.shade700,
+                      backgroundColor: colorScheme.onTertiaryFixedVariant,
                       content: Text(
                         isAr
                             ? '✅ تم بنجاح دمج وتحديث بيانات $count فرع في قاعدة البيانات!'
@@ -1617,7 +1619,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
         children: [
           Row(
             children: [
-              Icon(diff.icon, size: 16, color: Colors.deepPurple),
+              Icon(diff.icon, size: 16, color: colorScheme.primary),
               const SizedBox(width: 8),
               Text(
                 diff.fieldLabel,
@@ -1660,24 +1662,24 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                   ),
                 ),
               ),
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(horizontal: 8),
-                child: Icon(Icons.arrow_forward_rounded, size: 18, color: Colors.deepPurple),
+                child: Icon(Icons.arrow_forward_rounded, size: 18, color: colorScheme.primary),
               ),
               Expanded(
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.1),
+                    color: colorScheme.tertiary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.green.withValues(alpha: 0.4)),
+                    border: Border.all(color: colorScheme.tertiary.withValues(alpha: 0.4)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         isAr ? 'المقترح من الفاتورة:' : 'Harvested from Receipt:',
-                        style: GoogleFonts.cairo(fontSize: 10, color: Colors.green.shade800, fontWeight: FontWeight.w600),
+                        style: GoogleFonts.cairo(fontSize: 10, color: colorScheme.onTertiaryFixedVariant, fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -1685,7 +1687,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                         style: GoogleFonts.cairo(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: Colors.green.shade900,
+                          color: colorScheme.onTertiaryContainer,
                         ),
                       ),
                     ],
@@ -2544,7 +2546,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: Colors.deepPurple,
+                                  color: colorScheme.primary,
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Text(
@@ -2653,14 +2655,14 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        Colors.deepPurple.shade700,
-                        Colors.purple.shade600,
+                        colorScheme.primary,
+                        colorScheme.primary,
                       ],
                     ),
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.deepPurple.withValues(alpha: 0.25),
+                        color: colorScheme.primary.withValues(alpha: 0.25),
                         blurRadius: 8,
                         offset: const Offset(0, 3),
                       ),
@@ -2703,7 +2705,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
-                          foregroundColor: Colors.deepPurple.shade800,
+                          foregroundColor: colorScheme.onPrimaryFixedVariant,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                           elevation: 0,
@@ -3160,25 +3162,25 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
-                        color: Colors.teal.withValues(alpha: 0.12),
+                        color: colorScheme.tertiary.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.teal.withValues(alpha: 0.3)),
+                        border: Border.all(color: colorScheme.tertiary.withValues(alpha: 0.3)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.verified_user_rounded, size: 13, color: Colors.teal),
+                          Icon(Icons.verified_user_rounded, size: 13, color: colorScheme.tertiary),
                           const SizedBox(width: 4),
                           Text(
                             'بصمة ذكية معتمدة (Store ID: ${branch.receiptSignature!.storeId.isNotEmpty ? branch.receiptSignature!.storeId : 'نشط'})',
                             style: GoogleFonts.cairo(
                               fontSize: 10.5,
                               fontWeight: FontWeight.bold,
-                              color: Colors.teal.shade800,
+                              color: colorScheme.onTertiaryFixedVariant,
                             ),
                           ),
                           const SizedBox(width: 4),
-                          const Icon(Icons.info_outline_rounded, size: 12, color: Colors.teal),
+                          Icon(Icons.info_outline_rounded, size: 12, color: colorScheme.tertiary),
                         ],
                       ),
                     ),
@@ -3192,28 +3194,28 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: Colors.deepPurple.withValues(alpha: 0.12),
+                        color: colorScheme.primary.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.35)),
+                        border: Border.all(color: colorScheme.primary.withValues(alpha: 0.35)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.auto_awesome, size: 14, color: Colors.deepPurple),
+                          Icon(Icons.auto_awesome, size: 14, color: colorScheme.primary),
                           const SizedBox(width: 6),
                           Text(
                             'بيانات تكميلية مرصودة من فاتورة حية (${branch.pendingEnrichment!.receiptNumber.isNotEmpty ? "فاتورة #${branch.pendingEnrichment!.receiptNumber}" : "جاهزة للمراجعة"})',
                             style: GoogleFonts.cairo(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
-                              color: Colors.deepPurple.shade700,
+                              color: colorScheme.primary,
                             ),
                           ),
                           const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                              color: Colors.deepPurple,
+                              color: colorScheme.primary,
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
@@ -3336,7 +3338,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
                   decoration: BoxDecoration(
-                    color: Colors.amber.shade700.withValues(alpha: 0.12),
+                    color: colorScheme.secondary.withValues(alpha: 0.12),
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                     border: Border(bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.4))),
                   ),
@@ -3345,7 +3347,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Colors.amber.shade700,
+                          color: colorScheme.secondary,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(Icons.published_with_changes_rounded, color: Colors.white, size: 22),
@@ -3391,20 +3393,20 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                           margin: const EdgeInsets.only(bottom: 12),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.teal.withValues(alpha: 0.1),
+                            color: colorScheme.tertiary.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.teal.withValues(alpha: 0.3)),
+                            border: Border.all(color: colorScheme.tertiary.withValues(alpha: 0.3)),
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.check_circle_rounded, color: Colors.teal, size: 20),
+                              Icon(Icons.check_circle_rounded, color: colorScheme.tertiary, size: 20),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
                                   isAr
                                       ? 'جميع بيانات وبصمة الفاتورة متطابقة تماماً مع السجل الحالي في قاعدة البيانات.'
                                       : 'All extracted receipt details match the existing database record.',
-                                  style: GoogleFonts.cairo(fontSize: 12.5, color: Colors.teal.shade800, fontWeight: FontWeight.w600),
+                                  style: GoogleFonts.cairo(fontSize: 12.5, color: colorScheme.onTertiaryFixedVariant, fontWeight: FontWeight.w600),
                                 ),
                               ),
                             ],
@@ -3439,7 +3441,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                       FilledButton.icon(
                         onPressed: () => Navigator.of(ctx).pop(true),
                         style: FilledButton.styleFrom(
-                          backgroundColor: Colors.amber.shade800,
+                          backgroundColor: colorScheme.onSecondaryFixedVariant,
                           foregroundColor: Colors.white,
                         ),
                         icon: const Icon(Icons.check_rounded, size: 18),
@@ -3470,18 +3472,18 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: isChanged
-            ? Colors.amber.withValues(alpha: 0.08)
+            ? colorScheme.secondary.withValues(alpha: 0.08)
             : cs.surfaceContainerHighest.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isChanged ? Colors.amber.shade600.withValues(alpha: 0.4) : cs.outlineVariant.withValues(alpha: 0.3),
+          color: isChanged ? colorScheme.secondary.withValues(alpha: 0.4) : cs.outlineVariant.withValues(alpha: 0.3),
           width: isChanged ? 1.2 : 1,
         ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(diff.icon, size: 18, color: isChanged ? Colors.amber.shade800 : cs.onSurfaceVariant),
+          Icon(diff.icon, size: 18, color: isChanged ? colorScheme.onSecondaryFixedVariant : cs.onSurfaceVariant),
           const SizedBox(width: 10),
           SizedBox(
             width: 140,
@@ -3522,17 +3524,17 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                 Icon(
                   Icons.arrow_forward_rounded,
                   size: 16,
-                  color: isChanged ? Colors.amber.shade800 : cs.outlineVariant,
+                  color: isChanged ? colorScheme.onSecondaryFixedVariant : cs.outlineVariant,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                     decoration: BoxDecoration(
-                      color: isChanged ? Colors.amber.shade50 : cs.surface,
+                      color: isChanged ? colorScheme.secondaryContainer : cs.surface,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: isChanged ? Colors.amber.shade700 : cs.outlineVariant.withValues(alpha: 0.5),
+                        color: isChanged ? colorScheme.secondary : cs.outlineVariant.withValues(alpha: 0.5),
                       ),
                     ),
                     child: Text(
@@ -3540,7 +3542,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                       style: GoogleFonts.cairo(
                         fontSize: 12,
                         fontWeight: isChanged ? FontWeight.bold : FontWeight.normal,
-                        color: isChanged ? Colors.amber.shade900 : cs.onSurface,
+                        color: isChanged ? colorScheme.onSecondaryContainer : cs.onSurface,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -3555,7 +3557,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
               decoration: BoxDecoration(
-                color: Colors.amber.shade700,
+                color: colorScheme.secondary,
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
@@ -3568,7 +3570,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
               ),
             )
           else
-            Icon(Icons.check_rounded, size: 16, color: Colors.teal.shade700),
+            Icon(Icons.check_rounded, size: 16, color: colorScheme.onTertiaryFixedVariant),
         ],
       ),
     );

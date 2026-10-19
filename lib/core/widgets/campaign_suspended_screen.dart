@@ -407,16 +407,16 @@ class _CampaignSuspendedScreenState extends ConsumerState<CampaignSuspendedScree
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: isPromoter
-                              ? Colors.amber.shade100.withValues(alpha: 0.8)
-                              : colorScheme.secondaryContainer.withValues(alpha: 0.8),
+                              ? colorScheme.secondaryContainer.withValues(alpha: 0.85)
+                              : colorScheme.primaryContainer.withValues(alpha: 0.85),
                           border: Border.all(
-                            color: isPromoter ? Colors.amber.shade600 : colorScheme.primary,
+                            color: isPromoter ? colorScheme.secondary : colorScheme.primary,
                             width: 2.5,
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: (isPromoter ? Colors.amber.shade400 : colorScheme.primary)
-                                  .withValues(alpha: 0.3),
+                              color: (isPromoter ? colorScheme.secondary : colorScheme.primary)
+                                  .withValues(alpha: 0.25),
                               blurRadius: 24,
                               spreadRadius: 2,
                             ),
@@ -425,7 +425,7 @@ class _CampaignSuspendedScreenState extends ConsumerState<CampaignSuspendedScree
                         child: Icon(
                           heroIcon,
                           size: 44,
-                          color: isPromoter ? Colors.amber.shade900 : colorScheme.onSecondaryContainer,
+                          color: isPromoter ? colorScheme.onSecondaryContainer : colorScheme.onPrimaryContainer,
                         ),
                       ),
                     ),
@@ -435,21 +435,21 @@ class _CampaignSuspendedScreenState extends ConsumerState<CampaignSuspendedScree
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.amber.shade50,
+                        color: colorScheme.secondaryContainer,
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.amber.shade300),
+                        border: Border.all(color: colorScheme.outlineVariant),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.pause_circle_rounded, size: 14, color: Colors.amber.shade900),
+                          Icon(Icons.pause_circle_rounded, size: 14, color: colorScheme.onSecondaryContainer),
                           const SizedBox(width: 6),
                           Text(
                             strings.portalStatusPaused,
                             style: GoogleFonts.cairo(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
-                              color: Colors.amber.shade900,
+                              color: colorScheme.onSecondaryContainer,
                             ),
                           ),
                         ],

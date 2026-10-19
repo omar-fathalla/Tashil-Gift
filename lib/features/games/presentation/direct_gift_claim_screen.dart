@@ -943,15 +943,15 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
                                                      margin: const EdgeInsets.only(bottom: 14),
                                                      decoration: BoxDecoration(
-                                                       gradient: const LinearGradient(
-                                                         colors: [Color(0xFFFFB300), Color(0xFFFF6D00)],
+                                                       gradient: LinearGradient(
+                                                         colors: [colorScheme.primary, colorScheme.onPrimaryFixedVariant],
                                                          begin: Alignment.topLeft,
                                                          end: Alignment.bottomRight,
                                                        ),
                                                        borderRadius: BorderRadius.circular(14),
                                                        boxShadow: [
                                                          BoxShadow(
-                                                           color: const Color(0xFFFF8F00).withValues(alpha: 0.35),
+                                                           color: colorScheme.primary.withValues(alpha: 0.35),
                                                            blurRadius: 10,
                                                            offset: const Offset(0, 3),
                                                          ),
@@ -994,7 +994,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                          borderRadius: BorderRadius.circular(16),
                                                          border: Border.all(
                                                            color: isGiftVoucher
-                                                               ? Colors.amber.shade400
+                                                               ? colorScheme.primary.withValues(alpha: 0.6)
                                                                : colorScheme.outlineVariant.withValues(alpha: 0.6),
                                                            width: isGiftVoucher ? 1.5 : 1.0,
                                                          ),
@@ -1013,7 +1013,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                                      height: 40,
                                                                      decoration: BoxDecoration(
                                                                        color: isGiftVoucher
-                                                                           ? Colors.amber.shade100
+                                                                           ? colorScheme.primaryContainer
                                                                            : colorScheme.primary.withValues(alpha: 0.12),
                                                                        borderRadius: BorderRadius.circular(10),
                                                                      ),
@@ -1022,7 +1022,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                                            ? Icons.confirmation_number_rounded
                                                                            : Icons.card_giftcard_rounded,
                                                                        color: isGiftVoucher
-                                                                           ? Colors.amber.shade900
+                                                                           ? colorScheme.onPrimaryContainer
                                                                            : colorScheme.primary,
                                                                        size: 22,
                                                                      ),
@@ -1034,7 +1034,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                                  height: 40,
                                                                  decoration: BoxDecoration(
                                                                    color: isGiftVoucher
-                                                                       ? Colors.amber.shade100
+                                                                       ? colorScheme.primaryContainer
                                                                        : colorScheme.primary.withValues(alpha: 0.12),
                                                                    borderRadius: BorderRadius.circular(10),
                                                                  ),
@@ -1043,7 +1043,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                                        ? Icons.confirmation_number_rounded
                                                                        : Icons.card_giftcard_rounded,
                                                                    color: isGiftVoucher
-                                                                       ? Colors.amber.shade900
+                                                                       ? colorScheme.onPrimaryContainer
                                                                        : colorScheme.primary,
                                                                    size: 22,
                                                                  ),
@@ -1064,7 +1064,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                                  style: GoogleFonts.cairo(
                                                                    fontSize: 12,
                                                                    fontWeight: FontWeight.w600,
-                                                                   color: Colors.amber.shade900,
+                                                                   color: colorScheme.onPrimaryContainer,
                                                                  ),
                                                                  maxLines: 1,
                                                                  overflow: TextOverflow.ellipsis,
@@ -1084,7 +1084,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                                              decoration: BoxDecoration(
                                                                color: isGiftVoucher
-                                                                   ? Colors.amber.shade600
+                                                                   ? colorScheme.secondary
                                                                    : colorScheme.primary,
                                                                borderRadius: BorderRadius.circular(12),
                                                              ),
@@ -1127,10 +1127,10 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                  Container(
                                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                                                    decoration: BoxDecoration(
-                                                     gradient: const LinearGradient(
+                                                     gradient: LinearGradient(
                                                        colors: [
-                                                         Color(0xFFFFB300),
-                                                         Color(0xFFFF6D00),
+                                                         colorScheme.primary,
+                                                         colorScheme.onPrimaryFixedVariant,
                                                        ],
                                                        begin: Alignment.topLeft,
                                                        end: Alignment.bottomRight,
@@ -1138,7 +1138,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                      borderRadius: BorderRadius.circular(16),
                                                      boxShadow: [
                                                        BoxShadow(
-                                                         color: const Color(0xFFFF8F00).withValues(alpha: 0.4),
+                                                         color: colorScheme.primary.withValues(alpha: 0.4),
                                                          blurRadius: 14,
                                                          offset: const Offset(0, 4),
                                                        ),
@@ -1192,9 +1192,9 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                            return Container(
                                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                                              decoration: BoxDecoration(
-                                                               color: Colors.amber.shade50,
+                                                               color: colorScheme.secondaryContainer,
                                                                borderRadius: BorderRadius.circular(8),
-                                                               border: Border.all(color: Colors.amber.shade300),
+                                                               border: Border.all(color: colorScheme.secondary.withValues(alpha: 0.4)),
                                                              ),
                                                              child: Row(
                                                                mainAxisSize: MainAxisSize.min,
@@ -1212,7 +1212,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                                              ? Icons.confirmation_number_rounded
                                                                              : Icons.card_giftcard_rounded,
                                                                          size: 13,
-                                                                         color: Colors.amber.shade900,
+                                                                         color: colorScheme.onSecondaryContainer,
                                                                        ),
                                                                      ),
                                                                    ),
@@ -1223,7 +1223,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                                          ? Icons.confirmation_number_rounded
                                                                          : Icons.card_giftcard_rounded,
                                                                      size: 13,
-                                                                     color: Colors.amber.shade900,
+                                                                     color: colorScheme.onSecondaryContainer,
                                                                    ),
                                                                    const SizedBox(width: 4),
                                                                  ],
@@ -1232,7 +1232,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                                                    style: GoogleFonts.cairo(
                                                                      fontSize: 11.5,
                                                                      fontWeight: FontWeight.bold,
-                                                                     color: Colors.amber.shade900,
+                                                                     color: colorScheme.onSecondaryContainer,
                                                                    ),
                                                                  ),
                                                                ],
@@ -1290,7 +1290,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                           children: [
                                             Row(
                                               children: [
-                                                Icon(Icons.check_circle_outline_rounded, color: Colors.green.shade600, size: 20),
+                                                Icon(Icons.check_circle_outline_rounded, color: colorScheme.tertiary, size: 20),
                                                 const SizedBox(width: 10),
                                                 Expanded(
                                                   child: Text(
@@ -1339,13 +1339,13 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                   decoration: BoxDecoration(
-                                    color: Colors.amber.shade50,
+                                    color: colorScheme.secondaryContainer,
                                     borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: Colors.amber.shade400, width: 1.5),
+                                    border: Border.all(color: colorScheme.secondary, width: 1.5),
                                   ),
                                   child: Row(
                                     children: [
-                                      Icon(Icons.warning_amber_rounded, color: Colors.amber.shade900, size: 22),
+                                      Icon(Icons.warning_amber_rounded, color: colorScheme.onSecondaryContainer, size: 22),
                                       const SizedBox(width: 10),
                                       Expanded(
                                         child: Text(
@@ -1355,7 +1355,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                           style: GoogleFonts.cairo(
                                             fontSize: 13,
                                             fontWeight: FontWeight.bold,
-                                            color: Colors.amber.shade900,
+                                            color: colorScheme.onSecondaryContainer,
                                             height: 1.35,
                                           ),
                                         ),
@@ -1462,12 +1462,12 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
       margin: const EdgeInsets.only(top: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.amber.shade50.withValues(alpha: 0.6),
+        color: colorScheme.secondaryContainer.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.amber.shade400, width: 1.5),
+        border: Border.all(color: colorScheme.secondary, width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.amber.shade200.withValues(alpha: 0.3),
+            color: colorScheme.secondary.withValues(alpha: 0.15),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -1482,7 +1482,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.amber.shade700,
+                  color: colorScheme.secondary,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(
@@ -1501,7 +1501,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                       style: GoogleFonts.cairo(
                         fontSize: 14,
                         fontWeight: FontWeight.w900,
-                        color: Colors.amber.shade900,
+                        color: colorScheme.onSecondaryContainer,
                       ),
                     ),
                     Text(
@@ -1509,7 +1509,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                       style: GoogleFonts.cairo(
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
-                        color: Colors.amber.shade900,
+                        color: colorScheme.onSecondaryContainer,
                       ),
                     ),
                   ],
@@ -1530,9 +1530,9 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: colorScheme.surface,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.amber.shade300),
+                  border: Border.all(color: colorScheme.outlineVariant),
                 ),
                 child: Row(
                   children: [
@@ -1540,7 +1540,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.amber.shade100,
+                        color: colorScheme.primaryContainer,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -1548,7 +1548,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                         style: GoogleFonts.cairo(
                           fontWeight: FontWeight.w900,
                           fontSize: 12,
-                          color: Colors.amber.shade900,
+                          color: colorScheme.onPrimaryContainer,
                         ),
                       ),
                     ),
@@ -1578,13 +1578,13 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                           labelText: '${strings.voucherSerialInputLabel} (${slot.giftName})',
                           labelStyle: GoogleFonts.cairo(
                             fontSize: 12,
-                            color: Colors.amber.shade900,
+                            color: colorScheme.onSecondaryContainer,
                             fontWeight: FontWeight.w600,
                           ),
                           hintText: strings.voucherSerialInputHint,
-                          hintStyle: GoogleFonts.cairo(fontSize: 12, color: Colors.grey.shade400),
+                          hintStyle: GoogleFonts.cairo(fontSize: 12, color: colorScheme.outline),
                           border: InputBorder.none,
-                          prefixIcon: Icon(Icons.credit_card_rounded, size: 18, color: Colors.amber.shade800),
+                          prefixIcon: Icon(Icons.credit_card_rounded, size: 18, color: colorScheme.primary),
                           suffixIcon: slot.controller.text.isNotEmpty
                               ? IconButton(
                                   icon: const Icon(Icons.clear_rounded, size: 16),

@@ -49,6 +49,8 @@ class CampaignGiftBalanceDialog extends ConsumerStatefulWidget {
 }
 
 class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceDialog> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   String? _selectedBranchKey;
   String? _pinnedBranchKey;
 
@@ -1319,16 +1321,16 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
                 vertical: isMobile ? 10 : 12,
               ),
               decoration: BoxDecoration(
-                color: Colors.amber.shade50,
+                color: colorScheme.secondaryContainer,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.amber.shade300),
+                border: Border.all(color: colorScheme.primaryFixedDim),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.confirmation_number_rounded, size: 16, color: Colors.amber.shade900),
+                      Icon(Icons.confirmation_number_rounded, size: 16, color: colorScheme.onSecondaryContainer),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
@@ -1336,7 +1338,7 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
                           style: GoogleFonts.cairo(
                             fontSize: isMobile ? 10.5 : 11.5,
                             fontWeight: FontWeight.w600,
-                            color: Colors.amber.shade900,
+                            color: colorScheme.onSecondaryContainer,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -1350,7 +1352,7 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
                     style: GoogleFonts.cairo(
                       fontSize: isMobile ? 15 : 17,
                       fontWeight: FontWeight.w900,
-                      color: Colors.amber.shade900,
+                      color: colorScheme.onSecondaryContainer,
                     ),
                   ),
                 ],
@@ -1429,7 +1431,7 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: hasDisbursed
-              ? (isVoucher ? Colors.amber.shade400 : colorScheme.primary.withValues(alpha: 0.4))
+              ? (isVoucher ? colorScheme.primaryFixedDim : colorScheme.primary.withValues(alpha: 0.4))
               : colorScheme.outlineVariant.withValues(alpha: 0.4),
           width: hasDisbursed ? 1.5 : 1.0,
         ),
@@ -1451,13 +1453,13 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: isVoucher
-                      ? Colors.amber.shade100
+                      ? colorScheme.secondaryContainer
                       : colorScheme.primaryContainer.withValues(alpha: 0.7),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
-                  color: isVoucher ? Colors.amber.shade900 : colorScheme.primary,
+                  color: isVoucher ? colorScheme.onSecondaryContainer : colorScheme.primary,
                   size: 22,
                 ),
               ),
@@ -1492,13 +1494,13 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: hasDisbursed
-                      ? (isVoucher ? Colors.amber.shade600 : colorScheme.primary)
+                      ? (isVoucher ? colorScheme.secondary : colorScheme.primary)
                       : colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: hasDisbursed
                       ? [
                           BoxShadow(
-                            color: (isVoucher ? Colors.amber.shade700 : colorScheme.primary)
+                            color: (isVoucher ? colorScheme.secondary : colorScheme.primary)
                                 .withValues(alpha: 0.3),
                             blurRadius: 6,
                             offset: const Offset(0, 2),
@@ -1536,21 +1538,21 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.amber.shade50,
+                color: colorScheme.secondaryContainer,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.amber.shade200),
+                border: Border.all(color: colorScheme.secondaryFixedDim),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.payments_rounded, size: 14, color: Colors.amber.shade900),
+                  Icon(Icons.payments_rounded, size: 14, color: colorScheme.onSecondaryContainer),
                   const SizedBox(width: 6),
                   Text(
                     '${strings.disbursedVoucherAmountLabel}: ${disbursedValue.toInt()} ج.م',
                     style: GoogleFonts.cairo(
                       fontSize: 11.5,
                       fontWeight: FontWeight.bold,
-                      color: Colors.amber.shade900,
+                      color: colorScheme.onSecondaryContainer,
                     ),
                   ),
                 ],
@@ -1640,21 +1642,21 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         margin: const EdgeInsets.only(left: 6),
                         decoration: BoxDecoration(
-                          color: Colors.amber.withValues(alpha: 0.15),
+                          color: colorScheme.primary.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: Colors.amber.shade700.withValues(alpha: 0.4)),
+                          border: Border.all(color: colorScheme.secondary.withValues(alpha: 0.4)),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.push_pin_rounded, size: 12, color: Colors.amber.shade800),
+                            Icon(Icons.push_pin_rounded, size: 12, color: colorScheme.onSecondaryFixedVariant),
                             const SizedBox(width: 3),
                             Text(
                               'مثبت',
                               style: GoogleFonts.cairo(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.amber.shade900,
+                                color: colorScheme.onSecondaryContainer,
                               ),
                             ),
                           ],
@@ -1714,7 +1716,7 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
                   Icon(
                     isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
                     size: 16,
-                    color: isPinned ? Colors.amber.shade800 : colorScheme.onSurfaceVariant,
+                    color: isPinned ? colorScheme.onSecondaryFixedVariant : colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(width: 6),
                   Expanded(
@@ -1725,7 +1727,7 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
                       style: GoogleFonts.cairo(
                         fontSize: 11.5,
                         fontWeight: isPinned ? FontWeight.bold : FontWeight.normal,
-                        color: isPinned ? Colors.amber.shade900 : colorScheme.onSurfaceVariant,
+                        color: isPinned ? colorScheme.onSecondaryContainer : colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ),
@@ -1820,7 +1822,7 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
               backgroundColor: colorScheme.surfaceContainerHighest,
               color: remaining == 0
                   ? colorScheme.error
-                  : (remaining <= 2 ? Colors.amber.shade700 : colorScheme.primary),
+                  : (remaining <= 2 ? colorScheme.secondary : colorScheme.primary),
             ),
           ),
         ],
@@ -1845,7 +1847,7 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
 
     final Color statusColor = isOut
         ? colorScheme.error
-        : (isLow ? Colors.amber.shade800 : Colors.green.shade700);
+        : (isLow ? colorScheme.onSecondaryFixedVariant : colorScheme.tertiary);
 
     final String statusText = isOut
         ? strings.giftStatusEmpty
@@ -1859,7 +1861,7 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
         border: Border.all(
           color: isOut
               ? colorScheme.error.withValues(alpha: 0.3)
-              : (isLow ? Colors.amber.withValues(alpha: 0.4) : colorScheme.outlineVariant.withValues(alpha: 0.5)),
+              : (isLow ? colorScheme.primary.withValues(alpha: 0.4) : colorScheme.outlineVariant.withValues(alpha: 0.5)),
           width: isLow || isOut ? 1.3 : 1,
         ),
         boxShadow: [
@@ -1882,7 +1884,7 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
                   color: isOut
                       ? colorScheme.errorContainer.withValues(alpha: 0.5)
                       : (isLow
-                          ? Colors.amber.shade100
+                          ? colorScheme.secondaryContainer
                           : (isVoucher
                               ? colorScheme.primaryContainer.withValues(alpha: 0.8)
                               : colorScheme.primaryContainer.withValues(alpha: 0.6))),
@@ -1892,7 +1894,7 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
                   isVoucher ? Icons.confirmation_number_rounded : Icons.card_giftcard_rounded,
                   color: isOut
                       ? colorScheme.error
-                      : (isLow ? Colors.amber.shade900 : colorScheme.primary),
+                      : (isLow ? colorScheme.onSecondaryContainer : colorScheme.primary),
                   size: 20,
                 ),
               ),
@@ -1925,7 +1927,7 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
                 decoration: BoxDecoration(
                   color: isOut
                       ? colorScheme.errorContainer
-                      : (isLow ? Colors.amber.shade100 : Colors.green.shade50),
+                      : (isLow ? colorScheme.secondaryContainer : colorScheme.tertiaryContainer),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: statusColor.withValues(alpha: 0.4),

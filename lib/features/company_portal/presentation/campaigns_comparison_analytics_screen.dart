@@ -150,6 +150,8 @@ class CampaignsComparisonAnalyticsScreen extends ConsumerStatefulWidget {
 
 class _CampaignsComparisonAnalyticsScreenState
     extends ConsumerState<CampaignsComparisonAnalyticsScreen> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   // Global / Persistent In-Memory Caches across tab switches and widget re-mounts (0ms Instant Render)
   static final Map<String, Map<String, CampaignMetricsSummary>> _persistentMetricsCache = {};
   static final Map<String, List<EventModel>> _persistentEventsCache = {};
@@ -958,7 +960,7 @@ class _CampaignsComparisonAnalyticsScreenState
                     builder: (context) {
                       final dropA = _buildCampaignPicker(
                         label: strings.selectCampaignA,
-                        badgeColor: const Color(0xFF6750A4),
+                        badgeColor: colorScheme.primary,
                         selectedId: _selectedCampaignAId,
                         events: events,
                         isCompact: isNarrow,
@@ -988,7 +990,7 @@ class _CampaignsComparisonAnalyticsScreenState
 
                       final dropB = _buildCampaignPicker(
                         label: strings.selectCampaignB,
-                        badgeColor: const Color(0xFF006C51),
+                        badgeColor: colorScheme.tertiary,
                         selectedId: _selectedCampaignBId,
                         events: availableEventsForB,
                         isDisabled: isBDisabled,
@@ -1236,7 +1238,7 @@ class _CampaignsComparisonAnalyticsScreenState
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                                         decoration: BoxDecoration(
-                                          color: Colors.green.withValues(alpha: 0.15),
+                                          color: colorScheme.tertiary.withValues(alpha: 0.15),
                                           borderRadius: BorderRadius.circular(5),
                                         ),
                                         child: Text(
@@ -1244,7 +1246,7 @@ class _CampaignsComparisonAnalyticsScreenState
                                           style: GoogleFonts.cairo(
                                             fontSize: 9,
                                             fontWeight: FontWeight.bold,
-                                            color: Colors.green.shade700,
+                                            color: colorScheme.onTertiaryFixedVariant,
                                           ),
                                         ),
                                       ),
@@ -1337,7 +1339,7 @@ class _CampaignsComparisonAnalyticsScreenState
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                                   decoration: BoxDecoration(
-                                    color: Colors.green.withValues(alpha: 0.15),
+                                    color: colorScheme.tertiary.withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Text(
@@ -1345,7 +1347,7 @@ class _CampaignsComparisonAnalyticsScreenState
                                     style: GoogleFonts.cairo(
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.green.shade700,
+                                      color: colorScheme.onTertiaryFixedVariant,
                                     ),
                                   ),
                                 ),
@@ -1642,12 +1644,12 @@ class _CampaignsComparisonAnalyticsScreenState
             runSpacing: 8,
             children: [
               _buildLegendPill(
-                color: const Color(0xFF6750A4),
+                color: colorScheme.primary,
                 label: 'A: $labelA',
                 valText: '',
               ),
               _buildLegendPill(
-                color: const Color(0xFF006C51),
+                color: colorScheme.tertiary,
                 label: 'B: $labelB',
                 valText: '',
               ),
@@ -1796,7 +1798,7 @@ class _CampaignsComparisonAnalyticsScreenState
                                     TextSpan(
                                       text: textVal,
                                       style: GoogleFonts.cairo(
-                                        color: isA ? const Color(0xFF6750A4) : const Color(0xFF006C51),
+                                        color: isA ? colorScheme.primary : colorScheme.tertiary,
                                         fontWeight: FontWeight.w700,
                                         fontSize: 11.5,
                                       ),
@@ -1832,10 +1834,10 @@ class _CampaignsComparisonAnalyticsScreenState
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                                               decoration: BoxDecoration(
-                                                color: const Color(0xFF6750A4).withValues(alpha: 0.12),
+                                                color: colorScheme.primary.withValues(alpha: 0.12),
                                                 borderRadius: BorderRadius.circular(5),
                                                 border: Border.all(
-                                                  color: const Color(0xFF6750A4).withValues(alpha: 0.4),
+                                                  color: colorScheme.primary.withValues(alpha: 0.4),
                                                   width: 0.8,
                                                 ),
                                               ),
@@ -1844,7 +1846,7 @@ class _CampaignsComparisonAnalyticsScreenState
                                                 style: GoogleFonts.cairo(
                                                   fontSize: 10,
                                                   fontWeight: FontWeight.bold,
-                                                  color: const Color(0xFF6750A4),
+                                                  color: colorScheme.primary,
                                                 ),
                                               ),
                                             ),
@@ -1853,10 +1855,10 @@ class _CampaignsComparisonAnalyticsScreenState
                                               Container(
                                                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                                                 decoration: BoxDecoration(
-                                                  color: const Color(0xFF006C51).withValues(alpha: 0.12),
+                                                  color: colorScheme.tertiary.withValues(alpha: 0.12),
                                                   borderRadius: BorderRadius.circular(5),
                                                   border: Border.all(
-                                                    color: const Color(0xFF006C51).withValues(alpha: 0.4),
+                                                    color: colorScheme.tertiary.withValues(alpha: 0.4),
                                                     width: 0.8,
                                                   ),
                                                 ),
@@ -1865,7 +1867,7 @@ class _CampaignsComparisonAnalyticsScreenState
                                                   style: GoogleFonts.cairo(
                                                     fontSize: 10,
                                                     fontWeight: FontWeight.bold,
-                                                    color: const Color(0xFF006C51),
+                                                    color: colorScheme.tertiary,
                                                   ),
                                                 ),
                                               ),
@@ -1983,13 +1985,13 @@ class _CampaignsComparisonAnalyticsScreenState
                           barRods: [
                             BarChartRodData(
                               toY: rodAY,
-                              color: const Color(0xFF6750A4),
+                              color: colorScheme.primary,
                               width: 20,
                               borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
                             ),
                             BarChartRodData(
                               toY: rodBY,
-                              color: const Color(0xFF006C51),
+                              color: colorScheme.tertiary,
                               width: 20,
                               borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
                             ),
@@ -2302,8 +2304,8 @@ class _CampaignsComparisonAnalyticsScreenState
                     Container(
                       width: 8,
                       height: 8,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF6750A4),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -2316,7 +2318,7 @@ class _CampaignsComparisonAnalyticsScreenState
                         style: GoogleFonts.cairo(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF6750A4),
+                          color: colorScheme.primary,
                         ),
                       ),
                     ),
@@ -2330,8 +2332,8 @@ class _CampaignsComparisonAnalyticsScreenState
                     Container(
                       width: 8,
                       height: 8,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF006C51),
+                      decoration: BoxDecoration(
+                        color: colorScheme.tertiary,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -2344,7 +2346,7 @@ class _CampaignsComparisonAnalyticsScreenState
                         style: GoogleFonts.cairo(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF006C51),
+                          color: colorScheme.tertiary,
                         ),
                       ),
                     ),
@@ -2399,7 +2401,7 @@ class _CampaignsComparisonAnalyticsScreenState
               ? colorScheme.onSurfaceVariant
               : (isTied
                   ? colorScheme.onSurfaceVariant
-                  : (isPositive ? const Color(0xFF006C51) : const Color(0xFFBA1A1A)));
+                  : (isPositive ? colorScheme.tertiary : colorScheme.error));
 
           final leadingCampaign = isSingle
               ? (isAr ? 'حملة منفردة' : 'Single Campaign')
@@ -2457,7 +2459,7 @@ class _CampaignsComparisonAnalyticsScreenState
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF6750A4).withValues(alpha: 0.08),
+                        color: colorScheme.primary.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -2465,7 +2467,7 @@ class _CampaignsComparisonAnalyticsScreenState
                         style: GoogleFonts.cairo(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF6750A4),
+                          color: colorScheme.primary,
                         ),
                       ),
                     ),
@@ -2480,7 +2482,7 @@ class _CampaignsComparisonAnalyticsScreenState
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF006C51).withValues(alpha: 0.08),
+                        color: colorScheme.tertiary.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -2488,7 +2490,7 @@ class _CampaignsComparisonAnalyticsScreenState
                         style: GoogleFonts.cairo(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF006C51),
+                          color: colorScheme.tertiary,
                         ),
                       ),
                     ),
@@ -2543,15 +2545,15 @@ class _CampaignsComparisonAnalyticsScreenState
                         color: isTied
                             ? colorScheme.surfaceContainerHighest
                             : (isPositive
-                                ? const Color(0xFF6750A4).withValues(alpha: 0.12)
-                                : const Color(0xFF006C51).withValues(alpha: 0.12)),
+                                ? colorScheme.primary.withValues(alpha: 0.12)
+                                : colorScheme.tertiary.withValues(alpha: 0.12)),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: isTied
                               ? colorScheme.outlineVariant.withValues(alpha: 0.5)
                               : (isPositive
-                                  ? const Color(0xFF6750A4).withValues(alpha: 0.3)
-                                  : const Color(0xFF006C51).withValues(alpha: 0.3)),
+                                  ? colorScheme.primary.withValues(alpha: 0.3)
+                                  : colorScheme.tertiary.withValues(alpha: 0.3)),
                         ),
                       ),
                       child: Text(
@@ -2564,8 +2566,8 @@ class _CampaignsComparisonAnalyticsScreenState
                           color: isTied
                               ? colorScheme.onSurfaceVariant
                               : (isPositive
-                                  ? const Color(0xFF6750A4)
-                                  : const Color(0xFF006C51)),
+                                  ? colorScheme.primary
+                                  : colorScheme.tertiary),
                         ),
                       ),
                     ),
@@ -2604,7 +2606,7 @@ class _CampaignsComparisonAnalyticsScreenState
               ? colorScheme.onSurfaceVariant
               : (isTied
                   ? colorScheme.onSurfaceVariant
-                  : (isPositive ? const Color(0xFF006C51) : const Color(0xFFBA1A1A)));
+                  : (isPositive ? colorScheme.tertiary : colorScheme.error));
 
           final leadingCampaign = isSingle
               ? (isAr ? 'حملة منفردة' : 'Single Campaign')
@@ -2649,8 +2651,8 @@ class _CampaignsComparisonAnalyticsScreenState
                         color: isTied
                             ? colorScheme.surfaceContainerHighest
                             : (isPositive
-                                ? const Color(0xFF6750A4).withValues(alpha: 0.12)
-                                : const Color(0xFF006C51).withValues(alpha: 0.12)),
+                                ? colorScheme.primary.withValues(alpha: 0.12)
+                                : colorScheme.tertiary.withValues(alpha: 0.12)),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -2661,8 +2663,8 @@ class _CampaignsComparisonAnalyticsScreenState
                           color: isTied
                               ? colorScheme.onSurfaceVariant
                               : (isPositive
-                                  ? const Color(0xFF6750A4)
-                                  : const Color(0xFF006C51)),
+                                  ? colorScheme.primary
+                                  : colorScheme.tertiary),
                         ),
                       ),
                     ),
@@ -2678,10 +2680,10 @@ class _CampaignsComparisonAnalyticsScreenState
                       child: Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF6750A4).withValues(alpha: 0.08),
+                          color: colorScheme.primary.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: const Color(0xFF6750A4).withValues(alpha: 0.25),
+                            color: colorScheme.primary.withValues(alpha: 0.25),
                           ),
                         ),
                         child: Column(
@@ -2693,7 +2695,7 @@ class _CampaignsComparisonAnalyticsScreenState
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.cairo(
                                 fontSize: 11,
-                                color: const Color(0xFF6750A4),
+                                color: colorScheme.primary,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -2703,7 +2705,7 @@ class _CampaignsComparisonAnalyticsScreenState
                               style: GoogleFonts.cairo(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
-                                color: const Color(0xFF6750A4),
+                                color: colorScheme.primary,
                               ),
                             ),
                           ],
@@ -2717,10 +2719,10 @@ class _CampaignsComparisonAnalyticsScreenState
                       child: Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF006C51).withValues(alpha: 0.08),
+                          color: colorScheme.tertiary.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: const Color(0xFF006C51).withValues(alpha: 0.25),
+                            color: colorScheme.tertiary.withValues(alpha: 0.25),
                           ),
                         ),
                         child: Column(
@@ -2732,7 +2734,7 @@ class _CampaignsComparisonAnalyticsScreenState
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.cairo(
                                 fontSize: 11,
-                                color: const Color(0xFF006C51),
+                                color: colorScheme.tertiary,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -2742,7 +2744,7 @@ class _CampaignsComparisonAnalyticsScreenState
                               style: GoogleFonts.cairo(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
-                                color: const Color(0xFF006C51),
+                                color: colorScheme.tertiary,
                               ),
                             ),
                           ],
@@ -3189,7 +3191,7 @@ class _CampaignsComparisonAnalyticsScreenState
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                           decoration: BoxDecoration(
-                            color: Colors.green.withValues(alpha: 0.15),
+                            color: colorScheme.tertiary.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
@@ -3197,7 +3199,7 @@ class _CampaignsComparisonAnalyticsScreenState
                             style: GoogleFonts.cairo(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
-                              color: Colors.green.shade700,
+                              color: colorScheme.onTertiaryFixedVariant,
                             ),
                           ),
                         ),
@@ -3635,19 +3637,19 @@ class _CampaignsComparisonAnalyticsScreenState
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           colors: [
-            Color(0xFFFFF8E1),
-            Color(0xFFFFECB3),
+            colorScheme.secondaryContainer,
+            colorScheme.secondaryContainer,
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFFFB300), width: 1.5),
+        border: Border.all(color: colorScheme.primaryFixedDim, width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFFB300).withValues(alpha: 0.15),
+            color: colorScheme.primaryFixedDim.withValues(alpha: 0.15),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -3676,7 +3678,7 @@ class _CampaignsComparisonAnalyticsScreenState
                       style: GoogleFonts.cairo(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: const Color(0xFF7A4F01),
+                        color: colorScheme.onSecondaryFixedVariant,
                       ),
                     ),
                     Text(
@@ -3684,7 +3686,7 @@ class _CampaignsComparisonAnalyticsScreenState
                       style: GoogleFonts.cairo(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: const Color(0xFF8D6E63),
+                        color: colorScheme.secondary,
                       ),
                     ),
                   ],
@@ -3693,7 +3695,7 @@ class _CampaignsComparisonAnalyticsScreenState
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFB78103),
+                  color: colorScheme.onSecondaryFixedVariant,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
@@ -3755,7 +3757,7 @@ class _CampaignsComparisonAnalyticsScreenState
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.85),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFFFE082)),
+        border: Border.all(color: colorScheme.primaryFixedDim),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -3767,7 +3769,7 @@ class _CampaignsComparisonAnalyticsScreenState
             style: GoogleFonts.cairo(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: const Color(0xFF5D4037),
+              color: colorScheme.onSecondaryContainer,
             ),
           ),
           Text(
@@ -3775,7 +3777,7 @@ class _CampaignsComparisonAnalyticsScreenState
             style: GoogleFonts.cairo(
               fontSize: 12.5,
               fontWeight: FontWeight.bold,
-              color: const Color(0xFF7A4F01),
+              color: colorScheme.onSecondaryFixedVariant,
             ),
           ),
         ],
@@ -4033,7 +4035,7 @@ class _CampaignsComparisonAnalyticsScreenState
                     barRods: [
                       BarChartRodData(
                         toY: val,
-                        color: isPeak ? const Color(0xFFD48B00) : colorScheme.primary,
+                        color: isPeak ? colorScheme.secondary : colorScheme.primary,
                         width: math.min(36.0, 200.0 / allMetrics.length),
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
                       ),
@@ -4190,7 +4192,7 @@ class _CampaignsComparisonAnalyticsScreenState
 
                 return DataRow(
                   color: isTop
-                      ? WidgetStateProperty.all(const Color(0xFFFFF8E1).withValues(alpha: 0.6))
+                      ? WidgetStateProperty.all(colorScheme.secondaryContainer.withValues(alpha: 0.6))
                       : null,
                   cells: [
                     DataCell(
@@ -4201,7 +4203,7 @@ class _CampaignsComparisonAnalyticsScreenState
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
                             decoration: BoxDecoration(
                               color: isTop
-                                  ? const Color(0xFFFFB300)
+                                  ? colorScheme.primaryFixedDim
                                   : colorScheme.primaryContainer,
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -4225,7 +4227,7 @@ class _CampaignsComparisonAnalyticsScreenState
                         style: GoogleFonts.cairo(
                           fontSize: 12.5,
                           fontWeight: FontWeight.bold,
-                          color: isTop ? const Color(0xFFB78103) : colorScheme.primary,
+                          color: isTop ? colorScheme.onSecondaryFixedVariant : colorScheme.primary,
                         ),
                       ),
                     ),
@@ -4245,7 +4247,7 @@ class _CampaignsComparisonAnalyticsScreenState
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
                           color: isTop
-                              ? const Color(0xFFFFB300).withValues(alpha: 0.2)
+                              ? colorScheme.primaryFixedDim.withValues(alpha: 0.2)
                               : colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(6),
                         ),
@@ -4254,7 +4256,7 @@ class _CampaignsComparisonAnalyticsScreenState
                           style: GoogleFonts.cairo(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
-                            color: isTop ? const Color(0xFFB78103) : colorScheme.onSurfaceVariant,
+                            color: isTop ? colorScheme.onSecondaryFixedVariant : colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ),
@@ -4529,7 +4531,7 @@ class _CampaignsComparisonAnalyticsScreenState
                       final isNarrow = constraints.maxWidth < 700;
                       final dropA = _buildClusterDropdown(
                         label: strings.weekendPeriodA,
-                        badgeColor: const Color(0xFF6750A4),
+                        badgeColor: colorScheme.primary,
                         selectedId: _selectedClusterAId,
                         clusters: clusters,
                         colorScheme: colorScheme,
@@ -4544,7 +4546,7 @@ class _CampaignsComparisonAnalyticsScreenState
 
                       final dropB = _buildClusterDropdown(
                         label: strings.weekendPeriodB,
-                        badgeColor: const Color(0xFF006C51),
+                        badgeColor: colorScheme.tertiary,
                         selectedId: _selectedClusterBId,
                         clusters: clusters,
                         colorScheme: colorScheme,
@@ -4592,7 +4594,7 @@ class _CampaignsComparisonAnalyticsScreenState
                       final isNarrow = constraints.maxWidth < 700;
                       final btnA = _buildCustomDateRangeButton(
                         label: strings.weekendPeriodA,
-                        badgeColor: const Color(0xFF6750A4),
+                        badgeColor: colorScheme.primary,
                         range: _customRangeA,
                         colorScheme: colorScheme,
                         isAr: isAr,
@@ -4610,7 +4612,7 @@ class _CampaignsComparisonAnalyticsScreenState
 
                       final btnB = _buildCustomDateRangeButton(
                         label: strings.weekendPeriodB,
-                        badgeColor: const Color(0xFF006C51),
+                        badgeColor: colorScheme.tertiary,
                         range: _customRangeB,
                         colorScheme: colorScheme,
                         isAr: isAr,
@@ -4768,7 +4770,7 @@ class _CampaignsComparisonAnalyticsScreenState
                 value: '${NumberFormat('#,##0.00').format(totalPortfolioRevenue)} $currency',
                 subtitle: isAr ? 'مبيعات كافة الحملات مجتمعة' : 'All campaigns aggregate sales',
                 icon: Icons.payments_rounded,
-                accentColor: const Color(0xFF006C50),
+                accentColor: colorScheme.tertiary,
                 colorScheme: colorScheme,
               ),
               _buildPortfolioFeedKpiCard(
@@ -4776,7 +4778,7 @@ class _CampaignsComparisonAnalyticsScreenState
                 value: '${NumberFormat('#,###').format(totalPortfolioInvoices)} ${isAr ? 'فاتورة' : 'receipts'}',
                 subtitle: isAr ? 'الفواتير المدققة والمقبولة' : 'Audited and verified receipts',
                 icon: Icons.receipt_long_rounded,
-                accentColor: const Color(0xFF0284C7),
+                accentColor: colorScheme.primary,
                 colorScheme: colorScheme,
               ),
               _buildPortfolioFeedKpiCard(
@@ -4784,7 +4786,7 @@ class _CampaignsComparisonAnalyticsScreenState
                 value: '${NumberFormat('#,###').format(totalPortfolioProducts)} ${isAr ? 'قطعة' : 'items'}',
                 subtitle: isAr ? 'مبيعات أصناف العروض' : 'Promotional items sold',
                 icon: Icons.shopping_bag_rounded,
-                accentColor: const Color(0xFFD97706),
+                accentColor: colorScheme.secondary,
                 colorScheme: colorScheme,
               ),
               _buildPortfolioFeedKpiCard(
@@ -4792,7 +4794,7 @@ class _CampaignsComparisonAnalyticsScreenState
                 value: '${NumberFormat('#,###').format(totalPortfolioPrizes)} ${isAr ? 'جائزة' : 'prizes'}',
                 subtitle: isAr ? 'هدايا الحملات المستلمة' : 'Campaign prizes claimed',
                 icon: Icons.emoji_events_rounded,
-                accentColor: const Color(0xFF7C3AED),
+                accentColor: colorScheme.primary,
                 colorScheme: colorScheme,
               ),
             ],
@@ -4982,7 +4984,7 @@ class _CampaignsComparisonAnalyticsScreenState
                                   '${s.totalRevenue.toStringAsFixed(1)} $currency',
                                   style: GoogleFonts.cairo(
                                     fontWeight: FontWeight.bold,
-                                    color: const Color(0xFF006C51),
+                                    color: colorScheme.tertiary,
                                   ),
                                 ),
                               ),
@@ -4995,8 +4997,8 @@ class _CampaignsComparisonAnalyticsScreenState
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                   decoration: BoxDecoration(
                                     color: s.isActive
-                                        ? Colors.green.withValues(alpha: 0.15)
-                                        : Colors.grey.withValues(alpha: 0.15),
+                                        ? colorScheme.tertiary.withValues(alpha: 0.15)
+                                        : colorScheme.outline.withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Text(
@@ -5004,7 +5006,7 @@ class _CampaignsComparisonAnalyticsScreenState
                                     style: GoogleFonts.cairo(
                                       fontSize: 11,
                                       fontWeight: FontWeight.bold,
-                                      color: s.isActive ? Colors.green.shade700 : Colors.grey.shade700,
+                                      color: s.isActive ? colorScheme.onTertiaryFixedVariant : colorScheme.onSurfaceVariant,
                                     ),
                                   ),
                                 ),
@@ -5142,7 +5144,7 @@ class _CampaignsComparisonAnalyticsScreenState
               ? 'تم تصدير تقرير المقارنة الشامل (CSV) بنجاح'
               : 'Benchmark CSV report exported successfully',
         ),
-        backgroundColor: Colors.green.shade700,
+        backgroundColor: colorScheme.onTertiaryFixedVariant,
         behavior: SnackBarBehavior.floating,
       ),
     );

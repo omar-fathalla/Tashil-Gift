@@ -430,8 +430,8 @@ class GameTypesScreen extends ConsumerWidget {
                 // Scenario 1: Single Win (فوز فردي بسيط)
                 _DemoScenarioTile(
                   icon: Icons.confirmation_number_rounded,
-                  iconColor: const Color(0xFFFF8F00),
-                  iconBg: const Color(0xFFFFF8E1),
+                  iconColor: colorScheme.primary,
+                  iconBg: colorScheme.primaryContainer,
                   title: isAr ? '1. فوز فردي بسيط (Single Win)' : '1. Single Win (1 Gift)',
                   subtitle: isAr ? 'فوز بـ 1 × فواتشر مشتريات 50 ج.م' : 'Customer won 1 × 50 EGP Voucher',
                   badgeText: isAr ? 'عرض مفرد' : 'Single Offer',
@@ -455,8 +455,8 @@ class GameTypesScreen extends ConsumerWidget {
                 // Scenario 2: Multi-Quantity Win (مضاعفة كمية العرض)
                 _DemoScenarioTile(
                   icon: Icons.auto_awesome_rounded,
-                  iconColor: const Color(0xFF1E88E5),
-                  iconBg: const Color(0xFFE3F2FD),
+                  iconColor: colorScheme.secondary,
+                  iconBg: colorScheme.secondaryContainer,
                   title: isAr ? '2. مضاعفة كمية العرض (Multi-Quantity 2×)' : '2. Multi-Quantity (2× Offer)',
                   subtitle: isAr ? 'شراء 4 قطع ➔ 2 × فواتشر 125 ج.م (إجمالي 250 ج.م)' : 'Customer won 2 × 125 EGP Voucher (Total 250 EGP)',
                   badgeText: isAr ? 'مضاعفة ×2' : 'Multiplier 2×',
@@ -480,8 +480,8 @@ class GameTypesScreen extends ConsumerWidget {
                 // Scenario 3: Multi-Offer Bundle Win (سلة هدايا مجمعة - متعدد الشروط)
                 _DemoScenarioTile(
                   icon: Icons.inventory_2_rounded,
-                  iconColor: const Color(0xFF7B1FA2),
-                  iconBg: const Color(0xFFF3E5F5),
+                  iconColor: colorScheme.tertiary,
+                  iconBg: colorScheme.tertiaryContainer,
                   title: isAr ? '3. سلة هدايا مجمعة (Multi-Offer Bundle)' : '3. Multi-Offer Gift Bundle',
                   subtitle: isAr ? 'استيفاء 3 شروط: فواتشر 50 ج.م + كلير 90 مل + تريزيمي 250 مل' : 'Met 3 conditions: 50 EGP Voucher + Clear 90ml + Tresemme 250ml',
                   badgeText: isAr ? '3 هدايا مجمعة' : '3 Gifts Bundle',
@@ -528,8 +528,8 @@ class GameTypesScreen extends ConsumerWidget {
                 // Scenario 4: Single Physical Product (هدية عينية فردية)
                 _DemoScenarioTile(
                   icon: Icons.card_giftcard_rounded,
-                  iconColor: const Color(0xFF2E7D32),
-                  iconBg: const Color(0xFFE8F5E9),
+                  iconColor: colorScheme.onPrimaryContainer,
+                  iconBg: colorScheme.primaryContainer,
                   title: isAr ? '4. هدية عينية ترويجية (Physical Product)' : '4. Certified Physical Gift',
                   subtitle: isAr ? 'فوز بـ 1 × تريزيمي 250 مل هدية' : 'Customer won 1 × Tresemme 250ml Gift',
                   badgeText: isAr ? 'هدية عينية' : 'Physical Gift',

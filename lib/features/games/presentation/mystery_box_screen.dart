@@ -344,10 +344,10 @@ class _MysteryBoxScreenState extends ConsumerState<MysteryBoxScreen>
                                   index: 0,
                                   boxName: isAr ? 'الصندوق الأول' : 'Box #1',
                                   gradientColors: [
-                                    const Color(0xFF6750A4),
-                                    const Color(0xFF7D5260),
+                                    colorScheme.secondary,
+                                    colorScheme.onSecondaryFixedVariant,
                                   ],
-                                  accentColor: const Color(0xFFFFD8E4),
+                                  accentColor: colorScheme.secondaryContainer,
                                 ),
                                 SizedBox(
                                   width: isNarrow ? 0 : 28,
@@ -357,10 +357,10 @@ class _MysteryBoxScreenState extends ConsumerState<MysteryBoxScreen>
                                   index: 1,
                                   boxName: isAr ? 'الصندوق الذهبي' : 'Golden Box',
                                   gradientColors: [
-                                    const Color(0xFFD4A017),
-                                    const Color(0xFFFF8C00),
+                                    colorScheme.primary,
+                                    colorScheme.onPrimaryFixedVariant,
                                   ],
-                                  accentColor: const Color(0xFFFFF3CD),
+                                  accentColor: colorScheme.primaryContainer,
                                   isHero: true,
                                 ),
                                 SizedBox(
@@ -371,10 +371,10 @@ class _MysteryBoxScreenState extends ConsumerState<MysteryBoxScreen>
                                   index: 2,
                                   boxName: isAr ? 'الصندوق الثالث' : 'Box #3',
                                   gradientColors: [
-                                    const Color(0xFF006C50),
-                                    const Color(0xFF00897B),
+                                    colorScheme.tertiary,
+                                    colorScheme.onTertiaryFixedVariant,
                                   ],
-                                  accentColor: const Color(0xFFC4EED0),
+                                  accentColor: colorScheme.tertiaryContainer,
                                 ),
                               ],
                             );
@@ -477,7 +477,7 @@ class _MysteryBoxScreenState extends ConsumerState<MysteryBoxScreen>
                 scale: _prizeScaleAnimation,
                 child: Column(
                   children: [
-                    const Icon(Icons.celebration_rounded, color: Colors.amberAccent, size: 48),
+                    Icon(Icons.celebration_rounded, color: colorScheme.primaryContainer, size: 48),
                     const SizedBox(height: 8),
                     Text(
                       _wonPrize,

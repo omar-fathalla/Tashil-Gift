@@ -67,6 +67,8 @@ class AiSpeedBenchmarkScreen extends ConsumerStatefulWidget {
 
 class _AiSpeedBenchmarkScreenState extends ConsumerState<AiSpeedBenchmarkScreen>
     with SingleTickerProviderStateMixin {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   final ImagePicker _picker = ImagePicker();
   BenchmarkMode _selectedMode = BenchmarkMode.instantSample;
   Uint8List? _imageBytes;
@@ -147,7 +149,7 @@ class _AiSpeedBenchmarkScreenState extends ConsumerState<AiSpeedBenchmarkScreen>
     canvas.drawRect(const Rect.fromLTWH(0, 0, 600, 800), bgPaint);
 
     final borderPaint = Paint()
-      ..color = Colors.grey.shade400
+      ..color = colorScheme.outline
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
     canvas.drawRect(const Rect.fromLTWH(20, 20, 560, 760), borderPaint);
@@ -201,7 +203,7 @@ class _AiSpeedBenchmarkScreenState extends ConsumerState<AiSpeedBenchmarkScreen>
 
     canvas.drawLine(const Offset(40, 430), const Offset(560, 430), linePaint);
 
-    drawText('إجمالي منتجات المراعي: 265.00 ج.م', 550, 460, fontSize: 18, isBold: true, color: Colors.blue.shade900);
+    drawText('إجمالي منتجات المراعي: 265.00 ج.م', 550, 460, fontSize: 18, isBold: true, color: colorScheme.onPrimaryContainer);
     drawText('الإجمالي الكلي: 310.00 ج.م', 550, 500, fontSize: 18, isBold: true);
 
     drawText('شكراً لزيارتكم أسواق فتح الله', 400, 680, fontSize: 16, isBold: true);
@@ -620,13 +622,13 @@ class _AiSpeedBenchmarkScreenState extends ConsumerState<AiSpeedBenchmarkScreen>
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                             decoration: BoxDecoration(
                               color: _lastResult!.pipelineTierUsed == 'fast_tier'
-                                  ? Colors.amber.withValues(alpha: 0.15)
-                                  : Colors.purple.withValues(alpha: 0.15),
+                                  ? colorScheme.primary.withValues(alpha: 0.15)
+                                  : colorScheme.primary.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
                                 color: _lastResult!.pipelineTierUsed == 'fast_tier'
-                                    ? Colors.amber.shade700
-                                    : Colors.purple.shade400,
+                                    ? colorScheme.secondary
+                                    : colorScheme.primaryFixedDim,
                               ),
                             ),
                             child: Row(
@@ -638,8 +640,8 @@ class _AiSpeedBenchmarkScreenState extends ConsumerState<AiSpeedBenchmarkScreen>
                                       : Icons.psychology_rounded,
                                   size: 16,
                                   color: _lastResult!.pipelineTierUsed == 'fast_tier'
-                                      ? Colors.amber.shade800
-                                      : Colors.purple.shade700,
+                                      ? colorScheme.onSecondaryFixedVariant
+                                      : colorScheme.primary,
                                 ),
                                 const SizedBox(width: 6),
                                 Text(
@@ -650,8 +652,8 @@ class _AiSpeedBenchmarkScreenState extends ConsumerState<AiSpeedBenchmarkScreen>
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
                                     color: _lastResult!.pipelineTierUsed == 'fast_tier'
-                                        ? Colors.amber.shade900
-                                        : Colors.purple.shade900,
+                                        ? colorScheme.onSecondaryContainer
+                                        : colorScheme.onPrimaryContainer,
                                   ),
                                 ),
                               ],

@@ -69,6 +69,8 @@ class PromoterInvoicesDialog extends ConsumerStatefulWidget {
 }
 
 class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
@@ -821,20 +823,20 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: Colors.red.shade100,
+                        color: colorScheme.errorContainer,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.cancel_rounded, size: 12, color: Colors.red.shade900),
+                          Icon(Icons.cancel_rounded, size: 12, color: colorScheme.onErrorContainer),
                           const SizedBox(width: 4),
                           Text(
                             isAr ? '$totalRejected مرفوضة' : '$totalRejected Rejected',
                             style: GoogleFonts.cairo(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
-                              color: Colors.red.shade900,
+                              color: colorScheme.onErrorContainer,
                             ),
                           ),
                         ],
@@ -844,14 +846,14 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   const SizedBox(width: 12),
                   Container(width: 1, height: 16, color: colorScheme.outlineVariant),
                   const SizedBox(width: 12),
-                  Icon(Icons.monetization_on_rounded, size: 16, color: Colors.green.shade700),
+                  Icon(Icons.monetization_on_rounded, size: 16, color: colorScheme.onTertiaryFixedVariant),
                   const SizedBox(width: 4),
                   Text(
                     '${totalSales.toStringAsFixed(totalSales == totalSales.roundToDouble() ? 0 : 2)} $currencySymbol',
                     style: GoogleFonts.cairo(
                       fontWeight: FontWeight.bold,
                       fontSize: 13,
-                      color: Colors.green.shade800,
+                      color: colorScheme.onTertiaryFixedVariant,
                     ),
                   ),
                 ],
@@ -874,11 +876,11 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   ),
                   if (totalRejected > 0) ...[
                     const SizedBox(width: 4),
-                    Icon(Icons.cancel_rounded, size: 10, color: Colors.red.shade900),
+                    Icon(Icons.cancel_rounded, size: 10, color: colorScheme.onErrorContainer),
                     const SizedBox(width: 2),
                     Text(
                       '$totalRejected',
-                      style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red.shade900),
+                      style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.bold, color: colorScheme.onErrorContainer),
                     ),
                   ],
                 ],
@@ -1566,7 +1568,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
             filter: PromoterStatusFilter.accepted,
             count: acceptedCount,
             colorScheme: colorScheme,
-            activeColor: Colors.teal.shade700,
+            activeColor: colorScheme.onTertiaryFixedVariant,
             icon: Icons.check_circle_rounded,
           ),
           const SizedBox(width: 6),
@@ -1575,7 +1577,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
             filter: PromoterStatusFilter.rejected,
             count: rejectedCount,
             colorScheme: colorScheme,
-            activeColor: Colors.red.shade700,
+            activeColor: colorScheme.onErrorContainer,
             icon: Icons.cancel_rounded,
           ),
         ],
@@ -1759,7 +1761,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
         side: BorderSide(
           color: isValid
               ? colorScheme.outlineVariant.withValues(alpha: 0.6)
-              : Colors.red.shade200,
+              : colorScheme.errorContainer,
           width: 1,
         ),
       ),
@@ -1781,13 +1783,13 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                     decoration: BoxDecoration(
                       color: isValid
                           ? colorScheme.primaryContainer.withValues(alpha: 0.6)
-                          : Colors.red.shade100,
+                          : colorScheme.errorContainer,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
                       isValid ? Icons.receipt_rounded : Icons.receipt_long_rounded,
                       size: 20,
-                      color: isValid ? colorScheme.primary : Colors.red.shade800,
+                      color: isValid ? colorScheme.primary : colorScheme.onErrorContainer,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -1842,16 +1844,16 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: isValid ? Colors.green.shade50 : Colors.red.shade50,
+                      color: isValid ? colorScheme.tertiaryContainer : colorScheme.errorContainer,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: isValid ? Colors.green.shade300 : Colors.red.shade300),
+                      border: Border.all(color: isValid ? colorScheme.tertiaryFixedDim : colorScheme.errorContainer),
                     ),
                     child: Text(
                       '${totalVal.toStringAsFixed(totalVal == totalVal.roundToDouble() ? 0 : 2)} $currencySymbol',
                       style: GoogleFonts.cairo(
                         fontWeight: FontWeight.bold,
                         fontSize: isMobile ? 12.5 : 14,
-                        color: isValid ? Colors.green.shade900 : Colors.red.shade900,
+                        color: isValid ? colorScheme.onTertiaryContainer : colorScheme.onErrorContainer,
                       ),
                     ),
                   ),
@@ -1898,9 +1900,9 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: isValid ? Colors.teal.shade50 : Colors.red.shade50,
+                      color: isValid ? colorScheme.tertiaryContainer : colorScheme.errorContainer,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: isValid ? Colors.teal.shade200 : Colors.red.shade300),
+                      border: Border.all(color: isValid ? colorScheme.tertiaryFixedDim : colorScheme.errorContainer),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -1908,7 +1910,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                         Icon(
                           isValid ? Icons.verified_rounded : Icons.cancel_rounded,
                           size: 13,
-                          color: isValid ? Colors.teal.shade700 : Colors.red.shade700,
+                          color: isValid ? colorScheme.onTertiaryFixedVariant : colorScheme.onErrorContainer,
                         ),
                         const SizedBox(width: 4),
                         Text(
@@ -1916,7 +1918,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                           style: GoogleFonts.cairo(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
-                            color: isValid ? Colors.teal.shade800 : Colors.red.shade800,
+                            color: isValid ? colorScheme.onTertiaryFixedVariant : colorScheme.onErrorContainer,
                           ),
                         ),
                       ],
@@ -1963,21 +1965,21 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: Colors.amber.shade50,
+                        color: colorScheme.secondaryContainer,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.amber.shade300),
+                        border: Border.all(color: colorScheme.primaryFixedDim),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.card_giftcard_rounded, size: 13, color: Colors.amber.shade900),
+                          Icon(Icons.card_giftcard_rounded, size: 13, color: colorScheme.onSecondaryContainer),
                           const SizedBox(width: 4),
                           Text(
                             'الجائزة: $prizeWon',
                             style: GoogleFonts.cairo(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
-                              color: Colors.amber.shade900,
+                              color: colorScheme.onSecondaryContainer,
                             ),
                           ),
                         ],
@@ -1987,7 +1989,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: Colors.purple.shade50,
+                        color: colorScheme.primaryContainer,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -1995,7 +1997,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                         style: GoogleFonts.cairo(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: Colors.purple.shade800,
+                          color: colorScheme.onPrimaryFixedVariant,
                         ),
                       ),
                     ),
@@ -2004,14 +2006,14 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: Colors.amber.shade100,
+                        color: colorScheme.secondaryContainer,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.amber.shade400),
+                        border: Border.all(color: colorScheme.primaryFixedDim),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.confirmation_number_rounded, size: 12, color: Colors.amber.shade900),
+                          Icon(Icons.confirmation_number_rounded, size: 12, color: colorScheme.onSecondaryContainer),
                           const SizedBox(width: 4),
                           Text(
                             isAr
@@ -2020,7 +2022,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                             style: GoogleFonts.cairo(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
-                              color: Colors.amber.shade900,
+                              color: colorScheme.onSecondaryContainer,
                             ),
                           ),
                         ],
@@ -2036,16 +2038,16 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.red.shade50.withValues(alpha: 0.85),
+                    color: colorScheme.errorContainer.withValues(alpha: 0.85),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.red.shade200),
+                    border: Border.all(color: colorScheme.errorContainer),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.report_problem_rounded, size: 18, color: Colors.red.shade800),
+                          Icon(Icons.report_problem_rounded, size: 18, color: colorScheme.onErrorContainer),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -2053,7 +2055,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                               style: GoogleFonts.cairo(
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.red.shade900,
+                                color: colorScheme.onErrorContainer,
                               ),
                             ),
                           ),
@@ -2077,7 +2079,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                             children: [
                               Padding(
                                 padding: const EdgeInsets.only(top: 6),
-                                child: Icon(Icons.circle, size: 5, color: Colors.red.shade700),
+                                child: Icon(Icons.circle, size: 5, color: colorScheme.onErrorContainer),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
@@ -2086,7 +2088,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                                   style: GoogleFonts.cairo(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
-                                    color: Colors.red.shade900,
+                                    color: colorScheme.onErrorContainer,
                                     height: 1.35,
                                   ),
                                 ),
@@ -2148,7 +2150,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                           Icon(
                             isTarget ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
                             size: 14,
-                            color: isTarget ? Colors.green : colorScheme.onSurfaceVariant,
+                            color: isTarget ? colorScheme.tertiary : colorScheme.onSurfaceVariant,
                           ),
                           const SizedBox(width: 8),
                           Expanded(
@@ -2219,22 +2221,22 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: Colors.amber.shade100,
+          color: colorScheme.secondaryContainer,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.amber.shade300),
+          border: Border.all(color: colorScheme.primaryFixedDim),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(
+            SizedBox(
               width: 12,
               height: 12,
-              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.amber),
+              child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.secondary),
             ),
             const SizedBox(width: 6),
             Text(
               isAr ? 'جاري الفحص...' : 'Rechecking...',
-              style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+              style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: colorScheme.onSecondaryContainer),
             ),
           ],
         ),
@@ -2258,8 +2260,8 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
           style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
         ),
         style: FilledButton.styleFrom(
-          backgroundColor: Colors.red.shade100,
-          foregroundColor: Colors.red.shade900,
+          backgroundColor: colorScheme.errorContainer,
+          foregroundColor: colorScheme.onErrorContainer,
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
           visualDensity: VisualDensity.compact,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -2358,19 +2360,19 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.amber.shade50.withValues(alpha: 0.7),
+                  color: colorScheme.secondaryContainer.withValues(alpha: 0.7),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.amber.shade300),
+                  border: Border.all(color: colorScheme.primaryFixedDim),
                 ),
                 child: Row(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.amber.shade100,
+                        color: colorScheme.secondaryContainer,
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.bolt_rounded, color: Colors.amber.shade900, size: 22),
+                      child: Icon(Icons.bolt_rounded, color: colorScheme.onSecondaryContainer, size: 22),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -2382,10 +2384,10 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                               Flexible(
                                 child: Text(
                                   strings.quickRecheckTitle,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 13.5,
                                     fontWeight: FontWeight.bold,
-                                    color: Color(0xFF452700),
+                                    color: colorScheme.onSecondaryContainer,
                                   ),
                                 ),
                               ),
@@ -2393,12 +2395,12 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                                 decoration: BoxDecoration(
-                                  color: Colors.amber.shade200,
+                                  color: colorScheme.secondaryFixedDim,
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
                                   isAr ? '⚡ فوري' : '⚡ Instant',
-                                  style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF452700)),
+                                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: colorScheme.onSecondaryContainer),
                                 ),
                               ),
                             ],
@@ -2406,7 +2408,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                           const SizedBox(height: 3),
                           Text(
                             strings.quickRecheckSubtitle,
-                            style: TextStyle(fontSize: 11, color: Colors.amber.shade900, height: 1.3),
+                            style: TextStyle(fontSize: 11, color: colorScheme.onSecondaryContainer, height: 1.3),
                           ),
                         ],
                       ),
@@ -3202,10 +3204,10 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
         icon: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.green.shade50,
+            color: colorScheme.tertiaryContainer,
             shape: BoxShape.circle,
           ),
-          child: Icon(Icons.check_circle_rounded, size: 48, color: Colors.green.shade700),
+          child: Icon(Icons.check_circle_rounded, size: 48, color: colorScheme.onTertiaryFixedVariant),
         ),
         title: Text(
           isReassignedToSisterCampaign
@@ -3225,7 +3227,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                         : 'Receipt matches campaign (${winningCampaign?.eventName ?? ""}) and has been successfully approved!')
                     : strings.recheckSuccessMessage,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.cairo(color: Colors.grey.shade700, fontSize: 13.5),
+                style: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant, fontSize: 13.5),
               ),
               const SizedBox(height: 12),
 
@@ -3234,9 +3236,9 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.amber.shade50.withValues(alpha: 0.8),
+                    color: colorScheme.secondaryContainer.withValues(alpha: 0.8),
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.amber.shade300),
+                    border: Border.all(color: colorScheme.primaryFixedDim),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -3246,10 +3248,10 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                           Container(
                             padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
-                              color: Colors.amber.shade200,
+                              color: colorScheme.secondaryFixedDim,
                               shape: BoxShape.circle,
                             ),
-                            child: Icon(Icons.touch_app_rounded, color: Colors.amber.shade900, size: 18),
+                            child: Icon(Icons.touch_app_rounded, color: colorScheme.onSecondaryContainer, size: 18),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
@@ -3258,11 +3260,11 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                               children: [
                                 Text(
                                   isAr ? 'نظام اختيار الهدية (Choice Reward) 🎁' : 'Choice Reward System 🎁',
-                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF452700)),
+                                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: colorScheme.onSecondaryContainer),
                                 ),
                                 Text(
                                   isAr ? 'يحق للعميل اختيار هديته من بين الخيارات التالية:' : 'Customer can pick a gift from available choices:',
-                                  style: TextStyle(fontSize: 11, color: Colors.amber.shade900),
+                                  style: TextStyle(fontSize: 11, color: colorScheme.onSecondaryContainer),
                                 ),
                               ],
                             ),
@@ -3279,19 +3281,19 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.amber.shade300),
+                              border: Border.all(color: colorScheme.primaryFixedDim),
                               boxShadow: [
-                                BoxShadow(color: Colors.amber.shade100.withValues(alpha: 0.5), blurRadius: 3, offset: const Offset(0, 1)),
+                                BoxShadow(color: colorScheme.secondaryContainer.withValues(alpha: 0.5), blurRadius: 3, offset: const Offset(0, 1)),
                               ],
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.card_giftcard_rounded, size: 13, color: Colors.amber.shade900),
+                                Icon(Icons.card_giftcard_rounded, size: 13, color: colorScheme.onSecondaryContainer),
                                 const SizedBox(width: 5),
                                 Text(
                                   p,
-                                  style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold, color: const Color(0xFF452700)),
+                                  style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold, color: colorScheme.onSecondaryContainer),
                                 ),
                               ],
                             ),
@@ -3305,18 +3307,18 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
+                    color: colorScheme.secondaryContainer,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.amber.shade300),
+                    border: Border.all(color: colorScheme.primaryFixedDim),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.rotate_right_rounded, color: Colors.amber.shade900, size: 24),
+                      Icon(Icons.rotate_right_rounded, color: colorScheme.onSecondaryContainer, size: 24),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           isAr ? 'آلية الجائزة: عجلة الحظ 🎡 (قم بتدوير العجلة لتحديد الهدية)' : 'Wheel of Fortune 🎡 (Spin wheel to pick gift)',
-                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12.5, color: const Color(0xFF452700)),
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12.5, color: colorScheme.onSecondaryContainer),
                         ),
                       ),
                     ],
@@ -3326,18 +3328,18 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.indigo.shade50,
+                    color: colorScheme.primaryContainer,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.indigo.shade200),
+                    border: Border.all(color: colorScheme.primaryFixedDim),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.auto_awesome_rounded, color: Colors.indigo.shade700, size: 24),
+                      Icon(Icons.auto_awesome_rounded, color: colorScheme.primary, size: 24),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           isAr ? 'آلية الجائزة: كارت الخربشة ✨ (قم بالخربشة لكشف الهدية)' : 'Scratch Card ✨ (Scratch to reveal gift)',
-                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12.5, color: Colors.indigo.shade900),
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12.5, color: colorScheme.onPrimaryContainer),
                         ),
                       ),
                     ],
@@ -3349,14 +3351,14 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.purple.shade50,
+                      color: colorScheme.primaryContainer,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.purple.shade200),
+                      border: Border.all(color: colorScheme.primaryFixedDim),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.card_giftcard_rounded, color: Colors.purple.shade700, size: 20),
+                        Icon(Icons.card_giftcard_rounded, color: colorScheme.primary, size: 20),
                         const SizedBox(width: 8),
                         Flexible(
                           child: Text(
@@ -3364,7 +3366,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                             style: GoogleFonts.cairo(
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
-                              color: Colors.purple.shade900,
+                              color: colorScheme.onPrimaryContainer,
                             ),
                           ),
                         ),
@@ -3379,7 +3381,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                     ? 'تم تحديث حالة الفاتورة ونقلها تلقائياً إلى قسم "الفواتير المقبولة" وحذف سبب الرفض.'
                     : 'Status updated: Moved automatically to "Accepted Invoices" and rejection reason cleared.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
+                style: TextStyle(fontSize: 11.5, color: colorScheme.outline),
               ),
             ],
           ),
@@ -3411,7 +3413,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
                 ),
                 style: FilledButton.styleFrom(
-                  backgroundColor: Colors.purple.shade700,
+                  backgroundColor: colorScheme.primary,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                 ),
@@ -3437,7 +3439,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
                 ),
                 style: FilledButton.styleFrom(
-                  backgroundColor: Colors.amber.shade800,
+                  backgroundColor: colorScheme.onSecondaryFixedVariant,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                 ),
@@ -3463,7 +3465,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
                 ),
                 style: FilledButton.styleFrom(
-                  backgroundColor: Colors.indigo.shade700,
+                  backgroundColor: colorScheme.primary,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                 ),
@@ -3494,7 +3496,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
                 ),
                 style: FilledButton.styleFrom(
-                  backgroundColor: Colors.green.shade700,
+                  backgroundColor: colorScheme.onTertiaryFixedVariant,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                 ),
@@ -3513,8 +3515,8 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                 style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
               ),
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.green.shade800,
-                side: BorderSide(color: Colors.green.shade400),
+                foregroundColor: colorScheme.onTertiaryFixedVariant,
+                side: BorderSide(color: colorScheme.tertiaryFixedDim),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               ),
@@ -3543,10 +3545,10 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
         icon: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.orange.shade50,
+            color: colorScheme.secondaryContainer,
             shape: BoxShape.circle,
           ),
-          child: Icon(Icons.warning_amber_rounded, size: 48, color: Colors.orange.shade800),
+          child: Icon(Icons.warning_amber_rounded, size: 48, color: colorScheme.onSecondaryFixedVariant),
         ),
         title: Text(
           strings.recheckStillRejectedMessage,
@@ -3566,13 +3568,13 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                     children: [
                       Padding(
                         padding: const EdgeInsets.only(top: 5),
-                        child: Icon(Icons.circle, size: 6, color: Colors.orange.shade800),
+                        child: Icon(Icons.circle, size: 6, color: colorScheme.onSecondaryFixedVariant),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           r,
-                          style: TextStyle(fontSize: 12.5, color: Colors.grey.shade900, height: 1.3),
+                          style: TextStyle(fontSize: 12.5, color: colorScheme.onSurface, height: 1.3),
                         ),
                       ),
                     ],
@@ -3670,7 +3672,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline_rounded, size: 48, color: Colors.red),
+            Icon(Icons.error_outline_rounded, size: 48, color: colorScheme.error),
             const SizedBox(height: 12),
             Text(
               AppErrorHandler.getFriendlyMessage(error, defaultMessage: 'حدث خطأ أثناء تحميل الفواتير'),

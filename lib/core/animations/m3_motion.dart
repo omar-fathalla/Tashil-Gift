@@ -194,24 +194,24 @@ class M3ActionButton extends StatelessWidget {
 
     switch (variant) {
       case M3ButtonVariant.filled:
-        bg = backgroundColor ?? (isSuccess ? Colors.green.shade600 : colorScheme.primary);
+        bg = backgroundColor ?? colorScheme.primary;
         fg = foregroundColor ?? colorScheme.onPrimary;
         break;
       case M3ButtonVariant.tonal:
-        bg = backgroundColor ?? (isSuccess ? Colors.green.shade100 : colorScheme.secondaryContainer);
-        fg = foregroundColor ?? (isSuccess ? Colors.green.shade800 : colorScheme.onSecondaryContainer);
+        bg = backgroundColor ?? (isSuccess ? colorScheme.primaryContainer : colorScheme.secondaryContainer);
+        fg = foregroundColor ?? (isSuccess ? colorScheme.onPrimaryContainer : colorScheme.onSecondaryContainer);
         break;
       case M3ButtonVariant.outlined:
         bg = backgroundColor ?? Colors.transparent;
-        fg = foregroundColor ?? (isSuccess ? Colors.green.shade700 : colorScheme.primary);
+        fg = foregroundColor ?? colorScheme.primary;
         border = BorderSide(
-          color: isSuccess ? Colors.green.shade500 : colorScheme.outline,
+          color: isSuccess ? colorScheme.primary : colorScheme.outline,
           width: 1.5,
         );
         break;
       case M3ButtonVariant.text:
         bg = Colors.transparent;
-        fg = foregroundColor ?? (isSuccess ? Colors.green.shade700 : colorScheme.primary);
+        fg = foregroundColor ?? colorScheme.primary;
         break;
     }
 
@@ -785,13 +785,13 @@ class M3Feedback {
                 width: 76,
                 height: 76,
                 decoration: BoxDecoration(
-                  color: Colors.amber.shade100,
+                  color: colorScheme.secondaryContainer,
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   icon,
                   size: 44,
-                  color: Colors.amber.shade900,
+                  color: colorScheme.onSecondaryContainer,
                 ),
               ),
               const SizedBox(height: 20),
@@ -825,8 +825,8 @@ class M3Feedback {
                     if (onDismiss != null) onDismiss();
                   },
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.amber.shade900,
-                    foregroundColor: Colors.white,
+                    backgroundColor: colorScheme.secondary,
+                    foregroundColor: colorScheme.onSecondary,
                     shape: const StadiumBorder(),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),

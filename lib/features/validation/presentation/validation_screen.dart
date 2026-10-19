@@ -43,6 +43,8 @@ class ValidationScreen extends ConsumerStatefulWidget {
 }
 
 class _ValidationScreenState extends ConsumerState<ValidationScreen> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   final List<XFile> _receiptImages = [];
   int _selectedPreviewIndex = 0;
   bool _isAiLoading = false;
@@ -807,7 +809,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
                 ),
               ],
             ),
-            backgroundColor: Colors.green.shade700,
+            backgroundColor: colorScheme.onTertiaryFixedVariant,
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 4),
           ),
@@ -1423,10 +1425,10 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
                                           child: Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              const Icon(
+                                              Icon(
                                                 Icons.layers_rounded,
                                                 size: 14,
-                                                color: Color(0xFF818CF8),
+                                                color: colorScheme.primaryFixedDim,
                                               ),
                                               const SizedBox(width: 6),
                                               Text(
@@ -1786,7 +1788,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.monetization_on_outlined, size: 18, color: Colors.teal.shade700),
+                    Icon(Icons.monetization_on_outlined, size: 18, color: colorScheme.onTertiaryFixedVariant),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -1799,16 +1801,16 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                       decoration: BoxDecoration(
-                        color: Colors.teal.shade50,
+                        color: colorScheme.tertiaryContainer,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.teal.shade200),
+                        border: Border.all(color: colorScheme.tertiaryFixedDim),
                       ),
                       child: Text(
                         event.minimumSpend > 0 ? '${event.minimumSpend} ج.م' : (isAr ? 'بدون حد أدنى' : 'No Minimum'),
                         style: GoogleFonts.cairo(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: Colors.teal.shade800,
+                          color: colorScheme.onTertiaryFixedVariant,
                         ),
                       ),
                     ),
@@ -1888,7 +1890,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
                             '🎁 ${isAr ? 'الهدية المستحقة:' : 'Reward:'} ${rule.rewardValue.isNotEmpty ? rule.rewardValue : (rule.linkedGifts.isNotEmpty ? rule.linkedGifts.map((g) => "${g.quantity}x ${g.giftName}").join(", ") : (rule.linkedGiftName ?? ''))}',
                             style: GoogleFonts.cairo(
                               fontSize: 11,
-                              color: Colors.teal.shade700,
+                              color: colorScheme.onTertiaryFixedVariant,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -1906,16 +1908,16 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.amber.shade50.withValues(alpha: 0.5),
+              color: colorScheme.secondaryContainer.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.amber.shade200),
+              border: Border.all(color: colorScheme.secondaryFixedDim),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(Icons.tips_and_updates_rounded, size: 18, color: Colors.amber.shade800),
+                    Icon(Icons.tips_and_updates_rounded, size: 18, color: colorScheme.onSecondaryFixedVariant),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -1923,7 +1925,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
                         style: GoogleFonts.cairo(
                           fontSize: 12.5,
                           fontWeight: FontWeight.bold,
-                          color: Colors.amber.shade900,
+                          color: colorScheme.onSecondaryContainer,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -1938,7 +1940,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
                   style: GoogleFonts.cairo(
                     fontSize: 11.5,
                     height: 1.5,
-                    color: Colors.brown.shade800,
+                    color: colorScheme.onSecondaryContainer,
                   ),
                 ),
               ],

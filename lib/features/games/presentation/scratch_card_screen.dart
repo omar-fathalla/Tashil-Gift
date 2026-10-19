@@ -317,7 +317,7 @@ class _ScratchCardScreenState extends ConsumerState<ScratchCardScreen> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Icon(Icons.workspace_premium_rounded, color: const Color(0xFFFFD700), size: 28),
+                                  Icon(Icons.workspace_premium_rounded, color: colorScheme.primary, size: 28),
                                   const SizedBox(width: 8),
                                   Flexible(
                                     child: Text(
@@ -372,7 +372,7 @@ class _ScratchCardScreenState extends ConsumerState<ScratchCardScreen> {
                         Container(
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(24),
-                            border: Border.all(color: const Color(0xFFFFD700), width: 3),
+                            border: Border.all(color: colorScheme.primary, width: 3),
                             boxShadow: [
                               BoxShadow(
                                 color: colorScheme.primary.withValues(alpha: 0.2),
@@ -389,7 +389,7 @@ class _ScratchCardScreenState extends ConsumerState<ScratchCardScreen> {
                                 key: _scratcherKey,
                                 brushSize: 48,
                                 threshold: 45,
-                                color: const Color(0xFFC0C0C0),
+                                color: colorScheme.secondary,
                                 onThreshold: () => _onThresholdReached(),
                                 onChange: (value) {
                                   setState(() {
@@ -414,10 +414,10 @@ class _ScratchCardScreenState extends ConsumerState<ScratchCardScreen> {
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    const Icon(
+                                    Icon(
                                       Icons.card_giftcard_rounded,
                                       size: 52,
-                                      color: Color(0xFFFF8F00),
+                                      color: colorScheme.primary,
                                     ),
                                     const SizedBox(height: 12),
                                     Text(

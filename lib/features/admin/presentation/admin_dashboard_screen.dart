@@ -40,6 +40,8 @@ class AdminDashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   int _selectedIndex = 0;
   final Set<int> _loadedTabs = {0};
   String _campaignFilter = 'ACTIVE';
@@ -146,7 +148,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               ? 'تم نسخ رابط العميل والبروموتر الموحد للشركة ($slug): $url'
               : '${strings.promoterLinkCopied}: $url',
         ),
-        backgroundColor: Colors.teal.shade700,
+        backgroundColor: colorScheme.onTertiaryFixedVariant,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -164,7 +166,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               ? 'تم نسخ رابط بوابة شركة الدعاية والعمليات الموحد ($slug): $url'
               : '${strings.agencyOpsLinkCopied}: $url',
         ),
-        backgroundColor: Colors.purple.shade700,
+        backgroundColor: colorScheme.primary,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -182,7 +184,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               ? 'تم نسخ رابط مدير الشركة العام الموحد ($slug): $url'
               : '${strings.brandExecutiveLinkCopied}: $url',
         ),
-        backgroundColor: Colors.indigo.shade700,
+        backgroundColor: colorScheme.primary,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -285,7 +287,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(strings.campaignDeletedSuccess),
-              backgroundColor: Colors.red.shade700,
+              backgroundColor: colorScheme.onErrorContainer,
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -295,7 +297,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(AppStrings.of(ref).operationFailed(e.toString())),
-              backgroundColor: Colors.red.shade900,
+              backgroundColor: colorScheme.onErrorContainer,
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -467,8 +469,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                       Container(
                         width: 7,
                         height: 7,
-                        decoration: const BoxDecoration(
-                          color: Colors.green,
+                        decoration: BoxDecoration(
+                          color: colorScheme.tertiary,
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -478,7 +480,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                         style: GoogleFonts.cairo(
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
-                          color: Colors.green.shade700,
+                          color: colorScheme.onTertiaryFixedVariant,
                         ),
                       ),
                     ],
@@ -796,7 +798,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                  Icon(Icons.error_outline, size: 48, color: colorScheme.error),
                   const SizedBox(height: 12),
                   Text('${strings.error}: ${snapshot.error}'),
                 ],
@@ -827,7 +829,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                         child: CircularProgressIndicator(strokeWidth: 3),
                       ),
                       const SizedBox(height: 12),
-                      Text(strings.loading, style: const TextStyle(color: Colors.grey)),
+                      Text(strings.loading, style: TextStyle(color: colorScheme.outline)),
                     ],
                   ),
                 );
@@ -983,7 +985,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     subtitle: isAr ? 'حملات جارية وسارية الآن' : 'Live & Running Campaigns',
                     value: '$activeCount',
                     icon: Icons.check_circle_rounded,
-                    color: Colors.green.shade600,
+                    color: colorScheme.tertiary,
                     width: cardWidth,
                     hasPulse: true,
                     tooltip: isAr ? 'الحملات النشطة التي تستقبل فواتير العملاء حالياً (انقر للتصفية)' : 'Campaigns currently active and accepting receipts (click to filter)',
@@ -1006,7 +1008,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     subtitle: isAr ? 'حملات تم إيقافها أو انتهت' : 'Disabled or ended campaigns',
                     value: '$expiredOrDisabledCount',
                     icon: Icons.pause_circle_outline_rounded,
-                    color: Colors.amber.shade700,
+                    color: colorScheme.secondary,
                     width: cardWidth,
                     tooltip: isAr ? 'حملات متوقفة مؤقتاً أو انتهت صلاحيتها الزمنية (انقر للتصفية)' : 'Paused or expired campaigns (click to filter)',
                     isSelected: _campaignFilter == 'INACTIVE',
@@ -1237,9 +1239,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.green.shade50,
+                    color: colorScheme.tertiaryContainer,
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.green.shade200),
+                    border: Border.all(color: colorScheme.tertiaryFixedDim),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1247,8 +1249,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                       Container(
                         width: 8,
                         height: 8,
-                        decoration: const BoxDecoration(
-                          color: Colors.green,
+                        decoration: BoxDecoration(
+                          color: colorScheme.tertiary,
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -1258,7 +1260,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                         style: GoogleFonts.cairo(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
-                          color: Colors.green.shade800,
+                          color: colorScheme.onTertiaryFixedVariant,
                         ),
                       ),
                     ],
@@ -1338,21 +1340,21 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       statusIcon = Icons.pause_circle_outline_rounded;
       statusLabel = isAr ? 'معطلة' : 'Disabled';
     } else if (event.isExpired) {
-      statusBg = Colors.red.shade50;
-      statusBorder = Colors.red.shade200;
-      statusTextColor = Colors.red.shade800;
+      statusBg = colorScheme.errorContainer;
+      statusBorder = colorScheme.errorContainer;
+      statusTextColor = colorScheme.onErrorContainer;
       statusIcon = Icons.event_busy_rounded;
       statusLabel = isAr ? 'منتهية' : 'Expired';
     } else if (event.isNotStartedYet) {
-      statusBg = Colors.amber.shade50;
-      statusBorder = Colors.amber.shade200;
-      statusTextColor = Colors.amber.shade900;
+      statusBg = colorScheme.secondaryContainer;
+      statusBorder = colorScheme.secondaryFixedDim;
+      statusTextColor = colorScheme.onSecondaryContainer;
       statusIcon = Icons.schedule_rounded;
       statusLabel = isAr ? 'لم تبدأ بعد' : 'Upcoming';
     } else {
-      statusBg = Colors.green.shade50;
-      statusBorder = Colors.green.shade200;
-      statusTextColor = Colors.green.shade800;
+      statusBg = colorScheme.tertiaryContainer;
+      statusBorder = colorScheme.tertiaryFixedDim;
+      statusTextColor = colorScheme.onTertiaryFixedVariant;
       statusIcon = Icons.check_circle_rounded;
       statusLabel = isAr ? 'نشطة وسارية' : 'Active & Running';
     }
@@ -1475,9 +1477,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     icon: Icons.storefront_rounded,
                     label: event.branchesDisplaySummary,
                     colorScheme: colorScheme,
-                    customBg: Colors.amber.shade50,
-                    customBorder: Colors.amber.shade200,
-                    customColor: Colors.amber.shade900,
+                    customBg: colorScheme.secondaryContainer,
+                    customBorder: colorScheme.secondaryFixedDim,
+                    customColor: colorScheme.onSecondaryContainer,
                     tooltip: isAr ? 'السلسلة والفروع المحددة لسريان العرض' : 'Eligible retail chain & branch',
                   ),
                 _buildMetadataPill(
@@ -1492,9 +1494,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                       ? '${isAr ? "الحد الأدنى: " : "Min Spend: "}${event.minimumSpend == event.minimumSpend.roundToDouble() ? event.minimumSpend.toInt() : event.minimumSpend} ${activeCountry.currencySymbol}'
                       : (isAr ? 'بدون حد أدنى' : 'No Min Spend'),
                   colorScheme: colorScheme,
-                  customBg: Colors.teal.shade50,
-                  customBorder: Colors.teal.shade200,
-                  customColor: Colors.teal.shade900,
+                  customBg: colorScheme.tertiaryContainer,
+                  customBorder: colorScheme.tertiaryFixedDim,
+                  customColor: colorScheme.onTertiaryContainer,
                   tooltip: isAr ? 'قيمة المشتريات المطلوبة لقبول الفاتورة' : 'Minimum purchase threshold for receipt acceptance',
                 ),
                 if (event.startDate != null || event.endDate != null)
@@ -1509,9 +1511,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     icon: Icons.inventory_2_rounded,
                     label: '${isAr ? "الأصناف المستهدفة: " : "Target Items: "}${event.requiredProducts.length} ${isAr ? "صنفاً" : "items"}',
                     colorScheme: colorScheme,
-                    customBg: Colors.indigo.shade50,
-                    customBorder: Colors.indigo.shade200,
-                    customColor: Colors.indigo.shade900,
+                    customBg: colorScheme.primaryContainer,
+                    customBorder: colorScheme.primaryFixedDim,
+                    customColor: colorScheme.onPrimaryContainer,
                     tooltip: isAr
                         ? 'الأصناف المستهدفة (${event.requiredProducts.length} صنف):\n${event.requiredProducts.join(" • ")}'
                         : 'Target Products (${event.requiredProducts.length} items):\n${event.requiredProducts.join(" • ")}',
@@ -1734,8 +1736,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     icon: const Icon(Icons.store_mall_directory_rounded, size: 18),
                     label: Text(strings.copyAgencyOpsLink, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13)),
                     style: FilledButton.styleFrom(
-                      backgroundColor: Colors.purple.shade50,
-                      foregroundColor: Colors.purple.shade900,
+                      backgroundColor: colorScheme.primaryContainer,
+                      foregroundColor: colorScheme.onPrimaryContainer,
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
@@ -1963,9 +1965,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     required String tooltip,
     required ValueChanged<bool> onChanged,
   }) {
-    final statusColor = isActive ? Colors.green.shade700 : Colors.amber.shade900;
-    final statusBg = isActive ? Colors.green.shade50 : Colors.amber.shade50;
-    final statusBorder = isActive ? Colors.green.shade200 : Colors.amber.shade300;
+    final statusColor = isActive ? colorScheme.onTertiaryFixedVariant : colorScheme.onSecondaryContainer;
+    final statusBg = isActive ? colorScheme.tertiaryContainer : colorScheme.secondaryContainer;
+    final statusBorder = isActive ? colorScheme.tertiaryFixedDim : colorScheme.primaryFixedDim;
     final statusText = isActive ? (isAr ? 'مفعلة 🟢' : 'Active 🟢') : (isAr ? 'متوقفة ⏸️' : 'Paused ⏸️');
 
     return Container(
@@ -1975,7 +1977,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: isActive ? colorScheme.outlineVariant.withValues(alpha: 0.6) : Colors.amber.shade300,
+          color: isActive ? colorScheme.outlineVariant.withValues(alpha: 0.6) : colorScheme.primaryFixedDim,
           width: isActive ? 1 : 1.5,
         ),
       ),
@@ -1985,13 +1987,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: isActive ? colorScheme.primaryContainer : Colors.amber.shade100,
+              color: isActive ? colorScheme.primaryContainer : colorScheme.secondaryContainer,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
               icon,
               size: 18,
-              color: isActive ? colorScheme.onPrimaryContainer : Colors.amber.shade900,
+              color: isActive ? colorScheme.onPrimaryContainer : colorScheme.onSecondaryContainer,
             ),
           ),
           const SizedBox(width: 10),

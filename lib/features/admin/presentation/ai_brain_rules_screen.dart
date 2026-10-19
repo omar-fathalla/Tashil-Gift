@@ -35,6 +35,8 @@ class AiBrainRulesScreen extends ConsumerStatefulWidget {
 
 class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
     with SingleTickerProviderStateMixin {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   late final TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
   AiDirectiveCategory? _selectedCategory; // null = all
@@ -278,7 +280,7 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
                   : 'All $count directives synced to cloud successfully',
               style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
             ),
-            backgroundColor: Colors.teal.shade700,
+            backgroundColor: colorScheme.onTertiaryFixedVariant,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -288,7 +290,7 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('فشلت المزامنة: $e'),
-            backgroundColor: Colors.red.shade700,
+            backgroundColor: colorScheme.onErrorContainer,
           ),
         );
       }
@@ -344,7 +346,7 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
                       gradient: LinearGradient(
                         colors: [
                           colorScheme.primary,
-                          const Color(0xFF6750A4),
+                          colorScheme.primary,
                         ],
                       ),
                       borderRadius: BorderRadius.circular(14),
@@ -385,9 +387,9 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                                    color: colorScheme.tertiary.withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+                                    border: Border.all(color: colorScheme.tertiary.withValues(alpha: 0.4)),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -395,8 +397,8 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
                                       Container(
                                         width: 7,
                                         height: 7,
-                                        decoration: const BoxDecoration(
-                                          color: Color(0xFF10B981),
+                                        decoration: BoxDecoration(
+                                          color: colorScheme.tertiary,
                                           shape: BoxShape.circle,
                                         ),
                                       ),
@@ -407,14 +409,14 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
                                           style: GoogleFonts.cairo(
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
-                                            color: const Color(0xFF047857),
+                                            color: colorScheme.onTertiaryFixedVariant,
                                           ),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
                                       const SizedBox(width: 5),
-                                      const Icon(Icons.tune_rounded, size: 13, color: Color(0xFF047857)),
+                                      Icon(Icons.tune_rounded, size: 13, color: colorScheme.onTertiaryFixedVariant),
                                     ],
                                   ),
                                 ),
@@ -460,8 +462,8 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
                         style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12),
                       ),
                       style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF6750A4).withValues(alpha: 0.12),
-                        foregroundColor: const Color(0xFF6750A4),
+                        backgroundColor: colorScheme.primary.withValues(alpha: 0.12),
+                        foregroundColor: colorScheme.primary,
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
@@ -537,7 +539,7 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
                 value: '$totalDirectivesCount ${isAr ? 'بنداً معيارياً' : 'Directives'}',
                 subtitle: isAr ? 'محدثة ونشطة بكافة الحملات' : 'Enforced Globally',
                 icon: Icons.checklist_rtl_rounded,
-                color: const Color(0xFF6750A4),
+                color: colorScheme.primary,
                 isWide: isWide,
               ),
               _buildKpiCard(
@@ -545,7 +547,7 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
                 value: activeModelName,
                 subtitle: isAr ? '${activeAgentMode.labelAr} (انقر للتغيير ⚙️)' : '${activeAgentMode.labelEn} (Click to change ⚙️)',
                 icon: Icons.bolt_rounded,
-                color: const Color(0xFF006C50),
+                color: colorScheme.tertiary,
                 isWide: isWide,
                 onTap: () => AiModelSwitcherDialog.show(context),
               ),
@@ -554,7 +556,7 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
                 value: '99.8%',
                 subtitle: isAr ? 'فحص بونات الكاشير' : 'POS Vision & Rules',
                 icon: Icons.verified_rounded,
-                color: const Color(0xFF00639B),
+                color: colorScheme.primary,
                 isWide: isWide,
               ),
             ],
@@ -852,12 +854,12 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                     decoration: BoxDecoration(
                       color: item.isGloballyActive
-                          ? const Color(0xFFE8F5E9)
+                          ? colorScheme.tertiaryContainer
                           : colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                         color: item.isGloballyActive
-                            ? const Color(0xFF2E7D32).withValues(alpha: 0.3)
+                            ? colorScheme.onTertiaryFixedVariant.withValues(alpha: 0.3)
                             : colorScheme.outlineVariant,
                       ),
                     ),
@@ -867,7 +869,7 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
                         Icon(
                           item.isGloballyActive ? Icons.check_circle_rounded : Icons.pause_circle_rounded,
                           size: 11,
-                          color: item.isGloballyActive ? const Color(0xFF2E7D32) : colorScheme.onSurfaceVariant,
+                          color: item.isGloballyActive ? colorScheme.onTertiaryFixedVariant : colorScheme.onSurfaceVariant,
                         ),
                         const SizedBox(width: 3),
                         Text(
@@ -875,7 +877,7 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
                           style: GoogleFonts.cairo(
                             fontSize: 9.5,
                             fontWeight: FontWeight.bold,
-                            color: item.isGloballyActive ? const Color(0xFF1B5E20) : colorScheme.onSurfaceVariant,
+                            color: item.isGloballyActive ? colorScheme.onTertiaryContainer : colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -926,7 +928,7 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.lightbulb_rounded, size: 15, color: Colors.amber.shade700),
+                          Icon(Icons.lightbulb_rounded, size: 15, color: colorScheme.secondary),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
@@ -1092,12 +1094,12 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                                 decoration: BoxDecoration(
                                   color: item.isGloballyActive
-                                      ? const Color(0xFFE8F5E9)
+                                      ? colorScheme.tertiaryContainer
                                       : colorScheme.surfaceContainerHighest,
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
                                     color: item.isGloballyActive
-                                        ? const Color(0xFF2E7D32).withValues(alpha: 0.3)
+                                        ? colorScheme.onTertiaryFixedVariant.withValues(alpha: 0.3)
                                         : colorScheme.outlineVariant,
                                   ),
                                 ),
@@ -1109,7 +1111,7 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
                                     fontSize: 11,
                                     fontWeight: FontWeight.bold,
                                     color: item.isGloballyActive
-                                        ? const Color(0xFF2E7D32)
+                                        ? colorScheme.onTertiaryFixedVariant
                                         : colorScheme.onSurfaceVariant,
                                   ),
                                 ),
@@ -1190,7 +1192,7 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
             style: GoogleFonts.cairo(
               fontWeight: FontWeight.bold,
               fontSize: 14,
-              color: Colors.amber.shade800,
+              color: colorScheme.onSecondaryFixedVariant,
             ),
           ),
           const SizedBox(height: 8),
@@ -1422,7 +1424,7 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
                   const SizedBox(height: 16),
                   Text(
                     strings.directiveExampleHeader,
-                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.amber.shade800),
+                    style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13, color: colorScheme.onSecondaryFixedVariant),
                   ),
                   const SizedBox(height: 6),
                   Container(
@@ -1646,7 +1648,7 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(strings.directiveSavedSuccess),
-                            backgroundColor: Colors.teal.shade700,
+                            backgroundColor: colorScheme.onTertiaryFixedVariant,
                             behavior: SnackBarBehavior.floating,
                           ),
                         );

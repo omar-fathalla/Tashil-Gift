@@ -39,6 +39,8 @@ class CustomerImportDialog extends StatefulWidget {
 }
 
 class _CustomerImportDialogState extends State<CustomerImportDialog> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   final CustomerMarketingService _service = CustomerMarketingService();
   _ImportDialogTab _activeTab = _ImportDialogTab.manual;
 
@@ -75,7 +77,7 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(widget.isAr ? 'برجاء إدخال رقم هاتف صحيح' : 'Please enter a valid phone number'),
-          backgroundColor: Colors.red.shade700,
+          backgroundColor: colorScheme.onErrorContainer,
         ),
       );
       return;
@@ -106,7 +108,7 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(widget.strings.customerAddedSuccess),
-            backgroundColor: const Color(0xFF198754),
+            backgroundColor: colorScheme.tertiary,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -114,7 +116,7 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(widget.isAr ? 'فشل حفظ العميل في قاعدة البيانات' : 'Failed to save customer'),
-            backgroundColor: Colors.red.shade700,
+            backgroundColor: colorScheme.onErrorContainer,
           ),
         );
       }
@@ -157,7 +159,7 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('${widget.strings.fileParsedSuccessfully}: ${parsed.validContacts.length} ${widget.strings.validNumbersCount}'),
-              backgroundColor: const Color(0xFF198754),
+              backgroundColor: colorScheme.tertiary,
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -165,7 +167,7 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(parsed.errorMessage!),
-              backgroundColor: Colors.red.shade700,
+              backgroundColor: colorScheme.onErrorContainer,
             ),
           );
         }
@@ -176,7 +178,7 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('خطأ أثناء قراءة الملف: $e'),
-            backgroundColor: Colors.red.shade700,
+            backgroundColor: colorScheme.onErrorContainer,
           ),
         );
       }
@@ -199,7 +201,7 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('${widget.strings.customersImportedSuccess} ($savedCount)'),
-            backgroundColor: const Color(0xFF198754),
+            backgroundColor: colorScheme.tertiary,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -207,7 +209,7 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(widget.isAr ? 'فشل استيراد العملاء' : 'Failed to import customers'),
-            backgroundColor: Colors.red.shade700,
+            backgroundColor: colorScheme.onErrorContainer,
           ),
         );
       }
@@ -223,7 +225,7 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(widget.isAr ? 'تم تنزيل نموذج الإكسيل التجريبي بنجاح ✅' : 'Sample Excel template downloaded successfully ✅'),
-        backgroundColor: const Color(0xFF198754),
+        backgroundColor: colorScheme.tertiary,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -249,12 +251,12 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
               // Header
               Container(
                 padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24, vertical: 16),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      Color(0xFF0F5132),
-                      Color(0xFF198754),
-                      Color(0xFF20C997),
+                      colorScheme.onTertiaryContainer,
+                      colorScheme.tertiary,
+                      colorScheme.tertiary,
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
@@ -365,14 +367,14 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 18, color: isSelected ? const Color(0xFF198754) : cs.onSurfaceVariant),
+            Icon(icon, size: 18, color: isSelected ? colorScheme.tertiary : cs.onSurfaceVariant),
             const SizedBox(width: 8),
             Text(
               label,
               style: GoogleFonts.cairo(
                 fontSize: 13,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected ? const Color(0xFF0F5132) : cs.onSurfaceVariant,
+                color: isSelected ? colorScheme.onTertiaryContainer : cs.onSurfaceVariant,
               ),
             ),
           ],
@@ -418,15 +420,15 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
             decoration: InputDecoration(
               hintText: widget.isAr ? '010XXXXXXXX أو 2010XXXXXXXX' : '010XXXXXXXX',
               hintStyle: GoogleFonts.robotoMono(fontSize: 12),
-              prefixIcon: const Icon(Icons.phone_iphone_rounded, size: 20, color: Color(0xFF25D366)),
+              prefixIcon: Icon(Icons.phone_iphone_rounded, size: 20, color: colorScheme.tertiary),
               suffixIcon: isValidPhone
-                  ? const Icon(Icons.check_circle_rounded, color: Color(0xFF198754), size: 20)
+                  ? Icon(Icons.check_circle_rounded, color: colorScheme.tertiary, size: 20)
                   : null,
               filled: true,
               fillColor: cs.surfaceContainerLow,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
               helperText: isValidPhone ? 'WhatsApp ID: +$cleanPhone' : null,
-              helperStyle: GoogleFonts.robotoMono(fontSize: 11, color: const Color(0xFF198754)),
+              helperStyle: GoogleFonts.robotoMono(fontSize: 11, color: colorScheme.tertiary),
             ),
             style: GoogleFonts.robotoMono(fontSize: 14, fontWeight: FontWeight.w600),
             onChanged: (_) => setState(() {}),
@@ -494,7 +496,7 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
             height: 48,
             child: FilledButton.icon(
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF198754),
+                backgroundColor: colorScheme.tertiary,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
               icon: _isSavingManual
@@ -523,19 +525,19 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFF198754).withValues(alpha: 0.1),
+              color: colorScheme.tertiary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFF198754).withValues(alpha: 0.25)),
+              border: Border.all(color: colorScheme.tertiary.withValues(alpha: 0.25)),
             ),
             child: Row(
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF198754).withValues(alpha: 0.15),
+                    color: colorScheme.tertiary.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.file_download_rounded, color: Color(0xFF198754), size: 22),
+                  child: Icon(Icons.file_download_rounded, color: colorScheme.tertiary, size: 22),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -544,7 +546,7 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
                     children: [
                       Text(
                         widget.strings.downloadExcelTemplate,
-                        style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF0F5132)),
+                        style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold, color: colorScheme.onTertiaryContainer),
                       ),
                       Text(
                         widget.isAr
@@ -557,8 +559,8 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
                 ),
                 OutlinedButton(
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF198754),
-                    side: const BorderSide(color: Color(0xFF198754)),
+                    foregroundColor: colorScheme.tertiary,
+                    side: BorderSide(color: colorScheme.tertiary),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   onPressed: _downloadTemplate,
@@ -579,7 +581,7 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
                 color: cs.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: _pickedFileName != null ? const Color(0xFF198754) : cs.outlineVariant,
+                  color: _pickedFileName != null ? colorScheme.tertiary : cs.outlineVariant,
                   width: _pickedFileName != null ? 1.5 : 1,
                 ),
               ),
@@ -587,15 +589,15 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   if (_isParsingFile)
-                    const CircularProgressIndicator(color: Color(0xFF198754))
+                    CircularProgressIndicator(color: colorScheme.tertiary)
                   else
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF198754).withValues(alpha: 0.15),
+                        color: colorScheme.tertiary.withValues(alpha: 0.15),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.table_chart_rounded, size: 32, color: Color(0xFF198754)),
+                      child: Icon(Icons.table_chart_rounded, size: 32, color: colorScheme.tertiary),
                     ),
                   const SizedBox(height: 12),
                   Text(
@@ -623,7 +625,7 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
                   child: _buildStatBadge(
                     label: widget.strings.validNumbersCount,
                     count: _parseResult!.validContacts.length,
-                    color: const Color(0xFF198754),
+                    color: colorScheme.tertiary,
                     icon: Icons.check_circle_rounded,
                   ),
                 ),
@@ -632,7 +634,7 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
                   child: _buildStatBadge(
                     label: widget.strings.invalidNumbersCount,
                     count: _parseResult!.invalidRowsCount,
-                    color: Colors.red.shade700,
+                    color: colorScheme.onErrorContainer,
                     icon: Icons.error_rounded,
                   ),
                 ),
@@ -641,7 +643,7 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
                   child: _buildStatBadge(
                     label: widget.strings.duplicateNumbersCount,
                     count: _parseResult!.duplicateCount,
-                    color: Colors.orange.shade800,
+                    color: colorScheme.onSecondaryFixedVariant,
                     icon: Icons.filter_alt_rounded,
                   ),
                 ),
@@ -674,7 +676,7 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.person_pin_circle_rounded, size: 18, color: Color(0xFF198754)),
+                            Icon(Icons.person_pin_circle_rounded, size: 18, color: colorScheme.tertiary),
                             const SizedBox(width: 10),
                             Expanded(
                               flex: 3,
@@ -689,7 +691,7 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
                               flex: 3,
                               child: Text(
                                 '+${c.cleanPhone}',
-                                style: GoogleFonts.robotoMono(fontSize: 12, color: const Color(0xFF0F5132)),
+                                style: GoogleFonts.robotoMono(fontSize: 12, color: colorScheme.onTertiaryContainer),
                               ),
                             ),
                             if (c.branch.isNotEmpty)
@@ -716,7 +718,7 @@ class _CustomerImportDialogState extends State<CustomerImportDialog> {
                 height: 48,
                 child: FilledButton.icon(
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF198754),
+                    backgroundColor: colorScheme.tertiary,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                   icon: _isSavingBatch

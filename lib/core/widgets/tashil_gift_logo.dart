@@ -17,15 +17,16 @@ class TashilGiftLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final effectiveRadius = borderRadius ?? (size * 0.28);
-    const olivePrimary = Color(0xFF5C631D);
-    const oliveDeep = Color(0xFF444B04);
+    final olivePrimary = colorScheme.primary;
+    final oliveDeep = colorScheme.onPrimaryFixedVariant;
 
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
@@ -49,7 +50,7 @@ class TashilGiftLogo extends StatelessWidget {
         'G',
         textAlign: TextAlign.center,
         style: GoogleFonts.inter(
-          color: Colors.white,
+          color: colorScheme.onPrimary,
           fontSize: size * 0.62,
           fontWeight: FontWeight.w900,
           height: 1.0,

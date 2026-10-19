@@ -25,6 +25,8 @@ class CompanyGiftsScreen extends ConsumerStatefulWidget {
 }
 
 class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   String? _selectedCompanySlug;
   String? _selectedCompanyName;
   String _selectedGiftType = 'product'; // 'product' | 'voucher'
@@ -248,8 +250,8 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                     onTap: _clearPickedImage,
                     child: Container(
                       padding: const EdgeInsets.all(2),
-                      decoration: const BoxDecoration(
-                        color: Colors.redAccent,
+                      decoration: BoxDecoration(
+                        color: colorScheme.error,
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.close, size: 12, color: Colors.white),
@@ -377,7 +379,7 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                 ),
               ],
             ),
-            backgroundColor: Colors.green[700],
+            backgroundColor: colorScheme.onTertiaryFixedVariant,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             duration: const Duration(seconds: 3),
@@ -530,8 +532,8 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                                     },
                                     child: Container(
                                       padding: const EdgeInsets.all(4),
-                                      decoration: const BoxDecoration(
-                                        color: Colors.redAccent,
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.error,
                                         shape: BoxShape.circle,
                                       ),
                                       child: const Icon(Icons.close, size: 14, color: Colors.white),
@@ -735,7 +737,7 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                 isAr ? 'تم حذف الصنف من الكتالوج المعتمد بنجاح' : 'Gift deleted from catalog successfully',
                 style: GoogleFonts.cairo(),
               ),
-              backgroundColor: const Color(0xFF006C50),
+              backgroundColor: colorScheme.tertiary,
             ),
           );
         }

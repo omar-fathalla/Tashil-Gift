@@ -160,12 +160,12 @@ class _PortalScreenHeaderCardState extends ConsumerState<PortalScreenHeaderCard>
               padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
                 color: _showOnlyActive
-                    ? Colors.green.withValues(alpha: 0.12)
+                    ? colorScheme.primaryContainer.withValues(alpha: 0.7)
                     : colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: _showOnlyActive
-                      ? Colors.green.withValues(alpha: 0.5)
+                      ? colorScheme.primary.withValues(alpha: 0.5)
                       : colorScheme.outlineVariant.withValues(alpha: 0.8),
                   width: 1.2,
                 ),
@@ -176,7 +176,7 @@ class _PortalScreenHeaderCardState extends ConsumerState<PortalScreenHeaderCard>
                   Icon(
                     _showOnlyActive ? Icons.bolt_rounded : Icons.public_rounded,
                     size: 16,
-                    color: _showOnlyActive ? Colors.green.shade700 : colorScheme.primary,
+                    color: _showOnlyActive ? colorScheme.onPrimaryContainer : colorScheme.primary,
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -186,7 +186,7 @@ class _PortalScreenHeaderCardState extends ConsumerState<PortalScreenHeaderCard>
                     style: GoogleFonts.cairo(
                       fontSize: 11.5,
                       fontWeight: FontWeight.bold,
-                      color: _showOnlyActive ? Colors.green.shade800 : colorScheme.onSurface,
+                      color: _showOnlyActive ? colorScheme.onPrimaryContainer : colorScheme.onSurface,
                     ),
                   ),
                   const SizedBox(width: 5),
@@ -194,16 +194,16 @@ class _PortalScreenHeaderCardState extends ConsumerState<PortalScreenHeaderCard>
                     padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                     decoration: BoxDecoration(
                       color: _showOnlyActive
-                          ? Colors.green.shade700
+                          ? colorScheme.primary
                           : colorScheme.outlineVariant,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       '${_showOnlyActive ? activeEvents.length : cleanEvents.length}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: _showOnlyActive ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ),
@@ -242,7 +242,7 @@ class _PortalScreenHeaderCardState extends ConsumerState<PortalScreenHeaderCard>
                   Icon(
                     _showOnlyActive ? Icons.bolt_rounded : Icons.public_rounded,
                     size: 17,
-                    color: _showOnlyActive ? Colors.green.shade700 : colorScheme.primary,
+                    color: colorScheme.primary,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -303,13 +303,13 @@ class _PortalScreenHeaderCardState extends ConsumerState<PortalScreenHeaderCard>
                     Container(
                       padding: const EdgeInsets.all(7),
                       decoration: BoxDecoration(
-                        color: (_showOnlyActive ? Colors.green : colorScheme.primary).withValues(alpha: 0.12),
+                        color: colorScheme.primaryContainer.withValues(alpha: 0.7),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
                         _showOnlyActive ? Icons.bolt_rounded : Icons.public_rounded,
                         size: 18,
-                        color: _showOnlyActive ? Colors.green.shade700 : colorScheme.primary,
+                        color: colorScheme.onPrimaryContainer,
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -327,7 +327,7 @@ class _PortalScreenHeaderCardState extends ConsumerState<PortalScreenHeaderCard>
                             style: GoogleFonts.cairo(
                               fontSize: 13,
                               fontWeight: FontWeight.bold,
-                              color: _showOnlyActive ? Colors.green.shade800 : colorScheme.primary,
+                              color: colorScheme.primary,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -362,14 +362,14 @@ class _PortalScreenHeaderCardState extends ConsumerState<PortalScreenHeaderCard>
                         padding: const EdgeInsets.all(7),
                         decoration: BoxDecoration(
                           color: isEvtActive
-                              ? Colors.green.withValues(alpha: 0.15)
+                              ? colorScheme.primaryContainer.withValues(alpha: 0.8)
                               : colorScheme.secondaryContainer.withValues(alpha: 0.7),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Icon(
                           Icons.campaign_rounded,
                           size: 18,
-                          color: isEvtActive ? Colors.green.shade700 : colorScheme.secondary,
+                          color: isEvtActive ? colorScheme.onPrimaryContainer : colorScheme.secondary,
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -397,8 +397,8 @@ class _PortalScreenHeaderCardState extends ConsumerState<PortalScreenHeaderCard>
                                   padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                                   decoration: BoxDecoration(
                                     color: isEvtActive
-                                        ? Colors.green.withValues(alpha: 0.15)
-                                        : Colors.grey.withValues(alpha: 0.15),
+                                        ? colorScheme.primaryContainer
+                                        : colorScheme.surfaceContainerHighest,
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
@@ -406,7 +406,7 @@ class _PortalScreenHeaderCardState extends ConsumerState<PortalScreenHeaderCard>
                                     style: GoogleFonts.cairo(
                                       fontSize: 9.5,
                                       fontWeight: FontWeight.bold,
-                                      color: isEvtActive ? Colors.green.shade800 : Colors.grey.shade700,
+                                      color: isEvtActive ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
                                     ),
                                   ),
                                 ),

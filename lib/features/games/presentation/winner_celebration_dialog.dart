@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/animations/m3_motion.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/services/game_audio_service.dart';
 import '../../admin/domain/event_model.dart';
 import '../../company_portal/domain/whatsapp_gateway_service.dart';
@@ -111,17 +112,18 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
       final messenger = ScaffoldMessenger.maybeOf(context);
       if (messenger == null) return;
       if (result.isSuccess) {
+        final cs = Theme.of(context).colorScheme;
         messenger.showSnackBar(
           SnackBar(
             behavior: SnackBarBehavior.floating,
-            backgroundColor: const Color(0xFF1B5E20),
+            backgroundColor: cs.primary,
             duration: const Duration(seconds: 4),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             content: Directionality(
               textDirection: TextDirection.rtl,
               child: Row(
                 children: [
-                  const Icon(Icons.mark_chat_read_rounded, color: Color(0xFF25D366), size: 22),
+                  Icon(Icons.mark_chat_read_rounded, color: cs.primaryContainer, size: 22),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -131,7 +133,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                       style: GoogleFonts.cairo(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: cs.onPrimary,
                       ),
                     ),
                   ),
@@ -143,7 +145,8 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
       }
     });
 
-    // Spawn 75 diverse festive particles
+    // Spawn 75 diverse festive particles from M3 dynamic tonal palette
+    final initialPalette = AppTheme.getDynamicPalette(AppTheme.lightTheme.colorScheme);
     for (int i = 0; i < 75; i++) {
       _particles.add(
         _ConfettiParticle(
@@ -153,15 +156,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
           size: 6.0 + _random.nextDouble() * 10.0,
           rotation: _random.nextDouble() * 2 * pi,
           rotationSpeed: (_random.nextDouble() - 0.5) * 4,
-          color: [
-            const Color(0xFFFFD700), // Gold
-            const Color(0xFFFF4081), // Pink
-            const Color(0xFF7C4DFF), // Purple
-            const Color(0xFF00E676), // Green
-            const Color(0xFF00B0FF), // Light Blue
-            const Color(0xFFFF6D00), // Orange
-            const Color(0xFFFFEA00), // Yellow
-          ][_random.nextInt(7)],
+          color: initialPalette[_random.nextInt(initialPalette.length)],
           shape: _random.nextInt(3), // 0: rect, 1: circle, 2: star
         ),
       );
@@ -216,12 +211,12 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                     color: colorScheme.surface,
                     borderRadius: BorderRadius.circular(32),
                     border: Border.all(
-                      color: const Color(0xFFFFD700).withValues(alpha: 0.6),
+                      color: colorScheme.primary.withValues(alpha: 0.6),
                       width: 2.5,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFFFFD700).withValues(alpha: 0.35),
+                        color: colorScheme.primary.withValues(alpha: 0.35),
                         blurRadius: 36,
                         spreadRadius: 4,
                         offset: const Offset(0, 8),
@@ -238,22 +233,22 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Golden Trophy Icon with Breathing Glow
+                        // Trophy Icon with Breathing Glow
                         Container(
                           width: 88,
                           height: 88,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            gradient: const RadialGradient(
+                            gradient: RadialGradient(
                               colors: [
-                                Color(0xFFFFEA00),
-                                Color(0xFFFFB300),
-                                Color(0xFFFF8F00),
+                                colorScheme.primaryContainer,
+                                colorScheme.primary,
+                                colorScheme.onPrimaryFixedVariant,
                               ],
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFFFFB300).withValues(alpha: 0.5),
+                                color: colorScheme.primary.withValues(alpha: 0.5),
                                 blurRadius: 24,
                                 spreadRadius: 4,
                               ),
@@ -376,11 +371,11 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                     gradient: LinearGradient(
                                       colors: resolvedIsVoucher
                                           ? [
-                                              const Color(0xFFFFD700).withValues(alpha: 0.22),
+                                              colorScheme.secondaryContainer.withValues(alpha: 0.7),
                                               colorScheme.primaryContainer.withValues(alpha: 0.55),
                                             ]
                                           : [
-                                              const Color(0xFFE8F5E9).withValues(alpha: 0.6),
+                                              colorScheme.tertiaryContainer.withValues(alpha: 0.6),
                                               colorScheme.primaryContainer.withValues(alpha: 0.4),
                                             ],
                                       begin: Alignment.topLeft,
@@ -389,15 +384,13 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                     borderRadius: BorderRadius.circular(24),
                                     border: Border.all(
                                       color: resolvedIsVoucher
-                                          ? const Color(0xFFFFB300)
+                                          ? colorScheme.primary
                                           : colorScheme.primary.withValues(alpha: 0.3),
                                       width: resolvedIsVoucher ? 2.0 : 1.5,
                                     ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: resolvedIsVoucher
-                                            ? const Color(0xFFFFB300).withValues(alpha: 0.25)
-                                            : colorScheme.primary.withValues(alpha: 0.1),
+                                        color: colorScheme.primary.withValues(alpha: resolvedIsVoucher ? 0.25 : 0.1),
                                         blurRadius: 16,
                                         offset: const Offset(0, 4),
                                       ),
@@ -422,12 +415,12 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                                 color: Colors.white,
                                                 borderRadius: BorderRadius.circular(18),
                                                 border: Border.all(
-                                                  color: (resolvedIsVoucher ? const Color(0xFFFFB300) : colorScheme.primary).withValues(alpha: 0.25),
+                                                  color: colorScheme.primary.withValues(alpha: 0.25),
                                                   width: 1.5,
                                                 ),
                                                 boxShadow: [
                                                   BoxShadow(
-                                                    color: (resolvedIsVoucher ? const Color(0xFFFFB300) : colorScheme.primary).withValues(alpha: 0.08),
+                                                    color: colorScheme.primary.withValues(alpha: 0.08),
                                                     blurRadius: 10,
                                                     offset: const Offset(0, 3),
                                                   ),
@@ -439,16 +432,14 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                                   effectiveImageUrl,
                                                   fit: BoxFit.contain,
                                                   errorBuilder: (context, error, stackTrace) => Container(
-                                                    color: resolvedIsVoucher
-                                                        ? const Color(0xFFFF8F00).withValues(alpha: 0.15)
-                                                        : colorScheme.primary.withValues(alpha: 0.1),
+                                                    color: colorScheme.primary.withValues(alpha: 0.1),
                                                     child: Center(
                                                       child: Icon(
                                                         resolvedIsVoucher
                                                             ? Icons.confirmation_number_rounded
                                                             : Icons.card_giftcard_rounded,
                                                         size: 54,
-                                                        color: resolvedIsVoucher ? const Color(0xFFFF8F00) : colorScheme.primary,
+                                                        color: colorScheme.primary,
                                                       ),
                                                     ),
                                                   ),
@@ -464,7 +455,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                               color: Colors.white,
                                               borderRadius: BorderRadius.circular(18),
                                               border: Border.all(
-                                                color: (resolvedIsVoucher ? const Color(0xFFFFB300) : colorScheme.primary).withValues(alpha: 0.25),
+                                                color: colorScheme.primary.withValues(alpha: 0.25),
                                                 width: 1.5,
                                               ),
                                             ),
@@ -474,7 +465,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                                     ? Icons.confirmation_number_rounded
                                                     : Icons.card_giftcard_rounded,
                                                 size: 54,
-                                                color: resolvedIsVoucher ? const Color(0xFFFF8F00) : colorScheme.primary,
+                                                color: colorScheme.primary,
                                               ),
                                             ),
                                           );
@@ -520,10 +511,10 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                                           decoration: BoxDecoration(
-                                            gradient: const LinearGradient(
+                                            gradient: LinearGradient(
                                               colors: [
-                                                Color(0xFFFFB300),
-                                                Color(0xFFFF6D00),
+                                                colorScheme.primary,
+                                                colorScheme.onPrimaryFixedVariant,
                                               ],
                                               begin: Alignment.topLeft,
                                               end: Alignment.bottomRight,
@@ -531,7 +522,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                             borderRadius: BorderRadius.circular(16),
                                             boxShadow: [
                                               BoxShadow(
-                                                color: const Color(0xFFFF8F00).withValues(alpha: 0.45),
+                                                color: colorScheme.primary.withValues(alpha: 0.45),
                                                 blurRadius: 16,
                                                 spreadRadius: 1,
                                                 offset: const Offset(0, 4),
@@ -578,9 +569,9 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                             return Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                               decoration: BoxDecoration(
-                                                color: Colors.amber.shade50,
+                                                color: colorScheme.secondaryContainer,
                                                 borderRadius: BorderRadius.circular(8),
-                                                border: Border.all(color: Colors.amber.shade300),
+                                                border: Border.all(color: colorScheme.secondary.withValues(alpha: 0.4)),
                                               ),
                                               child: Row(
                                                 mainAxisSize: MainAxisSize.min,
@@ -590,7 +581,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                                         ? Icons.confirmation_number_rounded
                                                         : Icons.card_giftcard_rounded,
                                                     size: 13,
-                                                    color: Colors.amber.shade900,
+                                                    color: colorScheme.onSecondaryContainer,
                                                   ),
                                                   const SizedBox(width: 4),
                                                   Text(
@@ -598,7 +589,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                                     style: GoogleFonts.cairo(
                                                       fontSize: 11,
                                                       fontWeight: FontWeight.bold,
-                                                      color: Colors.amber.shade900,
+                                                      color: colorScheme.onSecondaryContainer,
                                                     ),
                                                   ),
                                                 ],
@@ -637,10 +628,10 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                               width: double.infinity,
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF25D366).withValues(alpha: 0.12),
+                                color: colorScheme.tertiaryContainer.withValues(alpha: 0.6),
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
-                                  color: const Color(0xFF25D366).withValues(alpha: 0.55),
+                                  color: colorScheme.tertiary.withValues(alpha: 0.55),
                                   width: 1.4,
                                 ),
                               ),
@@ -650,7 +641,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      const Icon(Icons.schedule_rounded, color: Color(0xFF145A26), size: 19),
+                                      Icon(Icons.schedule_rounded, color: colorScheme.onTertiaryContainer, size: 19),
                                       const SizedBox(width: 8),
                                       Flexible(
                                         child: Text(
@@ -658,7 +649,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                           style: GoogleFonts.cairo(
                                             fontSize: 13,
                                             fontWeight: FontWeight.w800,
-                                            color: const Color(0xFF145A26),
+                                            color: colorScheme.onTertiaryContainer,
                                           ),
                                         ),
                                       ),
@@ -671,7 +662,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                     style: GoogleFonts.cairo(
                                       fontSize: 11.5,
                                       fontWeight: FontWeight.w600,
-                                      color: const Color(0xFF145A26),
+                                      color: colorScheme.onTertiaryContainer,
                                     ),
                                   ),
                                 ],
@@ -682,10 +673,10 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                               width: double.infinity,
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
-                                color: Colors.amber.shade50,
+                                color: colorScheme.secondaryContainer,
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
-                                  color: Colors.amber.shade600,
+                                  color: colorScheme.secondary,
                                   width: 1.4,
                                 ),
                               ),
@@ -695,7 +686,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      Icon(Icons.phone_missed_rounded, color: Colors.amber.shade900, size: 19),
+                                      Icon(Icons.phone_missed_rounded, color: colorScheme.onSecondaryContainer, size: 19),
                                       const SizedBox(width: 8),
                                       Flexible(
                                         child: Text(
@@ -703,7 +694,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                           style: GoogleFonts.cairo(
                                             fontSize: 13,
                                             fontWeight: FontWeight.w800,
-                                            color: Colors.amber.shade900,
+                                            color: colorScheme.onSecondaryContainer,
                                           ),
                                         ),
                                       ),
@@ -716,7 +707,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                     style: GoogleFonts.cairo(
                                       fontSize: 11.5,
                                       fontWeight: FontWeight.w600,
-                                      color: Colors.amber.shade900,
+                                      color: colorScheme.onSecondaryContainer,
                                     ),
                                   ),
                                 ],
@@ -728,10 +719,10 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                               width: double.infinity,
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
-                                color: Colors.amber.shade50,
+                                color: colorScheme.secondaryContainer,
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
-                                  color: Colors.amber.shade600,
+                                  color: colorScheme.secondary,
                                   width: 1.4,
                                 ),
                               ),
@@ -741,7 +732,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      Icon(Icons.phone_missed_rounded, color: Colors.amber.shade900, size: 19),
+                                      Icon(Icons.phone_missed_rounded, color: colorScheme.onSecondaryContainer, size: 19),
                                       const SizedBox(width: 8),
                                       Flexible(
                                         child: Text(
@@ -749,7 +740,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                           style: GoogleFonts.cairo(
                                             fontSize: 13,
                                             fontWeight: FontWeight.w800,
-                                            color: Colors.amber.shade900,
+                                            color: colorScheme.onSecondaryContainer,
                                           ),
                                         ),
                                       ),
@@ -762,7 +753,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                     style: GoogleFonts.cairo(
                                       fontSize: 11.5,
                                       fontWeight: FontWeight.w600,
-                                      color: Colors.amber.shade900,
+                                      color: colorScheme.onSecondaryContainer,
                                     ),
                                   ),
                                 ],
@@ -778,14 +769,14 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
 
                                 final isFailed = !isWaiting && result != null && !result.isSuccess;
                                 final bgColor = isFailed
-                                    ? Colors.amber.shade50
-                                    : const Color(0xFF25D366).withValues(alpha: 0.14);
+                                    ? colorScheme.secondaryContainer
+                                    : colorScheme.tertiaryContainer.withValues(alpha: 0.6);
                                 final borderColor = isFailed
-                                    ? Colors.amber.shade600
-                                    : const Color(0xFF25D366).withValues(alpha: 0.65);
+                                    ? colorScheme.secondary
+                                    : colorScheme.tertiary.withValues(alpha: 0.65);
                                 final textColor = isFailed
-                                    ? Colors.amber.shade900
-                                    : const Color(0xFF145A26);
+                                    ? colorScheme.onSecondaryContainer
+                                    : colorScheme.onTertiaryContainer;
 
                                 return AnimatedContainer(
                                   duration: const Duration(milliseconds: 280),
@@ -806,12 +797,12 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                         mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
                                           if (isWaiting)
-                                            const SizedBox(
+                                            SizedBox(
                                               width: 16,
                                               height: 16,
                                               child: CircularProgressIndicator(
                                                 strokeWidth: 2,
-                                                color: Color(0xFF1E7E34),
+                                                color: colorScheme.tertiary,
                                               ),
                                             )
                                           else
@@ -867,10 +858,10 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                               width: double.infinity,
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF25D366).withValues(alpha: 0.14),
+                                color: colorScheme.tertiaryContainer.withValues(alpha: 0.6),
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
-                                  color: const Color(0xFF25D366).withValues(alpha: 0.65),
+                                  color: colorScheme.tertiary.withValues(alpha: 0.65),
                                   width: 1.4,
                                 ),
                               ),
@@ -880,7 +871,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      const Icon(Icons.check_circle_rounded, color: Color(0xFF145A26), size: 19),
+                                      Icon(Icons.check_circle_rounded, color: colorScheme.onTertiaryContainer, size: 19),
                                       const SizedBox(width: 8),
                                       Flexible(
                                         child: Text(
@@ -888,7 +879,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                           style: GoogleFonts.cairo(
                                             fontSize: 13,
                                             fontWeight: FontWeight.w800,
-                                            color: const Color(0xFF145A26),
+                                            color: colorScheme.onTertiaryContainer,
                                           ),
                                         ),
                                       ),
@@ -901,7 +892,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                     style: GoogleFonts.cairo(
                                       fontSize: 11.5,
                                       fontWeight: FontWeight.w600,
-                                      color: const Color(0xFF145A26),
+                                      color: colorScheme.onTertiaryContainer,
                                     ),
                                   ),
                                 ],

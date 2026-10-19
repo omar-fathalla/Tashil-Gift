@@ -45,6 +45,8 @@ class AiDiscoveredProductsDialog extends ConsumerStatefulWidget {
 }
 
 class _AiDiscoveredProductsDialogState extends ConsumerState<AiDiscoveredProductsDialog> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   late List<DiscoveredProductItem> _items;
   bool _isSaving = false;
   int _savedCount = 0;
@@ -82,7 +84,7 @@ class _AiDiscoveredProductsDialogState extends ConsumerState<AiDiscoveredProduct
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
-            const Icon(Icons.edit_note_rounded, color: Colors.indigo, size: 24),
+            Icon(Icons.edit_note_rounded, color: colorScheme.primary, size: 24),
             const SizedBox(width: 8),
             Text(
               'تعديل بيانات الصنف',
@@ -235,7 +237,7 @@ class _AiDiscoveredProductsDialogState extends ConsumerState<AiDiscoveredProduct
                 ),
               ],
             ),
-            backgroundColor: Colors.green.shade800,
+            backgroundColor: colorScheme.onTertiaryFixedVariant,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
@@ -247,7 +249,7 @@ class _AiDiscoveredProductsDialogState extends ConsumerState<AiDiscoveredProduct
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('حدث خطأ أثناء حفظ الأصناف: $e'),
-            backgroundColor: Colors.red.shade800,
+            backgroundColor: colorScheme.onErrorContainer,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -284,14 +286,14 @@ class _AiDiscoveredProductsDialogState extends ConsumerState<AiDiscoveredProduct
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [Colors.indigo.shade600, Colors.purple.shade600],
+                      colors: [colorScheme.primary, colorScheme.primary],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.indigo.withValues(alpha: 0.3),
+                        color: colorScheme.primary.withValues(alpha: 0.3),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
@@ -336,20 +338,20 @@ class _AiDiscoveredProductsDialogState extends ConsumerState<AiDiscoveredProduct
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: Colors.indigo.shade50,
+                color: colorScheme.primaryContainer,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.indigo.shade100),
+                border: Border.all(color: colorScheme.primaryContainer),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline_rounded, color: Colors.indigo.shade800, size: 20),
+                  Icon(Icons.info_outline_rounded, color: colorScheme.onPrimaryFixedVariant, size: 20),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       strings.aiProductDiscoverySubtitle,
                       style: GoogleFonts.cairo(
                         fontSize: 11.5,
-                        color: Colors.indigo.shade900,
+                        color: colorScheme.onPrimaryContainer,
                         height: 1.3,
                       ),
                     ),
@@ -463,16 +465,16 @@ class _AiDiscoveredProductsDialogState extends ConsumerState<AiDiscoveredProduct
                                               Container(
                                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                                 decoration: BoxDecoration(
-                                                  color: Colors.green.shade50,
+                                                  color: colorScheme.tertiaryContainer,
                                                   borderRadius: BorderRadius.circular(8),
-                                                  border: Border.all(color: Colors.green.shade200),
+                                                  border: Border.all(color: colorScheme.tertiaryFixedDim),
                                                 ),
                                                 child: Text(
                                                   '${item.referencePrice!.toStringAsFixed(1)} ج.م',
                                                   style: GoogleFonts.cairo(
                                                     fontSize: 11,
                                                     fontWeight: FontWeight.bold,
-                                                    color: Colors.green.shade800,
+                                                    color: colorScheme.onTertiaryFixedVariant,
                                                   ),
                                                 ),
                                               ),
@@ -507,7 +509,7 @@ class _AiDiscoveredProductsDialogState extends ConsumerState<AiDiscoveredProduct
                                               Container(
                                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                                 decoration: BoxDecoration(
-                                                  color: Colors.blue.shade50,
+                                                  color: colorScheme.primaryContainer,
                                                   borderRadius: BorderRadius.circular(6),
                                                 ),
                                                 child: Text(
@@ -515,7 +517,7 @@ class _AiDiscoveredProductsDialogState extends ConsumerState<AiDiscoveredProduct
                                                   style: GoogleFonts.cairo(
                                                     fontSize: 10,
                                                     fontWeight: FontWeight.w600,
-                                                    color: Colors.blue.shade800,
+                                                    color: colorScheme.onPrimaryFixedVariant,
                                                   ),
                                                 ),
                                               ),
@@ -523,7 +525,7 @@ class _AiDiscoveredProductsDialogState extends ConsumerState<AiDiscoveredProduct
                                               Container(
                                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                                 decoration: BoxDecoration(
-                                                  color: Colors.orange.shade50,
+                                                  color: colorScheme.secondaryContainer,
                                                   borderRadius: BorderRadius.circular(6),
                                                 ),
                                                 child: Text(
@@ -531,14 +533,14 @@ class _AiDiscoveredProductsDialogState extends ConsumerState<AiDiscoveredProduct
                                                   style: GoogleFonts.cairo(
                                                     fontSize: 10,
                                                     fontWeight: FontWeight.w600,
-                                                    color: Colors.orange.shade900,
+                                                    color: colorScheme.onSecondaryContainer,
                                                   ),
                                                 ),
                                               ),
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                               decoration: BoxDecoration(
-                                                color: Colors.purple.shade50,
+                                                color: colorScheme.primaryContainer,
                                                 borderRadius: BorderRadius.circular(6),
                                               ),
                                               child: Text(
@@ -546,7 +548,7 @@ class _AiDiscoveredProductsDialogState extends ConsumerState<AiDiscoveredProduct
                                                 style: GoogleFonts.cairo(
                                                   fontSize: 10,
                                                   fontWeight: FontWeight.bold,
-                                                  color: Colors.purple.shade800,
+                                                  color: colorScheme.onPrimaryFixedVariant,
                                                 ),
                                               ),
                                             ),
@@ -618,7 +620,7 @@ class _AiDiscoveredProductsDialogState extends ConsumerState<AiDiscoveredProduct
                     style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
                   ),
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.green.shade800,
+                    backgroundColor: colorScheme.onTertiaryFixedVariant,
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   ),
                   onPressed: _isSaving || selectedCount == 0 ? null : _approveAndSave,

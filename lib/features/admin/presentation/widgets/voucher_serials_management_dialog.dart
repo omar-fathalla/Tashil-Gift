@@ -71,6 +71,8 @@ class VoucherSerialsManagementDialog extends ConsumerStatefulWidget {
 }
 
 class _VoucherSerialsManagementDialogState extends ConsumerState<VoucherSerialsManagementDialog> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   bool _isResetting = false;
@@ -87,7 +89,7 @@ class _VoucherSerialsManagementDialogState extends ConsumerState<VoucherSerialsM
       builder: (ctx) {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          icon: Icon(Icons.warning_amber_rounded, size: 40, color: Colors.amber.shade800),
+          icon: Icon(Icons.warning_amber_rounded, size: 40, color: colorScheme.onSecondaryFixedVariant),
           title: Text(
             strings.resetVoucherSerialsConfirmTitle,
             style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 18),
@@ -109,7 +111,7 @@ class _VoucherSerialsManagementDialogState extends ConsumerState<VoucherSerialsM
             ),
             FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: Colors.amber.shade800,
+                backgroundColor: colorScheme.onSecondaryFixedVariant,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
@@ -151,7 +153,7 @@ class _VoucherSerialsManagementDialogState extends ConsumerState<VoucherSerialsM
               ),
             ],
           ),
-          backgroundColor: Colors.green.shade700,
+          backgroundColor: colorScheme.onTertiaryFixedVariant,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -316,15 +318,15 @@ class _VoucherSerialsManagementDialogState extends ConsumerState<VoucherSerialsM
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFFFFB300), Color(0xFFFF6D00)],
+                            gradient: LinearGradient(
+                              colors: [colorScheme.primaryFixedDim, colorScheme.secondary],
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
                             borderRadius: BorderRadius.circular(14),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFFFF8F00).withValues(alpha: 0.3),
+                                color: colorScheme.secondary.withValues(alpha: 0.3),
                                 blurRadius: 8,
                                 offset: const Offset(0, 2),
                               ),
@@ -357,7 +359,7 @@ class _VoucherSerialsManagementDialogState extends ConsumerState<VoucherSerialsM
                                 style: GoogleFonts.cairo(
                                   fontSize: isMobile ? 11.5 : 12.5,
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.amber.shade900,
+                                  color: colorScheme.onSecondaryContainer,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -394,13 +396,13 @@ class _VoucherSerialsManagementDialogState extends ConsumerState<VoucherSerialsM
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                                 decoration: BoxDecoration(
-                                  color: Colors.amber.shade50,
+                                  color: colorScheme.secondaryContainer,
                                   borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: Colors.amber.shade300),
+                                  border: Border.all(color: colorScheme.primaryFixedDim),
                                 ),
                                 child: Row(
                                   children: [
-                                    Icon(Icons.credit_card_rounded, size: 20, color: Colors.amber.shade900),
+                                    Icon(Icons.credit_card_rounded, size: 20, color: colorScheme.onSecondaryContainer),
                                     const SizedBox(width: 10),
                                     Expanded(
                                       child: Column(
@@ -411,7 +413,7 @@ class _VoucherSerialsManagementDialogState extends ConsumerState<VoucherSerialsM
                                             style: GoogleFonts.cairo(
                                               fontSize: 11,
                                               fontWeight: FontWeight.bold,
-                                              color: Colors.amber.shade900,
+                                              color: colorScheme.onSecondaryContainer,
                                             ),
                                           ),
                                           Text(
@@ -419,7 +421,7 @@ class _VoucherSerialsManagementDialogState extends ConsumerState<VoucherSerialsM
                                             style: GoogleFonts.cairo(
                                               fontSize: 15,
                                               fontWeight: FontWeight.w900,
-                                              color: Colors.amber.shade900,
+                                              color: colorScheme.onSecondaryContainer,
                                             ),
                                           ),
                                         ],
@@ -548,21 +550,21 @@ class _VoucherSerialsManagementDialogState extends ConsumerState<VoucherSerialsM
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                       decoration: BoxDecoration(
-                                        color: Colors.amber.shade50,
+                                        color: colorScheme.secondaryContainer,
                                         borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(color: Colors.amber.shade300),
+                                        border: Border.all(color: colorScheme.primaryFixedDim),
                                       ),
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          Icon(Icons.qr_code_rounded, size: 14, color: Colors.amber.shade900),
+                                          Icon(Icons.qr_code_rounded, size: 14, color: colorScheme.onSecondaryContainer),
                                           const SizedBox(width: 6),
                                           SelectableText(
                                             item.serial,
                                             style: GoogleFonts.cairo(
                                               fontWeight: FontWeight.w900,
                                               fontSize: 13,
-                                              color: Colors.amber.shade900,
+                                              color: colorScheme.onSecondaryContainer,
                                             ),
                                           ),
                                         ],
@@ -595,7 +597,7 @@ class _VoucherSerialsManagementDialogState extends ConsumerState<VoucherSerialsM
                                                   style: GoogleFonts.cairo(
                                                     fontWeight: FontWeight.bold,
                                                     fontSize: 12.5,
-                                                    color: Colors.green.shade700,
+                                                    color: colorScheme.onTertiaryFixedVariant,
                                                   ),
                                                 ),
                                               ],
@@ -652,7 +654,7 @@ class _VoucherSerialsManagementDialogState extends ConsumerState<VoucherSerialsM
                           child: FilledButton.icon(
                             onPressed: _isResetting ? null : () => _handleResetSerials(strings),
                             style: FilledButton.styleFrom(
-                              backgroundColor: Colors.amber.shade800,
+                              backgroundColor: colorScheme.onSecondaryFixedVariant,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),

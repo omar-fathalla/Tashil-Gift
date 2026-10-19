@@ -115,6 +115,8 @@ class WhatsappCampaignDispatcherDialog extends StatefulWidget {
 }
 
 class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispatcherDialog> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   final _gatewayService = WhatsAppGatewayService();
   WhatsAppGatewayConfigModel _gatewayConfig = const WhatsAppGatewayConfigModel();
   bool _isLoadingConfig = true;
@@ -345,7 +347,7 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(widget.strings.operationFailed(e.toString())),
-            backgroundColor: Colors.red.shade700,
+            backgroundColor: colorScheme.onErrorContainer,
           ),
         );
       }
@@ -438,12 +440,12 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
               // 1. Header with Gradient & Live Progress
               Container(
                 padding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 24, vertical: isMobile ? 12 : 18),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      Color(0xFF0F5132),
-                      Color(0xFF198754),
-                      Color(0xFF20C997),
+                      colorScheme.onTertiaryContainer,
+                      colorScheme.tertiary,
+                      colorScheme.tertiary,
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
@@ -540,7 +542,7 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                                       Icons.cloud_sync_rounded,
                                       size: 16,
                                       color: _selectedMode == DispatchMode.automatedGateway
-                                          ? const Color(0xFF0F5132)
+                                          ? colorScheme.onTertiaryContainer
                                           : Colors.white,
                                     ),
                                     const SizedBox(width: 6),
@@ -551,7 +553,7 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                                           fontSize: 12,
                                           fontWeight: FontWeight.bold,
                                           color: _selectedMode == DispatchMode.automatedGateway
-                                              ? const Color(0xFF0F5132)
+                                              ? colorScheme.onTertiaryContainer
                                               : Colors.white,
                                         ),
                                         maxLines: 1,
@@ -585,7 +587,7 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                                       Icons.touch_app_rounded,
                                       size: 16,
                                       color: _selectedMode == DispatchMode.manualBrowser
-                                          ? const Color(0xFF0F5132)
+                                          ? colorScheme.onTertiaryContainer
                                           : Colors.white,
                                     ),
                                     const SizedBox(width: 6),
@@ -596,7 +598,7 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                                           fontSize: 12,
                                           fontWeight: FontWeight.bold,
                                           color: _selectedMode == DispatchMode.manualBrowser
-                                              ? const Color(0xFF0F5132)
+                                              ? colorScheme.onTertiaryContainer
                                               : Colors.white,
                                         ),
                                         maxLines: 1,
@@ -620,7 +622,7 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                 value: progress.clamp(0.0, 1.0),
                 minHeight: 4,
                 backgroundColor: cs.surfaceContainerHighest,
-                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF20C997)),
+                valueColor: AlwaysStoppedAnimation<Color>(colorScheme.tertiary),
               ),
 
               // 2. Main Body Content
@@ -651,7 +653,7 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                         children: [
                           Switch.adaptive(
                             value: _autoAdvance,
-                            activeTrackColor: const Color(0xFF198754),
+                            activeTrackColor: colorScheme.tertiary,
                             onChanged: (val) {
                               setState(() {
                                 _autoAdvance = val;
@@ -680,7 +682,7 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                           Icon(
                             _gatewayConfig.isConfigured ? Icons.check_circle_rounded : Icons.warning_rounded,
                             size: 16,
-                            color: _gatewayConfig.isConfigured ? const Color(0xFF198754) : Colors.orange.shade800,
+                            color: _gatewayConfig.isConfigured ? colorScheme.tertiary : colorScheme.onSecondaryFixedVariant,
                           ),
                           const SizedBox(width: 6),
                           Text(
@@ -690,7 +692,7 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                             style: GoogleFonts.cairo(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
-                              color: _gatewayConfig.isConfigured ? const Color(0xFF198754) : Colors.orange.shade800,
+                              color: _gatewayConfig.isConfigured ? colorScheme.tertiary : colorScheme.onSecondaryFixedVariant,
                             ),
                           ),
                         ],
@@ -734,21 +736,21 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
               padding: const EdgeInsets.all(16),
               margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
-                color: Colors.amber.shade800.withValues(alpha: 0.12),
+                color: colorScheme.onSecondaryFixedVariant.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: Colors.amber.shade800.withValues(alpha: 0.4)),
+                border: Border.all(color: colorScheme.onSecondaryFixedVariant.withValues(alpha: 0.4)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.info_outline_rounded, color: Colors.amber.shade900, size: 22),
+                      Icon(Icons.info_outline_rounded, color: colorScheme.onSecondaryContainer, size: 22),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           widget.isAr ? 'البوابة السحابية بحاجة للضبط أولاً' : 'Gateway configuration required',
-                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.amber.shade900),
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 14, color: colorScheme.onSecondaryContainer),
                         ),
                       ),
                     ],
@@ -763,8 +765,8 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                   const SizedBox(height: 12),
                   FilledButton.tonalIcon(
                     style: FilledButton.styleFrom(
-                      backgroundColor: Colors.amber.shade800.withValues(alpha: 0.2),
-                      foregroundColor: const Color(0xFF451A03),
+                      backgroundColor: colorScheme.onSecondaryFixedVariant.withValues(alpha: 0.2),
+                      foregroundColor: colorScheme.onSecondaryContainer,
                     ),
                     icon: const Icon(Icons.settings_rounded, size: 18),
                     label: Text(widget.strings.gatewayNotConfiguredBadge, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
@@ -780,9 +782,9 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFF198754).withValues(alpha: 0.08),
+                color: colorScheme.tertiary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: const Color(0xFF198754).withValues(alpha: 0.3)),
+                border: Border.all(color: colorScheme.tertiary.withValues(alpha: 0.3)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -792,10 +794,10 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                       Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF198754).withValues(alpha: 0.15),
+                          color: colorScheme.tertiary.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.poll_rounded, color: Color(0xFF198754), size: 18),
+                        child: Icon(Icons.poll_rounded, color: colorScheme.tertiary, size: 18),
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -803,7 +805,7 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                         style: GoogleFonts.cairo(
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
-                          color: const Color(0xFF0F5132),
+                          color: colorScheme.onTertiaryContainer,
                         ),
                       ),
                       const Spacer(),
@@ -811,12 +813,12 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF198754).withValues(alpha: 0.15),
+                            color: colorScheme.tertiary.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
                             widget.isAr ? 'خيارات متعددة مسموحة' : 'Multiple choices allowed',
-                            style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF0F5132)),
+                            style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.bold, color: colorScheme.onTertiaryContainer),
                           ),
                         ),
                     ],
@@ -838,12 +840,12 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                                 decoration: BoxDecoration(
                                   color: cs.surface,
                                   borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(color: const Color(0xFF198754).withValues(alpha: 0.25)),
+                                  border: Border.all(color: colorScheme.tertiary.withValues(alpha: 0.25)),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Icon(Icons.radio_button_unchecked_rounded, size: 13, color: Color(0xFF198754)),
+                                    Icon(Icons.radio_button_unchecked_rounded, size: 13, color: colorScheme.tertiary),
                                     const SizedBox(width: 6),
                                     Text(opt, style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600)),
                                   ],
@@ -879,22 +881,22 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF198754).withValues(alpha: 0.15),
+                          color: colorScheme.tertiary.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFF198754)),
+                          border: Border.all(color: colorScheme.tertiary),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const SizedBox(
+                            SizedBox(
                               width: 10,
                               height: 10,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF198754)),
+                              child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.tertiary),
                             ),
                             const SizedBox(width: 6),
                             Text(
                               widget.isAr ? 'جاري البث...' : 'Broadcasting...',
-                              style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF198754)),
+                              style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: colorScheme.tertiary),
                             ),
                           ],
                         ),
@@ -924,7 +926,7 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                       child: _buildStatChip(
                         title: widget.isAr ? 'تم بنجاح' : 'Success',
                         value: '$_sentCount',
-                        color: const Color(0xFF198754),
+                        color: colorScheme.tertiary,
                         cs: cs,
                       ),
                     ),
@@ -933,7 +935,7 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                       child: _buildStatChip(
                         title: widget.isAr ? 'تعذر' : 'Failed',
                         value: '$_failedCount',
-                        color: Colors.red.shade700,
+                        color: colorScheme.onErrorContainer,
                         cs: cs,
                       ),
                     ),
@@ -998,7 +1000,7 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                         height: 48,
                         child: FilledButton.icon(
                           style: FilledButton.styleFrom(
-                            backgroundColor: allSent ? const Color(0xFF0F5132) : const Color(0xFF198754),
+                            backgroundColor: allSent ? colorScheme.onTertiaryContainer : colorScheme.tertiary,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                           ),
                           icon: Icon(allSent ? Icons.replay_rounded : Icons.bolt_rounded, size: 22),
@@ -1032,7 +1034,7 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                       Expanded(
                         child: FilledButton.icon(
                           style: FilledButton.styleFrom(
-                            backgroundColor: Colors.red.shade700,
+                            backgroundColor: colorScheme.onErrorContainer,
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                           ),
@@ -1081,7 +1083,7 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                         Icon(
                           log.isSuccess ? Icons.check_circle_rounded : Icons.error_rounded,
                           size: 16,
-                          color: log.isSuccess ? const Color(0xFF198754) : Colors.red,
+                          color: log.isSuccess ? colorScheme.tertiary : colorScheme.error,
                         ),
                         const SizedBox(width: 8),
                         Expanded(
@@ -1094,7 +1096,7 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                           log.message,
                           style: GoogleFonts.cairo(
                             fontSize: 11,
-                            color: log.isSuccess ? const Color(0xFF0F5132) : Colors.red.shade900,
+                            color: log.isSuccess ? colorScheme.onTertiaryContainer : colorScheme.onErrorContainer,
                           ),
                         ),
                       ],
@@ -1193,7 +1195,7 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF198754),
+                      color: colorScheme.tertiary,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -1264,21 +1266,21 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF198754).withValues(alpha: 0.15),
+                                color: colorScheme.tertiary.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFF198754)),
+                                border: Border.all(color: colorScheme.tertiary),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.check_circle_rounded, color: Color(0xFF198754), size: 13),
+                                  Icon(Icons.check_circle_rounded, color: colorScheme.tertiary, size: 13),
                                   const SizedBox(width: 4),
                                   Text(
                                     widget.isAr ? 'تم الإرسال' : 'Sent',
                                     style: GoogleFonts.cairo(
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
-                                      color: const Color(0xFF198754),
+                                      color: colorScheme.tertiary,
                                     ),
                                   ),
                                 ],
@@ -1288,16 +1290,16 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: Colors.orange.shade800.withValues(alpha: 0.15),
+                                color: colorScheme.onSecondaryFixedVariant.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.orange.shade800),
+                                border: Border.all(color: colorScheme.onSecondaryFixedVariant),
                               ),
                               child: Text(
                                 widget.isAr ? 'تم التخطي' : 'Skipped',
                                 style: GoogleFonts.cairo(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.orange.shade800,
+                                  color: colorScheme.onSecondaryFixedVariant,
                                 ),
                               ),
                             ),
@@ -1359,7 +1361,7 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                               Icons.emoji_events_rounded,
                               contact.prizesWon.join(', '),
                               cs,
-                              accentColor: Colors.amber.shade800,
+                              accentColor: colorScheme.onSecondaryFixedVariant,
                             ),
                         ],
                       ),
@@ -1384,23 +1386,23 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFFDCF8C6).withValues(alpha: 0.35),
+              color: colorScheme.tertiaryContainer.withValues(alpha: 0.35),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFF25D366).withValues(alpha: 0.4)),
+              border: Border.all(color: colorScheme.tertiary.withValues(alpha: 0.4)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.chat_bubble_outline_rounded, size: 15, color: Color(0xFF075E54)),
+                    Icon(Icons.chat_bubble_outline_rounded, size: 15, color: colorScheme.onTertiaryContainer),
                     const SizedBox(width: 6),
                     Text(
                       widget.isAr ? 'نص الرسالة المجهزة لهذا العميل:' : 'Prepared WhatsApp message for this customer:',
                       style: GoogleFonts.cairo(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: const Color(0xFF075E54),
+                        color: colorScheme.onTertiaryContainer,
                       ),
                     ),
                   ],
@@ -1424,7 +1426,7 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
             height: 50,
             child: FilledButton.icon(
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF25D366),
+                backgroundColor: colorScheme.tertiary,
                 foregroundColor: Colors.white,
                 elevation: 2,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1468,7 +1470,7 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                 flex: isMobile ? 3 : 0,
                 child: TextButton.icon(
                   style: TextButton.styleFrom(
-                    foregroundColor: Colors.orange.shade800,
+                    foregroundColor: colorScheme.onSecondaryFixedVariant,
                     padding: EdgeInsets.symmetric(horizontal: isMobile ? 6 : 16, vertical: 10),
                   ),
                   icon: const Icon(Icons.redo_rounded, size: 15),
@@ -1518,10 +1520,10 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: const Color(0xFF198754).withValues(alpha: 0.15),
+                color: colorScheme.tertiary.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.check_circle_rounded, color: Color(0xFF198754), size: 64),
+              child: Icon(Icons.check_circle_rounded, color: colorScheme.tertiary, size: 64),
             ),
             const SizedBox(height: 20),
             Text(
@@ -1571,7 +1573,7 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
                 const SizedBox(width: 12),
                 FilledButton.icon(
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF198754),
+                    backgroundColor: colorScheme.tertiary,
                     padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),

@@ -60,6 +60,8 @@ class ClientReceiptUploadScreen extends ConsumerStatefulWidget {
 }
 
 class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadScreen> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   static const String kAutoAllCampaignsId = '__AUTO_ALL__';
   bool _isAutoMultiCampaignMode = true;
 
@@ -1625,10 +1627,17 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
             child: IconButton.filledTonal(
               icon: Icon(
                 Icons.campaign_rounded,
-                size: isMobile ? 18 : 20,
+                size: isMobile ? 16 : 20,
                 color: colorScheme.primary,
               ),
-              padding: EdgeInsets.all(isMobile ? 6 : 8),
+              style: isMobile
+                  ? IconButton.styleFrom(
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      minimumSize: const Size(30, 30),
+                      padding: const EdgeInsets.all(5),
+                    )
+                  : null,
+              padding: EdgeInsets.all(isMobile ? 5 : 8),
               constraints: isMobile ? const BoxConstraints() : null,
               visualDensity: isMobile ? VisualDensity.compact : VisualDensity.standard,
               onPressed: () {
@@ -1645,10 +1654,17 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
             child: IconButton.filledTonal(
               icon: Icon(
                 Icons.card_giftcard_rounded,
-                size: isMobile ? 18 : 20,
+                size: isMobile ? 16 : 20,
                 color: colorScheme.primary,
               ),
-              padding: EdgeInsets.all(isMobile ? 6 : 8),
+              style: isMobile
+                  ? IconButton.styleFrom(
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      minimumSize: const Size(30, 30),
+                      padding: const EdgeInsets.all(5),
+                    )
+                  : null,
+              padding: EdgeInsets.all(isMobile ? 5 : 8),
               constraints: isMobile ? const BoxConstraints() : null,
               visualDensity: isMobile ? VisualDensity.compact : VisualDensity.standard,
               onPressed: () {
@@ -1665,10 +1681,17 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
             child: IconButton.filledTonal(
               icon: Icon(
                 Icons.receipt_long_rounded,
-                size: isMobile ? 18 : 20,
+                size: isMobile ? 16 : 20,
                 color: colorScheme.primary,
               ),
-              padding: EdgeInsets.all(isMobile ? 6 : 8),
+              style: isMobile
+                  ? IconButton.styleFrom(
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      minimumSize: const Size(30, 30),
+                      padding: const EdgeInsets.all(5),
+                    )
+                  : null,
+              padding: EdgeInsets.all(isMobile ? 5 : 8),
               constraints: isMobile ? const BoxConstraints() : null,
               visualDensity: isMobile ? VisualDensity.compact : VisualDensity.standard,
               onPressed: () {
@@ -1926,13 +1949,13 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                               Container(
                                                 padding: const EdgeInsets.all(3),
                                                 decoration: BoxDecoration(
-                                                  color: Colors.amber.shade100,
+                                                  color: colorScheme.secondaryContainer,
                                                   borderRadius: BorderRadius.circular(6),
                                                 ),
                                                 child: Icon(
                                                   Icons.auto_awesome_rounded,
                                                   size: 15,
-                                                  color: Colors.amber.shade900,
+                                                  color: colorScheme.onSecondaryContainer,
                                                 ),
                                               ),
                                               const SizedBox(width: 8),
@@ -2090,7 +2113,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                               helperStyle: GoogleFonts.cairo(
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.w600,
-                                color: const Color(0xFF1E7E34),
+                                color: colorScheme.onTertiaryFixedVariant,
                               ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(16),
@@ -2300,10 +2323,10 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                                 child: Row(
                                                   mainAxisSize: MainAxisSize.min,
                                                   children: [
-                                                    const Icon(
+                                                    Icon(
                                                       Icons.layers_rounded,
                                                       size: 14,
-                                                      color: Color(0xFF818CF8),
+                                                      color: colorScheme.primaryFixedDim,
                                                     ),
                                                     const SizedBox(width: 6),
                                                     Text(
@@ -2728,7 +2751,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
               children: [
                 Row(
                   children: [
-                    Icon(Icons.monetization_on_outlined, size: 18, color: Colors.teal.shade700),
+                    Icon(Icons.monetization_on_outlined, size: 18, color: colorScheme.onTertiaryFixedVariant),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -2741,16 +2764,16 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                       decoration: BoxDecoration(
-                        color: Colors.teal.shade50,
+                        color: colorScheme.tertiaryContainer,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.teal.shade200),
+                        border: Border.all(color: colorScheme.tertiaryFixedDim),
                       ),
                       child: Text(
                         event.minimumSpend > 0 ? '${event.minimumSpend} ج.م' : (isAr ? 'بدون حد أدنى' : 'No Minimum'),
                         style: GoogleFonts.cairo(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: Colors.teal.shade800,
+                          color: colorScheme.onTertiaryFixedVariant,
                         ),
                       ),
                     ),
@@ -2830,7 +2853,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                             '🎁 ${isAr ? 'الهدية المستحقة:' : 'Reward:'} ${rule.rewardValue.isNotEmpty ? rule.rewardValue : (rule.linkedGifts.isNotEmpty ? rule.linkedGifts.map((g) => "${g.quantity}x ${g.giftName}").join(", ") : (rule.linkedGiftName ?? ''))}',
                             style: GoogleFonts.cairo(
                               fontSize: 11,
-                              color: Colors.teal.shade700,
+                              color: colorScheme.onTertiaryFixedVariant,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -2848,16 +2871,16 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.amber.shade50.withValues(alpha: 0.5),
+              color: colorScheme.secondaryContainer.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.amber.shade200),
+              border: Border.all(color: colorScheme.secondaryFixedDim),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(Icons.tips_and_updates_rounded, size: 18, color: Colors.amber.shade800),
+                    Icon(Icons.tips_and_updates_rounded, size: 18, color: colorScheme.onSecondaryFixedVariant),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -2865,7 +2888,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                         style: GoogleFonts.cairo(
                           fontSize: 12.5,
                           fontWeight: FontWeight.bold,
-                          color: Colors.amber.shade900,
+                          color: colorScheme.onSecondaryContainer,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -2880,7 +2903,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                   style: GoogleFonts.cairo(
                     fontSize: 11.5,
                     height: 1.5,
-                    color: Colors.brown.shade800,
+                    color: colorScheme.onSecondaryContainer,
                   ),
                 ),
               ],

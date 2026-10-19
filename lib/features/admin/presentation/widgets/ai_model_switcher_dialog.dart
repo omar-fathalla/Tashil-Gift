@@ -20,6 +20,8 @@ class AiModelSwitcherDialog extends ConsumerStatefulWidget {
 }
 
 class _AiModelSwitcherDialogState extends ConsumerState<AiModelSwitcherDialog> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   late String _selectedPrimaryModel;
   late String _selectedFallbackModel;
   late AiAgentMode _selectedAgentMode;
@@ -77,7 +79,7 @@ class _AiModelSwitcherDialogState extends ConsumerState<AiModelSwitcherDialog> {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: const Color(0xFF10B981),
+            backgroundColor: colorScheme.tertiary,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             content: Row(
@@ -206,13 +208,13 @@ class _AiModelSwitcherDialogState extends ConsumerState<AiModelSwitcherDialog> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF6750A4), Color(0xFF006C50)],
+              gradient: LinearGradient(
+                colors: [colorScheme.primary, colorScheme.tertiary],
               ),
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF6750A4).withValues(alpha: 0.3),
+                  color: colorScheme.primary.withValues(alpha: 0.3),
                   blurRadius: 8,
                   offset: const Offset(0, 3),
                 ),
@@ -344,12 +346,12 @@ class _AiModelSwitcherDialogState extends ConsumerState<AiModelSwitcherDialog> {
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
                             color: preset.isLatest
-                                ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                                ? colorScheme.tertiary.withValues(alpha: 0.15)
                                 : colorScheme.surfaceContainerHighest,
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
                               color: preset.isLatest
-                                  ? const Color(0xFF10B981).withValues(alpha: 0.5)
+                                  ? colorScheme.tertiary.withValues(alpha: 0.5)
                                   : colorScheme.outlineVariant.withValues(alpha: 0.5),
                             ),
                           ),
@@ -358,7 +360,7 @@ class _AiModelSwitcherDialogState extends ConsumerState<AiModelSwitcherDialog> {
                             style: GoogleFonts.cairo(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
-                              color: preset.isLatest ? const Color(0xFF047857) : colorScheme.onSurfaceVariant,
+                              color: preset.isLatest ? colorScheme.onTertiaryFixedVariant : colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ),
@@ -427,16 +429,16 @@ class _AiModelSwitcherDialogState extends ConsumerState<AiModelSwitcherDialog> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF6750A4).withValues(alpha: 0.12),
+                      color: colorScheme.primary.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFF6750A4).withValues(alpha: 0.3)),
+                      border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3)),
                     ),
                     child: Text(
                       isAr ? 'أي موديل مستقبلي ✨' : 'Future-Proof ✨',
                       style: GoogleFonts.cairo(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
-                        color: const Color(0xFF6750A4),
+                        color: colorScheme.primary,
                       ),
                     ),
                   ),
@@ -481,11 +483,11 @@ class _AiModelSwitcherDialogState extends ConsumerState<AiModelSwitcherDialog> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             color: isSelected
-                ? const Color(0xFF6750A4).withValues(alpha: 0.12)
+                ? colorScheme.primary.withValues(alpha: 0.12)
                 : colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: isSelected ? const Color(0xFF6750A4) : colorScheme.outlineVariant.withValues(alpha: 0.4),
+              color: isSelected ? colorScheme.primary : colorScheme.outlineVariant.withValues(alpha: 0.4),
               width: isSelected ? 2 : 1,
             ),
           ),
@@ -493,7 +495,7 @@ class _AiModelSwitcherDialogState extends ConsumerState<AiModelSwitcherDialog> {
             children: [
               Icon(
                 isSelected ? Icons.check_circle_rounded : Icons.radio_button_off_rounded,
-                color: isSelected ? const Color(0xFF6750A4) : colorScheme.onSurfaceVariant,
+                color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
                 size: 20,
               ),
               const SizedBox(width: 14),
@@ -503,7 +505,7 @@ class _AiModelSwitcherDialogState extends ConsumerState<AiModelSwitcherDialog> {
                   style: GoogleFonts.cairo(
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                     fontSize: 13,
-                    color: isSelected ? const Color(0xFF6750A4) : colorScheme.onSurface,
+                    color: isSelected ? colorScheme.primary : colorScheme.onSurface,
                   ),
                 ),
               ),
@@ -580,7 +582,7 @@ class _AiModelSwitcherDialogState extends ConsumerState<AiModelSwitcherDialog> {
               style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
             ),
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF10B981),
+              backgroundColor: colorScheme.tertiary,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

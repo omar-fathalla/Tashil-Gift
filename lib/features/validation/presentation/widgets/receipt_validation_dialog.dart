@@ -717,7 +717,7 @@ class ReceiptValidationReportDialog extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
                         color: isDuplicate
-                            ? Colors.amber.shade100
+                            ? colorScheme.secondaryContainer
                             : colorScheme.error.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -728,7 +728,7 @@ class ReceiptValidationReportDialog extends StatelessWidget {
                         style: GoogleFonts.cairo(
                           fontSize: 10.5,
                           fontWeight: FontWeight.bold,
-                          color: isDuplicate ? Colors.amber.shade900 : colorScheme.error,
+                          color: isDuplicate ? colorScheme.onSecondaryContainer : colorScheme.error,
                         ),
                       ),
                     ),

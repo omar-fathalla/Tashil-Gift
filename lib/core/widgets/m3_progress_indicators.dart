@@ -170,7 +170,7 @@ class M3ProgressCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         side: BorderSide(
           color: isComplete
-              ? Colors.green.shade400
+              ? colorScheme.primary
               : colorScheme.primary.withValues(alpha: 0.35),
           width: 1.5,
         ),
@@ -188,14 +188,12 @@ class M3ProgressCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: isComplete
-                        ? Colors.green.withValues(alpha: 0.15)
-                        : colorScheme.primaryContainer,
+                    color: colorScheme.primaryContainer,
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Icon(
                     isComplete ? Icons.check_circle_rounded : icon,
-                    color: isComplete ? Colors.green.shade700 : colorScheme.primary,
+                    color: isComplete ? colorScheme.onPrimaryContainer : colorScheme.primary,
                     size: 24,
                   ),
                 ),
@@ -233,9 +231,7 @@ class M3ProgressCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: isComplete
-                          ? Colors.green.shade800
-                          : colorScheme.primary,
+                      color: colorScheme.primary,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -243,7 +239,7 @@ class M3ProgressCard extends StatelessWidget {
                       style: GoogleFonts.cairo(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: colorScheme.onPrimary,
                       ),
                     ),
                   ),
@@ -256,7 +252,7 @@ class M3ProgressCard extends StatelessWidget {
             M3LinearProgress(
               value: progress,
               height: 10,
-              color: isComplete ? Colors.green.shade600 : colorScheme.primary,
+              color: colorScheme.primary,
               backgroundColor: colorScheme.surfaceContainerHighest,
             ),
 
@@ -273,7 +269,7 @@ class M3ProgressCard extends StatelessWidget {
                     style: GoogleFonts.cairo(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: isComplete ? Colors.green.shade700 : colorScheme.primary,
+                      color: colorScheme.primary,
                     ),
                   )
                 else if (hasProgress)
@@ -282,7 +278,7 @@ class M3ProgressCard extends StatelessWidget {
                     style: GoogleFonts.cairo(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: isComplete ? Colors.green.shade700 : colorScheme.onSurfaceVariant,
+                      color: isComplete ? colorScheme.primary : colorScheme.onSurfaceVariant,
                     ),
                   )
                 else

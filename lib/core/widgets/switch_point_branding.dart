@@ -166,10 +166,36 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
               ],
 
               // 3. Version & Build Badge + Dark Mode Toggle on Mobile
-              _buildHeaderVersionPill(colorScheme, isMobile: true),
+              _buildHeaderVersionPill(
+                colorScheme,
+                isMobile: true,
+                isCompact: screenWidth < 480,
+              ),
               const SizedBox(width: 6),
               if (showDarkModeToggle)
                 _buildThemeModeButton(ref, colorScheme, isDark, true),
+              if (showMobileMenu && onMobileMenuPressed != null) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.menu_rounded,
+                      size: 20,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                  tooltip: isAr ? 'القائمة الرئيسية والإعدادات' : 'Menu & Settings',
+                  visualDensity: VisualDensity.compact,
+                  constraints: const BoxConstraints(),
+                  padding: const EdgeInsets.all(2),
+                  onPressed: onMobileMenuPressed,
+                ),
+              ],
             ],
           ),
         ),
@@ -271,12 +297,16 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
     );
   }
 
-  Widget _buildHeaderVersionPill(ColorScheme colorScheme, {required bool isMobile}) {
+  Widget _buildHeaderVersionPill(
+    ColorScheme colorScheme, {
+    required bool isMobile,
+    bool isCompact = false,
+  }) {
     return Tooltip(
       message: AppVersionConfig.tooltipText,
       child: Container(
         padding: EdgeInsets.symmetric(
-          horizontal: isMobile ? 8 : 12,
+          horizontal: isCompact ? 6 : (isMobile ? 8 : 12),
           vertical: isMobile ? 4 : 6,
         ),
         decoration: BoxDecoration(
@@ -292,14 +322,16 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
           children: [
             Icon(
               Icons.verified_outlined,
-              size: isMobile ? 13 : 15,
+              size: isCompact ? 12 : (isMobile ? 13 : 15),
               color: colorScheme.primary,
             ),
-            SizedBox(width: isMobile ? 4 : 6),
+            SizedBox(width: isCompact ? 3 : (isMobile ? 4 : 6)),
             Text(
-              AppVersionConfig.fullBuildDisplay,
+              isCompact
+                  ? AppVersionConfig.versionDisplay
+                  : AppVersionConfig.fullBuildDisplay,
               style: GoogleFonts.cairo(
-                fontSize: isMobile ? 10.5 : 12,
+                fontSize: isCompact ? 9.5 : (isMobile ? 10.5 : 12),
                 fontWeight: FontWeight.w700,
                 color: colorScheme.onPrimaryContainer,
                 height: 1.1,
@@ -1032,7 +1064,7 @@ class SwitchPointMobileMenuSheet extends ConsumerWidget {
                           dense: true,
                           secondary: Icon(
                             isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
-                            color: isDark ? Colors.amber : colorScheme.primary,
+                            color: colorScheme.primary,
                             size: 20,
                           ),
                           title: Text(
@@ -1081,10 +1113,10 @@ class SwitchPointMobileMenuSheet extends ConsumerWidget {
                           leading: Container(
                             padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
-                              color: Colors.green.shade50,
+                              color: colorScheme.primaryContainer,
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Icon(Icons.chat_rounded, color: Colors.green.shade700, size: 18),
+                            child: Icon(Icons.chat_rounded, color: colorScheme.onPrimaryContainer, size: 18),
                           ),
                           title: Text(
                             'WhatsApp (مصر)',
@@ -1105,10 +1137,10 @@ class SwitchPointMobileMenuSheet extends ConsumerWidget {
                           leading: Container(
                             padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
-                              color: Colors.green.shade50,
+                              color: colorScheme.primaryContainer,
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Icon(Icons.chat_rounded, color: Colors.green.shade700, size: 18),
+                            child: Icon(Icons.chat_rounded, color: colorScheme.onPrimaryContainer, size: 18),
                           ),
                           title: Text(
                             'WhatsApp (الإمارات)',
@@ -1129,10 +1161,10 @@ class SwitchPointMobileMenuSheet extends ConsumerWidget {
                           leading: Container(
                             padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
+                              color: colorScheme.secondaryContainer,
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Icon(Icons.mail_outline_rounded, color: Colors.blue.shade700, size: 18),
+                            child: Icon(Icons.mail_outline_rounded, color: colorScheme.onSecondaryContainer, size: 18),
                           ),
                           title: Text(
                             isAr ? 'البريد الإلكتروني للدعم' : 'Support Email',
@@ -1153,10 +1185,10 @@ class SwitchPointMobileMenuSheet extends ConsumerWidget {
                           leading: Container(
                             padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
-                              color: Colors.purple.shade50,
+                              color: colorScheme.tertiaryContainer,
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Icon(Icons.public_rounded, color: Colors.purple.shade700, size: 18),
+                            child: Icon(Icons.public_rounded, color: colorScheme.onTertiaryContainer, size: 18),
                           ),
                           title: Text(
                             isAr ? 'موقع سويتش بوينت الرسمي' : 'Switch Point Website',
