@@ -18,10 +18,12 @@ import '../../../core/constants/country_currency_config.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../core/services/campaign_ai_assistant_service.dart';
+import '../../../core/services/partner_portal_auth_service.dart';
 import '../domain/company_model.dart';
 import '../domain/event_model.dart';
 import '../domain/company_gift_model.dart';
 import '../domain/retail_chain_model.dart';
+import 'widgets/portal_credentials_dialog.dart';
 import 'widgets/smart_branch_batch_importer_dialog.dart';
 
 
@@ -84,6 +86,10 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   bool _requireVoucherSerials = false;
   bool _allowComplementaryReceipts = false;
   bool _enableWhatsAppWinnerNotification = true;
+  bool _hasCustomAgencyCredentials = false;
+  late final TextEditingController _customAgencyUsernameController;
+  late final TextEditingController _customAgencyPasswordController;
+  int _customAgencyCredentialVersion = 1;
   
   DateTime? _startDate;
   DateTime? _endDate;
@@ -114,6 +120,28 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   final Map<String, String?> _chainSelectedGovernorateFilterMap = {};
   List<BranchModel> _availableBranches = [];
   bool _isLoadingBranches = false;
+
+  // Memoized Firestore Streams (Rule 9: Never create streams inside build)
+  Stream<QuerySnapshot>? _companiesStream;
+  Stream<List<RetailChainModel>>? _chainsStream;
+
+  Stream<QuerySnapshot>? _ensureCompaniesStream() {
+    if (_companiesStream == null) {
+      try {
+        _companiesStream = ref.read(firestoreProvider).collection('companies').snapshots();
+      } catch (_) {}
+    }
+    return _companiesStream;
+  }
+
+  Stream<List<RetailChainModel>>? _ensureChainsStream() {
+    if (_chainsStream == null) {
+      try {
+        _chainsStream = ref.read(retailChainsServiceProvider).getRetailChainsStream();
+      } catch (_) {}
+    }
+    return _chainsStream;
+  }
 
   String? get _selectedRetailChainId {
     final unique = _selectedRetailChainIds.toSet().where((s) => s.isNotEmpty).toList();
@@ -182,6 +210,10 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     _requireVoucherSerials = e?.requireVoucherSerials ?? false;
     _allowComplementaryReceipts = e?.allowComplementaryReceipts ?? false;
     _enableWhatsAppWinnerNotification = e?.enableWhatsAppWinnerNotification ?? true;
+    _hasCustomAgencyCredentials = e?.hasCustomAgencyCredentials ?? false;
+    _customAgencyUsernameController = TextEditingController(text: e?.customAgencyUsername ?? '');
+    _customAgencyPasswordController = TextEditingController(text: e?.customAgencyPassword ?? '');
+    _customAgencyCredentialVersion = e?.customAgencyCredentialVersion ?? 1;
     _maxChancesController = TextEditingController(
       text: (e?.maxChancesPerReceipt != null && e!.maxChancesPerReceipt > 0)
           ? e.maxChancesPerReceipt.toString()
@@ -1651,6 +1683,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     _welcomeMessageController.dispose();
     _termsController.dispose();
     _maxChancesController.dispose();
+    _customAgencyUsernameController.dispose();
+    _customAgencyPasswordController.dispose();
     super.dispose();
   }
 
@@ -3887,6 +3921,23 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         isPromoterActive: widget.eventToEdit?.isPromoterActive ?? true,
         isAgencyActive: widget.eventToEdit?.isAgencyActive ?? true,
         isManagerActive: widget.eventToEdit?.isManagerActive ?? true,
+        hasCustomAgencyCredentials: _hasCustomAgencyCredentials,
+        customAgencyUsername: _hasCustomAgencyCredentials
+            ? (_customAgencyUsernameController.text.trim().isNotEmpty
+                ? _customAgencyUsernameController.text.trim()
+                : 'ops_${rawSlug}_custom')
+            : '',
+        customAgencyPassword: _hasCustomAgencyCredentials
+            ? (_customAgencyPasswordController.text.trim().isNotEmpty
+                ? _customAgencyPasswordController.text.trim()
+                : PartnerPortalAuthService.defaultAgencyPassword(rawSlug))
+            : '',
+        customAgencyCredentialVersion: (widget.eventToEdit != null &&
+                (widget.eventToEdit!.hasCustomAgencyCredentials != _hasCustomAgencyCredentials ||
+                    widget.eventToEdit!.customAgencyUsername != _customAgencyUsernameController.text.trim() ||
+                    widget.eventToEdit!.customAgencyPassword != _customAgencyPasswordController.text.trim()))
+            ? _customAgencyCredentialVersion + 1
+            : _customAgencyCredentialVersion,
         gameType: _selectedGameType,
         allocatedPrizes: () {
           final List<AllocatedPrize> prizes = [];
@@ -4059,6 +4110,16 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         );
       }
 
+      if (createdEventId.isNotEmpty) {
+        await ref.read(partnerPortalAuthServiceProvider).saveCampaignAgencyOverride(
+              eventId: createdEventId,
+              companySlug: event.companySlug,
+              hasCustomAgencyCredentials: event.hasCustomAgencyCredentials,
+              customAgencyUsername: event.customAgencyUsername,
+              customAgencyPassword: event.customAgencyPassword,
+            );
+      }
+
       // Synchronize company master inventory in Firestore
       await ref.read(companyGiftsServiceProvider).syncCompanyGiftsAvailableQuantities(event.companySlug);
 
@@ -4184,8 +4245,37 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isAr = ref.isArabic;
+    final authService = ref.read(partnerPortalAuthServiceProvider);
+    final resolvedCreds = await authService.resolveCredentials(
+      companySlug: event.companySlug,
+      companyNameHint: event.targetCompany,
+      eventId: eventId,
+    );
+    if (!context.mounted) return;
     final promoterUrl = AppUrlBuilder.buildPromoterUrl(event.companySlug, eventId: eventId);
+    final agencyOpsUrl = AppUrlBuilder.buildAgencyOpsUrl(event.companySlug, eventId: eventId);
     final managerUrl = AppUrlBuilder.buildManagerPortalUrl(event.companySlug, eventId: eventId);
+
+    final agencyWhatsAppCard = PartnerPortalAuthService.buildWhatsAppLoginCard(
+      role: PartnerPortalRole.agencyOps,
+      companyName: event.targetCompany,
+      campaignName: event.eventName,
+      portalUrl: agencyOpsUrl,
+      username: resolvedCreds.effectiveAgencyUsername,
+      password: resolvedCreds.effectiveAgencyPassword,
+      isCustomCampaignTier: resolvedCreds.hasCustomAgencyCredentials,
+      isAr: isAr,
+    );
+    final brandWhatsAppCard = PartnerPortalAuthService.buildWhatsAppLoginCard(
+      role: PartnerPortalRole.brandManager,
+      companyName: event.targetCompany,
+      campaignName: event.eventName,
+      portalUrl: managerUrl,
+      username: resolvedCreds.brandManagerUsername,
+      password: resolvedCreds.brandManagerPassword,
+      isCustomCampaignTier: false,
+      isAr: isAr,
+    );
 
     await showDialog(
       context: context,
@@ -4212,7 +4302,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           ],
         ),
         content: SizedBox(
-          width: 520,
+          width: 560,
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -4220,12 +4310,12 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               children: [
                 Text(
                   isAr
-                      ? 'تم توليد الروابط المباشرة للحملة بنجاح باسم إنجليزي فريد (${event.companySlug}). يمكنك نسخ الروابط أدناه وبدء الفحص والتشغيل من أي مكان:'
-                      : 'Live campaign URLs generated with unique English slug (${event.companySlug}). You can copy the links below:',
+                      ? 'تم توليد الروابط الثلاثة المباشرة للحملة بنجاح (${event.companySlug})، مع بطاقات دخول الواتساب الجاهزة:'
+                      : 'All 3 campaign links generated (${event.companySlug}) with 1-Click WhatsApp login cards:',
                   style: GoogleFonts.cairo(fontSize: 13, color: colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 16),
-                // Promoter Link Card
+                // 1. Promoter Link Card (Open / Frictionless)
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -4238,11 +4328,13 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.campaign_rounded, size: 18, color: colorScheme.onTertiaryFixedVariant),
+                          Icon(Icons.qr_code_scanner_rounded, size: 18, color: colorScheme.onTertiaryFixedVariant),
                           const SizedBox(width: 6),
-                          Text(
-                            isAr ? 'رابط البروموتر والعميل (Client Submission):' : 'Promoter & Client Link:',
-                            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12, color: colorScheme.onTertiaryContainer),
+                          Expanded(
+                            child: Text(
+                              isAr ? '1. رابط البروموتر الميداني (مفتوح بدون باسورد):' : '1. Field Promoter Link (Open / No Password):',
+                              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12, color: colorScheme.onTertiaryContainer),
+                            ),
                           ),
                         ],
                       ),
@@ -4273,7 +4365,82 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Company Manager Portal Link Card
+                // 2. Agency Operations Supervisor Link Card (Protected + Stock Edit)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: colorScheme.secondaryContainer.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: colorScheme.secondary.withValues(alpha: 0.35)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.inventory_rounded, size: 18, color: colorScheme.secondary),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              isAr
+                                  ? '2. رابط شركة الدعاية والعمليات (تعديل المخزون والهدايا):'
+                                  : '2. Agency Operations Link (Stock & Gifts Management):',
+                              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12, color: colorScheme.onSecondaryContainer),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      SelectableText(
+                        agencyOpsUrl,
+                        style: GoogleFonts.sourceCodePro(fontSize: 12, color: colorScheme.onSecondaryContainer, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${isAr ? 'المستخدم:' : 'User:'} ${resolvedCreds.effectiveAgencyUsername}  |  ${isAr ? 'كلمة المرور:' : 'Pass:'} ${resolvedCreds.effectiveAgencyPassword}',
+                        style: GoogleFonts.sourceCodePro(fontSize: 11, color: colorScheme.onSecondaryContainer, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.end,
+                        children: [
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.link_rounded, size: 16),
+                            label: Text(isAr ? 'نسخ الرابط فقط' : 'Copy URL', style: GoogleFonts.cairo(fontSize: 11)),
+                            onPressed: () {
+                              Clipboard.setData(ClipboardData(text: agencyOpsUrl));
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                SnackBar(
+                                  content: Text(isAr ? 'تم نسخ رابط شركة الدعاية!' : 'Agency Ops URL Copied!'),
+                                  backgroundColor: colorScheme.secondary,
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                          ),
+                          FilledButton.tonalIcon(
+                            icon: const Icon(Icons.chat_rounded, size: 16),
+                            label: Text(isAr ? 'نسخ بطاقة دخول واتساب' : 'Copy WhatsApp Login Card', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold)),
+                            onPressed: () {
+                              Clipboard.setData(ClipboardData(text: agencyWhatsAppCard));
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                SnackBar(
+                                  content: Text(isAr ? 'تم نسخ بطاقة دخول مشرف الدعاية للواتساب!' : 'Agency WhatsApp Card Copied!'),
+                                  backgroundColor: colorScheme.secondary,
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // 3. Company Manager Portal Link Card (Protected + Read-Only Stock)
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -4288,9 +4455,11 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         children: [
                           Icon(Icons.storefront_rounded, size: 18, color: colorScheme.onPrimaryFixedVariant),
                           const SizedBox(width: 6),
-                          Text(
-                            isAr ? 'رابط لوحة مدير وشريك الشركة (Partner Portal):' : 'Company Manager Portal Link:',
-                            style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12, color: colorScheme.onPrimaryContainer),
+                          Expanded(
+                            child: Text(
+                              isAr ? '3. رابط مدير العلامة التجارية (تقارير ومخزون للقراءة فقط):' : '3. Brand Executive Portal (Analytics & Read-Only Stock):',
+                              style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12, color: colorScheme.onPrimaryContainer),
+                            ),
                           ),
                         ],
                       ),
@@ -4299,23 +4468,46 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         managerUrl,
                         style: GoogleFonts.sourceCodePro(fontSize: 12, color: colorScheme.onPrimaryContainer, fontWeight: FontWeight.w600),
                       ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${isAr ? 'المستخدم:' : 'User:'} ${resolvedCreds.brandManagerUsername}  |  ${isAr ? 'كلمة المرور:' : 'Pass:'} ${resolvedCreds.brandManagerPassword}',
+                        style: GoogleFonts.sourceCodePro(fontSize: 11, color: colorScheme.onPrimaryContainer, fontWeight: FontWeight.bold),
+                      ),
                       const SizedBox(height: 8),
-                      Align(
-                        alignment: AlignmentDirectional.centerEnd,
-                        child: FilledButton.tonalIcon(
-                          icon: const Icon(Icons.copy_rounded, size: 16),
-                          label: Text(isAr ? 'نسخ رابط لوحة المدير' : 'Copy Manager Link', style: GoogleFonts.cairo(fontSize: 12)),
-                          onPressed: () {
-                            Clipboard.setData(ClipboardData(text: managerUrl));
-                            ScaffoldMessenger.of(ctx).showSnackBar(
-                              SnackBar(
-                                content: Text(isAr ? 'تم نسخ رابط لوحة المدير بنجاح!' : 'Manager Portal Link Copied!'),
-                                backgroundColor: colorScheme.primary,
-                                duration: const Duration(seconds: 2),
-                              ),
-                            );
-                          },
-                        ),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.end,
+                        children: [
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.link_rounded, size: 16),
+                            label: Text(isAr ? 'نسخ الرابط فقط' : 'Copy URL', style: GoogleFonts.cairo(fontSize: 11)),
+                            onPressed: () {
+                              Clipboard.setData(ClipboardData(text: managerUrl));
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                SnackBar(
+                                  content: Text(isAr ? 'تم نسخ رابط مدير العلامة!' : 'Manager Portal URL Copied!'),
+                                  backgroundColor: colorScheme.primary,
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                          ),
+                          FilledButton.tonalIcon(
+                            icon: const Icon(Icons.chat_rounded, size: 16),
+                            label: Text(isAr ? 'نسخ بطاقة دخول واتساب' : 'Copy WhatsApp Login Card', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold)),
+                            onPressed: () {
+                              Clipboard.setData(ClipboardData(text: brandWhatsAppCard));
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                SnackBar(
+                                  content: Text(isAr ? 'تم نسخ بطاقة دخول مدير العلامة للواتساب!' : 'Brand Executive WhatsApp Card Copied!'),
+                                  backgroundColor: colorScheme.primary,
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -4503,7 +4695,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
                     // Company Selection Dropdown from Coded Catalog
                     StreamBuilder<QuerySnapshot>(
-                      stream: ref.watch(firestoreProvider).collection('companies').snapshots(),
+                      stream: _ensureCompaniesStream(),
                       builder: (context, snapshot) {
                         final docs = snapshot.data?.docs ?? [];
                         final companies = docs.map((d) => CompanyModel.fromFirestore(d)).toList();
@@ -4808,6 +5000,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     _buildVoucherSerialsSettingSection(context, colorScheme, isMobile),
                     _buildComplementaryReceiptsSettingSection(context, colorScheme, isMobile),
                     _buildWhatsAppWinnerNotificationSettingSection(context, colorScheme, isMobile),
+                    _buildCampaignAgencyCredentialsSettingSection(context, colorScheme, isMobile),
                   ],
                 ),
 
@@ -6148,6 +6341,194 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               });
             },
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCampaignAgencyCredentialsSettingSection(
+    BuildContext context,
+    ColorScheme colorScheme,
+    bool isMobile,
+  ) {
+    final isAr = ref.isArabic;
+    final slugPreview = _companySlugController.text.trim().isNotEmpty
+        ? _companySlugController.text.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '-')
+        : _targetCompanyController.text.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '-');
+    final defaultOpsUser = PartnerPortalAuthService.defaultAgencyUsername(slugPreview);
+    final defaultOpsPass = PartnerPortalAuthService.defaultAgencyPassword(slugPreview);
+
+    return Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: EdgeInsets.all(isMobile ? 14 : 18),
+      decoration: BoxDecoration(
+        color: _hasCustomAgencyCredentials
+            ? colorScheme.secondaryContainer.withValues(alpha: 0.25)
+            : colorScheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: _hasCustomAgencyCredentials
+              ? colorScheme.secondary.withValues(alpha: 0.45)
+              : colorScheme.outlineVariant,
+          width: _hasCustomAgencyCredentials ? 1.5 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: _hasCustomAgencyCredentials
+                      ? colorScheme.secondaryContainer
+                      : colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.admin_panel_settings_rounded,
+                  color: _hasCustomAgencyCredentials
+                      ? colorScheme.onSecondaryContainer
+                      : colorScheme.onSurfaceVariant,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            isAr
+                                ? 'تخصيص كلمة مرور مستقلة لشركة الدعاية في هذه الحملة (Tier 2)'
+                                : 'Custom Campaign-Specific Agency Credentials (Tier 2)',
+                            style: GoogleFonts.cairo(
+                              fontSize: isMobile ? 14 : 15,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _hasCustomAgencyCredentials
+                                ? colorScheme.secondaryContainer
+                                : colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            _hasCustomAgencyCredentials
+                                ? (isAr ? 'مخصص للحملة 🔒' : 'Campaign Custom 🔒')
+                                : (isAr ? 'موروث من الشركة ($defaultOpsUser)' : 'Inherited ($defaultOpsUser)'),
+                            style: GoogleFonts.cairo(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: _hasCustomAgencyCredentials
+                                  ? colorScheme.onSecondaryContainer
+                                  : colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _hasCustomAgencyCredentials
+                          ? (isAr
+                              ? 'تعمل هذه الحملة باسم مستخدم وكلمة مرور مستقلين لشركة الدعاية والعمليات (لتعديل المخزون والهدايا في هذه الحملة فقط).'
+                              : 'This campaign uses isolated Agency Operations credentials for stock & gifts management.')
+                          : (isAr
+                              ? 'الوضع الافتراضي (Tier 1): ترث الحملة تلقائياً بيانات دخول شركة الدعاية الموحدة للشركة ($defaultOpsUser / $defaultOpsPass) دون الحاجة لإعداد يدوي.'
+                              : 'Default (Tier 1): Automatically inherits the company-wide Agency Operations credentials ($defaultOpsUser / $defaultOpsPass).'),
+                      style: GoogleFonts.cairo(
+                        fontSize: 12,
+                        color: colorScheme.onSurfaceVariant,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (widget.eventToEdit != null)
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(end: 8),
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      PortalCredentialsDialog.show(
+                        context,
+                        companySlug: slugPreview,
+                        companyName: _targetCompanyController.text.trim(),
+                        event: widget.eventToEdit,
+                      );
+                    },
+                    icon: const Icon(Icons.key_rounded, size: 16),
+                    label: Text(
+                      isAr ? 'بطاقات الدخول' : 'Login Cards',
+                      style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              Switch.adaptive(
+                value: _hasCustomAgencyCredentials,
+                activeTrackColor: colorScheme.secondary,
+                onChanged: (val) {
+                  setState(() {
+                    _hasCustomAgencyCredentials = val;
+                    if (val) {
+                      if (_customAgencyUsernameController.text.trim().isEmpty) {
+                        _customAgencyUsernameController.text = 'ops_${slugPreview}_custom';
+                      }
+                      if (_customAgencyPasswordController.text.trim().isEmpty) {
+                        _customAgencyPasswordController.text = defaultOpsPass;
+                      }
+                    }
+                  });
+                },
+              ),
+            ],
+          ),
+          if (_hasCustomAgencyCredentials) ...[
+            const SizedBox(height: 14),
+            Flex(
+              direction: isMobile ? Axis.vertical : Axis.horizontal,
+              children: [
+                Expanded(
+                  flex: isMobile ? 0 : 1,
+                  child: TextFormField(
+                    controller: _customAgencyUsernameController,
+                    style: GoogleFonts.sourceCodePro(fontSize: 13, fontWeight: FontWeight.w600),
+                    decoration: _m3InputDecoration(
+                      context: context,
+                      labelText: isAr ? 'اسم مستخدم شركة الدعاية المخصص للحملة' : 'Custom Campaign Agency Username',
+                      hintText: 'ops_${slugPreview}_custom',
+                      prefixIcon: Icons.person_outline_rounded,
+                    ),
+                  ),
+                ),
+                if (isMobile) const SizedBox(height: 12) else const SizedBox(width: 14),
+                Expanded(
+                  flex: isMobile ? 0 : 1,
+                  child: TextFormField(
+                    controller: _customAgencyPasswordController,
+                    style: GoogleFonts.sourceCodePro(fontSize: 13, fontWeight: FontWeight.w600),
+                    decoration: _m3InputDecoration(
+                      context: context,
+                      labelText: isAr ? 'كلمة المرور المخصصة للحملة' : 'Custom Campaign Agency Password',
+                      hintText: defaultOpsPass,
+                      prefixIcon: Icons.lock_outline_rounded,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -7615,7 +7996,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   }
 
   Widget _buildRetailChainSection(BuildContext context, ColorScheme colorScheme, bool isMobile) {
-    final chainsStream = ref.watch(retailChainsServiceProvider).getRetailChainsStream();
+    final chainsStream = _ensureChainsStream();
 
     return StreamBuilder<List<RetailChainModel>>(
       stream: chainsStream,

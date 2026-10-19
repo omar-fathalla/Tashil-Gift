@@ -131,14 +131,13 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Login Portal strictly renders in English (LTR) per user requirements
-    final strings = AppStrings('en');
-    const isAr = false;
+    final strings = AppStrings.of(ref);
+    final isAr = strings.languageCode == 'ar';
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
     return Directionality(
-      textDirection: TextDirection.ltr,
+      textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         backgroundColor: colorScheme.surface,
         appBar: SwitchPointHeader(
@@ -233,8 +232,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         color: isDarkMode
             ? colorScheme.surfaceContainerHigh.withValues(alpha: 0.35)
             : colorScheme.surfaceContainerLow,
-        border: Border(
-          right: !isMobile
+        border: BorderDirectional(
+          end: !isMobile
               ? BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5), width: 1)
               : BorderSide.none,
           top: isMobile
@@ -265,7 +264,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Switch Point Smart Platform',
+                            strings.heroBrandHeadline,
                             style: GoogleFonts.cairo(
                               fontSize: isTablet ? 23 : 27,
                               fontWeight: FontWeight.w900,

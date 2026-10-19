@@ -27,7 +27,9 @@ import 'ai_speed_benchmark_screen.dart';
 import 'ai_brain_rules_screen.dart';
 import 'ai_product_discovery_screen.dart';
 import '../../../core/services/ai_product_discovery_service.dart';
+import '../../../core/services/partner_portal_auth_service.dart';
 import 'widgets/voucher_serials_management_dialog.dart';
+import 'widgets/portal_credentials_dialog.dart';
 import '../../../core/services/company_gifts_service.dart';
 import '../../../core/utils/url_builder.dart';
 import '../../../core/utils/responsive.dart';
@@ -47,6 +49,32 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   String _campaignFilter = 'ACTIVE';
   EventModel? _selectedReportsEvent;
   final _searchController = TextEditingController();
+  Stream<int>? _pendingDiscoveryCountStream;
+  Stream<QuerySnapshot>? _eventsStream;
+  Future<QuerySnapshot>? _eventsFuture;
+
+  Stream<int> _getPendingDiscoveryCountStream() {
+    return _pendingDiscoveryCountStream ??=
+        ref.read(aiProductDiscoveryServiceProvider).streamPendingCount();
+  }
+
+  Stream<QuerySnapshot>? _getEventsStream(FirebaseFirestore? firestore) {
+    if (firestore == null) return null;
+    try {
+      return _eventsStream ??= firestore.collection('events').snapshots();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<QuerySnapshot>? _getEventsFuture(FirebaseFirestore? firestore) {
+    if (firestore == null) return null;
+    try {
+      return _eventsFuture ??= firestore.collection('events').get();
+    } catch (_) {
+      return null;
+    }
+  }
 
   void _selectTab(int index) {
     if (_selectedIndex != index) {
@@ -179,17 +207,40 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     );
   }
 
-  void _copyAgencyOpsLink(BuildContext context, String slug, {String? eventId}) {
-    final url = AppUrlBuilder.buildAgencyOpsUrl(slug, eventId: eventId);
-    Clipboard.setData(ClipboardData(text: url));
-    final strings = AppStrings.of(ref);
+  Future<void> _copyAgencyOpsLink(
+    BuildContext context,
+    String slug, {
+    String? eventId,
+    EventModel? event,
+  }) async {
     final isAr = ref.isArabic;
+    final firestore = ref.read(firestoreProvider);
+    final service = PartnerPortalAuthService(firestore: firestore);
+    final effectiveEventId = event?.hasCustomAgencyCredentials == true ? event?.id : eventId;
+    final creds = await service.resolveCredentials(
+      companySlug: slug,
+      companyNameHint: event?.targetCompany,
+      eventId: effectiveEventId,
+    );
+    final url = AppUrlBuilder.buildAgencyOpsUrl(slug, eventId: effectiveEventId);
+    final card = PartnerPortalAuthService.buildWhatsAppLoginCard(
+      role: PartnerPortalRole.agencyOps,
+      companyName: event != null && event.targetCompany.isNotEmpty ? event.targetCompany : creds.companyName,
+      portalUrl: url,
+      username: creds.effectiveAgencyUsername,
+      password: creds.effectiveAgencyPassword,
+      isAr: isAr,
+      campaignName: event?.hasCustomAgencyCredentials == true ? event?.eventName : null,
+      isCustomCampaignTier: creds.hasCustomAgencyCredentials,
+    );
+    await Clipboard.setData(ClipboardData(text: card));
+    if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           isAr
-              ? 'تم نسخ رابط بوابة شركة الدعاية والعمليات الموحد ($slug): $url'
-              : '${strings.agencyOpsLinkCopied}: $url',
+              ? 'تم نسخ كارت دخول بوابة العمليات للواتساب (الرابط + اسم المستخدم + كلمة المرور)'
+              : 'Copied Agency Operations WhatsApp Login Card (URL + Username + Password)',
         ),
         backgroundColor: colorScheme.primary,
         behavior: SnackBarBehavior.floating,
@@ -197,17 +248,36 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     );
   }
 
-  void _copyBrandExecutiveLink(BuildContext context, String slug, {String? eventId}) {
-    final url = AppUrlBuilder.buildBrandExecutiveUrl(slug, eventId: eventId);
-    Clipboard.setData(ClipboardData(text: url));
-    final strings = AppStrings.of(ref);
+  Future<void> _copyBrandExecutiveLink(
+    BuildContext context,
+    String slug, {
+    String? eventId,
+    EventModel? event,
+  }) async {
     final isAr = ref.isArabic;
+    final firestore = ref.read(firestoreProvider);
+    final service = PartnerPortalAuthService(firestore: firestore);
+    final creds = await service.resolveCredentials(
+      companySlug: slug,
+      companyNameHint: event?.targetCompany,
+    );
+    final url = AppUrlBuilder.buildBrandExecutiveUrl(slug, eventId: eventId);
+    final card = PartnerPortalAuthService.buildWhatsAppLoginCard(
+      role: PartnerPortalRole.brandManager,
+      companyName: event != null && event.targetCompany.isNotEmpty ? event.targetCompany : creds.companyName,
+      portalUrl: url,
+      username: creds.brandManagerUsername,
+      password: creds.brandManagerPassword,
+      isAr: isAr,
+    );
+    await Clipboard.setData(ClipboardData(text: card));
+    if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           isAr
-              ? 'تم نسخ رابط مدير الشركة العام الموحد ($slug): $url'
-              : '${strings.brandExecutiveLinkCopied}: $url',
+              ? 'تم نسخ كارت دخول البوابة التنفيذية للشركة للواتساب (الرابط + اسم المستخدم + كلمة المرور)'
+              : 'Copied Brand Executive WhatsApp Login Card (URL + Username + Password)',
         ),
         backgroundColor: colorScheme.primary,
         behavior: SnackBarBehavior.floating,
@@ -557,117 +627,127 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   child: Column(
                     children: [
                       Expanded(
-                        child: SingleChildScrollView(
-                          physics: const BouncingScrollPhysics(),
-                          child: NavigationRail(
-                            selectedIndex: _selectedIndex,
-                            onDestinationSelected: _selectTab,
-                            labelType: NavigationRailLabelType.all,
-                            minWidth: 80,
-                            backgroundColor: Colors.transparent,
-                            elevation: 0,
-                            indicatorColor: colorScheme.secondaryContainer,
-                            selectedIconTheme: IconThemeData(color: colorScheme.onSecondaryContainer, size: 24),
-                            unselectedIconTheme: IconThemeData(color: colorScheme.onSurfaceVariant, size: 22),
-                            selectedLabelTextStyle: GoogleFonts.cairo(
-                              color: colorScheme.primary,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 11,
-                              height: 1.2,
-                            ),
-                            unselectedLabelTextStyle: GoogleFonts.cairo(
-                              color: colorScheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 10.5,
-                              height: 1.2,
-                            ),
-                            destinations: [
-                              NavigationRailDestination(
-                                icon: const Icon(Icons.campaign_outlined),
-                                selectedIcon: const Icon(Icons.campaign_rounded),
-                                label: Text(strings.navEventsManagement, maxLines: 1, overflow: TextOverflow.ellipsis),
-                              ),
-                              NavigationRailDestination(
-                                icon: const Icon(Icons.bar_chart_outlined),
-                                selectedIcon: const Icon(Icons.bar_chart_rounded),
-                                label: Text(strings.navAnalytics, maxLines: 1, overflow: TextOverflow.ellipsis),
-                              ),
-                              NavigationRailDestination(
-                                icon: const Icon(Icons.business_center_outlined),
-                                selectedIcon: const Icon(Icons.business_center_rounded),
-                                label: Text(strings.navCompanyCatalog, maxLines: 1, overflow: TextOverflow.ellipsis),
-                              ),
-                              NavigationRailDestination(
-                                icon: const Icon(Icons.storefront_outlined),
-                                selectedIcon: const Icon(Icons.storefront_rounded),
-                                label: Text(strings.navRetailChains, maxLines: 1, overflow: TextOverflow.ellipsis),
-                              ),
-                              NavigationRailDestination(
-                                icon: const Icon(Icons.inventory_2_outlined),
-                                selectedIcon: const Icon(Icons.inventory_2_rounded),
-                                label: Text(strings.navProductsIntelligence, maxLines: 1, overflow: TextOverflow.ellipsis),
-                              ),
-                              NavigationRailDestination(
-                                icon: const Icon(Icons.receipt_long_outlined),
-                                selectedIcon: const Icon(Icons.receipt_long_rounded),
-                                label: Text(strings.navInvoicesAudit, maxLines: 1, overflow: TextOverflow.ellipsis),
-                              ),
-                              NavigationRailDestination(
-                                icon: const Icon(Icons.card_giftcard_outlined),
-                                selectedIcon: const Icon(Icons.card_giftcard_rounded),
-                                label: Text(strings.navCompanyGifts, maxLines: 1, overflow: TextOverflow.ellipsis),
-                              ),
-                              NavigationRailDestination(
-                                icon: const Icon(Icons.casino_outlined),
-                                selectedIcon: const Icon(Icons.casino_rounded),
-                                label: Text(strings.navGameTypes, maxLines: 1, overflow: TextOverflow.ellipsis),
-                              ),
-                              NavigationRailDestination(
-                                icon: const Icon(Icons.speed_outlined),
-                                selectedIcon: const Icon(Icons.speed_rounded),
-                                label: Text(strings.navAiSpeedBenchmark, maxLines: 1, overflow: TextOverflow.ellipsis),
-                              ),
-                              NavigationRailDestination(
-                                icon: const Icon(Icons.psychology_outlined),
-                                selectedIcon: const Icon(Icons.psychology_rounded),
-                                label: Text(strings.navAiBrainRules, maxLines: 1, overflow: TextOverflow.ellipsis),
-                              ),
-                              NavigationRailDestination(
-                                icon: StreamBuilder<int>(
-                                  stream: ref.watch(aiProductDiscoveryServiceProvider).streamPendingCount(),
-                                  builder: (context, snapshot) {
-                                    final count = snapshot.data ?? 0;
-                                    return Badge(
-                                      isLabelVisible: count > 0,
-                                      label: Text('$count'),
-                                      backgroundColor: colorScheme.tertiary,
-                                      textColor: colorScheme.onTertiary,
-                                      child: const Icon(Icons.auto_awesome_outlined),
-                                    );
-                                  },
+                        child: LayoutBuilder(
+                          builder: (context, railConstraints) {
+                            return SingleChildScrollView(
+                              physics: const BouncingScrollPhysics(),
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  minHeight: railConstraints.maxHeight,
                                 ),
-                                selectedIcon: StreamBuilder<int>(
-                                  stream: ref.watch(aiProductDiscoveryServiceProvider).streamPendingCount(),
-                                  builder: (context, snapshot) {
-                                    final count = snapshot.data ?? 0;
-                                    return Badge(
-                                      isLabelVisible: count > 0,
-                                      label: Text('$count'),
-                                      backgroundColor: colorScheme.tertiary,
-                                      textColor: colorScheme.onTertiary,
-                                      child: const Icon(Icons.auto_awesome_rounded),
-                                    );
-                                  },
+                                child: IntrinsicHeight(
+                                  child: NavigationRail(
+                                    selectedIndex: _selectedIndex,
+                                    onDestinationSelected: _selectTab,
+                                    labelType: NavigationRailLabelType.all,
+                                    minWidth: 80,
+                                    backgroundColor: Colors.transparent,
+                                    indicatorColor: colorScheme.secondaryContainer,
+                                    selectedIconTheme: IconThemeData(color: colorScheme.onSecondaryContainer, size: 24),
+                                    unselectedIconTheme: IconThemeData(color: colorScheme.onSurfaceVariant, size: 22),
+                                    selectedLabelTextStyle: GoogleFonts.cairo(
+                                      color: colorScheme.primary,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11,
+                                      height: 1.2,
+                                    ),
+                                    unselectedLabelTextStyle: GoogleFonts.cairo(
+                                      color: colorScheme.onSurfaceVariant,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 10.5,
+                                      height: 1.2,
+                                    ),
+                                    destinations: [
+                                      NavigationRailDestination(
+                                        icon: const Icon(Icons.campaign_outlined),
+                                        selectedIcon: const Icon(Icons.campaign_rounded),
+                                        label: Text(strings.navEventsManagement, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      ),
+                                      NavigationRailDestination(
+                                        icon: const Icon(Icons.bar_chart_outlined),
+                                        selectedIcon: const Icon(Icons.bar_chart_rounded),
+                                        label: Text(strings.navAnalytics, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      ),
+                                      NavigationRailDestination(
+                                        icon: const Icon(Icons.business_center_outlined),
+                                        selectedIcon: const Icon(Icons.business_center_rounded),
+                                        label: Text(strings.navCompanyCatalog, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      ),
+                                      NavigationRailDestination(
+                                        icon: const Icon(Icons.storefront_outlined),
+                                        selectedIcon: const Icon(Icons.storefront_rounded),
+                                        label: Text(strings.navRetailChains, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      ),
+                                      NavigationRailDestination(
+                                        icon: const Icon(Icons.inventory_2_outlined),
+                                        selectedIcon: const Icon(Icons.inventory_2_rounded),
+                                        label: Text(strings.navProductsIntelligence, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      ),
+                                      NavigationRailDestination(
+                                        icon: const Icon(Icons.receipt_long_outlined),
+                                        selectedIcon: const Icon(Icons.receipt_long_rounded),
+                                        label: Text(strings.navInvoicesAudit, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      ),
+                                      NavigationRailDestination(
+                                        icon: const Icon(Icons.card_giftcard_outlined),
+                                        selectedIcon: const Icon(Icons.card_giftcard_rounded),
+                                        label: Text(strings.navCompanyGifts, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      ),
+                                      NavigationRailDestination(
+                                        icon: const Icon(Icons.casino_outlined),
+                                        selectedIcon: const Icon(Icons.casino_rounded),
+                                        label: Text(strings.navGameTypes, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      ),
+                                      NavigationRailDestination(
+                                        icon: const Icon(Icons.speed_outlined),
+                                        selectedIcon: const Icon(Icons.speed_rounded),
+                                        label: Text(strings.navAiSpeedBenchmark, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      ),
+                                      NavigationRailDestination(
+                                        icon: const Icon(Icons.psychology_outlined),
+                                        selectedIcon: const Icon(Icons.psychology_rounded),
+                                        label: Text(strings.navAiBrainRules, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      ),
+                                      NavigationRailDestination(
+                                        icon: StreamBuilder<int>(
+                                          stream: _getPendingDiscoveryCountStream(),
+                                          builder: (context, snapshot) {
+                                            final count = snapshot.data ?? 0;
+                                            return Badge(
+                                              isLabelVisible: count > 0,
+                                              label: Text('$count'),
+                                              backgroundColor: colorScheme.tertiary,
+                                              textColor: colorScheme.onTertiary,
+                                              child: const Icon(Icons.auto_awesome_outlined),
+                                            );
+                                          },
+                                        ),
+                                        selectedIcon: StreamBuilder<int>(
+                                          stream: _getPendingDiscoveryCountStream(),
+                                          builder: (context, snapshot) {
+                                            final count = snapshot.data ?? 0;
+                                            return Badge(
+                                              isLabelVisible: count > 0,
+                                              label: Text('$count'),
+                                              backgroundColor: colorScheme.tertiary,
+                                              textColor: colorScheme.onTertiary,
+                                              child: const Icon(Icons.auto_awesome_rounded),
+                                            );
+                                          },
+                                        ),
+                                        label: Text(strings.navAiProductDiscovery, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      ),
+                                      NavigationRailDestination(
+                                        icon: const Icon(Icons.mark_chat_read_outlined),
+                                        selectedIcon: const Icon(Icons.mark_chat_read_rounded),
+                                        label: Text(strings.navWhatsAppMarketing, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                label: Text(strings.navAiProductDiscovery, maxLines: 1, overflow: TextOverflow.ellipsis),
                               ),
-                              NavigationRailDestination(
-                                icon: const Icon(Icons.mark_chat_read_outlined),
-                                selectedIcon: const Icon(Icons.mark_chat_read_rounded),
-                                label: Text(strings.navWhatsAppMarketing, maxLines: 1, overflow: TextOverflow.ellipsis),
-                              ),
-                            ],
-                          ),
+                            );
+                          },
                         ),
                       ),
                       Divider(
@@ -810,12 +890,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
 
   // Fast & Instant Loading StreamBuilder + FutureBuilder Fallback for Campaigns
   Widget _buildCampaignsDashboard(FirebaseFirestore? firestore, AppStrings strings, bool isAr) {
-    Stream<QuerySnapshot>? eventsStream;
-    try {
-      if (firestore != null) {
-        eventsStream = firestore.collection('events').snapshots();
-      }
-    } catch (_) {}
+    final eventsStream = _getEventsStream(firestore);
 
     return StreamBuilder<QuerySnapshot>(
       stream: eventsStream,
@@ -837,12 +912,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         }
 
         if (!snapshot.hasData) {
-          Future<QuerySnapshot>? futureGet;
-          try {
-            if (firestore != null) {
-              futureGet = firestore.collection('events').get();
-            }
-          } catch (_) {}
+          final futureGet = _getEventsFuture(firestore);
 
           return FutureBuilder<QuerySnapshot>(
             future: futureGet,
@@ -1757,11 +1827,11 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 // 2. Copy Agency Operations Link (Unified Company Master Link)
                 Tooltip(
                   message: isAr
-                      ? 'نسخ رابط بوابة شركة الدعاية والعمليات الموحد لكافة عروض الشركة (كود: $companySlug)'
+                      ? 'نسخ كارت واتساب بوابة شركة الدعاية والعمليات (الرابط + اسم المستخدم + كلمة المرور)'
                       : strings.agencyOpsPortalTooltip,
                   waitDuration: const Duration(milliseconds: 400),
                   child: FilledButton.tonalIcon(
-                    onPressed: () => _copyAgencyOpsLink(context, companySlug),
+                    onPressed: () => _copyAgencyOpsLink(context, companySlug, event: event),
                     icon: const Icon(Icons.store_mall_directory_rounded, size: 18),
                     label: Text(strings.copyAgencyOpsLink, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13)),
                     style: FilledButton.styleFrom(
@@ -1776,11 +1846,11 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 // 3. Copy Brand Executive Master Link (Unified Company Master Link)
                 Tooltip(
                   message: isAr
-                      ? 'نسخ رابط البوابة التنفيذية الدائمة لمدير عام الشركة (كود: $companySlug)'
+                      ? 'نسخ كارت واتساب البوابة التنفيذية لمدير عام الشركة (الرابط + اسم المستخدم + كلمة المرور)'
                       : strings.brandExecutivePortalTooltip,
                   waitDuration: const Duration(milliseconds: 400),
                   child: FilledButton.tonalIcon(
-                    onPressed: () => _copyBrandExecutiveLink(context, companySlug),
+                    onPressed: () => _copyBrandExecutiveLink(context, companySlug, event: event),
                     icon: const Icon(Icons.business_center_rounded, size: 18),
                     label: Text(strings.copyBrandExecutiveLink, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13)),
                     style: FilledButton.styleFrom(
@@ -1788,6 +1858,33 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                       foregroundColor: colorScheme.onSecondaryContainer,
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+
+                // 3.5. Portal Credentials & WhatsApp Login Card
+                Tooltip(
+                  message: isAr
+                      ? 'إدارة بيانات الدخول لبوابتي الشركة والعمليات ونسخ كارت الواتساب الجاهز'
+                      : 'Manage Portal Credentials & Copy WhatsApp Login Card',
+                  waitDuration: const Duration(milliseconds: 400),
+                  child: OutlinedButton.icon(
+                    onPressed: () => PortalCredentialsDialog.show(
+                      context,
+                      companySlug: companySlug,
+                      companyName: event.targetCompany.isNotEmpty ? event.targetCompany : companySlug.toUpperCase(),
+                      event: event,
+                    ),
+                    icon: const Icon(Icons.vpn_key_rounded, size: 18),
+                    label: Text(
+                      isAr ? 'بيانات الدخول وكارت الواتساب' : 'Portal Login & WhatsApp Card',
+                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: colorScheme.primary,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.4)),
                     ),
                   ),
                 ),
@@ -1882,6 +1979,17 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                       context: context,
                       title: isAr ? 'إدارة وتحكم الحملة' : 'Campaign Management',
                       icon: Icons.tune_rounded,
+                    ),
+                    M3ActionMenu.item(
+                      context: context,
+                      label: isAr ? 'بيانات دخول البوابات وكارت الواتساب' : 'Portal Credentials & WhatsApp Card',
+                      icon: Icons.vpn_key_rounded,
+                      onPressed: () => PortalCredentialsDialog.show(
+                        context,
+                        companySlug: companySlug,
+                        companyName: event.targetCompany.isNotEmpty ? event.targetCompany : companySlug.toUpperCase(),
+                        event: event,
+                      ),
                     ),
                     M3ActionMenu.item(
                       context: context,

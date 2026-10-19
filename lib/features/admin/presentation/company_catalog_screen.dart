@@ -18,7 +18,9 @@ import '../../../core/widgets/m3_button_groups.dart';
 import '../../../core/widgets/m3_action_menu.dart';
 import '../../../core/widgets/m3_progress_indicators.dart';
 import '../../../core/services/ai_product_discovery_service.dart';
+import '../../../core/services/partner_portal_auth_service.dart';
 import 'widgets/ai_discovered_products_dialog.dart';
+import 'widgets/portal_credentials_dialog.dart';
 import '../domain/company_model.dart';
 
 enum CatalogInputMode {
@@ -72,6 +74,42 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
     final clean = code.trim().toLowerCase();
     if (clean.isEmpty) return null;
     return _existingCompanies.where((c) => c.slug.toLowerCase().trim() == clean).firstOrNull;
+  }
+
+  // Memoized Firestore Streams (Rule 9: Never create streams inside build)
+  Stream<QuerySnapshot>? _companiesStream;
+  Stream<List<DiscoveredProductDocument>>? _discoveredProductsStream;
+  String? _lastDiscoveredStreamSlug;
+  Stream<QuerySnapshot>? _companyProductsStream;
+  String? _lastCompanyProductsStreamKey;
+
+  Stream<QuerySnapshot> _ensureCompaniesStream(FirebaseFirestore firestore) {
+    _companiesStream ??= firestore.collection('companies').snapshots();
+    return _companiesStream!;
+  }
+
+  Stream<List<DiscoveredProductDocument>> _ensureDiscoveredProductsStream(String slug) {
+    if (_discoveredProductsStream == null || _lastDiscoveredStreamSlug != slug) {
+      _lastDiscoveredStreamSlug = slug;
+      _discoveredProductsStream = ref.read(aiProductDiscoveryServiceProvider).streamDiscoveredProducts(
+        companySlug: slug,
+        status: 'pending',
+      );
+    }
+    return _discoveredProductsStream!;
+  }
+
+  Stream<QuerySnapshot> _ensureCompanyProductsStream(FirebaseFirestore firestore, String slug) {
+    final key = '${slug}_$_catalogDisplayLimit';
+    if (_companyProductsStream == null || _lastCompanyProductsStreamKey != key) {
+      _lastCompanyProductsStreamKey = key;
+      _companyProductsStream = firestore
+          .collection('company_products')
+          .where('companySlug', isEqualTo: slug)
+          .limit(_catalogDisplayLimit)
+          .snapshots();
+    }
+    return _companyProductsStream!;
   }
 
   @override
@@ -151,6 +189,12 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
         'name': companyName,
         'slug': companyCode,
         'productsCount': 0,
+        'brandManagerUsername': PartnerPortalAuthService.defaultBrandUsername(companyCode),
+        'brandManagerPassword': PartnerPortalAuthService.defaultBrandPassword(companyCode),
+        'brandCredentialVersion': 1,
+        'agencyOpsUsername': PartnerPortalAuthService.defaultAgencyUsername(companyCode),
+        'agencyOpsPassword': PartnerPortalAuthService.defaultAgencyPassword(companyCode),
+        'agencyCredentialVersion': 1,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true)).timeout(
@@ -1152,7 +1196,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
 
             // Stream builder to keep _existingCompanies synced
             StreamBuilder<QuerySnapshot>(
-              stream: firestore.collection('companies').snapshots(),
+              stream: _ensureCompaniesStream(firestore),
               builder: (context, snapshot) {
                 final companies = snapshot.data?.docs.map((d) => CompanyModel.fromFirestore(d)).toList() ?? [];
                 _existingCompanies = companies;
@@ -3068,6 +3112,24 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
 
                     // Quick Edit Company Button
                     IconButton.outlined(
+                      tooltip: 'إدارة بيانات دخول البوابات وكارت الواتساب (${comp.name})',
+                      icon: Icon(Icons.vpn_key_rounded, size: 16, color: colorScheme.primary),
+                      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(32, 32),
+                        fixedSize: const Size(32, 32),
+                        padding: EdgeInsets.zero,
+                        side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.4)),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: () => PortalCredentialsDialog.show(
+                        context,
+                        companySlug: comp.slug,
+                        companyName: comp.name,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton.outlined(
                       tooltip: 'تعديل اسم أو كود (${comp.name})',
                       icon: const Icon(Icons.edit_note_rounded, size: 16),
                       constraints: const BoxConstraints.tightFor(width: 32, height: 32),
@@ -3088,6 +3150,16 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
                       anchorIcon: Icon(Icons.more_vert_rounded, size: 16, color: colorScheme.onSurfaceVariant),
                       children: [
                         M3ActionMenu.header(context: context, title: comp.name),
+                        M3ActionMenu.item(
+                          context: context,
+                          label: 'بيانات دخول البوابات وكارت الواتساب',
+                          icon: Icons.vpn_key_rounded,
+                          onPressed: () => PortalCredentialsDialog.show(
+                            context,
+                            companySlug: comp.slug,
+                            companyName: comp.name,
+                          ),
+                        ),
                         M3ActionMenu.item(
                           context: context,
                           label: 'فحص واكتشاف الأصناف بالذكاء الاصطناعي',
@@ -3190,10 +3262,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
     AppStrings strings,
   ) {
     return StreamBuilder<List<DiscoveredProductDocument>>(
-      stream: ref.watch(aiProductDiscoveryServiceProvider).streamDiscoveredProducts(
-        companySlug: selectedCompany.slug,
-        status: 'pending',
-      ),
+      stream: _ensureDiscoveredProductsStream(selectedCompany.slug),
       builder: (context, snapshot) {
         final pendingDocs = snapshot.data ?? [];
         if (pendingDocs.isEmpty) return const SizedBox.shrink();
@@ -3550,11 +3619,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
 
         // Firestore Stream for this Company (Limited to _catalogDisplayLimit)
         StreamBuilder<QuerySnapshot>(
-          stream: firestore
-              .collection('company_products')
-              .where('companySlug', isEqualTo: selectedCompany.slug)
-              .limit(_catalogDisplayLimit)
-              .snapshots(),
+          stream: _ensureCompanyProductsStream(firestore, selectedCompany.slug),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(

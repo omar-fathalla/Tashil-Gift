@@ -59,6 +59,15 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
   bool _isScanningReceipt = false;
   bool _isDeduplicating = false;
 
+  // Memoized Firestore Streams (Rule 9: Never create streams inside build)
+  Stream<List<RetailChainModel>>? _chainsStream;
+  Stream<List<BranchModel>>? _branchesStream;
+
+  void _ensureStreams() {
+    _chainsStream ??= ref.read(retailChainsServiceProvider).getRetailChainsStream();
+    _branchesStream ??= ref.read(retailChainsServiceProvider).getAllBranchesStream();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1829,8 +1838,9 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final chainsStream = ref.watch(retailChainsServiceProvider).getRetailChainsStream();
-    final branchesStream = ref.watch(retailChainsServiceProvider).getAllBranchesStream();
+    _ensureStreams();
+    final chainsStream = _chainsStream;
+    final branchesStream = _branchesStream;
 
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth >= 1050;

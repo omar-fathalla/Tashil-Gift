@@ -99,6 +99,7 @@ class AggregatedVoucherMetrics {
 /// Standalone Dedicated Vouchers & Gift Cards Intelligence Screen (منظومة قسائم المشتريات والفواتشر المستقلة)
 class CompanyVouchersReportScreen extends ConsumerStatefulWidget {
   final String? initialEventId;
+  final String? lockedEventId;
   final String? lockedCompanySlug;
   final String? lockedCompanyName;
   final bool isEmbedded;
@@ -106,6 +107,7 @@ class CompanyVouchersReportScreen extends ConsumerStatefulWidget {
   const CompanyVouchersReportScreen({
     super.key,
     this.initialEventId,
+    this.lockedEventId,
     this.lockedCompanySlug,
     this.lockedCompanyName,
     this.isEmbedded = false,
@@ -187,15 +189,23 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
   @override
   void initState() {
     super.initState();
-    _selectedEventId = widget.initialEventId;
+    _selectedEventId = (widget.lockedEventId != null && widget.lockedEventId!.isNotEmpty)
+        ? widget.lockedEventId
+        : widget.initialEventId;
   }
 
   @override
   void didUpdateWidget(covariant CompanyVouchersReportScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.initialEventId != oldWidget.initialEventId && widget.initialEventId != null) {
+    final effectiveEventId = (widget.lockedEventId != null && widget.lockedEventId!.isNotEmpty)
+        ? widget.lockedEventId
+        : widget.initialEventId;
+    final oldEffectiveEventId = (oldWidget.lockedEventId != null && oldWidget.lockedEventId!.isNotEmpty)
+        ? oldWidget.lockedEventId
+        : oldWidget.initialEventId;
+    if (effectiveEventId != oldEffectiveEventId && effectiveEventId != null) {
       setState(() {
-        _selectedEventId = widget.initialEventId;
+        _selectedEventId = effectiveEventId;
       });
     }
   }
@@ -518,7 +528,13 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                     final effectiveCompanyName = widget.lockedCompanyName?.trim() ??
                         (effectiveSlug.isNotEmpty ? SlugUtils.formatSlugToName(effectiveSlug) : '');
 
+                    final isCampaignLocked = widget.lockedEventId != null && widget.lockedEventId!.isNotEmpty;
+                    if (isCampaignLocked && _selectedEventId != widget.lockedEventId) {
+                      _selectedEventId = widget.lockedEventId;
+                    }
+
                     final companyEvents = allEvents.where((e) {
+                      if (isCampaignLocked && e.id != widget.lockedEventId) return false;
                       if (effectiveSlug.isEmpty && effectiveCompanyName.isEmpty) return true;
                       final matchSlug = effectiveSlug.isNotEmpty &&
                           e.companySlug.trim().toLowerCase() == effectiveSlug;
@@ -545,7 +561,13 @@ class _CompanyVouchersReportScreenState extends ConsumerState<CompanyVouchersRep
                       _persistentTxDocsCache[effectiveSlug] = txSnapshot.data!.docs;
                       _cachedTxDocs = txSnapshot.data!.docs;
                     }
-                    final txDocs = _persistentTxDocsCache[effectiveSlug] ?? _cachedTxDocs ?? txSnapshot.data?.docs ?? [];
+                    final rawTxDocs = _persistentTxDocsCache[effectiveSlug] ?? _cachedTxDocs ?? txSnapshot.data?.docs ?? [];
+                    final txDocs = isCampaignLocked
+                        ? rawTxDocs.where((d) {
+                            final data = d.data() as Map<String, dynamic>?;
+                            return data?['campaignId']?.toString() == widget.lockedEventId;
+                          }).toList()
+                        : rawTxDocs;
 
                     if (branchesSnapshot.hasData && branchesSnapshot.data!.docs.isNotEmpty) {
                       final mapped = branchesSnapshot.data!.docs.map((d) {

@@ -129,6 +129,44 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
     _loadGatewayConfig();
   }
 
+  FirebaseFirestore? _lastFirestore;
+  Stream<QuerySnapshot>? _eventsStream;
+  String? _lastScopedSlug;
+  Stream<QuerySnapshot>? _transactionsStream;
+  Stream<QuerySnapshot>? _customContactsStream;
+
+  Stream<QuerySnapshot> _getEventsStream(FirebaseFirestore firestore) {
+    if (_lastFirestore != firestore || _eventsStream == null) {
+      _lastFirestore = firestore;
+      _eventsStream = firestore.collection('events').snapshots();
+      _lastScopedSlug = null;
+    }
+    return _eventsStream!;
+  }
+
+  void _ensureScopedDataStreams(FirebaseFirestore firestore, String effectiveSlug) {
+    if (_lastFirestore == firestore &&
+        _lastScopedSlug == effectiveSlug &&
+        _transactionsStream != null &&
+        _customContactsStream != null) {
+      return;
+    }
+    _lastFirestore = firestore;
+    _lastScopedSlug = effectiveSlug;
+
+    Query transactionsQuery = firestore.collection('receipts_transactions');
+    if (effectiveSlug.isNotEmpty) {
+      transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: effectiveSlug);
+    }
+    _transactionsStream = transactionsQuery.snapshots();
+
+    Query customContactsQuery = firestore.collection('marketing_contacts');
+    if (effectiveSlug.isNotEmpty) {
+      customContactsQuery = customContactsQuery.where('companySlug', isEqualTo: effectiveSlug);
+    }
+    _customContactsStream = customContactsQuery.snapshots();
+  }
+
   Future<void> _loadGatewayConfig() async {
     final config = await _gatewayService.loadConfig(companySlug: widget.lockedCompanySlug);
     if (mounted) {
@@ -1843,7 +1881,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
     final firestore = ref.watch(firestoreProvider);
 
     return StreamBuilder<QuerySnapshot>(
-      stream: firestore.collection('events').snapshots(),
+      stream: _getEventsStream(firestore),
       builder: (context, eventsSnapshot) {
         final eventsDocs = eventsSnapshot.data?.docs ?? [];
         final allEvents = eventsDocs
@@ -1904,23 +1942,13 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
         }
         final sortedBranches = allBranches.toList()..sort();
 
-        // Query transactions
-        Query transactionsQuery = firestore.collection('receipts_transactions');
-        if (effectiveSlug.isNotEmpty) {
-          transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: effectiveSlug);
-        }
-
-        // Query custom & Excel marketing contacts
-        Query customContactsQuery = firestore.collection('marketing_contacts');
-        if (effectiveSlug.isNotEmpty) {
-          customContactsQuery = customContactsQuery.where('companySlug', isEqualTo: effectiveSlug);
-        }
+        _ensureScopedDataStreams(firestore, effectiveSlug);
 
         return StreamBuilder<QuerySnapshot>(
-          stream: transactionsQuery.snapshots(),
+          stream: _transactionsStream,
           builder: (context, transSnapshot) {
             return StreamBuilder<QuerySnapshot>(
-              stream: customContactsQuery.snapshots(),
+              stream: _customContactsStream,
               builder: (context, customSnapshot) {
                 final transDocs = transSnapshot.data?.docs ?? [];
                 final customDocs = customSnapshot.data?.docs ?? [];

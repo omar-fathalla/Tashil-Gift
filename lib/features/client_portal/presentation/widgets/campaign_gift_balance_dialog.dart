@@ -61,6 +61,34 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
   late DateTime _selectedDate;
   bool _isAllTime = false;
 
+  FirebaseFirestore? _lastFirestore;
+  String? _lastEventId;
+  Stream<DocumentSnapshot<Map<String, dynamic>>>? _eventDocStream;
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _transactionsStream;
+
+  void _ensureStreams(FirebaseFirestore firestore) {
+    if (_lastFirestore == firestore && _lastEventId == widget.event.id && _eventDocStream != null) {
+      return;
+    }
+    _lastFirestore = firestore;
+    _lastEventId = widget.event.id;
+    if (widget.event.id.isNotEmpty) {
+      _eventDocStream = firestore.collection('events').doc(widget.event.id).snapshots();
+      final slug = widget.event.companySlug.trim();
+      if (slug.isNotEmpty) {
+        _transactionsStream = firestore
+            .collection('receipts_transactions')
+            .where('companySlug', isEqualTo: slug)
+            .snapshots();
+      } else {
+        _transactionsStream = firestore
+            .collection('receipts_transactions')
+            .where('event_id', isEqualTo: widget.event.id)
+            .snapshots();
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -452,10 +480,9 @@ class _CampaignGiftBalanceDialogState extends ConsumerState<CampaignGiftBalanceD
     Stream<QuerySnapshot<Map<String, dynamic>>>? transactionsStream;
     try {
       final firestore = ref.watch(firestoreProvider);
-      if (widget.event.id.isNotEmpty) {
-        eventDocStream = firestore.collection('events').doc(widget.event.id).snapshots();
-        transactionsStream = firestore.collection('receipts_transactions').snapshots();
-      }
+      _ensureStreams(firestore);
+      eventDocStream = _eventDocStream;
+      transactionsStream = _transactionsStream;
     } catch (_) {}
 
     return Directionality(

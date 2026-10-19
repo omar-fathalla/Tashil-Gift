@@ -22,7 +22,7 @@ class SwitchPointInfo {
   static const String whatsappEgyptUrl = 'https://wa.me/201211857725';
   static const String whatsappUae = '+971 55 871 5615';
   static const String whatsappUaeUrl = 'https://wa.me/971558715615';
-  static const String copyright = '2026 Switch Point. All rights reserved.';
+  static const String copyright = '© 2026 Switch Point. All rights reserved.';
 
   /// Safe URL launcher helper
   static Future<void> launchLink(String urlString) async {
@@ -65,8 +65,8 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
     this.showMobileMenu = true,
     this.companyLogoUrl,
     this.onMobileMenuPressed,
-    this.showLanguageSelector = false,
-    this.showCountryCurrencySelector = false,
+    this.showLanguageSelector = true,
+    this.showCountryCurrencySelector = true,
     this.showDarkModeToggle = true,
   });
 
@@ -625,12 +625,15 @@ class SwitchPointFooter extends StatelessWidget {
                   color: colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: 6),
-                Text(
-                  SwitchPointInfo.copyright,
-                  style: GoogleFonts.cairo(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: colorScheme.onSurfaceVariant,
+                Flexible(
+                  child: Text(
+                    SwitchPointInfo.copyright,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.cairo(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ],
@@ -672,7 +675,15 @@ class SwitchPointFooter extends StatelessWidget {
                 ),
               ),
 
-              // 3. Email Support
+              // 3. Official Website Pill
+              _buildFooterPill(
+                context: context,
+                icon: Icons.public_rounded,
+                label: SwitchPointInfo.websiteDisplay,
+                url: SwitchPointInfo.websiteUrl,
+              ),
+
+              // 4. Email Support
               _buildFooterPill(
                 context: context,
                 icon: Icons.mail_outline_rounded,
@@ -680,7 +691,7 @@ class SwitchPointFooter extends StatelessWidget {
                 url: 'mailto:${SwitchPointInfo.supportEmail}',
               ),
 
-              // 4. WhatsApp Egypt Pill (M3 Theme Blue & Google Icon)
+              // 5. WhatsApp Egypt Pill (M3 Theme Blue & Google Icon)
               _buildFooterPill(
                 context: context,
                 icon: Icons.chat_bubble_outline_rounded,
@@ -689,7 +700,7 @@ class SwitchPointFooter extends StatelessWidget {
                 url: SwitchPointInfo.whatsappEgyptUrl,
               ),
 
-              // 5. WhatsApp UAE Pill (M3 Theme Blue & Google Icon)
+              // 6. WhatsApp UAE Pill (M3 Theme Blue & Google Icon)
               _buildFooterPill(
                 context: context,
                 icon: Icons.chat_bubble_outline_rounded,
@@ -704,12 +715,17 @@ class SwitchPointFooter extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  copyrightWidget,
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: linksWidgets,
+                  Flexible(child: copyrightWidget),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    flex: 3,
+                    child: Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.end,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: linksWidgets,
+                    ),
                   ),
                 ],
               );

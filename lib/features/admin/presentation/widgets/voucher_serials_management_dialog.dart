@@ -76,6 +76,33 @@ class _VoucherSerialsManagementDialogState extends ConsumerState<VoucherSerialsM
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   bool _isResetting = false;
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _transactionsStream;
+  String? _lastStreamKey;
+
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _ensureTransactionsStream() {
+    final key = '${widget.event.id}_${widget.event.companySlug}';
+    if (_transactionsStream == null || _lastStreamKey != key) {
+      _lastStreamKey = key;
+      try {
+        final firestore = ref.read(firestoreProvider);
+        final slug = widget.event.companySlug.trim();
+        if (slug.isNotEmpty) {
+          _transactionsStream = firestore
+              .collection('receipts_transactions')
+              .where('companySlug', isEqualTo: slug)
+              .snapshots();
+        } else if (widget.event.id.isNotEmpty) {
+          _transactionsStream = firestore
+              .collection('receipts_transactions')
+              .where('campaignId', isEqualTo: widget.event.id)
+              .snapshots();
+        }
+      } catch (_) {
+        _transactionsStream = null;
+      }
+    }
+    return _transactionsStream;
+  }
 
   @override
   void dispose() {
@@ -178,16 +205,7 @@ class _VoucherSerialsManagementDialogState extends ConsumerState<VoucherSerialsM
     final mediaQuery = MediaQuery.of(context);
     final isMobile = mediaQuery.size.width < 600;
 
-    Stream<QuerySnapshot<Map<String, dynamic>>>? transactionsStream;
-    try {
-      final firestore = ref.watch(firestoreProvider);
-      if (widget.event.id.isNotEmpty) {
-        transactionsStream = firestore
-            .collection('receipts_transactions')
-            .where('event_id', isEqualTo: widget.event.id)
-            .snapshots();
-      }
-    } catch (_) {}
+    final transactionsStream = _ensureTransactionsStream();
 
     return Directionality(
       textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
@@ -221,6 +239,8 @@ class _VoucherSerialsManagementDialogState extends ConsumerState<VoucherSerialsM
               for (final doc in docs) {
                 final data = doc.data();
                 if (data['status'] == 'rejected' || data['is_valid'] == false) continue;
+                final txEventId = (data['campaignId'] ?? data['event_id'] ?? data['campaign_id'] ?? '').toString();
+                if (widget.event.id.isNotEmpty && txEventId.isNotEmpty && txEventId != widget.event.id) continue;
 
                 final bName = (data['branch_detected'] ?? data['branch'] ?? data['branch_id'] ?? '').toString();
                 final cName = (data['customerName'] ?? data['customer_name'] ?? '').toString();

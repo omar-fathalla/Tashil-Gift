@@ -44,6 +44,7 @@ class InvoicesLogScreen extends ConsumerStatefulWidget {
   final String? lockedCompanySlug;
   final String? lockedCompanyName;
   final String? initialEventId;
+  final String? lockedEventId;
   final bool isEmbedded;
 
   const InvoicesLogScreen({
@@ -51,6 +52,7 @@ class InvoicesLogScreen extends ConsumerStatefulWidget {
     this.lockedCompanySlug,
     this.lockedCompanyName,
     this.initialEventId,
+    this.lockedEventId,
     this.isEmbedded = false,
   });
 
@@ -98,7 +100,9 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
   void _ensureStreams(FirebaseFirestore? firestore, {bool force = false}) {
     if (firestore == null) return;
     final isLocked = widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty;
-    final effectiveKey = '${widget.lockedCompanySlug ?? 'all'}_$_selectedCampaignId';
+    final isCampaignLocked = widget.lockedEventId != null && widget.lockedEventId!.isNotEmpty;
+    final effectiveCampaignId = isCampaignLocked ? widget.lockedEventId! : _selectedCampaignId;
+    final effectiveKey = '${widget.lockedCompanySlug ?? 'all'}_$effectiveCampaignId';
 
     if (_lastStreamsKey != effectiveKey || force || _transactionsStream == null) {
       _lastStreamsKey = effectiveKey;
@@ -112,8 +116,8 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       }
 
       Query transactionsQuery = firestore.collection('receipts_transactions');
-      if (_selectedCampaignId != 'ALL' && _selectedCampaignId != 'all' && _selectedCampaignId.isNotEmpty) {
-        transactionsQuery = transactionsQuery.where('campaignId', isEqualTo: _selectedCampaignId);
+      if (effectiveCampaignId != 'ALL' && effectiveCampaignId != 'all' && effectiveCampaignId.isNotEmpty) {
+        transactionsQuery = transactionsQuery.where('campaignId', isEqualTo: effectiveCampaignId);
       } else if (isLocked) {
         transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug);
       }
@@ -125,8 +129,11 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
   void initState() {
     super.initState();
     _selectedCompanySlug = widget.lockedCompanySlug ?? 'all';
-    if (widget.initialEventId != null && widget.initialEventId!.isNotEmpty) {
-      _selectedCampaignId = widget.initialEventId!;
+    final effectiveInitialEventId = (widget.lockedEventId != null && widget.lockedEventId!.isNotEmpty)
+        ? widget.lockedEventId
+        : widget.initialEventId;
+    if (effectiveInitialEventId != null && effectiveInitialEventId.isNotEmpty) {
+      _selectedCampaignId = effectiveInitialEventId;
     }
     _scrollController.addListener(_onScroll);
   }
@@ -134,11 +141,17 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
   @override
   void didUpdateWidget(covariant InvoicesLogScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.initialEventId != oldWidget.initialEventId &&
-        widget.initialEventId != null &&
-        widget.initialEventId!.isNotEmpty) {
+    final effectiveEventId = (widget.lockedEventId != null && widget.lockedEventId!.isNotEmpty)
+        ? widget.lockedEventId
+        : widget.initialEventId;
+    final oldEffectiveEventId = (oldWidget.lockedEventId != null && oldWidget.lockedEventId!.isNotEmpty)
+        ? oldWidget.lockedEventId
+        : oldWidget.initialEventId;
+    if (effectiveEventId != oldEffectiveEventId &&
+        effectiveEventId != null &&
+        effectiveEventId.isNotEmpty) {
       setState(() {
-        _selectedCampaignId = widget.initialEventId!;
+        _selectedCampaignId = effectiveEventId;
       });
     }
   }
@@ -229,7 +242,9 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
   void _resetFilters() {
     setState(() {
       _searchController.clear();
-      _selectedCampaignId = 'all';
+      _selectedCampaignId = (widget.lockedEventId != null && widget.lockedEventId!.isNotEmpty)
+          ? widget.lockedEventId!
+          : 'all';
       _selectedCompanySlug = widget.lockedCompanySlug ?? 'all';
       _selectedBranch = 'all';
       _statusFilter = 'accepted';
@@ -888,6 +903,8 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     required CountryCurrency activeCountry,
     required bool isAr,
   }) {
+    if (widget.isEmbedded || !ref.read(isAdminProvider)) return;
+
     final receiptNumber = inv['receipt_number']?.toString() ?? 'N/A';
     final hasImage = (inv['image_url']?.toString().isNotEmpty ?? false) ||
         (inv['storage_path']?.toString().isNotEmpty ?? false);
@@ -1098,83 +1115,85 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
               ),
             ),
 
-            const SizedBox(height: 10),
+            if (!widget.isEmbedded && ref.read(isAdminProvider)) ...[
+              const SizedBox(height: 10),
 
-            // Option 3: Interactive AI Brain Co-Pilot Studio
-            InkWell(
-              onTap: () {
-                Navigator.pop(dialogCtx);
-                _openAiBrainCoPilotForInvoice(
-                  context: context,
-                  inv: inv,
-                  event: event,
-                  strings: strings,
-                  isAr: isAr,
-                );
-              },
-              borderRadius: BorderRadius.circular(14),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: colorScheme.primary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: colorScheme.primary.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
+              // Option 3: Interactive AI Brain Co-Pilot Studio
+              InkWell(
+                onTap: () {
+                  Navigator.pop(dialogCtx);
+                  _openAiBrainCoPilotForInvoice(
+                    context: context,
+                    inv: inv,
+                    event: event,
+                    strings: strings,
+                    isAr: isAr,
+                  );
+                },
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primary.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.psychology_rounded, color: colorScheme.primary, size: 22),
                       ),
-                      child: Icon(Icons.psychology_rounded, color: colorScheme.primary, size: 22),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  isAr ? 'تشخيص في استوديو عقل الذكاء الاصطناعي' : 'Diagnose in AI Brain Studio',
-                                  style: TextStyle(
-                                    fontSize: 13.5,
-                                    fontWeight: FontWeight.bold,
-                                    color: colorScheme.primary,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    isAr ? 'تشخيص في استوديو عقل الذكاء الاصطناعي' : 'Diagnose in AI Brain Studio',
+                                    style: TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: colorScheme.primary,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                decoration: BoxDecoration(
-                                  color: colorScheme.primary.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(6),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.primary.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    isAr ? '🧠 تفاعلي' : '🧠 Co-Pilot',
+                                    style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: colorScheme.primary),
+                                  ),
                                 ),
-                                child: Text(
-                                  isAr ? '🧠 تفاعلي' : '🧠 Co-Pilot',
-                                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: colorScheme.primary),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            isAr
-                                ? 'فتح شات تفاعلي مباشر مع Gemini 3.7 Flash لتشخيص سبب الرفض وتدريب الذكاء فوراً واعتماد المعيار'
-                                : 'Interactive chat with Gemini 3.7 Flash to diagnose rejections and deploy new directives',
-                            style: TextStyle(fontSize: 11, color: colorScheme.onPrimaryFixedVariant, height: 1.3),
-                          ),
-                        ],
+                              ],
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              isAr
+                                  ? 'فتح شات تفاعلي مباشر مع Gemini 3.7 Flash لتشخيص سبب الرفض وتدريب الذكاء فوراً واعتماد المعيار'
+                                  : 'Interactive chat with Gemini 3.7 Flash to diagnose rejections and deploy new directives',
+                              style: TextStyle(fontSize: 11, color: colorScheme.onPrimaryFixedVariant, height: 1.3),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
+            ],
           ],
         ),
         actions: [
@@ -2390,7 +2409,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),
-          if (inv != null)
+          if (inv != null && !widget.isEmbedded && ref.read(isAdminProvider))
             FilledButton.icon(
               onPressed: () {
                 Navigator.pop(ctx);
@@ -2502,6 +2521,10 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
     final activeFirestore = firestore;
     _ensureStreams(activeFirestore);
 
+    final isCampaignLocked = widget.lockedEventId != null && widget.lockedEventId!.isNotEmpty;
+    if (isCampaignLocked && _selectedCampaignId != widget.lockedEventId) {
+      _selectedCampaignId = widget.lockedEventId!;
+    }
     final eventsKey = widget.lockedCompanySlug ?? 'all';
     final txKey = '${widget.lockedCompanySlug ?? 'all'}_$_selectedCampaignId';
 
@@ -2521,7 +2544,13 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
             }
             _persistentEventsCache[eventsKey] = map;
           }
-          final eventsMap = _persistentEventsCache[eventsKey] ?? const {};
+          final rawEventsMap = _persistentEventsCache[eventsKey] ?? const {};
+          final eventsMap = isCampaignLocked
+              ? <String, EventModel>{
+                  if (rawEventsMap.containsKey(widget.lockedEventId))
+                    widget.lockedEventId!: rawEventsMap[widget.lockedEventId]!,
+                }
+              : rawEventsMap;
 
           return StreamBuilder<QuerySnapshot>(
             stream: _transactionsStream,
@@ -2544,7 +2573,13 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                 return const Center(child: CircularProgressIndicator());
               }
 
-              final rawDocs = cachedDocs ?? transactionsSnapshot.data?.docs ?? [];
+              final unFilteredDocs = cachedDocs ?? transactionsSnapshot.data?.docs ?? [];
+              final rawDocs = isCampaignLocked
+                  ? unFilteredDocs.where((d) {
+                      final data = d.data() as Map<String, dynamic>?;
+                      return data?['campaignId']?.toString() == widget.lockedEventId;
+                    }).toList()
+                  : unFilteredDocs;
               final int snapshotHash = transactionsSnapshot.data != null
                   ? identityHashCode(transactionsSnapshot.data)
                   : 0;
@@ -2579,15 +2614,19 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
     required List<QueryDocumentSnapshot> rawDocs,
     int snapshotHash = 0,
   }) {
-    // 1. Scoped Events by locked company
-    final scopedEvents = (widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty)
-        ? eventsMap.values.where((e) {
-            final slug = e.companySlug.toLowerCase();
-            final name = e.targetCompany.toLowerCase();
-            return slug == widget.lockedCompanySlug!.toLowerCase() ||
-                (widget.lockedCompanyName != null && name == widget.lockedCompanyName!.toLowerCase());
-          }).toList()
-        : eventsMap.values.toList();
+    // 1. Scoped Events by locked company & locked campaign
+    final scopedEvents = eventsMap.values.where((e) {
+      if (widget.lockedEventId != null && widget.lockedEventId!.isNotEmpty && e.id != widget.lockedEventId) {
+        return false;
+      }
+      if (widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty) {
+        final slug = e.companySlug.toLowerCase();
+        final name = e.targetCompany.toLowerCase();
+        return slug == widget.lockedCompanySlug!.toLowerCase() ||
+            (widget.lockedCompanyName != null && name == widget.lockedCompanyName!.toLowerCase());
+      }
+      return true;
+    }).toList();
 
     // 2. Official Canonical Branches from campaign definitions
     final List<String> canonicalBranches;
@@ -6442,23 +6481,23 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                   }
                 },
               ),
-              M3ActionMenu.item(
-                context: context,
-                label: isAr ? 'إعادة فحص OCR بالذكاء الاصطناعي' : 'Re-run AI OCR Scan',
-                icon: Icons.sync_rounded,
-                enabled: !isRechecking,
-                onPressed: () => _promptRecheckOptions(
-                  context: context,
-                  inv: inv,
-                  event: event,
-                  eventsMap: eventsMap,
-                  strings: strings,
-                  colorScheme: colorScheme,
-                  activeCountry: activeCountry,
-                  isAr: isAr,
-                ),
-              ),
               if (isAdmin) ...[
+                M3ActionMenu.item(
+                  context: context,
+                  label: isAr ? 'إعادة فحص OCR بالذكاء الاصطناعي' : 'Re-run AI OCR Scan',
+                  icon: Icons.sync_rounded,
+                  enabled: !isRechecking,
+                  onPressed: () => _promptRecheckOptions(
+                    context: context,
+                    inv: inv,
+                    event: event,
+                    eventsMap: eventsMap,
+                    strings: strings,
+                    colorScheme: colorScheme,
+                    activeCountry: activeCountry,
+                    isAr: isAr,
+                  ),
+                ),
                 M3ActionMenu.divider(),
                 M3ActionMenu.item(
                   context: context,
@@ -7242,56 +7281,58 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                                       color: colorScheme.onErrorContainer,
                                     ),
                                   ),
-                                  const Spacer(),
-                                  // Connected Action Group for Quick Re-check and AI Brain
-                                  M3ConnectedActionGroup(
-                                    height: 30,
-                                    borderRadius: 8,
-                                    fontSize: 11,
-                                    iconSize: 14,
-                                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                                    actions: [
-                                      M3ConnectedActionItem(
-                                        label: isRechecking ? strings.recheckingReceiptLoading : strings.recheckInvoiceAction,
-                                        iconWidget: isRechecking
-                                            ? SizedBox(
-                                                width: 12,
-                                                height: 12,
-                                                child: CircularProgressIndicator(
-                                                  strokeWidth: 2,
-                                                  color: colorScheme.error,
-                                                ),
-                                              )
-                                            : null,
-                                        icon: isRechecking ? null : Icons.sync_rounded,
-                                        isDestructive: true,
-                                        onPressed: isRechecking
-                                            ? null
-                                            : () => _promptRecheckOptions(
-                                                  context: context,
-                                                  inv: inv,
-                                                  event: event,
-                                                  eventsMap: eventsMap,
-                                                  strings: strings,
-                                                  colorScheme: colorScheme,
-                                                  activeCountry: activeCountry,
-                                                  isAr: isAr,
-                                                ),
-                                      ),
-                                      M3ConnectedActionItem(
-                                        label: isAr ? 'عقل الذكاء' : 'AI Brain',
-                                        icon: Icons.psychology_rounded,
-                                        isPrimary: true,
-                                        onPressed: () => _openAiBrainCoPilotForInvoice(
-                                          context: context,
-                                          inv: inv,
-                                          event: event,
-                                          strings: strings,
-                                          isAr: isAr,
+                                  if (isAdmin) ...[
+                                    const Spacer(),
+                                    // Connected Action Group for Quick Re-check and AI Brain
+                                    M3ConnectedActionGroup(
+                                      height: 30,
+                                      borderRadius: 8,
+                                      fontSize: 11,
+                                      iconSize: 14,
+                                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                                      actions: [
+                                        M3ConnectedActionItem(
+                                          label: isRechecking ? strings.recheckingReceiptLoading : strings.recheckInvoiceAction,
+                                          iconWidget: isRechecking
+                                              ? SizedBox(
+                                                  width: 12,
+                                                  height: 12,
+                                                  child: CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    color: colorScheme.error,
+                                                  ),
+                                                )
+                                              : null,
+                                          icon: isRechecking ? null : Icons.sync_rounded,
+                                          isDestructive: true,
+                                          onPressed: isRechecking
+                                              ? null
+                                              : () => _promptRecheckOptions(
+                                                    context: context,
+                                                    inv: inv,
+                                                    event: event,
+                                                    eventsMap: eventsMap,
+                                                    strings: strings,
+                                                    colorScheme: colorScheme,
+                                                    activeCountry: activeCountry,
+                                                    isAr: isAr,
+                                                  ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
+                                        M3ConnectedActionItem(
+                                          label: isAr ? 'عقل الذكاء' : 'AI Brain',
+                                          icon: Icons.psychology_rounded,
+                                          isPrimary: true,
+                                          onPressed: () => _openAiBrainCoPilotForInvoice(
+                                            context: context,
+                                            inv: inv,
+                                            event: event,
+                                            strings: strings,
+                                            isAr: isAr,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ],
                               ),
                               const SizedBox(height: 8),
@@ -7386,7 +7427,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                         fontSize: isCardMobile ? 11 : 12,
                         iconSize: isCardMobile ? 15 : 17,
                         actions: [
-                          if (!isValid)
+                          if (!isValid && isAdmin)
                             M3ConnectedActionItem(
                               label: strings.recheckInvoiceAction,
                               iconWidget: isRechecking
@@ -7417,13 +7458,13 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                           M3ConnectedActionItem(
                             label: itemsBtnLabel,
                             icon: isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                            isPrimary: isValid,
+                            isPrimary: isValid || !isAdmin,
                             onPressed: () => _toggleExpand(docId),
                           ),
                         ],
                       ),
                     ] else ...[
-                      if (!isValid) ...[
+                      if (!isValid && isAdmin) ...[
                         const SizedBox(width: 8),
                         M3ConnectedActionGroup(
                           height: 36,
@@ -7532,23 +7573,23 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                             }
                           },
                         ),
-                        M3ActionMenu.item(
-                          context: context,
-                          label: isAr ? 'إعادة فحص OCR بالذكاء الاصطناعي' : 'Re-run AI OCR Scan',
-                          icon: Icons.sync_rounded,
-                          enabled: !isRechecking,
-                          onPressed: () => _promptRecheckOptions(
-                            context: context,
-                            inv: inv,
-                            event: event,
-                            eventsMap: eventsMap,
-                            strings: strings,
-                            colorScheme: colorScheme,
-                            activeCountry: activeCountry,
-                            isAr: isAr,
-                          ),
-                        ),
                         if (isAdmin) ...[
+                          M3ActionMenu.item(
+                            context: context,
+                            label: isAr ? 'إعادة فحص OCR بالذكاء الاصطناعي' : 'Re-run AI OCR Scan',
+                            icon: Icons.sync_rounded,
+                            enabled: !isRechecking,
+                            onPressed: () => _promptRecheckOptions(
+                              context: context,
+                              inv: inv,
+                              event: event,
+                              eventsMap: eventsMap,
+                              strings: strings,
+                              colorScheme: colorScheme,
+                              activeCountry: activeCountry,
+                              isAr: isAr,
+                            ),
+                          ),
                           M3ActionMenu.divider(),
                           M3ActionMenu.item(
                             context: context,

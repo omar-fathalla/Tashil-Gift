@@ -24,6 +24,11 @@ class _AiProductDiscoveryScreenState extends ConsumerState<AiProductDiscoveryScr
   final TextEditingController _searchController = TextEditingController();
 
   bool _isProcessingBulk = false;
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _companiesStream;
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _getCompaniesStream(FirebaseFirestore firestore) {
+    return _companiesStream ??= firestore.collection('companies').snapshots();
+  }
 
   @override
   void dispose() {
@@ -421,7 +426,7 @@ class _AiProductDiscoveryScreenState extends ConsumerState<AiProductDiscoveryScr
                   final isNarrow = constraints.maxWidth < 750;
                   final companyDropdown = firestore != null
                       ? StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                          stream: firestore.collection('companies').snapshots(),
+                          stream: _getCompaniesStream(firestore),
                           builder: (context, compSnapshot) {
                             final docs = compSnapshot.data?.docs ?? [];
                             return Container(

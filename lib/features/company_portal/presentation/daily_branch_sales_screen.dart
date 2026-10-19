@@ -24,11 +24,13 @@ import '../../../core/widgets/m3_adaptive_scaffold.dart';
 class DailyBranchSalesScreen extends ConsumerStatefulWidget {
   final String? lockedCompanySlug;
   final String? initialEventId;
+  final String? lockedEventId;
 
   const DailyBranchSalesScreen({
     super.key,
     this.lockedCompanySlug,
     this.initialEventId,
+    this.lockedEventId,
   });
 
   @override
@@ -89,8 +91,11 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
     super.initState();
     final now = DateTime.now();
     _selectedDate = DateTime(now.year, now.month, now.day);
-    _selectedEventId = (widget.initialEventId != null && widget.initialEventId!.isNotEmpty)
-        ? widget.initialEventId
+    final effectiveEventId = (widget.lockedEventId != null && widget.lockedEventId!.isNotEmpty)
+        ? widget.lockedEventId
+        : widget.initialEventId;
+    _selectedEventId = (effectiveEventId != null && effectiveEventId.isNotEmpty)
+        ? effectiveEventId
         : 'all';
     _searchController.addListener(() {
       if (_searchQuery != _searchController.text) {
@@ -99,6 +104,24 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
         });
       }
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant DailyBranchSalesScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final effectiveEventId = (widget.lockedEventId != null && widget.lockedEventId!.isNotEmpty)
+        ? widget.lockedEventId
+        : widget.initialEventId;
+    final oldEffectiveEventId = (oldWidget.lockedEventId != null && oldWidget.lockedEventId!.isNotEmpty)
+        ? oldWidget.lockedEventId
+        : oldWidget.initialEventId;
+    if (effectiveEventId != oldEffectiveEventId &&
+        effectiveEventId != null &&
+        effectiveEventId.isNotEmpty) {
+      setState(() {
+        _selectedEventId = effectiveEventId;
+      });
+    }
   }
 
   @override
@@ -441,7 +464,12 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
               .toList();
         }
 
-        final companyEvents = _persistentEventsCache[effectiveSlug] ?? (eventsSnap.data?.docs ?? [])
+        final isCampaignLocked = widget.lockedEventId != null && widget.lockedEventId!.isNotEmpty;
+        if (isCampaignLocked && _selectedEventId != widget.lockedEventId) {
+          _selectedEventId = widget.lockedEventId;
+        }
+
+        final rawCompanyEvents = _persistentEventsCache[effectiveSlug] ?? (eventsSnap.data?.docs ?? [])
             .map((d) {
               try {
                 return EventModel.fromFirestore(d);
@@ -452,14 +480,20 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
             .whereType<EventModel>()
             .toList();
 
+        final companyEvents = isCampaignLocked
+            ? rawCompanyEvents.where((e) => e.id == widget.lockedEventId).toList()
+            : rawCompanyEvents;
+
         // Selected Campaign Scoping
-        final isAllCampaigns = _selectedEventId == null || _selectedEventId == 'all' || _selectedEventId == 'ALL';
+        final isAllCampaigns = !isCampaignLocked &&
+            (_selectedEventId == null || _selectedEventId == 'all' || _selectedEventId == 'ALL');
         EventModel? currentEvent;
         if (!isAllCampaigns) {
-          currentEvent = companyEvents.where((e) => e.id == _selectedEventId).firstOrNull;
+          final targetId = isCampaignLocked ? widget.lockedEventId : _selectedEventId;
+          currentEvent = companyEvents.where((e) => e.id == targetId).firstOrNull;
         }
 
-        final targetEventId = isAllCampaigns ? null : currentEvent?.id;
+        final targetEventId = isAllCampaigns ? null : (currentEvent?.id ?? (isCampaignLocked ? widget.lockedEventId : null));
         final targetDateStr = _isAllDays ? null : _formatDateStr(_selectedDate);
         final cacheKey = '${effectiveSlug}_${targetEventId ?? 'all'}_${targetDateStr ?? 'all'}';
 
@@ -482,7 +516,10 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
                   }
                 }
 
-                final rawTransactions = _persistentTxCache[cacheKey] ?? (txSnap.data?.docs ?? []).map((d) => d.data() as Map<String, dynamic>).toList();
+                final unFilteredTransactions = _persistentTxCache[cacheKey] ?? (txSnap.data?.docs ?? []).map((d) => d.data() as Map<String, dynamic>).toList();
+                final rawTransactions = isCampaignLocked
+                    ? unFilteredTransactions.where((tx) => tx['campaignId']?.toString() == widget.lockedEventId).toList()
+                    : unFilteredTransactions;
                 final cachedSales = _persistentSalesCache[cacheKey];
 
                 if (txSnap.connectionState == ConnectionState.waiting && !txSnap.hasData && _lastLoadedRecords == null && cachedSales == null) {

@@ -476,32 +476,67 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                       // Prize Name Title with "لقد فزت بـ:"
                                       Padding(
                                         padding: const EdgeInsets.symmetric(horizontal: 4),
-                                        child: RichText(
-                                          textAlign: TextAlign.center,
-                                          text: TextSpan(
-                                            style: GoogleFonts.cairo(
-                                              fontSize: 20,
-                                              height: 1.3,
-                                            ),
-                                            children: [
-                                              TextSpan(
-                                                text: 'لقد فزت بـ: ',
-                                                style: GoogleFonts.cairo(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: colorScheme.onSurfaceVariant,
-                                                ),
+                                        child: Wrap(
+                                          alignment: WrapAlignment.center,
+                                          crossAxisAlignment: WrapCrossAlignment.center,
+                                          spacing: 6,
+                                          runSpacing: 4,
+                                          children: [
+                                            Text(
+                                              'لقد فزت بـ:',
+                                              textAlign: TextAlign.center,
+                                              style: GoogleFonts.cairo(
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.w700,
+                                                color: colorScheme.onSurfaceVariant,
+                                                height: 1.3,
                                               ),
-                                              TextSpan(
-                                                text: cleanPrizeName,
+                                            ),
+                                            Text(
+                                              cleanPrizeName,
+                                              textAlign: TextAlign.center,
+                                              style: GoogleFonts.cairo(
+                                                fontSize: 22,
+                                                fontWeight: FontWeight.w900,
+                                                color: colorScheme.primary,
+                                                height: 1.3,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: colorScheme.primaryContainer.withValues(alpha: 0.45),
+                                          borderRadius: BorderRadius.circular(20),
+                                          border: Border.all(
+                                            color: colorScheme.primary.withValues(alpha: 0.25),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.verified_rounded,
+                                              size: 14,
+                                              color: colorScheme.primary,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Flexible(
+                                              child: Text(
+                                                resolvedIsVoucher
+                                                    ? 'كارت فواتشر مشتريات معتمد'
+                                                    : 'هدية عينية فورية معتمدة',
                                                 style: GoogleFonts.cairo(
-                                                  fontSize: 22,
-                                                  fontWeight: FontWeight.w900,
+                                                  fontSize: 11.5,
+                                                  fontWeight: FontWeight.bold,
                                                   color: colorScheme.primary,
                                                 ),
                                               ),
-                                            ],
-                                          ),
+                                            ),
+                                          ],
                                         ),
                                       ),
 
@@ -941,6 +976,21 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                               Navigator.of(context).pop();
                               widget.onNextChance?.call();
                             },
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                              widget.onNextCustomer();
+                            },
+                            child: Text(
+                              'إنهاء واستلام الجوائز',
+                              style: GoogleFonts.cairo(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
                           ),
                         ] else ...[
                           M3ActionButton(

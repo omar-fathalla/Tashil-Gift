@@ -538,6 +538,12 @@ class EventModel {
   /// Whether to automatically send celebratory WhatsApp greeting messages to winning shoppers upon gift handover (true by default).
   final bool enableWhatsAppWinnerNotification;
 
+  /// Tier 2 (Optional Campaign-Level Override): Whether this specific campaign uses custom Agency Operations credentials instead of inheriting Company-Level credentials.
+  final bool hasCustomAgencyCredentials;
+  final String customAgencyUsername;
+  final String customAgencyPassword;
+  final int customAgencyCredentialVersion;
+
   EventModel({
     required this.id,
     required this.eventName,
@@ -573,6 +579,10 @@ class EventModel {
     this.requireVoucherSerials = false,
     this.allowComplementaryReceipts = false,
     this.enableWhatsAppWinnerNotification = true,
+    this.hasCustomAgencyCredentials = false,
+    this.customAgencyUsername = '',
+    this.customAgencyPassword = '',
+    this.customAgencyCredentialVersion = 1,
   });
 
   bool get isExpired {
@@ -731,6 +741,10 @@ class EventModel {
       requireVoucherSerials: data['requireVoucherSerials'] == true || data['require_voucher_serials'] == true,
       allowComplementaryReceipts: data['allowComplementaryReceipts'] == true || data['allow_complementary_receipts'] == true,
       enableWhatsAppWinnerNotification: data['enableWhatsAppWinnerNotification'] != false && data['enable_whatsapp_winner_notification'] != false,
+      hasCustomAgencyCredentials: data['hasCustomAgencyCredentials'] == true,
+      customAgencyUsername: (data['customAgencyUsername'] ?? '').toString(),
+      customAgencyPassword: (data['customAgencyPassword'] ?? '').toString(),
+      customAgencyCredentialVersion: (data['customAgencyCredentialVersion'] as num?)?.toInt() ?? 1,
     );
   }
 
@@ -795,6 +809,10 @@ class EventModel {
       'requireVoucherSerials': requireVoucherSerials,
       'allowComplementaryReceipts': allowComplementaryReceipts,
       'enableWhatsAppWinnerNotification': enableWhatsAppWinnerNotification,
+      'hasCustomAgencyCredentials': hasCustomAgencyCredentials,
+      'customAgencyUsername': customAgencyUsername,
+      'customAgencyPassword': customAgencyPassword,
+      'customAgencyCredentialVersion': customAgencyCredentialVersion,
     };
   }
 
@@ -833,6 +851,10 @@ class EventModel {
     bool? requireVoucherSerials,
     bool? allowComplementaryReceipts,
     bool? enableWhatsAppWinnerNotification,
+    bool? hasCustomAgencyCredentials,
+    String? customAgencyUsername,
+    String? customAgencyPassword,
+    int? customAgencyCredentialVersion,
   }) {
     return EventModel(
       id: id ?? this.id,
@@ -869,6 +891,10 @@ class EventModel {
       requireVoucherSerials: requireVoucherSerials ?? this.requireVoucherSerials,
       allowComplementaryReceipts: allowComplementaryReceipts ?? this.allowComplementaryReceipts,
       enableWhatsAppWinnerNotification: enableWhatsAppWinnerNotification ?? this.enableWhatsAppWinnerNotification,
+      hasCustomAgencyCredentials: hasCustomAgencyCredentials ?? this.hasCustomAgencyCredentials,
+      customAgencyUsername: customAgencyUsername ?? this.customAgencyUsername,
+      customAgencyPassword: customAgencyPassword ?? this.customAgencyPassword,
+      customAgencyCredentialVersion: customAgencyCredentialVersion ?? this.customAgencyCredentialVersion,
     );
   }
 }

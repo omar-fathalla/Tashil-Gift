@@ -257,10 +257,18 @@ exports.wahaProxy = functions.https.onRequest(async (req, res) => {
       targetUrl = "/" + targetUrl;
     }
 
-    const backendUrl = "http://76.13.14.23:3000" + targetUrl;
+    // Block path traversal or non-API paths
+    if (targetUrl.includes("..") || !targetUrl.startsWith("/api/")) {
+      return res.status(403).json({
+        error: "FORBIDDEN_PROXY_PATH",
+        message: "Only /api/* WAHA endpoints are permitted through the proxy.",
+      });
+    }
+
+    const backendUrl = (process.env.WAHA_BACKEND_URL || "http://76.13.14.23:3000") + targetUrl;
 
     const forwardHeaders = {
-      "x-api-key": req.headers["x-api-key"] || "tashil_secret_token_2026",
+      "x-api-key": req.headers["x-api-key"] || process.env.WAHA_API_KEY || "tashil_secret_token_2026",
     };
     if (req.headers["accept"]) {
       forwardHeaders["accept"] = req.headers["accept"];

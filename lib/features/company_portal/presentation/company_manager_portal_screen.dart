@@ -23,6 +23,8 @@ import '../../../core/utils/slug_utils.dart';
 import '../../../core/widgets/campaign_suspended_screen.dart';
 import '../../client_portal/presentation/client_receipt_upload_screen.dart';
 import '../../../core/utils/responsive.dart';
+import '../../../core/services/partner_portal_auth_service.dart';
+import '../../auth/presentation/partner_portal_login_screen.dart';
 
 /// Navigation destination model for Partner Portal Dashboard
 class _PortalNavItem {
@@ -52,12 +54,14 @@ class CompanyManagerPortalScreen extends ConsumerStatefulWidget {
   final String companySlug;
   final String? initialEventId;
   final bool isAgencyOpsMode;
+  final bool requirePortalAuth;
 
   const CompanyManagerPortalScreen({
     super.key,
     required this.companySlug,
     this.initialEventId,
     this.isAgencyOpsMode = false,
+    this.requirePortalAuth = false,
   });
 
   @override
@@ -71,6 +75,37 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
   int _selectedTab = 0;
   final Set<int> _loadedTabs = {0}; // Lazy loading set: only render tabs when requested
   final Map<String, Widget> _cachedTabWidgets = {}; // High performance memoized tab widget cache (0ms instant tab switching)
+  Stream<QuerySnapshot>? _memoizedEventsStream;
+  String? _lastEventsStreamKey;
+
+  Stream<QuerySnapshot>? _ensureEventsStream(FirebaseFirestore? firestore) {
+    if (firestore == null) return null;
+    final cleanSlug = widget.companySlug.trim().toLowerCase();
+    final key = '$cleanSlug:${widget.initialEventId ?? ''}';
+    if (_memoizedEventsStream == null || _lastEventsStreamKey != key) {
+      _lastEventsStreamKey = key;
+      try {
+        _memoizedEventsStream = firestore.collection('events').snapshots();
+      } catch (_) {
+        _memoizedEventsStream = null;
+      }
+    }
+    return _memoizedEventsStream;
+  }
+
+  Future<void> _signOutPortalSession(String effectiveSlug, {String? eventId}) async {
+    final authService = ref.read(partnerPortalAuthServiceProvider);
+    final role = widget.isAgencyOpsMode
+        ? PartnerPortalRole.agencyOps
+        : PartnerPortalRole.brandManager;
+    await authService.signOut(
+      companySlug: effectiveSlug.isNotEmpty ? effectiveSlug : widget.companySlug,
+      role: role,
+      eventId: eventId ?? widget.initialEventId,
+    );
+    if (!mounted) return;
+    ref.read(partnerPortalSessionEpochProvider.notifier).state++;
+  }
 
   @override
   void didUpdateWidget(covariant CompanyManagerPortalScreen oldWidget) {
@@ -82,32 +117,87 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     }
   }
 
-  void _copyAgencyOpsLink(BuildContext context, AppStrings strings, String effectiveSlug) {
-    final url = AppUrlBuilder.buildAgencyOpsUrl(effectiveSlug);
-    Clipboard.setData(ClipboardData(text: url));
-    ScaffoldMessenger.of(context).showSnackBar(
+  Future<void> _copyAgencyOpsLink(
+    BuildContext context,
+    AppStrings strings,
+    String effectiveSlug, {
+    String? eventId,
+  }) async {
+    final targetEventId = (eventId != null && eventId.trim().isNotEmpty)
+        ? eventId.trim()
+        : widget.initialEventId;
+    final url = AppUrlBuilder.buildAgencyOpsUrl(effectiveSlug, eventId: targetEventId);
+    final messenger = ScaffoldMessenger.of(context);
+    final primaryColor = colorScheme.primary;
+    try {
+      final authService = ref.read(partnerPortalAuthServiceProvider);
+      final creds = await authService.resolveCredentials(
+        companySlug: effectiveSlug,
+        eventId: targetEventId,
+      );
+      final card = PartnerPortalAuthService.buildWhatsAppLoginCard(
+        role: PartnerPortalRole.agencyOps,
+        companyName: creds.companyName,
+        portalUrl: url,
+        username: creds.effectiveAgencyUsername,
+        password: creds.effectiveAgencyPassword,
+        campaignName: creds.eventName,
+        isCustomCampaignTier: creds.hasCustomAgencyCredentials,
+        isAr: strings.isAr,
+      );
+      await Clipboard.setData(ClipboardData(text: card));
+    } catch (_) {
+      await Clipboard.setData(ClipboardData(text: url));
+    }
+    if (!mounted) return;
+    messenger.showSnackBar(
       SnackBar(
         content: Text('${strings.agencyOpsLinkCopied}: $url'),
-        backgroundColor: colorScheme.primary,
+        backgroundColor: primaryColor,
         behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
-  void _copyBrandExecutiveLink(BuildContext context, AppStrings strings, String effectiveSlug) {
+  Future<void> _copyBrandExecutiveLink(BuildContext context, AppStrings strings, String effectiveSlug) async {
     final url = AppUrlBuilder.buildBrandExecutiveUrl(effectiveSlug);
-    Clipboard.setData(ClipboardData(text: url));
-    ScaffoldMessenger.of(context).showSnackBar(
+    final messenger = ScaffoldMessenger.of(context);
+    final primaryColor = colorScheme.primary;
+    try {
+      final authService = ref.read(partnerPortalAuthServiceProvider);
+      final creds = await authService.resolveCredentials(
+        companySlug: effectiveSlug,
+        eventId: widget.initialEventId,
+      );
+      final card = PartnerPortalAuthService.buildWhatsAppLoginCard(
+        role: PartnerPortalRole.brandManager,
+        companyName: creds.companyName,
+        portalUrl: url,
+        username: creds.brandManagerUsername,
+        password: creds.brandManagerPassword,
+        isAr: strings.isAr,
+      );
+      await Clipboard.setData(ClipboardData(text: card));
+    } catch (_) {
+      await Clipboard.setData(ClipboardData(text: url));
+    }
+    if (!mounted) return;
+    messenger.showSnackBar(
       SnackBar(
         content: Text('${strings.brandExecutiveLinkCopied}: $url'),
-        backgroundColor: colorScheme.primary,
+        backgroundColor: primaryColor,
         behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
-  void _copyPromoterLink(BuildContext context, AppStrings strings, String effectiveSlug) {
-    final url = AppUrlBuilder.buildPromoterUrl(effectiveSlug);
+  void _copyPromoterLink(
+    BuildContext context,
+    AppStrings strings,
+    String effectiveSlug, {
+    String? eventId,
+  }) {
+    final url = AppUrlBuilder.buildPromoterUrl(effectiveSlug, eventId: eventId);
     Clipboard.setData(ClipboardData(text: url));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -236,6 +326,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     required bool isHi,
     required M3LayoutMetrics layout,
     required List<QueryDocumentSnapshot> allDocs,
+    PartnerPortalSession? portalSession,
   }) {
     final isCompact = layout.isCompact;
     final isMedium = layout.isMedium;
@@ -379,8 +470,14 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
       );
     }
 
-    final activeEventId = initialEvent?.id ?? widget.initialEventId;
+    final lockedEventId = (portalSession?.lockedEventId != null && portalSession!.lockedEventId!.isNotEmpty)
+        ? portalSession.lockedEventId
+        : null;
+    final activeEventId = lockedEventId ?? initialEvent?.id ?? widget.initialEventId;
     final navItems = _getNavItems(strings, isAr, isHi);
+    final isSystemAdmin = ref.watch(isAdminProvider);
+    final isReadOnlyStock =
+        !widget.isAgencyOpsMode && (!isSystemAdmin || portalSession?.role == PartnerPortalRole.brandManager);
 
     return Directionality(
       textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
@@ -461,8 +558,10 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                                 effectiveSlug: effectiveSlug,
                                 companyDisplayName: companyDisplayName,
                                 activeEventId: activeEventId,
+                                lockedEventId: lockedEventId,
                                 initialEvent: initialEvent,
                                 companyEvents: companyEvents,
+                                isReadOnlyStock: isReadOnlyStock,
                               )
                             : const SizedBox.shrink(),
                       ),
@@ -483,15 +582,17 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     required String effectiveSlug,
     required String companyDisplayName,
     required String? activeEventId,
+    required String? lockedEventId,
     required EventModel? initialEvent,
     required List<EventModel> companyEvents,
+    required bool isReadOnlyStock,
   }) {
     final String tabKey;
     if (!widget.isAgencyOpsMode && tabIndex == 1) {
       // Comparison Analytics benchmarks all campaigns of the company; keep stable across single-campaign selector
-      tabKey = '1-comparison-$effectiveSlug';
+      tabKey = '1-comparison-$effectiveSlug-${lockedEventId ?? 'all'}';
     } else {
-      tabKey = '$tabIndex-${activeEventId ?? 'all'}-$effectiveSlug-${widget.isAgencyOpsMode}';
+      tabKey = '$tabIndex-${activeEventId ?? 'all'}-${lockedEventId ?? 'unlocked'}-$effectiveSlug-${widget.isAgencyOpsMode}-$isReadOnlyStock';
     }
     if (_cachedTabWidgets.containsKey(tabKey)) {
       return _cachedTabWidgets[tabKey]!;
@@ -501,8 +602,10 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
       effectiveSlug: effectiveSlug,
       companyDisplayName: companyDisplayName,
       activeEventId: activeEventId,
+      lockedEventId: lockedEventId,
       initialEvent: initialEvent,
       companyEvents: companyEvents,
+      isReadOnlyStock: isReadOnlyStock,
     );
     _cachedTabWidgets[tabKey] = widgetContent;
     return widgetContent;
@@ -514,39 +617,46 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     required String effectiveSlug,
     required String companyDisplayName,
     required String? activeEventId,
+    required String? lockedEventId,
     required EventModel? initialEvent,
     required List<EventModel> companyEvents,
+    required bool isReadOnlyStock,
   }) {
     if (widget.isAgencyOpsMode) {
       switch (tabIndex) {
         case 0:
           return InvoicesLogScreen(
-            key: ValueKey('agency_invoices_${effectiveSlug}_${activeEventId ?? 'all'}'),
+            key: ValueKey('agency_invoices_${effectiveSlug}_${activeEventId ?? 'all'}_${lockedEventId ?? 'unlocked'}'),
             initialEventId: activeEventId,
+            lockedEventId: lockedEventId,
             lockedCompanySlug: effectiveSlug,
             lockedCompanyName: companyDisplayName,
             isEmbedded: true,
           );
         case 1:
           return BranchStockBalancesScreen(
-            key: ValueKey('agency_balances_${effectiveSlug}_${activeEventId ?? 'all'}'),
+            key: ValueKey('agency_balances_${effectiveSlug}_${activeEventId ?? 'all'}_${lockedEventId ?? 'unlocked'}'),
             initialEventId: activeEventId,
+            lockedEventId: lockedEventId,
             lockedCompanySlug: effectiveSlug,
             lockedCompanyName: companyDisplayName,
             isEmbedded: true,
+            isReadOnly: false,
           );
         case 2:
           return CompanyVouchersReportScreen(
-            key: ValueKey('agency_vouchers_${effectiveSlug}_${activeEventId ?? 'all'}'),
+            key: ValueKey('agency_vouchers_${effectiveSlug}_${activeEventId ?? 'all'}_${lockedEventId ?? 'unlocked'}'),
             initialEventId: activeEventId,
+            lockedEventId: lockedEventId,
             lockedCompanySlug: effectiveSlug,
             lockedCompanyName: companyDisplayName,
             isEmbedded: true,
           );
         case 3:
           return DailyBranchSalesScreen(
-            key: ValueKey('agency_daily_sales_${effectiveSlug}_${activeEventId ?? 'all'}'),
+            key: ValueKey('agency_daily_sales_${effectiveSlug}_${activeEventId ?? 'all'}_${lockedEventId ?? 'unlocked'}'),
             initialEventId: activeEventId,
+            lockedEventId: lockedEventId,
             lockedCompanySlug: effectiveSlug,
           );
         default:
@@ -576,30 +686,35 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
         );
       case 2:
         return InvoicesLogScreen(
-          key: ValueKey('invoices_${effectiveSlug}_${activeEventId ?? 'all'}'),
+          key: ValueKey('invoices_${effectiveSlug}_${activeEventId ?? 'all'}_${lockedEventId ?? 'unlocked'}'),
           initialEventId: activeEventId,
+          lockedEventId: lockedEventId,
           lockedCompanySlug: effectiveSlug,
           lockedCompanyName: companyDisplayName,
           isEmbedded: true,
         );
       case 3:
         return DailyBranchSalesScreen(
-          key: ValueKey('daily_sales_${effectiveSlug}_${activeEventId ?? 'all'}'),
+          key: ValueKey('daily_sales_${effectiveSlug}_${activeEventId ?? 'all'}_${lockedEventId ?? 'unlocked'}'),
           initialEventId: activeEventId,
+          lockedEventId: lockedEventId,
           lockedCompanySlug: effectiveSlug,
         );
       case 4:
         return BranchStockBalancesScreen(
-          key: ValueKey('balances_${effectiveSlug}_${activeEventId ?? 'all'}'),
+          key: ValueKey('balances_${effectiveSlug}_${activeEventId ?? 'all'}_${lockedEventId ?? 'unlocked'}_$isReadOnlyStock'),
           initialEventId: activeEventId,
+          lockedEventId: lockedEventId,
           lockedCompanySlug: effectiveSlug,
           lockedCompanyName: companyDisplayName,
           isEmbedded: true,
+          isReadOnly: isReadOnlyStock,
         );
       case 5:
         return CompanyVouchersReportScreen(
-          key: ValueKey('vouchers_${effectiveSlug}_${activeEventId ?? 'all'}'),
+          key: ValueKey('vouchers_${effectiveSlug}_${activeEventId ?? 'all'}_${lockedEventId ?? 'unlocked'}'),
           initialEventId: activeEventId,
+          lockedEventId: lockedEventId,
           lockedCompanySlug: effectiveSlug,
           lockedCompanyName: companyDisplayName,
           isEmbedded: true,
@@ -854,7 +969,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                           child: IconButton(
                             icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
                             visualDensity: VisualDensity.compact,
-                            onPressed: () => _copyPromoterLink(context, strings, effectiveSlug),
+                            onPressed: () => _copyPromoterLink(context, strings, effectiveSlug, eventId: activeEventId),
                           ),
                         ),
                         // 2. Copy Agency Ops Link Quick Button
@@ -863,18 +978,19 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                           child: IconButton(
                             icon: const Icon(Icons.store_mall_directory_rounded, size: 18),
                             visualDensity: VisualDensity.compact,
-                            onPressed: () => _copyAgencyOpsLink(context, strings, effectiveSlug),
+                            onPressed: () => _copyAgencyOpsLink(context, strings, effectiveSlug, eventId: activeEventId),
                           ),
                         ),
-                        // 3. Copy Brand Executive Master Link Quick Button
-                        Tooltip(
-                          message: strings.copyBrandExecutiveLink,
-                          child: IconButton(
-                            icon: const Icon(Icons.business_center_rounded, size: 18),
-                            visualDensity: VisualDensity.compact,
-                            onPressed: () => _copyBrandExecutiveLink(context, strings, effectiveSlug),
+                        // 3. Copy Brand Executive Master Link Quick Button (Brand Manager / Admin only)
+                        if (!widget.isAgencyOpsMode)
+                          Tooltip(
+                            message: strings.copyBrandExecutiveLink,
+                            child: IconButton(
+                              icon: const Icon(Icons.business_center_rounded, size: 18),
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () => _copyBrandExecutiveLink(context, strings, effectiveSlug),
+                            ),
                           ),
-                        ),
                         const SizedBox(height: 4),
                         // 4. Portal Settings & Preferences Button
                         Tooltip(
@@ -1466,7 +1582,7 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                         tooltip: strings.copyPromoterLink,
                         colorScheme: colorScheme,
                         onTap: () {
-                          _copyPromoterLink(context, strings, effectiveSlug);
+                          _copyPromoterLink(context, strings, effectiveSlug, eventId: activeEventId);
                           Navigator.of(context).pop();
                         },
                       ),
@@ -1477,21 +1593,22 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                         tooltip: strings.copyAgencyOpsLink,
                         colorScheme: colorScheme,
                         onTap: () {
-                          _copyAgencyOpsLink(context, strings, effectiveSlug);
+                          _copyAgencyOpsLink(context, strings, effectiveSlug, eventId: activeEventId);
                           Navigator.of(context).pop();
                         },
                       ),
-                      // 3. رابط مدير الشركة الدائم
-                      _buildDrawerShareIconButton(
-                        context: context,
-                        icon: Icons.business_center_rounded,
-                        tooltip: strings.copyBrandExecutiveLink,
-                        colorScheme: colorScheme,
-                        onTap: () {
-                          _copyBrandExecutiveLink(context, strings, effectiveSlug);
-                          Navigator.of(context).pop();
-                        },
-                      ),
+                      // 3. رابط مدير الشركة الدائم (Brand Manager / Admin only)
+                      if (!widget.isAgencyOpsMode)
+                        _buildDrawerShareIconButton(
+                          context: context,
+                          icon: Icons.business_center_rounded,
+                          tooltip: strings.copyBrandExecutiveLink,
+                          colorScheme: colorScheme,
+                          onTap: () {
+                            _copyBrandExecutiveLink(context, strings, effectiveSlug);
+                            Navigator.of(context).pop();
+                          },
+                        ),
                     ],
                   ),
 
@@ -1747,31 +1864,33 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                                 context: context,
                                 icon: Icons.qr_code_scanner_rounded,
                                 title: currentAr ? 'رابط المتسوق والبروموتر في الفرع' : (currentHi ? 'प्रमोटर और खरीदार लिंक' : 'Promoter & Shopper Link'),
-                                subtitle: AppUrlBuilder.buildPromoterUrl(effectiveSlug),
+                                subtitle: AppUrlBuilder.buildPromoterUrl(effectiveSlug, eventId: activeEventId),
                                 tooltip: strings.copyPromoterLink,
                                 colorScheme: dialogColorScheme,
-                                onCopy: () => _copyPromoterLink(context, strings, effectiveSlug),
+                                onCopy: () => _copyPromoterLink(context, strings, effectiveSlug, eventId: activeEventId),
                               ),
                               const SizedBox(height: 6),
                               _buildSettingsLinkTile(
                                 context: context,
                                 icon: Icons.store_mall_directory_rounded,
                                 title: currentAr ? 'رابط عمليات الوكالة وفريق الميدان' : (currentHi ? 'एजेंसी संचालन लिंक' : 'Agency Field Ops Link'),
-                                subtitle: AppUrlBuilder.buildAgencyOpsUrl(effectiveSlug),
+                                subtitle: AppUrlBuilder.buildAgencyOpsUrl(effectiveSlug, eventId: activeEventId),
                                 tooltip: strings.copyAgencyOpsLink,
                                 colorScheme: dialogColorScheme,
-                                onCopy: () => _copyAgencyOpsLink(context, strings, effectiveSlug),
+                                onCopy: () => _copyAgencyOpsLink(context, strings, effectiveSlug, eventId: activeEventId),
                               ),
-                              const SizedBox(height: 6),
-                              _buildSettingsLinkTile(
-                                context: context,
-                                icon: Icons.business_center_rounded,
-                                title: currentAr ? 'رابط مدير الشركة التنفيذي' : (currentHi ? 'कंपनी प्रबंधक लिंक' : 'Brand Executive Link'),
-                                subtitle: AppUrlBuilder.buildBrandExecutiveUrl(effectiveSlug),
-                                tooltip: strings.copyBrandExecutiveLink,
-                                colorScheme: dialogColorScheme,
-                                onCopy: () => _copyBrandExecutiveLink(context, strings, effectiveSlug),
-                              ),
+                              if (!widget.isAgencyOpsMode) ...[
+                                const SizedBox(height: 6),
+                                _buildSettingsLinkTile(
+                                  context: context,
+                                  icon: Icons.business_center_rounded,
+                                  title: currentAr ? 'رابط مدير الشركة التنفيذي' : (currentHi ? 'कंपनी प्रबंधक लिंक' : 'Brand Executive Link'),
+                                  subtitle: AppUrlBuilder.buildBrandExecutiveUrl(effectiveSlug),
+                                  tooltip: strings.copyBrandExecutiveLink,
+                                  colorScheme: dialogColorScheme,
+                                  onCopy: () => _copyBrandExecutiveLink(context, strings, effectiveSlug),
+                                ),
+                              ],
                               const SizedBox(height: 18),
 
                               // 4. Theme Mode
@@ -1802,6 +1921,36 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                                   },
                                 ),
                               ),
+
+                              // 5. Sign Out Option (for Portal Sessions)
+                              if (widget.requirePortalAuth) ...[
+                                const SizedBox(height: 14),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton.icon(
+                                    onPressed: () {
+                                      Navigator.of(dialogContext).pop();
+                                      _signOutPortalSession(effectiveSlug, eventId: activeEventId);
+                                    },
+                                    icon: Icon(Icons.logout_rounded, size: 18, color: dialogColorScheme.error),
+                                    label: Text(
+                                      currentAr
+                                          ? 'تسجيل الخروج من البوابة'
+                                          : (currentHi ? 'पोर्टल से साइन आउट करें' : 'Sign Out of Portal'),
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: dialogColorScheme.error,
+                                      ),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      side: BorderSide(color: dialogColorScheme.error.withValues(alpha: 0.5)),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -1886,43 +2035,57 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
       firestore = null;
     }
 
-    Stream<QuerySnapshot>? eventsStream;
-    if (firestore != null) {
-      try {
-        eventsStream = firestore.collection('events').snapshots();
-      } catch (_) {
-        eventsStream = null;
-      }
-    }
+    final eventsStream = _ensureEventsStream(firestore);
 
-    if (eventsStream != null) {
-      return StreamBuilder<QuerySnapshot>(
-        stream: eventsStream,
-        builder: (context, snapshot) {
-          final allDocs = snapshot.data?.docs ?? [];
-          return _buildScaffoldContent(
-            context: context,
-            colorScheme: colorScheme,
-            textTheme: textTheme,
-            strings: strings,
-            isAr: isAr,
-            isHi: isHi,
-            layout: layout,
-            allDocs: allDocs,
-          );
-        },
+    Widget buildPortalBody(PartnerPortalSession? session) {
+      if (eventsStream != null) {
+        return StreamBuilder<QuerySnapshot>(
+          stream: eventsStream,
+          builder: (context, snapshot) {
+            final rawDocs = snapshot.data?.docs ?? [];
+            final lockedId = session?.lockedEventId;
+            final allDocs = (lockedId != null && lockedId.isNotEmpty)
+                ? rawDocs.where((d) => d.id == lockedId).toList()
+                : rawDocs;
+            return _buildScaffoldContent(
+              context: context,
+              colorScheme: colorScheme,
+              textTheme: textTheme,
+              strings: strings,
+              isAr: isAr,
+              isHi: isHi,
+              layout: layout,
+              allDocs: allDocs,
+              portalSession: session,
+            );
+          },
+        );
+      }
+
+      return _buildScaffoldContent(
+        context: context,
+        colorScheme: colorScheme,
+        textTheme: textTheme,
+        strings: strings,
+        isAr: isAr,
+        isHi: isHi,
+        layout: layout,
+        allDocs: const [],
+        portalSession: session,
       );
     }
 
-    return _buildScaffoldContent(
-      context: context,
-      colorScheme: colorScheme,
-      textTheme: textTheme,
-      strings: strings,
-      isAr: isAr,
-      isHi: isHi,
-      layout: layout,
-      allDocs: const [],
-    );
+    if (widget.requirePortalAuth) {
+      return PortalAuthGuard(
+        companySlug: widget.companySlug,
+        eventId: widget.initialEventId,
+        requiredRole: widget.isAgencyOpsMode
+            ? PartnerPortalRole.agencyOps
+            : PartnerPortalRole.brandManager,
+        authenticatedBuilder: (context, session) => buildPortalBody(session),
+      );
+    }
+
+    return buildPortalBody(null);
   }
 }

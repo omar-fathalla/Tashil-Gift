@@ -173,6 +173,7 @@ class MyApp extends ConsumerWidget {
           companySlug: '',
           initialEventId: eventId,
           isAgencyOpsMode: true,
+          requirePortalAuth: true,
         ),
         settings: effectiveSettings,
       );
@@ -223,6 +224,7 @@ class MyApp extends ConsumerWidget {
           companySlug: slug,
           initialEventId: eventId,
           isAgencyOpsMode: true,
+          requirePortalAuth: true,
         ),
         settings: effectiveSettings,
       );
@@ -249,6 +251,7 @@ class MyApp extends ConsumerWidget {
           companySlug: slug,
           initialEventId: eventId,
           isAgencyOpsMode: false,
+          requirePortalAuth: true,
         ),
         settings: effectiveSettings,
       );
@@ -282,6 +285,7 @@ class MyApp extends ConsumerWidget {
           builder: (context) => CompanyManagerPortalScreen(
             companySlug: slug,
             initialEventId: eventId,
+            requirePortalAuth: true,
           ),
           settings: effectiveSettings,
         );
@@ -306,6 +310,7 @@ class MyApp extends ConsumerWidget {
             companySlug: slug,
             initialEventId: eventId,
             isAgencyOpsMode: true,
+            requirePortalAuth: true,
           ),
           settings: effectiveSettings,
         );

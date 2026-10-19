@@ -3167,6 +3167,18 @@ class _CampaignEventDetailsCardState extends ConsumerState<_CampaignEventDetails
   bool _isBranchesExpanded = false;
   String? _selectedChainFilter; // null means 'ALL' (كافة السلاسل)
   String? _lastEventId;
+  Stream<List<BranchModel>>? _branchesStream;
+
+  Stream<List<BranchModel>> _ensureBranchesStream() {
+    if (_branchesStream == null) {
+      try {
+        _branchesStream = ref.read(retailChainsServiceProvider).getAllBranchesStream();
+      } catch (_) {
+        _branchesStream = Stream.value([]);
+      }
+    }
+    return _branchesStream!;
+  }
 
   @override
   void initState() {
@@ -3280,12 +3292,7 @@ class _CampaignEventDetailsCardState extends ConsumerState<_CampaignEventDetails
     final rawBranches = event.branchNames;
     final chainNames = _extractRetailChains(event.retailChainName);
 
-    Stream<List<BranchModel>> branchesStream;
-    try {
-      branchesStream = ref.watch(retailChainsServiceProvider).getAllBranchesStream();
-    } catch (_) {
-      branchesStream = Stream.value([]);
-    }
+    final branchesStream = _ensureBranchesStream();
 
     return StreamBuilder<List<BranchModel>>(
       stream: branchesStream,

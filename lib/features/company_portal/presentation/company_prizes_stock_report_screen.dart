@@ -117,6 +117,49 @@ class _CompanyPrizesStockReportScreenState
   DateTime _selectedDate = DateTime.now();
   bool _isAllTime = false;
 
+  // Memoized stream lifecycle outside build() per Rule 9
+  String? _lastStreamsKey;
+  Stream<QuerySnapshot>? _eventsStream;
+  Stream<QuerySnapshot>? _giftsStream;
+  Stream<QuerySnapshot>? _transactionsStream;
+  final Map<String, Stream<List<GiftStockMovement>>> _stockMovementsStreams = {};
+
+  Stream<List<GiftStockMovement>> _ensureStockMovementsStream(String companySlug, {String? giftId}) {
+    final key = '${companySlug}_${giftId ?? 'all'}';
+    return _stockMovementsStreams.putIfAbsent(
+      key,
+      () => ref.read(companyGiftsServiceProvider).stockMovementsStream(companySlug, giftId: giftId),
+    );
+  }
+
+  void _ensureStreams(FirebaseFirestore firestore, String slug) {
+    final effectiveKey = '${slug}_${_selectedEventId ?? 'all'}';
+    if (_lastStreamsKey != effectiveKey || _transactionsStream == null) {
+      _lastStreamsKey = effectiveKey;
+
+      if (_eventsStream == null) {
+        Query eventsQuery = firestore.collection('events');
+        if (slug.isNotEmpty) {
+          eventsQuery = eventsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug.trim());
+        }
+        _eventsStream = eventsQuery.snapshots();
+      }
+
+      _giftsStream ??= firestore
+          .collection('company_gifts')
+          .where('companySlug', isEqualTo: slug)
+          .snapshots();
+
+      Query transactionsQuery = firestore.collection('receipts_transactions');
+      if (_selectedEventId != null && _selectedEventId != 'ALL' && _selectedEventId != 'all') {
+        transactionsQuery = transactionsQuery.where('campaignId', isEqualTo: _selectedEventId);
+      } else if (slug.isNotEmpty) {
+        transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug.trim());
+      }
+      _transactionsStream = transactionsQuery.snapshots();
+    }
+  }
+
   Future<void> _pickDate(BuildContext context) async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -1472,7 +1515,7 @@ class _CompanyPrizesStockReportScreenState
 
                         // Tab 2: Stock Movement Ledger (Live Stream)
                         StreamBuilder<List<GiftStockMovement>>(
-                          stream: ref.read(companyGiftsServiceProvider).stockMovementsStream(gift.companySlug, giftId: gift.id),
+                          stream: _ensureStockMovementsStream(gift.companySlug, giftId: gift.id),
                           builder: (context, snapshot) {
                             if (snapshot.connectionState == ConnectionState.waiting) {
                               return const Center(child: CircularProgressIndicator.adaptive());
@@ -1662,15 +1705,11 @@ class _CompanyPrizesStockReportScreenState
     }
 
     final slug = widget.lockedCompanySlug.toLowerCase().trim();
-
-    Query eventsQuery = firestore.collection('events');
-    if (slug.isNotEmpty) {
-      eventsQuery = eventsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug.trim());
-    }
+    _ensureStreams(firestore, slug);
 
     // 1. Stream events for this company to obtain all allocated prizes per campaign & branch
     return StreamBuilder<QuerySnapshot>(
-      stream: eventsQuery.snapshots(),
+      stream: _eventsStream,
       builder: (context, eventsSnapshot) {
         if (eventsSnapshot.connectionState == ConnectionState.waiting &&
             !eventsSnapshot.hasData) {
@@ -1695,10 +1734,7 @@ class _CompanyPrizesStockReportScreenState
 
         // 2. Stream company_gifts master catalog
         return StreamBuilder<QuerySnapshot>(
-          stream: firestore
-              .collection('company_gifts')
-              .where('companySlug', isEqualTo: slug)
-              .snapshots(),
+          stream: _giftsStream,
           builder: (context, giftsSnapshot) {
             final masterGifts = (giftsSnapshot.data?.docs ?? [])
                 .map((d) {
@@ -1711,16 +1747,9 @@ class _CompanyPrizesStockReportScreenState
                 .whereType<CompanyGiftModel>()
                 .toList();
 
-            Query transactionsQuery = firestore.collection('receipts_transactions');
-            if (_selectedEventId != null && _selectedEventId != 'ALL' && _selectedEventId != 'all') {
-              transactionsQuery = transactionsQuery.where('campaignId', isEqualTo: _selectedEventId);
-            } else if (slug.isNotEmpty) {
-              transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug.trim());
-            }
-
             // 3. Stream receipts_transactions for live claimed gifts verification & audit reconciliation
             return StreamBuilder<QuerySnapshot>(
-              stream: transactionsQuery.snapshots(),
+              stream: _transactionsStream,
               builder: (context, receiptsSnapshot) {
                 final allDocs = receiptsSnapshot.data?.docs ?? [];
                 final companyEventIds = companyEvents.map((e) => e.id).toSet();
@@ -3187,7 +3216,7 @@ class _CompanyPrizesStockReportScreenState
     required List<CompanyGiftModel> masterGifts,
   }) {
     return StreamBuilder<List<GiftStockMovement>>(
-      stream: ref.watch(companyGiftsServiceProvider).stockMovementsStream(companySlug),
+      stream: _ensureStockMovementsStream(companySlug),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(

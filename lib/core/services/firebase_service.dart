@@ -37,7 +37,7 @@ final isAdminProvider = Provider<bool>((ref) {
   try {
     final user = ref.watch(authStateStreamProvider).value ??
         ref.watch(firebaseAuthProvider).currentUser;
-    if (user != null && isAuthorizedAdminEmail(user.email)) {
+    if (user != null && !user.isAnonymous && isAuthorizedAdminEmail(user.email)) {
       return true;
     }
   } catch (_) {}
@@ -187,7 +187,7 @@ class FirebaseService {
       return true;
     }
     final user = _auth.currentUser;
-    return user != null && isAuthorizedAdminEmail(user.email);
+    return user != null && !user.isAnonymous && isAuthorizedAdminEmail(user.email);
   }
   
   Stream<User?> get authStateChanges => _auth.authStateChanges();

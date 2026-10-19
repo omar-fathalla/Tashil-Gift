@@ -41,6 +41,29 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
   Uint8List? _pickedImageBytes;
   String? _pickedImageFileName;
 
+  // Memoized streams outside build() per Rule 9
+  Stream<QuerySnapshot>? _companiesStream;
+  String? _lastGiftsCompanySlug;
+  Stream<QuerySnapshot>? _giftsStream;
+
+  Stream<QuerySnapshot>? _getCompaniesStream(FirebaseFirestore? firestore) {
+    if (firestore == null) return null;
+    return _companiesStream ??= firestore.collection('companies').snapshots();
+  }
+
+  Stream<QuerySnapshot>? _getGiftsStream(FirebaseFirestore? firestore, String companySlug) {
+    if (firestore == null) return null;
+    final cleanSlug = companySlug.toLowerCase().trim();
+    if (_lastGiftsCompanySlug != cleanSlug || _giftsStream == null) {
+      _lastGiftsCompanySlug = cleanSlug;
+      _giftsStream = firestore
+          .collection('company_gifts')
+          .where('companySlug', isEqualTo: cleanSlug)
+          .snapshots();
+    }
+    return _giftsStream;
+  }
+
   @override
   void dispose() {
     _companySearchController.dispose();
@@ -871,7 +894,7 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                     const SizedBox(height: 16),
 
                     StreamBuilder<QuerySnapshot>(
-                      stream: firestore?.collection('companies').snapshots(),
+                      stream: _getCompaniesStream(firestore),
                       builder: (context, snapshot) {
                         if (snapshot.hasError) {
                           return Text('Error: ${snapshot.error}', style: GoogleFonts.cairo(color: colorScheme.error));
@@ -1346,10 +1369,7 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                       const SizedBox(height: 16),
 
                       StreamBuilder<QuerySnapshot>(
-                        stream: firestore
-                            ?.collection('company_gifts')
-                            .where('companySlug', isEqualTo: _selectedCompanySlug!.toLowerCase().trim())
-                            .snapshots(),
+                        stream: _getGiftsStream(firestore, _selectedCompanySlug!),
                         builder: (context, snapshot) {
                           if (snapshot.connectionState == ConnectionState.waiting) {
                             return const Center(

@@ -10,7 +10,7 @@ import '../../../../core/constants/country_currency_config.dart';
 import '../../../admin/domain/event_model.dart';
 
 /// Interactive Material Design 3 Dialog displaying the Campaign Concept, Brief, and Structured Promotional Rules
-class CampaignBriefDialog extends ConsumerWidget {
+class CampaignBriefDialog extends ConsumerStatefulWidget {
   final EventModel event;
 
   const CampaignBriefDialog({
@@ -45,7 +45,31 @@ class CampaignBriefDialog extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CampaignBriefDialog> createState() => _CampaignBriefDialogState();
+}
+
+class _CampaignBriefDialogState extends ConsumerState<CampaignBriefDialog> {
+  Stream<DocumentSnapshot<Map<String, dynamic>>>? _eventDocStream;
+  String? _lastEventId;
+
+  Stream<DocumentSnapshot<Map<String, dynamic>>>? _ensureEventDocStream() {
+    if (_eventDocStream == null || _lastEventId != widget.event.id) {
+      _lastEventId = widget.event.id;
+      try {
+        final firestore = ref.read(firestoreProvider);
+        if (widget.event.id.isNotEmpty) {
+          _eventDocStream = firestore.collection('events').doc(widget.event.id).snapshots();
+        }
+      } catch (_) {
+        _eventDocStream = null;
+      }
+    }
+    return _eventDocStream;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final event = widget.event;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final strings = AppStrings.of(ref);
@@ -56,14 +80,7 @@ class CampaignBriefDialog extends ConsumerWidget {
     final screenWidth = mediaQuery.size.width;
     final isMobile = screenWidth < 600;
 
-    // Stream live event doc to ensure fresh rules
-    Stream<DocumentSnapshot<Map<String, dynamic>>>? eventDocStream;
-    try {
-      final firestore = ref.watch(firestoreProvider);
-      if (event.id.isNotEmpty) {
-        eventDocStream = firestore.collection('events').doc(event.id).snapshots();
-      }
-    } catch (_) {}
+    final eventDocStream = _ensureEventDocStream();
 
     return Directionality(
       textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,

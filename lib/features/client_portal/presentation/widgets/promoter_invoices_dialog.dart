@@ -2215,6 +2215,9 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     required bool isAr,
     required bool isDense,
   }) {
+    if (!ref.watch(isAdminProvider)) {
+      return const SizedBox.shrink();
+    }
     final isRechecking = _recheckingDocIds.contains(docId);
 
     if (isRechecking) {
