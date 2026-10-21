@@ -1757,9 +1757,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                       _buildPortalControlTile(
                         context,
                         title: strings.brandExecutivePortalLabel,
-                        subtitle: isAr ? 'رابط العلامة التجارية والـ ROI' : 'Brand Executive & ROI',
+                        subtitle: isAr ? 'رابط مدير الشركة الدائم والـ ROI' : 'Permanent Brand Executive & ROI',
                         icon: Icons.business_center_rounded,
-                        isActive: event.isActive && event.isManagerActive,
+                        isActive: event.isManagerActive,
                         colorScheme: colorScheme,
                         isAr: isAr,
                         tooltip: event.isManagerActive

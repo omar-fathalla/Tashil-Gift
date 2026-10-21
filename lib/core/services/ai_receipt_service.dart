@@ -4031,10 +4031,14 @@ class PromotionalRuleMatcher {
         (rule != null &&
             rule.requiredBrands.any((b) => b.contains('سيجنال') || b.contains('كلوس')));
 
-    // Reject deodorant or spray or roll-on or shampoo matching oral care / toothpaste rules:
-    if ((isProductSpray || isProductRollOn || isProductShampoo) &&
-        !isProductToothpaste &&
-        isTriggerToothpaste) {
+    // Reject deodorant or spray or roll-on or shampoo matching oral care / toothpaste rules (unless trigger also covers that category):
+    if (isProductShampoo && isTriggerToothpaste && !isTriggerShampoo) {
+      return false;
+    }
+    if ((isProductSpray || isProductRollOn) &&
+        isTriggerToothpaste &&
+        !isTriggerSpray &&
+        !isTriggerRollOn) {
       return false;
     }
     // Reject roll-on products matching pure spray rules:
@@ -4155,14 +4159,16 @@ class PromotionalRuleMatcher {
 
       if (hasRuleBrand || isCompanyProductSpendRule) {
         // Form & category validation
-        if (isTriggerToothpaste && !isProductToothpaste) {
-          // Skip non-toothpaste
-        } else if (isTriggerSpray && !isTriggerRollOn && !isProductSpray) {
-          // Skip non-spray for pure spray rules
-        } else if (isTriggerRollOn && !isTriggerSpray && !isProductRollOn) {
-          // Skip non-roll-on for pure roll-on rules
-        } else if (isTriggerShampoo && !isProductShampoo) {
-          // Skip non-shampoo
+        final bool hasCategoryFilter =
+            isTriggerToothpaste || isTriggerSpray || isTriggerRollOn || isTriggerShampoo;
+        final bool matchesCategory =
+            (isTriggerToothpaste && isProductToothpaste) ||
+            (isTriggerSpray && isProductSpray) ||
+            (isTriggerRollOn && isProductRollOn) ||
+            (isTriggerShampoo && isProductShampoo);
+
+        if (hasCategoryFilter && !matchesCategory) {
+          // Skip if product category does not match any triggered categories
         } else {
           // Volume/size conflict guard for brand-level rules:
           // If the rule specifies a volume (e.g. 600ml or 550ml), and the product specifies a different volume, skip!

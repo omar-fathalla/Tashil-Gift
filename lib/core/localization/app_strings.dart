@@ -3325,6 +3325,11 @@ class AppStrings {
     en: 'Brand Executive Master Portal link (Permanent across all campaigns) copied',
     hi: 'ब्रांड एक्जीक्यूटिव मास्टर पोर्टल लिंक कॉपी किया गया',
   );
+  String get managerPortalArchiveNotice => _t(
+    ar: 'وضع المراجعة وقراءة التقارير والأرشيف • الحملات متوقفة حالياً في الفروع',
+    en: 'Historical Audit & Reporting Mode • Campaigns are currently paused in stores',
+    hi: 'ऐतिहासिक ऑडिट और रिपोर्टिंग मोड • अभियान वर्तमान में स्टोर्स में रोके गए हैं',
+  );
   String get promoterPortalTooltip => _t(
     ar: 'نسخ رابط العميل والبروموتر المباشر لرفع الفواتير وتجربة الألعاب واستلام الجوائز',
     en: 'Copy direct Promoter / Client submission link to scan receipts & play games',

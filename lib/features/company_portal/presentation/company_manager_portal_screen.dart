@@ -457,8 +457,8 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     final bool isSuspended = widget.isAgencyOpsMode
         ? ((initialEvent != null && (!initialEvent.isActive || !initialEvent.isAgencyActive)) ||
             (companyEvents.isNotEmpty && companyEvents.every((e) => !e.isActive || !e.isAgencyActive)))
-        : ((initialEvent != null && (!initialEvent.isActive || !initialEvent.isManagerActive)) ||
-            (companyEvents.isNotEmpty && companyEvents.every((e) => !e.isActive || !e.isManagerActive)));
+        : ((initialEvent != null && !initialEvent.isManagerActive) ||
+            (companyEvents.isNotEmpty && companyEvents.every((e) => !e.isManagerActive)));
 
     if (isSuspended) {
       return CampaignSuspendedScreen(
@@ -543,31 +543,66 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
 
           // 2. Main Executive Content Views (Lazy On-Demand Tab Loading + High Performance Offstage Cache)
           Expanded(
-            child: RepaintBoundary(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  for (int i = 0; i < navItems.length; i++)
-                    Offstage(
-                      offstage: _selectedTab != i,
-                      child: TickerMode(
-                        enabled: _selectedTab == i,
-                        child: _loadedTabs.contains(i)
-                            ? _getOrCreateTabWidget(
-                                tabIndex: i,
-                                effectiveSlug: effectiveSlug,
-                                companyDisplayName: companyDisplayName,
-                                activeEventId: activeEventId,
-                                lockedEventId: lockedEventId,
-                                initialEvent: initialEvent,
-                                companyEvents: companyEvents,
-                                isReadOnlyStock: isReadOnlyStock,
-                              )
-                            : const SizedBox.shrink(),
-                      ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (!widget.isAgencyOpsMode &&
+                    companyEvents.isNotEmpty &&
+                    companyEvents.every((e) => !e.isActive))
+                  Container(
+                    margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: colorScheme.secondaryContainer.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: colorScheme.secondary.withValues(alpha: 0.25)),
                     ),
-                ],
-              ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.archive_outlined, size: 17, color: colorScheme.onSecondaryContainer),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            strings.managerPortalArchiveNotice,
+                            style: GoogleFonts.cairo(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSecondaryContainer,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                Expanded(
+                  child: RepaintBoundary(
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        for (int i = 0; i < navItems.length; i++)
+                          Offstage(
+                            offstage: _selectedTab != i,
+                            child: TickerMode(
+                              enabled: _selectedTab == i,
+                              child: _loadedTabs.contains(i)
+                                  ? _getOrCreateTabWidget(
+                                      tabIndex: i,
+                                      effectiveSlug: effectiveSlug,
+                                      companyDisplayName: companyDisplayName,
+                                      activeEventId: activeEventId,
+                                      lockedEventId: lockedEventId,
+                                      initialEvent: initialEvent,
+                                      companyEvents: companyEvents,
+                                      isReadOnlyStock: isReadOnlyStock,
+                                    )
+                                  : const SizedBox.shrink(),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

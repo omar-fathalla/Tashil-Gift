@@ -12,6 +12,7 @@ import 'package:al_mraay/features/validation/presentation/invoices_log_screen.da
 import 'package:al_mraay/features/auth/presentation/auth_screen.dart';
 import 'package:al_mraay/core/utils/slug_utils.dart';
 import 'package:al_mraay/features/company_portal/presentation/branch_stock_balances_screen.dart';
+import 'package:al_mraay/features/admin/domain/event_model.dart';
 
 void main() {
   group('Dual Link Architecture & Company Manager Portal Tests', () {
@@ -388,6 +389,55 @@ void main() {
       expect(stringsEn.branchBalancesNavTitle, equals('Branch Balances'));
       expect(stringsEn.saveAllBalancesBtn, isNotEmpty);
       expect(stringsEn.applyToAllBranchesBtn, isNotEmpty);
+    });
+
+    test('managerPortalArchiveNotice string is localized across AR, EN, and HI', () {
+      final stringsAr = AppStrings.fromLocale('ar');
+      expect(stringsAr.managerPortalArchiveNotice, contains('المراجعة'));
+      expect(stringsAr.managerPortalArchiveNotice, contains('متوقفة'));
+
+      final stringsEn = AppStrings.fromLocale('en');
+      expect(stringsEn.managerPortalArchiveNotice, contains('Audit'));
+      expect(stringsEn.managerPortalArchiveNotice, contains('paused'));
+
+      final stringsHi = AppStrings.fromLocale('hi');
+      expect(stringsHi.managerPortalArchiveNotice, isNotEmpty);
+    });
+
+    test('EventModel portal access rules decouple Manager from isActive while keeping Promoter and Agency strictly gated', () {
+      // 1. Inactive Campaign (isActive: false), but Manager and Promoter active flags are true
+      final inactiveEvent = EventModel(
+        id: 'evt_inactive_1',
+        eventName: 'حملة شومان المتوقفة',
+        targetCompany: 'شومان',
+        companySlug: 'shoman',
+        minimumSpend: 100.0,
+        startDate: DateTime.now().subtract(const Duration(days: 10)),
+        endDate: DateTime.now().add(const Duration(days: 10)),
+        isActive: false, // PAUSED CAMPAIGN
+        isPromoterActive: true,
+        isAgencyActive: true,
+        isManagerActive: true,
+      );
+
+      // Promoter MUST be BLOCKED when campaign is inactive
+      expect(inactiveEvent.canPromoterAccess, isFalse, reason: 'Promoters must be strictly blocked from scanning inactive campaigns');
+
+      // Agency Ops MUST be BLOCKED when campaign is inactive
+      expect(inactiveEvent.canAgencyAccess, isFalse, reason: 'Agency field ops must be blocked from auditing inactive campaigns');
+
+      // Company Manager MUST REMAIN PERMANENTLY OPEN for analytics and reporting review
+      expect(inactiveEvent.canManagerAccess, isTrue, reason: 'Company Manager link must remain permanently active even when campaign is paused');
+
+      // 2. Explicit Manager Access Revocation (isManagerActive: false)
+      final revokedManagerEvent = inactiveEvent.copyWith(isManagerActive: false);
+      expect(revokedManagerEvent.canManagerAccess, isFalse, reason: 'Manager access should only be blocked if explicitly revoked via isManagerActive');
+
+      // 3. Fully Active Campaign
+      final activeEvent = inactiveEvent.copyWith(isActive: true);
+      expect(activeEvent.canPromoterAccess, isTrue);
+      expect(activeEvent.canAgencyAccess, isTrue);
+      expect(activeEvent.canManagerAccess, isTrue);
     });
   });
 }

@@ -607,7 +607,8 @@ class EventModel {
 
   /// Granular portal access status helpers
   bool get canPromoterAccess => isActive && isPromoterActive && !isExpired && !isNotStartedYet;
-  bool get canManagerAccess => isActive && isManagerActive;
+  bool get canAgencyAccess => isActive && isAgencyActive;
+  bool get canManagerAccess => isManagerActive;
 
   /// Formatted branches display for UI chips & summaries
   String get branchesDisplaySummary {

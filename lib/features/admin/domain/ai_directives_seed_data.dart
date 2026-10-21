@@ -1613,8 +1613,31 @@ class AiDirectivesSeedData {
           tags: ['arabic-branch-normalization', 'anti-city-collision', 'smouha-211', 'shoman', 'al-durra', 'seyidoglu', 'competitor-sauce-isolation', 'air-80'],
           lastUpdated: '2026-10-21',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-81',
+          code: 'MULTI_CATEGORY_MULTI_BRAND_COLLISION_GUARD_AND_SPEND_RULE_ISOLATION_STANDARD',
+          orderIndex: 81,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار حوكمة عروض الإنفاق المشتركة ومتعددة الفئات ومنع التصادم الفئوي بين الشامبو والعناية بالفم',
+          titleEn: 'Multi-Category & Multi-Brand Spend Rule Anti-Collision Guard Standard',
+          descriptionAr:
+              'معيار حوكمة معماري يضمن دقة احتساب عروض الإنفاق الترويجية المشتركة بين عدة علامات تجارية أو فئات مختلفة (مثل: اشترى بـ 170 جنيه من صانسيلك أو دوف معاً): 1) استثناء التصادم الفئوي المشترك (Multi-Category Collision Exemption): عند احتواء شرط العرض الترويجي أو علاماته على أكثر من فئة فيزيائية (مثل الشامبو مع العناية بالفم أو مزيلات العرق)، يُمنع منعاً باتاً استبعاد منتجات الشامبو أو المزيلات بحجة أن الشرط يحتوي على كلمات معجون أسنان أو سيجنال (isTriggerToothpaste) إذا كان الشرط يغطي الشامبو أيضاً (!isTriggerShampoo). 2) تدقيق مطابقة الفئات المتعددة: في التحقق الفئوي، إذا حددت القاعدة فئة أو أكثر، يُقبل المنتج فوراً طالما طابق إحدى الفئات المشمولة بالعرض. 3) حوكمة العلامات المطلوبة للعروض المشتركة (Required Brands Governance): ضبط مصفوفة requiredBrands لتقتصر حصراً على العلامات المعنية بالعرض المشترك (مثل صانسيلك ودوف) ومنع تسرب كافة وسوم الكتالوج (سيجنال، ريكسونا، لوكس) إليها. 4) تجميع الإنفاق المشترك (Joint Spend Aggregation): تجميع كامل قيمة مشتريات الأصناف المؤهلة من العلامتين معاً (مثل: صانسيلك 75 ج.م + دوف 170 ج.م = 245 ج.م) لاجتياز الحد الأدنى للعرض وصرف الهدية.',
+          descriptionEn:
+              'Architectural governance standard ensuring precise evaluation of multi-brand and multi-category promotional spend rules (e.g. spend 170 EGP on Sunsilk or Dove together): 1) Multi-Category Collision Exemption: when a promotional rule covers multiple physical forms (such as shampoos alongside oral care or deodorants), shampoos or deodorants must never be dropped under toothpaste collision guards (isTriggerToothpaste) when the rule trigger explicitly includes shampoos (!isTriggerShampoo). 2) Multi-Category Form Validation: accepts a candidate product if it matches any of the triggered product categories. 3) Required Brands Governance: scopes requiredBrands strictly to the brands participating in the joint offer, preventing catalog tag pollution. 4) Joint Spend Aggregation: aggregates total eligible spend across all participating brands (e.g. Sunsilk 75 EGP + Dove 170 EGP = 245 EGP) to satisfy the spend threshold and disburse rewards.',
+          logicAr:
+              '1. في _matchesProduct: تحديث حراس التصادم الفئوي بحيث لا يُرفض الشامبو إلا إذا كان العرض يخص معجون الأسنان حصراً ولا يشمل الشامبو (!isTriggerShampoo)، وكذلك للمزيلات والاسبراي.\n2. في التحقق من الفئات (Category Validation): استخدام hasCategoryFilter و matchesCategory بحيث يُقبل المنتج إذا طابق أياً من الفئات المستهدفة.\n3. تنقية مصفوفة requiredBrands في قواعد العروض الترويجية بالحملات لتشمل علامات العرض المحددة فقط.\n4. تجميع كافة بنود الفاتورة المطابقة للشامبو أو المنتجات المشروطة واحتساب الإنفاق الصافي المشترك بدقة.',
+          logicEn:
+              '1. In _matchesProduct: collision guards only reject shampoos if the rule is purely oral care without shampoo triggers (!isTriggerShampoo).\n2. In Category Validation: accepts items matching any triggered category via hasCategoryFilter and matchesCategory.\n3. Scopes requiredBrands in campaign rules to relevant brands only.\n4. Aggregates all matching items across brands to compute net eligible spend.',
+          exampleInput:
+              'فاتورة فتح الله - سموحة برقم 78/17/211/211026 تضم "صانسيلك شامبو 350" (75 ج.م بعد الخصم) و "دوف شامبو 600 ملي" (170 ج.م) بإجمالي 245 ج.م على عرض يونيليفر (اشترى بـ 170 ج.م من صانسيلك أو دوف واحصل على فاوتشر 50 ج.م).',
+          exampleOutput:
+              '1) احتساب صانسيلك شامبو (75 ج.م) ودوف شامبو (170 ج.م) معاً ضمن الإنفاق المؤهل بإجمالي 245.00 ج.م دون استبعاد دوف. 2) تأهيل الفاتورة فورياً لاجتيازها الحد الأدنى (245 >= 165 ج.م مع السماحية). 3) صرف فاوتشر بقيمة 50 ج.م بنجاح مع تصفير قائمة الشروط غير المستوفاة (unfulfilledConditions = []).',
+          tags: ['multi-brand-spend', 'multi-category-collision', 'sunsilk', 'dove', 'shampoo-toothpaste-isolation', 'unilever', 'air-81'],
+          lastUpdated: '2026-10-21',
+        ),
       ];
 }
+
 
 
 
