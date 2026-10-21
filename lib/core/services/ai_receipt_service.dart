@@ -152,7 +152,7 @@ class ExtractedProductItem {
       isTarget = false;
     }
 
-    // AIR-80: Cross-Brand Sauce & Ketchup Isolation (Shoman vs Al-Dorra vs Heinz vs Goody vs Chef)
+    // AIR-80: Shoman & Al-Dorra Umbrella Brand Governance and Competitor Sauce Isolation Guard
     final isShomanTenant = targetCompany != null &&
         (targetCompany.contains('شومان') ||
             targetCompany.toLowerCase().contains('shoman') ||
@@ -164,8 +164,20 @@ class ExtractedProductItem {
             targetCompany.contains('دره') ||
             targetCompany.toLowerCase().contains('dorra') ||
             targetCompany.toLowerCase().contains('durra'));
-    final hasDorraBrand = RegExp(r'(^|\s)(الدرة|الدره|درة|دره|dorra|durra)(\s|$)', caseSensitive: false).hasMatch(nameLower);
-    final hasShomanBrand = nameLower.contains('شومان') || nameLower.contains('shoman') || nameLower.contains('shouman');
+    final hasDorraBrand = RegExp(
+      r'(^|\s)(الدرة|الدره|درة|دره|د\s*ر\s*[هة]|dorra|durra)(\s|$)',
+      caseSensitive: false,
+    ).hasMatch(nameLower);
+    final hasSeyidogluBrand = nameLower.contains('سيد اوغلو') ||
+        nameLower.contains('سيد أوغلو') ||
+        nameLower.contains('اوغلو') ||
+        nameLower.contains('seyidoglu');
+    final hasShomanBrand = nameLower.contains('شومان') ||
+        nameLower.contains('shoman') ||
+        nameLower.contains('shouman');
+    final hasAuthorizedShomanDorraBrand =
+        hasShomanBrand || hasDorraBrand || hasSeyidogluBrand;
+
     final hasCompetitorSauceBrand = nameLower.contains('هاينز') ||
         nameLower.contains('heinz') ||
         nameLower.contains('قودي') ||
@@ -177,10 +189,12 @@ class ExtractedProductItem {
         nameLower.contains('امريكانا') ||
         nameLower.contains('أمريكانا');
 
-    if (isShomanTenant && (hasDorraBrand || hasCompetitorSauceBrand) && !hasShomanBrand) {
-      isTarget = false;
-    } else if (isDorraTenant && (hasShomanBrand || hasCompetitorSauceBrand) && !hasDorraBrand) {
-      isTarget = false;
+    if (isShomanTenant || isDorraTenant) {
+      if (hasCompetitorSauceBrand) {
+        isTarget = false;
+      } else if (hasAuthorizedShomanDorraBrand) {
+        isTarget = true;
+      }
     }
 
     // Only auto-infer if isTargetCompany was not explicitly set to false
@@ -700,7 +714,7 @@ class AiReceiptService {
         '- شركة أدكو (ADCO): تشمل منتجات النظافة والأرضيات والتواليت علامة "سبيد (Speed)"؛ وتطبعها بعض ماكينات الكاشير بحذف حرف الباء مثل: "سيد منظف ارضيات" أو "سيد باودر" أو "سيد 28.00" - يجب احتسابها صنفاً أصيلاً ومعتمداً لشركة أدكو (isTargetCompany = true) وإدراجها في قائمة extractedProducts وجمع قيمتها في targetCompanyTotal.\n'
         '- علامة "كلوريل (Clorel)" و "فلفيتا (Velveta)" و "ماكسيل ماجيك (Maxel Magic)" و "فيبا (Feba)" و "ديفا (Diva)" هي علامات تابعة لشركة أدكو ويجب استخراج كافة بنودها بعناية دون إسقاط أي صنف منها.\n'
         '- 🛑 معيار الحظر القطعي لأصناف كلوركس واستقلاليتها عن أدكو (AIR-79): شركة أدكو (ADCO) تنتج مبيضات وكلور الملابس تحت علامة "كلوريل (Clorel)" حصراً؛ وتتبع علامة "كلوركس (Clorox)" شركة أخرى مستقلة ومنافسة وليست تابعة لأدكو مطلقاً. يُحظر تماماً وبصرامة احتساب أي منتج باسم "كلوركس" (مثل: كلوركس ألوان، كلوركس أبيض، كلوركس جل، كلوركس منظف) كصنف تابع لأدكو (يجب حتماً تعيين isTargetCompany = false واستبعاده كلياً من targetCompanyTotal وعروض أدكو).\n'
-        '- 🛑 معيار العزل الصارم لماركات الكاتشب والصلصات المتنافسة شومان مقابل الدرة وهاينز (AIR-80): شركة "شومان (Shoman)" وشركة "الدرة (دره / الدرة / Dorra)" وشركة "هاينز (Heinz)" وشركة "قودي (Goody)" وشركة "هارفست (Harvest)" هي شركات غذائية مستقلة ومنافسة لبعضها البعض. عند فحص فاتورة لحملة "شومان"، يُحظر قطعياً احتساب أي صنف يحمل اسم "دره" أو "الدرة" (مثل: دره عرض كاتشب، الدرة شيلي صوص، صلصة الدرة) أو "هاينز" أو "هارفست" كمنتج تابع لشومان، بل يجب تعيين isTargetCompany = false واستبعاده تماماً من targetCompanyTotal ومن استحقاق الهدايا.\n\n'
+        '- 🛑 معيار حوكمة ماركات شومان والدرة وسيد أوغلو وعزل الصلصات المتنافسة (AIR-80): شركة "شومان (Shoman)" هي الراعي والمصنع لمنتجات "الدرة (الدرة / درة / دره / د ر ه / Dorra / Durra)" و"سيد أوغلو (Seyidoglu)" في مصر. عند فحص فاتورة لحملة "شومان" أو "الدرة"، تُعد كافة أصناف الدرة وشومان وسيد أوغلو (مثل: دره عرض كاتشب، د ر ه كاتشب، الدرة شيلي صوص، صلصة الدرة، مايونيز، مربى، خل، إلخ) منتجات أصيلة ومؤهلة بنسبة 100% ويجب تعيين isTargetCompany = true وجمع قيمتها فوراً في targetCompanyTotal. أما الشركات المنافسة التي يُحظر قطعياً احتسابها (isTargetCompany = false) واستبعادها كلياً من قيمة العرض فهي: هاينز (Heinz)، قودي (Goody)، هارفست (Harvest)، كنور (Knorr)، فاين فودز (Fine Foods)، أمريكانا (Americana).\n\n'
         '🛑 معيار الحظر الصارم لاحتساب أصناف الشوكولاتة والمالتي باك العامة دون علامة تجارية صريحة (AIR-71):\n'
         '- يُمنع منعاً باتاً افتراض أو تخمين تبعية أي صنف عام مطبوع على بون الكاشير تحت مسمى مبهم أو عام مثل: "مالتي باك شوكولات" أو "مالتي باك شوكولاتة" أو "شوكولاتة مشكلة" أو "بسكويت ويفر" لشركة كادبوري (Cadbury) أو مونديليز (Mondelez) ما لم يُذكر في سطر البون صراحة اسم العلامة المعتمدة التابعة للشركة (مثل: كادبوري، ديري ميلك، مورو، بابلي، أوريو، ماندولين، فليك، سي دي ام، CDM).\n'
         '- يُحظر كلياً الاستناد إلى وجود أصناف كادبوري أخرى بالفاتورة لاعتبار الصنف العام تابعاً لكادبري.\n'
@@ -1823,7 +1837,7 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           result = result.copyWith(extractedProducts: sanitizedProducts);
         }
 
-        // AIR-80: Shoman / Al-Dorra Competitor Sauce & Ketchup Isolation Guard
+        // AIR-80: Shoman & Al-Dorra Umbrella Brand Governance and Competitor Sauce Isolation Guard
         final isShomanTenant = targetCompany.contains('شومان') ||
             targetCompany.toLowerCase().contains('shoman') ||
             targetCompany.toLowerCase().contains('shouman');
@@ -1837,8 +1851,19 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         if ((isShomanTenant || isDorraTenant) && result.extractedProducts.isNotEmpty) {
           final sanitizedProducts = result.extractedProducts.map((p) {
             final nameLower = p.name.toLowerCase();
-            final hasDorra = RegExp(r'(^|\s)(الدرة|الدره|درة|دره|dorra|durra)(\s|$)', caseSensitive: false).hasMatch(nameLower);
-            final hasShoman = nameLower.contains('شومان') || nameLower.contains('shoman') || nameLower.contains('shouman');
+            final hasDorra = RegExp(
+              r'(^|\s)(الدرة|الدره|درة|دره|د\s*ر\s*[هة]|dorra|durra)(\s|$)',
+              caseSensitive: false,
+            ).hasMatch(nameLower);
+            final hasSeyidoglu = nameLower.contains('سيد اوغلو') ||
+                nameLower.contains('سيد أوغلو') ||
+                nameLower.contains('اوغلو') ||
+                nameLower.contains('seyidoglu');
+            final hasShoman = nameLower.contains('شومان') ||
+                nameLower.contains('shoman') ||
+                nameLower.contains('shouman');
+            final hasAuthorizedBrand = hasShoman || hasDorra || hasSeyidoglu;
+
             final hasOtherCompetitor = nameLower.contains('هاينز') ||
                 nameLower.contains('heinz') ||
                 nameLower.contains('قودي') ||
@@ -1846,13 +1871,15 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                 nameLower.contains('هارفست') ||
                 nameLower.contains('harvest') ||
                 nameLower.contains('فاين فودز') ||
-                nameLower.contains('كنور');
+                nameLower.contains('كنور') ||
+                nameLower.contains('امريكانا') ||
+                nameLower.contains('أمريكانا');
 
-            if (isShomanTenant && (hasDorra || hasOtherCompetitor || !hasShoman)) {
+            if (hasOtherCompetitor) {
               return p.copyWith(isTargetCompany: false);
             }
-            if (isDorraTenant && (hasShoman || hasOtherCompetitor || !hasDorra)) {
-              return p.copyWith(isTargetCompany: false);
+            if (hasAuthorizedBrand) {
+              return p.copyWith(isTargetCompany: true);
             }
             return p;
           }).toList();
@@ -4320,10 +4347,16 @@ class PromotionalRuleMatcher {
       (m) => '${m.group(1)} ${m.group(2)}',
     );
 
-    // POS Concatenated Volume and Price Separation (e.g. 600132.00 -> 600 132.00, 150218.00 -> 150 218.00)
+    // POS Concatenated Volume and Price Separation (e.g. 600132.00 -> 600 132.00, 300160.00 -> 300 160.00, 150218.00 -> 150 218.00)
     str = str.replaceAllMapped(
-      RegExp(r'\b(1000|750|700|650|600|450|400|360|350|250|220|200|180|150|120|100|90|75|50)(\d{2,4}\.\d{2})\b'),
+      RegExp(r'\b(1000|900|750|700|650|600|550|500|450|400|360|350|300|250|220|200|180|150|120|100|90|75|50)(\d{2,4}\.\d{2})\b'),
       (m) => '${m.group(1)} ${m.group(2)}',
+    );
+
+    // Spaced Al-Durra brand normalization in thermal POS (e.g. "د ر ه عرض كاتشب", "د ر ة" -> "دره")
+    str = str.replaceAllMapped(
+      RegExp(r'(^|\s)د\s+ر\s+[هة]($|\s)'),
+      (m) => '${m.group(1)}دره${m.group(2)}',
     );
 
     // POS Truncated & Clipped Brand Handler (e.g. "كس اسبراى", "كس رول", "ايس شيل" -> "اكس اسبراي")

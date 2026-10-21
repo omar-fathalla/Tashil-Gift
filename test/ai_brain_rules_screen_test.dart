@@ -264,11 +264,20 @@ void main() {
         isTrue,
       );
 
-      // 2. Verify competitor brand isolation (Al-Durra vs Shoman)
+      // 2. Verify Shoman umbrella brand qualification (Al-Durra & Seyidoglu) vs competitor brand isolation (Heinz, Harvest)
       final dorraKetchupInShoman = ExtractedProductItem.fromJson(
         {
           'name': 'دره عرض كاتشب 300',
-          'price': 55.0,
+          'price': 135.0,
+          'quantity': 1,
+          'isTargetCompany': true,
+        },
+        targetCompany: 'شومان',
+      );
+      final spacedDorraInShoman = ExtractedProductItem.fromJson(
+        {
+          'name': 'د ر ه عرض كاتشب 300',
+          'price': 135.0,
           'quantity': 1,
           'isTargetCompany': true,
         },
@@ -277,8 +286,8 @@ void main() {
       final dorraChiliInShoman = ExtractedProductItem.fromJson(
         {
           'name': 'الدرة شيلي صوص 41',
-          'price': 36.25,
-          'quantity': 2,
+          'price': 59.0,
+          'quantity': 1,
           'isTargetCompany': true,
         },
         targetCompany: 'شومان',
@@ -292,10 +301,31 @@ void main() {
         },
         targetCompany: 'شومان',
       );
+      final competitorHeinzKetchup = ExtractedProductItem.fromJson(
+        {
+          'name': 'هاينز كاتشب 300 جرام',
+          'price': 45.0,
+          'quantity': 1,
+          'isTargetCompany': true,
+        },
+        targetCompany: 'شومان',
+      );
+      final competitorHarvestSauce = ExtractedProductItem.fromJson(
+        {
+          'name': 'هارفست صلصة 320 جرام',
+          'price': 25.0,
+          'quantity': 1,
+          'isTargetCompany': true,
+        },
+        targetCompany: 'شومان',
+      );
 
-      expect(dorraKetchupInShoman.isTargetCompany, isFalse);
-      expect(dorraChiliInShoman.isTargetCompany, isFalse);
+      expect(dorraKetchupInShoman.isTargetCompany, isTrue);
+      expect(spacedDorraInShoman.isTargetCompany, isTrue);
+      expect(dorraChiliInShoman.isTargetCompany, isTrue);
       expect(genuineShomanKetchup.isTargetCompany, isTrue);
+      expect(competitorHeinzKetchup.isTargetCompany, isFalse);
+      expect(competitorHarvestSauce.isTargetCompany, isFalse);
     });
   });
 }
