@@ -483,16 +483,80 @@ class CompanyGiftsService {
     await syncCompanyGiftsAvailableQuantities(slug);
   }
 
+  /// Canonical Arabic-safe branch token normalizer (AIR-80 & Rule 8).
+  /// Strips parenthetical governorates (e.g. "(الإسكندرية)", "(القاهرة)"), retail chain prefixes,
+  /// and "فرع", while preserving all Arabic characters without destructive ASCII regexes.
+  static String normalizeBranchToken(String raw) {
+    var s = raw
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\u064B-\u065F\u0670\u0640]'), '')
+        .replaceAll(RegExp(r'[أإآ]'), 'ا')
+        .replaceAll('ة', 'ه')
+        .replaceAll('ى', 'ي')
+        .replaceAll('ؤ', 'و')
+        .replaceAll('ئ', 'ي');
+    // Strip parenthetical governorates and bracketed metadata first
+    s = s.replaceAll(RegExp(r'\s*\([^)]*\)|\s*\[[^\]]*\]'), ' ');
+    // Strip multi-word retail chain names
+    for (final phrase in const [
+      'اسواق فتح الله للجمله',
+      'اسواق فتح الله',
+      'فتح الله للجمله',
+      'فتح الله',
+      'جمله ماركت',
+      'بيت الجمله',
+      'خير زمان',
+      'هايبر وان',
+      'سوبر ماركت',
+      'fatha..a',
+      'fathalla',
+    ]) {
+      s = s.replaceAll(phrase, ' ');
+    }
+    s = s.replaceAll(RegExp(r'[^\w\s\d\u0600-\u06FF]'), ' ');
+    const stopWords = {
+      'اسواق',
+      'سوق',
+      'فتح',
+      'الله',
+      'للجمله',
+      'كارفور',
+      'سبينس',
+      'زهران',
+      'كازيون',
+      'بيم',
+      'هايبر',
+      'سوبر',
+      'ماركت',
+      'سلسله',
+      'فرع',
+      'مفرع',
+      'fathalla',
+      'fatha',
+      'gomla',
+      'carrefour',
+      'spinneys',
+      'store',
+      'branch',
+      'pos',
+    };
+    final tokens = s
+        .split(RegExp(r'\s+'))
+        .where((t) => t.isNotEmpty && !stopWords.contains(t))
+        .toList();
+    return tokens.join(' ').trim();
+  }
+
   /// Helper to match branch names with fuzzy normalization (stripping city parentheticals and "فرع")
   static bool matchesBranchName(String b1, String b2) {
     final t1 = b1.trim().toLowerCase();
     final t2 = b2.trim().toLowerCase();
     if (t1.isEmpty || t2.isEmpty) return false;
     if (t1 == t2) return true;
-    final c1 = t1.replaceAll(RegExp(r'\s*\([^)]*\)'), '').replaceAll(RegExp(r'فرع\s+'), '').trim();
-    final c2 = t2.replaceAll(RegExp(r'\s*\([^)]*\)'), '').replaceAll(RegExp(r'فرع\s+'), '').trim();
+    final c1 = normalizeBranchToken(b1);
+    final c2 = normalizeBranchToken(b2);
     if (c1.isEmpty || c2.isEmpty) return false;
-    return c1 == c2 || (c1.length >= 3 && t2.contains(c1)) || (c2.length >= 3 && t1.contains(c2));
+    return c1 == c2 || (c1.length >= 3 && c2.contains(c1)) || (c2.length >= 3 && c1.contains(c2));
   }
 
   /// High-performance bulk synchronization for multiple branch prize allocations across campaigns.
@@ -1285,7 +1349,7 @@ class CompanyGiftsService {
         .replaceAll('٧', '7')
         .replaceAll('٨', '8')
         .replaceAll('٩', '9')
-        .replaceAll(RegExp(r'[^\w\s\d]'), ' ')
+        .replaceAll(RegExp(r'[^\w\s\d\u0600-\u06FF]'), ' ')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
   }

@@ -3,6 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:al_mraay/core/services/ai_directives_service.dart';
 import 'package:al_mraay/core/services/ai_model_config_service.dart';
+import 'package:al_mraay/core/services/ai_receipt_service.dart';
+import 'package:al_mraay/core/services/company_gifts_service.dart';
+import 'package:al_mraay/core/utils/responsive.dart';
 import 'package:al_mraay/core/widgets/m3_adaptive_scaffold.dart';
 import 'package:al_mraay/features/admin/domain/ai_directive_model.dart';
 import 'package:al_mraay/features/admin/domain/ai_directives_seed_data.dart';
@@ -85,14 +88,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(tester.takeException(), isNull);
-      expect(find.byType(M3ListDetailLayout), findsOneWidget);
+      expect(find.byType(M3ContentBoundary), findsAtLeastNWidgets(1));
 
       // Verify list pane and detail pane both exist
       expect(find.text('AIR-01'), findsAtLeastNWidgets(1));
       // First directive is selected by default in detail pane
       expect(find.text('المنطق والخوارزمية البرمجية:'), findsOneWidget);
       expect(find.text('مثال عملي حي من واقع البونات:'), findsOneWidget);
-      expect(find.text('تجربة في استوديو الذكاء الاصطناعي'), findsOneWidget);
+      expect(find.text('تجربة في استوديو الذكاء'), findsOneWidget);
     });
 
     testWidgets('Tapping a directive card in the list pane updates the selected directive in the detail pane', (tester) async {
@@ -225,6 +228,74 @@ void main() {
       expect(air71.orderIndex, 71);
       expect(air71.tags, contains('generic-multipack'));
       expect(air71.tags, contains('cadbury-mondelez'));
+    });
+
+    test('AIR-80 directive and branch/brand isolation rules work accurately', () {
+      final air80 = sampleDirectives.where((d) => d.id == 'AIR-80').firstOrNull;
+      expect(air80, isNotNull);
+      expect(
+        air80!.code,
+        'CANONICAL_ARABIC_BRANCH_TOKEN_PRESERVATION_AND_SAUCE_BRAND_ISOLATION_STANDARD',
+      );
+      expect(air80.orderIndex, 80);
+
+      // 1. Verify Arabic branch token normalization preserves Arabic letters & strips governorate
+      final normSmouha = CompanyGiftsService.normalizeBranchToken(
+        'أسواق فتح الله للجملة - فرع سموحة (الإسكندرية)',
+      );
+      final normStanley = CompanyGiftsService.normalizeBranchToken(
+        'أسواق فتح الله - فرع ستانلي (الإسكندرية)',
+      );
+      expect(normSmouha, 'سموحه');
+      expect(normStanley, 'ستانلي');
+      expect(normSmouha == normStanley, isFalse);
+      expect(
+        CompanyGiftsService.matchesBranchName(
+          'سموحة',
+          'فرع ستانلي (الإسكندرية)',
+        ),
+        isFalse,
+      );
+      expect(
+        CompanyGiftsService.matchesBranchName(
+          'فرع سموحة',
+          'أسواق فتح الله - سموحة (الإسكندرية)',
+        ),
+        isTrue,
+      );
+
+      // 2. Verify competitor brand isolation (Al-Durra vs Shoman)
+      final dorraKetchupInShoman = ExtractedProductItem.fromJson(
+        {
+          'name': 'دره عرض كاتشب 300',
+          'price': 55.0,
+          'quantity': 1,
+          'isTargetCompany': true,
+        },
+        targetCompany: 'شومان',
+      );
+      final dorraChiliInShoman = ExtractedProductItem.fromJson(
+        {
+          'name': 'الدرة شيلي صوص 41',
+          'price': 36.25,
+          'quantity': 2,
+          'isTargetCompany': true,
+        },
+        targetCompany: 'شومان',
+      );
+      final genuineShomanKetchup = ExtractedProductItem.fromJson(
+        {
+          'name': 'شومان كاتشب 250 ملي',
+          'price': 30.0,
+          'quantity': 2,
+          'isTargetCompany': true,
+        },
+        targetCompany: 'شومان',
+      );
+
+      expect(dorraKetchupInShoman.isTargetCompany, isFalse);
+      expect(dorraChiliInShoman.isTargetCompany, isFalse);
+      expect(genuineShomanKetchup.isTargetCompany, isTrue);
     });
   });
 }

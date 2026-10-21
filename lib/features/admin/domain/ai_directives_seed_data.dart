@@ -1591,6 +1591,28 @@ class AiDirectivesSeedData {
           tags: ['clorox-exclusion', 'clorel-disambiguation', 'adco', 'fmcg-governance', 'product-intelligence', 'air-79'],
           lastUpdated: '2026-10-11',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-80',
+          code: 'CANONICAL_ARABIC_BRANCH_TOKEN_PRESERVATION_AND_SAUCE_BRAND_ISOLATION_STANDARD',
+          orderIndex: 80,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'حوكمة الحفاظ على حروف الفروع العربية ومنع تصادم المحافظات وعزل ماركات الصلصات والكاتشب',
+          titleEn: 'Canonical Arabic Branch Token Preservation & Competitor Sauce Brand Isolation Standard',
+          descriptionAr:
+              'معيار حوكمة معماري يعالج جذرياً ثلاث ثغرات في مطابقة الفروع والعلامات التجارية: 1) الحفاظ على الحروف العربية في مطابقة الفروع (Unicode-Safe Arabic Branch Normalization): حظر استخدام التعبير النمطي المدمر RegExp(r\'[^\\w\\s\\d]\') الذي يمسح الحروف العربية ويحول أسماء الفروع إلى سلاسل فارغة مما يؤدي لمطابقة أول فرع في القائمة بالخطأ، واستبداله بـ CompanyGiftsService.normalizeBranchToken المحافظ على النطاق العربي \\u0600-\\u06FF مع تجريد المحافظات بين الأقواس (الإسكندرية/القاهرة) وتجريد بادئات السلاسل (أسواق فتح الله للجملة). 2) منع تصادم الفروع داخل نفس المحافظة عند مطابقة كود الفرع (Anti-City Collision): عند استرداد الفرع من كود نقطة البيع (مثل Store: 211 = سموحة)، يُحظر المطابقة الجزئية على اسم المدينة (الإسكندرية) مع فرع آخر في نفس المحافظة مثل فرع ستانلي (الإسكندرية)، ويتم رفض الفاتورة فوراً إذا كان الفرع الفعلي خارج الفروع المعتمدة للحملة. 3) العزل الصارم لماركات الكاتشب والصلصات المتنافسة (Competitor Sauce Brand Isolation): عزل منتجات شركة الدرة (دره / الدرة / Dorra) وهاينز وقودي وهارفست كلياً عن حملات شركة شومان (Shoman) والعكس، بحيث لا تؤهل أصناف "دره عرض كاتشب" أو "الدرة شيلي صوص" العميل للفوز بهدايا شومان.',
+          descriptionEn:
+              'Architectural governance standard resolving three critical branch and brand verification vulnerabilities: 1) Unicode-Safe Arabic Branch Token Preservation: bans destructive ASCII-only regexes RegExp(r\'[^\\w\\s\\d]\') that strip Arabic letters and cause empty-string fallbacks to the first branch in the list, replacing them with CompanyGiftsService.normalizeBranchToken which preserves Arabic script (\\u0600-\\u06FF) while stripping parenthetical governorates and chain prefixes. 2) Anti-City Collision in Store Code Resolution: when a POS store code resolves to a specific branch (e.g. Store 211 = Smouha), bans city-name fallback matching against other branches in the same governorate (e.g. Stanley (Alexandria)), strictly rejecting receipts from unapproved branches. 3) Competitor Sauce & Ketchup Brand Isolation: enforces strict brand root isolation between Shoman (شومان), Al-Durra (الدرة / دره), Heinz, Goody, and Harvest across AI parsing, post-processing, and PromotionalRuleMatcher so competitor ketchup/chili sauce items never trigger sponsor gifts.',
+          logicAr:
+              '1. استبدال كافة عمليات التطبيع النصي للفروع بدالة CompanyGiftsService.normalizeBranchToken التي تحافظ على الحروف العربية وتزيل اسم المحافظة بين الأقواس وبادئة السلسلة.\n2. في مدقق كود الفرع (POS Store Code Reconciler): إلغاء شرط تطابق المدينة (cleanCity) ومنع تحويل فرع سموحة (211) إلى فرع ستانلي (الإسكندرية)، وتعيين isBranchMatched = false إذا لم يكن الفرع ضمن allowedBranches.\n3. في DirectGiftClaimScreen: الحفاظ على اسم الفرع الفعلي الممرر من الفاتورة ومنع استبداله باسم فرع آخر من قائمة الجوائز العامة.\n4. في ExtractedProductItem.fromJson و PromotionalRuleMatcher: عزل جذور العلامات التجارية (شومان، الدرة/دره، هاينز، قودي، هارفست) وتعيين isTargetCompany = false لأي صنف منافس.',
+          logicEn:
+              '1. Replaces all branch string normalizers with CompanyGiftsService.normalizeBranchToken, preserving Arabic characters while stripping parenthetical governorates and retail chain prefixes.\n2. In POS Store Code Reconciler: removes cleanCity fallback matching so Store 211 (Smouha) never collides with Stanley (Alexandria), setting isBranchMatched = false when outside allowedBranches.\n3. In DirectGiftClaimScreen: preserves the verified receipt branchName and prevents overwriting it from generic prize entries.\n4. In ExtractedProductItem.fromJson and PromotionalRuleMatcher: enforces strict brand root isolation across Shoman, Al-Durra/Dorra, Heinz, Goody, and Harvest, setting isTargetCompany = false on competitor SKUs.',
+          exampleInput:
+              'فاتورة أسواق فتح الله للجملة - فرع سموحة (Store: 211) برقم 121/1/211/211026 تحتوي على "دره عرض كاتشب 300" و "الدرة شيلي صوص 41" يتم فحصها على حملة شركة شومان المخصصة لفرع ستانلي (الإسكندرية).',
+          exampleOutput:
+              '1) التعرف الدقيق على الفرع كـ "سموحة" عبر كود 211 ورفض مطابقته مع "فرع ستانلي (الإسكندرية)" (isBranchMatched = false). 2) تصنيف أصناف "دره كاتشب" و "الدرة شيلي صوص" كمنتجات منافسة غير تابعة لشركة شومان (isTargetCompany = false، الإجمالي المؤهل = 0 ج.م). 3) رفض الفاتورة بدقة مع توضيح السبب للمروج بدلاً من منح هدية كاتشب شومان بالخطأ.',
+          tags: ['arabic-branch-normalization', 'anti-city-collision', 'smouha-211', 'stanley-branch', 'shoman', 'dorra-exclusion', 'air-80'],
+          lastUpdated: '2026-10-21',
+        ),
       ];
 }
 

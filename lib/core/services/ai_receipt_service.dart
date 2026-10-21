@@ -8,6 +8,7 @@ import 'package:al_mraay/features/admin/domain/retail_chain_model.dart';
 import '../config/ai_config.dart';
 import '../utils/arabic_numbers_utils.dart';
 import 'campaign_ai_assistant_service.dart';
+import 'company_gifts_service.dart';
 import 'ai_model_config_service.dart';
 
 final aiReceiptServiceProvider = Provider<AiReceiptService>((ref) {
@@ -148,6 +149,37 @@ class ExtractedProductItem {
             targetCompany.toLowerCase().contains('adco'));
     final isCloroxName = nameLower.contains('كلوركس') || nameLower.contains('clorox');
     if (isAdco && isCloroxName) {
+      isTarget = false;
+    }
+
+    // AIR-80: Cross-Brand Sauce & Ketchup Isolation (Shoman vs Al-Dorra vs Heinz vs Goody vs Chef)
+    final isShomanTenant = targetCompany != null &&
+        (targetCompany.contains('شومان') ||
+            targetCompany.toLowerCase().contains('shoman') ||
+            targetCompany.toLowerCase().contains('shouman'));
+    final isDorraTenant = targetCompany != null &&
+        (targetCompany.contains('الدرة') ||
+            targetCompany.contains('الدره') ||
+            targetCompany.contains('درة') ||
+            targetCompany.contains('دره') ||
+            targetCompany.toLowerCase().contains('dorra') ||
+            targetCompany.toLowerCase().contains('durra'));
+    final hasDorraBrand = RegExp(r'(^|\s)(الدرة|الدره|درة|دره|dorra|durra)(\s|$)', caseSensitive: false).hasMatch(nameLower);
+    final hasShomanBrand = nameLower.contains('شومان') || nameLower.contains('shoman') || nameLower.contains('shouman');
+    final hasCompetitorSauceBrand = nameLower.contains('هاينز') ||
+        nameLower.contains('heinz') ||
+        nameLower.contains('قودي') ||
+        nameLower.contains('goody') ||
+        nameLower.contains('هارفست') ||
+        nameLower.contains('harvest') ||
+        nameLower.contains('فاين فودز') ||
+        nameLower.contains('كنور') ||
+        nameLower.contains('امريكانا') ||
+        nameLower.contains('أمريكانا');
+
+    if (isShomanTenant && (hasDorraBrand || hasCompetitorSauceBrand) && !hasShomanBrand) {
+      isTarget = false;
+    } else if (isDorraTenant && (hasShomanBrand || hasCompetitorSauceBrand) && !hasDorraBrand) {
       isTarget = false;
     }
 
@@ -528,6 +560,7 @@ class AiReceiptAnalysisResult {
     String? kpiColorHex,
     int? chancesEarned,
     String? matchedRuleId,
+    List<String>? matchedRuleIds,
     String? matchedRuleTitle,
     String? matchedRewardValue,
     double? matchedRewardAmount,
@@ -575,6 +608,7 @@ class AiReceiptAnalysisResult {
               : this.kpiColorHex),
       chancesEarned: chancesEarned ?? this.chancesEarned,
       matchedRuleId: matchedRuleId ?? this.matchedRuleId,
+      matchedRuleIds: matchedRuleIds ?? this.matchedRuleIds,
       matchedRuleTitle: matchedRuleTitle ?? this.matchedRuleTitle,
       matchedRewardValue: matchedRewardValue ?? this.matchedRewardValue,
       matchedRewardAmount: matchedRewardAmount ?? this.matchedRewardAmount,
@@ -665,7 +699,8 @@ class AiReceiptService {
         'في بونات الكاشير لبعض السلاسل التجارية، قد تحدث أخطاء طباعية أو إسقاط حروف من أسماء العلامات الفرعية:\n'
         '- شركة أدكو (ADCO): تشمل منتجات النظافة والأرضيات والتواليت علامة "سبيد (Speed)"؛ وتطبعها بعض ماكينات الكاشير بحذف حرف الباء مثل: "سيد منظف ارضيات" أو "سيد باودر" أو "سيد 28.00" - يجب احتسابها صنفاً أصيلاً ومعتمداً لشركة أدكو (isTargetCompany = true) وإدراجها في قائمة extractedProducts وجمع قيمتها في targetCompanyTotal.\n'
         '- علامة "كلوريل (Clorel)" و "فلفيتا (Velveta)" و "ماكسيل ماجيك (Maxel Magic)" و "فيبا (Feba)" و "ديفا (Diva)" هي علامات تابعة لشركة أدكو ويجب استخراج كافة بنودها بعناية دون إسقاط أي صنف منها.\n'
-        '- 🛑 معيار الحظر القطعي لأصناف كلوركس واستقلاليتها عن أدكو (AIR-79): شركة أدكو (ADCO) تنتج مبيضات وكلور الملابس تحت علامة "كلوريل (Clorel)" حصراً؛ وتتبع علامة "كلوركس (Clorox)" شركة أخرى مستقلة ومنافسة وليست تابعة لأدكو مطلقاً. يُحظر تماماً وبصرامة احتساب أي منتج باسم "كلوركس" (مثل: كلوركس ألوان، كلوركس أبيض، كلوركس جل، كلوركس منظف) كصنف تابع لأدكو (يجب حتماً تعيين isTargetCompany = false واستبعاده كلياً من targetCompanyTotal وعروض أدكو).\n\n'
+        '- 🛑 معيار الحظر القطعي لأصناف كلوركس واستقلاليتها عن أدكو (AIR-79): شركة أدكو (ADCO) تنتج مبيضات وكلور الملابس تحت علامة "كلوريل (Clorel)" حصراً؛ وتتبع علامة "كلوركس (Clorox)" شركة أخرى مستقلة ومنافسة وليست تابعة لأدكو مطلقاً. يُحظر تماماً وبصرامة احتساب أي منتج باسم "كلوركس" (مثل: كلوركس ألوان، كلوركس أبيض، كلوركس جل، كلوركس منظف) كصنف تابع لأدكو (يجب حتماً تعيين isTargetCompany = false واستبعاده كلياً من targetCompanyTotal وعروض أدكو).\n'
+        '- 🛑 معيار العزل الصارم لماركات الكاتشب والصلصات المتنافسة شومان مقابل الدرة وهاينز (AIR-80): شركة "شومان (Shoman)" وشركة "الدرة (دره / الدرة / Dorra)" وشركة "هاينز (Heinz)" وشركة "قودي (Goody)" وشركة "هارفست (Harvest)" هي شركات غذائية مستقلة ومنافسة لبعضها البعض. عند فحص فاتورة لحملة "شومان"، يُحظر قطعياً احتساب أي صنف يحمل اسم "دره" أو "الدرة" (مثل: دره عرض كاتشب، الدرة شيلي صوص، صلصة الدرة) أو "هاينز" أو "هارفست" كمنتج تابع لشومان، بل يجب تعيين isTargetCompany = false واستبعاده تماماً من targetCompanyTotal ومن استحقاق الهدايا.\n\n'
         '🛑 معيار الحظر الصارم لاحتساب أصناف الشوكولاتة والمالتي باك العامة دون علامة تجارية صريحة (AIR-71):\n'
         '- يُمنع منعاً باتاً افتراض أو تخمين تبعية أي صنف عام مطبوع على بون الكاشير تحت مسمى مبهم أو عام مثل: "مالتي باك شوكولات" أو "مالتي باك شوكولاتة" أو "شوكولاتة مشكلة" أو "بسكويت ويفر" لشركة كادبوري (Cadbury) أو مونديليز (Mondelez) ما لم يُذكر في سطر البون صراحة اسم العلامة المعتمدة التابعة للشركة (مثل: كادبوري، ديري ميلك، مورو، بابلي، أوريو، ماندولين، فليك، سي دي ام، CDM).\n'
         '- يُحظر كلياً الاستناد إلى وجود أصناف كادبوري أخرى بالفاتورة لاعتبار الصنف العام تابعاً لكادبري.\n'
@@ -1788,13 +1823,61 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           result = result.copyWith(extractedProducts: sanitizedProducts);
         }
 
+        // AIR-80: Shoman / Al-Dorra Competitor Sauce & Ketchup Isolation Guard
+        final isShomanTenant = targetCompany.contains('شومان') ||
+            targetCompany.toLowerCase().contains('shoman') ||
+            targetCompany.toLowerCase().contains('shouman');
+        final isDorraTenant = targetCompany.contains('الدرة') ||
+            targetCompany.contains('الدره') ||
+            targetCompany.contains('درة') ||
+            targetCompany.contains('دره') ||
+            targetCompany.toLowerCase().contains('dorra') ||
+            targetCompany.toLowerCase().contains('durra');
+
+        if ((isShomanTenant || isDorraTenant) && result.extractedProducts.isNotEmpty) {
+          final sanitizedProducts = result.extractedProducts.map((p) {
+            final nameLower = p.name.toLowerCase();
+            final hasDorra = RegExp(r'(^|\s)(الدرة|الدره|درة|دره|dorra|durra)(\s|$)', caseSensitive: false).hasMatch(nameLower);
+            final hasShoman = nameLower.contains('شومان') || nameLower.contains('shoman') || nameLower.contains('shouman');
+            final hasOtherCompetitor = nameLower.contains('هاينز') ||
+                nameLower.contains('heinz') ||
+                nameLower.contains('قودي') ||
+                nameLower.contains('goody') ||
+                nameLower.contains('هارفست') ||
+                nameLower.contains('harvest') ||
+                nameLower.contains('فاين فودز') ||
+                nameLower.contains('كنور');
+
+            if (isShomanTenant && (hasDorra || hasOtherCompetitor || !hasShoman)) {
+              return p.copyWith(isTargetCompany: false);
+            }
+            if (isDorraTenant && (hasShoman || hasOtherCompetitor || !hasDorra)) {
+              return p.copyWith(isTargetCompany: false);
+            }
+            return p;
+          }).toList();
+
+          result = result.copyWith(extractedProducts: sanitizedProducts);
+          if (!result.extractedProducts.any((p) => p.isTargetCompany)) {
+            result = result.copyWith(
+              targetCompanyTotal: 0.0,
+              matchedRuleId: '',
+              matchedRuleIds: const [],
+              matchedRuleTitle: '',
+              matchedRewardValue: '',
+              matchedRewardAmount: 0.0,
+            );
+          }
+        }
+
         // Auto-heal targetCompanyTotal if sum of extracted target products exceeds it (AIR-58)
         final double sumOfExtractedTarget = result.extractedProducts
             .where((p) => p.isTargetCompany)
             .fold<double>(0.0, (sum, p) => sum + (p.price * p.quantity));
         if (sumOfExtractedTarget > result.targetCompanyTotal ||
             (isMondelezTenant && sumOfExtractedTarget != result.targetCompanyTotal) ||
-            (isAdcoTenant && sumOfExtractedTarget != result.targetCompanyTotal)) {
+            (isAdcoTenant && sumOfExtractedTarget != result.targetCompanyTotal) ||
+            ((isShomanTenant || isDorraTenant) && sumOfExtractedTarget != result.targetCompanyTotal)) {
           result = result.copyWith(targetCompanyTotal: sumOfExtractedTarget);
         }
 
@@ -2027,33 +2110,32 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           }
 
           if (matchedBranchByCode != null) {
+            String? matchedCanonicalAllowedBranch;
+            final cleanBName = CompanyGiftsService.normalizeBranchToken(
+              matchedBranchByCode.branchName,
+            );
+            for (final ab in allowedBranches) {
+              final cleanAb = CompanyGiftsService.normalizeBranchToken(ab);
+              if (cleanAb.isNotEmpty &&
+                  cleanBName.isNotEmpty &&
+                  (cleanAb == cleanBName ||
+                      cleanAb.contains(cleanBName) ||
+                      cleanBName.contains(cleanAb))) {
+                matchedCanonicalAllowedBranch = ab;
+                break;
+              }
+            }
+
             final isAllowed =
                 isAllBranches ||
                 allowedBranches.isEmpty ||
-                allowedBranches.any((ab) {
-                  final cleanAb = ab
-                      .replaceAll(RegExp(r'[\(\)]'), ' ')
-                      .replaceAll(RegExp(r'\s+'), ' ')
-                      .trim()
-                      .toLowerCase();
-                  final cleanBName = matchedBranchByCode!.branchName
-                      .replaceAll(RegExp(r'[\(\)]'), ' ')
-                      .replaceAll(RegExp(r'\s+'), ' ')
-                      .trim()
-                      .toLowerCase();
-                  final cleanCity = matchedBranchByCode.city
-                      .replaceAll(RegExp(r'[\(\)]'), ' ')
-                      .replaceAll(RegExp(r'\s+'), ' ')
-                      .trim()
-                      .toLowerCase();
-                  return cleanAb.contains(cleanBName) ||
-                      cleanBName.contains(cleanAb) ||
-                      (cleanCity.isNotEmpty && cleanAb.contains(cleanCity));
-                });
+                matchedCanonicalAllowedBranch != null;
+
+            final fixedBranchName =
+                matchedCanonicalAllowedBranch ?? matchedBranchByCode.branchName;
+            final prevBranchName = result.branchDetected;
 
             if (isAllowed) {
-              final fixedBranchName = matchedBranchByCode.branchName;
-              final prevBranchName = result.branchDetected;
               final wasBranchFailure = !result.isBranchMatched;
 
               result = result.copyWith(
@@ -2081,6 +2163,17 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                             )
                           : result.message),
               );
+            } else {
+              // Strictly reject if the POS Store Code belongs to a branch outside the campaign's allowedBranches!
+              result = result.copyWith(
+                isBranchMatched: false,
+                isValid: false,
+                branchDetected: fixedBranchName,
+                storeChainDetected:
+                    matchedBranchByCode.retailChainName.isNotEmpty
+                    ? matchedBranchByCode.retailChainName
+                    : result.storeChainDetected,
+              );
             }
           }
         }
@@ -2088,22 +2181,11 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         // Auto-reconcile detected branch against allowedBranches in Dart using canonical resolution
         if (allowedBranches.isNotEmpty) {
           final detectedRaw = result.branchDetected.trim();
-          final detectedClean = detectedRaw
-              .replaceAll(RegExp(r'\s*\([^)]*\)'), '')
-              .replaceAll('فرع', '')
-              .replaceAll('-', ' ')
-              .replaceAll(RegExp(r'\s+'), ' ')
-              .trim()
-              .toLowerCase();
+          final detectedClean = CompanyGiftsService.normalizeBranchToken(detectedRaw);
+          bool matchedAnyAllowed = false;
 
           for (final ab in allowedBranches) {
-            final abClean = ab
-                .replaceAll(RegExp(r'\s*\([^)]*\)'), '')
-                .replaceAll('فرع', '')
-                .replaceAll('-', ' ')
-                .replaceAll(RegExp(r'\s+'), ' ')
-                .trim()
-                .toLowerCase();
+            final abClean = CompanyGiftsService.normalizeBranchToken(ab);
 
             if (detectedClean.isNotEmpty && abClean.isNotEmpty) {
               if (detectedClean == abClean ||
@@ -2113,20 +2195,22 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                       abClean.contains('عبور')) ||
                   (detectedClean.contains('رحاب') &&
                       abClean.contains('رحاب')) ||
-                  (detectedClean.contains('سموحة') &&
-                      abClean.contains('سموحة')) ||
+                  (detectedClean.contains('سموحه') &&
+                      abClean.contains('سموحه')) ||
+                  (detectedClean.contains('ستانلي') &&
+                      abClean.contains('ستانلي')) ||
                   (detectedClean.contains('جاردينيا') &&
                       abClean.contains('جاردينيا')) ||
                   (detectedClean.contains('عجمي') &&
                       abClean.contains('عجمي')) ||
-                  (detectedClean.contains('محلة') &&
-                      abClean.contains('محلة')) ||
+                  (detectedClean.contains('محله') &&
+                      abClean.contains('محله')) ||
                   (detectedClean.contains('تجمع') &&
                       abClean.contains('تجمع')) ||
-                  (detectedClean.contains('أكتوبر') &&
-                      abClean.contains('أكتوبر')) ||
-                  (detectedClean.contains('منصورة') &&
-                      abClean.contains('منصورة')) ||
+                  (detectedClean.contains('اكتوبر') &&
+                      abClean.contains('اكتوبر')) ||
+                  (detectedClean.contains('منصوره') &&
+                      abClean.contains('منصوره')) ||
                   (detectedClean.contains('شبين') &&
                       abClean.contains('شبين')) ||
                   (detectedClean.contains('منتزه') &&
@@ -2139,9 +2223,17 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                   isBranchMatched: true,
                   branchDetected: ab,
                 );
+                matchedAnyAllowed = true;
                 break;
               }
             }
+          }
+
+          if (!isAllBranches && !matchedAnyAllowed && detectedClean.isNotEmpty) {
+            result = result.copyWith(
+              isBranchMatched: false,
+              isValid: false,
+            );
           }
         }
 
@@ -3609,6 +3701,21 @@ class PromotionalRuleMatcher {
     'المراعي',
     'المراعى',
     'almarai',
+    'شومان',
+    'shoman',
+    'shouman',
+    'الدره',
+    'الدرة',
+    'دره',
+    'درة',
+    'dorra',
+    'هاينز',
+    'heinz',
+    'قودي',
+    'قودى',
+    'goody',
+    'هارفست',
+    'harvest',
   };
 
   static final RegExp _explicitSizeRegex = RegExp(

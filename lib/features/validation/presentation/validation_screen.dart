@@ -12,6 +12,7 @@ import '../../../core/services/firebase_service.dart';
 import '../../../core/services/ai_receipt_service.dart';
 import '../../../core/services/ai_product_discovery_service.dart';
 import '../../../core/services/company_products_service.dart';
+import '../../../core/services/company_gifts_service.dart';
 import '../../../core/services/retail_chains_service.dart';
 import '../../../core/services/receipt_deduplication_helper.dart';
 import '../../../core/utils/error_handler.dart';
@@ -856,31 +857,38 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           : null;
       final gameType = ruleLevelGame ?? activeEvent.gameType;
 
-      // Smart branch ID resolution matching AI-detected branch name with campaign branches
+      // Smart branch ID resolution matching AI-detected branch name with campaign branches (AIR-80 & Rule 8)
       String? resolvedBranchId;
+      String resolvedCanonicalBranchName = result.branchDetected.trim();
       if (activeEvent.branchIds.isNotEmpty) {
-        final detectedBranchClean = result.branchDetected.trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
+        final detectedBranchClean = CompanyGiftsService.normalizeBranchToken(result.branchDetected);
         if (detectedBranchClean.isNotEmpty) {
           for (int i = 0; i < activeEvent.branchNames.length; i++) {
-            final bName = activeEvent.branchNames[i].trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
-            if (bName.isNotEmpty && (bName.contains(detectedBranchClean) || detectedBranchClean.contains(bName))) {
+            final bName = CompanyGiftsService.normalizeBranchToken(activeEvent.branchNames[i]);
+            if (bName.isNotEmpty && (bName == detectedBranchClean || bName.contains(detectedBranchClean) || detectedBranchClean.contains(bName))) {
               if (i < activeEvent.branchIds.length) {
                 resolvedBranchId = activeEvent.branchIds[i];
+                resolvedCanonicalBranchName = activeEvent.branchNames[i];
                 break;
               }
             }
           }
           if (resolvedBranchId == null) {
             for (final p in activeEvent.allocatedPrizes) {
-              final pBranchName = p.branchName.trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
-              if (pBranchName.isNotEmpty && (pBranchName.contains(detectedBranchClean) || detectedBranchClean.contains(pBranchName))) {
-                resolvedBranchId = p.branchId;
+              final pBranchName = CompanyGiftsService.normalizeBranchToken(p.branchName);
+              if (pBranchName.isNotEmpty && (pBranchName == detectedBranchClean || pBranchName.contains(detectedBranchClean) || detectedBranchClean.contains(pBranchName))) {
+                resolvedBranchId = p.branchId.isNotEmpty ? p.branchId : p.branchName;
+                if (p.branchName.trim().isNotEmpty) {
+                  resolvedCanonicalBranchName = p.branchName.trim();
+                }
                 break;
               }
             }
           }
         }
-        resolvedBranchId ??= activeEvent.branchIds.first;
+        if (resolvedBranchId == null && (detectedBranchClean.isEmpty || activeEvent.branchIds.length == 1)) {
+          resolvedBranchId = activeEvent.branchIds.first;
+        }
       }
 
       if (gameType == 'directGift' || gameType == 'direct_gift') {
@@ -960,6 +968,11 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
               prizeName: designatedPrize,
               quantity: promoQuantity,
               branchId: resolvedBranchId,
+              branchName: resolvedCanonicalBranchName.isNotEmpty ? resolvedCanonicalBranchName : result.branchDetected,
+              retailChainName: activeEvent.retailChainName.isNotEmpty ? activeEvent.retailChainName : result.storeChainDetected,
+              companyName: activeEvent.targetCompany,
+              receiptNumber: receiptNumber,
+              companySlug: activeEvent.companySlug,
               unitValue: resolvedUnitValue,
               isVoucher: resolvedIsVoucher,
               linkedGifts: resolvedLinkedGifts,

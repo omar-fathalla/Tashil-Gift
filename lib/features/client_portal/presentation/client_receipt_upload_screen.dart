@@ -15,6 +15,7 @@ import '../../../core/services/ai_receipt_service.dart';
 import '../../../core/services/ai_product_discovery_service.dart';
 import '../../../core/services/chain_products_intelligence_service.dart';
 import '../../../core/services/company_products_service.dart';
+import '../../../core/services/company_gifts_service.dart';
 import '../../../core/services/retail_chains_service.dart';
 import '../../../core/utils/error_handler.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
@@ -1324,31 +1325,38 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           : null;
       final gameType = ruleLevelGame ?? currentEvent?.gameType ?? (totalValue >= 500 ? 'scratchCard' : 'spinTheWheel');
 
-      // Smart branch ID resolution matching AI-detected branch name with campaign branches
+      // Smart branch ID resolution matching AI-detected branch name with campaign branches (AIR-80 & Rule 8)
       String? resolvedBranchId;
+      String resolvedCanonicalBranchName = result.branchDetected.trim();
       if (currentEvent != null && currentEvent.branchIds.isNotEmpty) {
-        final detectedBranchClean = result.branchDetected.trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
+        final detectedBranchClean = CompanyGiftsService.normalizeBranchToken(result.branchDetected);
         if (detectedBranchClean.isNotEmpty) {
           for (int i = 0; i < currentEvent.branchNames.length; i++) {
-            final bName = currentEvent.branchNames[i].trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
-            if (bName.isNotEmpty && (bName.contains(detectedBranchClean) || detectedBranchClean.contains(bName))) {
+            final bName = CompanyGiftsService.normalizeBranchToken(currentEvent.branchNames[i]);
+            if (bName.isNotEmpty && (bName == detectedBranchClean || bName.contains(detectedBranchClean) || detectedBranchClean.contains(bName))) {
               if (i < currentEvent.branchIds.length) {
                 resolvedBranchId = currentEvent.branchIds[i];
+                resolvedCanonicalBranchName = currentEvent.branchNames[i];
                 break;
               }
             }
           }
           if (resolvedBranchId == null) {
             for (final p in currentEvent.allocatedPrizes) {
-              final pBranchName = p.branchName.trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\d]'), ' ');
-              if (pBranchName.isNotEmpty && (pBranchName.contains(detectedBranchClean) || detectedBranchClean.contains(pBranchName))) {
-                resolvedBranchId = p.branchId;
+              final pBranchName = CompanyGiftsService.normalizeBranchToken(p.branchName);
+              if (pBranchName.isNotEmpty && (pBranchName == detectedBranchClean || pBranchName.contains(detectedBranchClean) || detectedBranchClean.contains(pBranchName))) {
+                resolvedBranchId = p.branchId.isNotEmpty ? p.branchId : p.branchName;
+                if (p.branchName.trim().isNotEmpty) {
+                  resolvedCanonicalBranchName = p.branchName.trim();
+                }
                 break;
               }
             }
           }
         }
-        resolvedBranchId ??= currentEvent.branchIds.first;
+        if (resolvedBranchId == null && (detectedBranchClean.isEmpty || currentEvent.branchIds.length == 1)) {
+          resolvedBranchId = currentEvent.branchIds.first;
+        }
       }
 
       if (gameType == 'directGift' || gameType == 'direct_gift') {
@@ -1440,7 +1448,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
               customerPhone: enteredPhone,
               customerName: enteredName,
               retailChainName: currentEvent?.retailChainName ?? result.storeChainDetected,
-              branchName: result.branchDetected,
+              branchName: resolvedCanonicalBranchName.isNotEmpty ? resolvedCanonicalBranchName : result.branchDetected,
               companyName: currentEvent?.targetCompany ?? '',
               receiptNumber: receiptNumber,
               companySlug: currentEvent?.companySlug,

@@ -348,13 +348,24 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
         String? branchNameFound;
         final branchNamesList = (data['branchNames'] as List?)?.map((e) => e.toString()).toList() ?? [];
         final branchIdsList = (data['branchIds'] as List?)?.map((e) => e.toString()).toList() ?? [];
-        if (widget.branchId != null && widget.branchId!.isNotEmpty) {
+        final explicitWidgetBranch = (widget.branchName ?? '').trim();
+
+        if (explicitWidgetBranch.isNotEmpty) {
+          // Try to find exact canonical branch name matching explicitWidgetBranch
+          for (final bn in branchNamesList) {
+            if (CompanyGiftsService.matchesBranchName(bn, explicitWidgetBranch)) {
+              branchNameFound = bn;
+              break;
+            }
+          }
+          branchNameFound ??= explicitWidgetBranch;
+        } else if (widget.branchId != null && widget.branchId!.isNotEmpty) {
           final idx = branchIdsList.indexOf(widget.branchId!);
           if (idx != -1 && idx < branchNamesList.length) {
             branchNameFound = branchNamesList[idx];
           } else {
             for (final bn in branchNamesList) {
-              if (bn == widget.branchId || bn.contains(widget.branchId!) || widget.branchId!.contains(bn)) {
+              if (bn == widget.branchId || CompanyGiftsService.matchesBranchName(bn, widget.branchId!)) {
                 branchNameFound = bn;
                 break;
               }
@@ -379,7 +390,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
         if (matchIdx != -1) {
           foundRemaining = (prizes[matchIdx]['remainingQuantity'] as num?)?.toInt() ?? 0;
           final pBranch = (prizes[matchIdx]['branchName'] ?? '').toString().trim();
-          if (pBranch.isNotEmpty) {
+          if (pBranch.isNotEmpty && (branchNameFound == null || CompanyGiftsService.matchesBranchName(pBranch, branchNameFound))) {
             branchNameFound = pBranch;
           }
         } else {
@@ -408,7 +419,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
             }
           }
         }
-        branchNameFound ??= widget.branchId;
+        branchNameFound ??= explicitWidgetBranch.isNotEmpty ? explicitWidgetBranch : widget.branchId;
 
         if (mounted) {
           setState(() {
