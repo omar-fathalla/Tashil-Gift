@@ -327,5 +327,26 @@ void main() {
       expect(competitorHeinzKetchup.isTargetCompany, isFalse);
       expect(competitorHarvestSauce.isTargetCompany, isFalse);
     });
+
+    test('AIR-81 and AIR-82 directives are properly registered and verified', () {
+      final air81 = sampleDirectives.where((d) => d.id == 'AIR-81').firstOrNull;
+      expect(air81, isNotNull);
+      expect(
+        air81!.code,
+        'MULTI_CATEGORY_MULTI_BRAND_COLLISION_GUARD_AND_SPEND_RULE_ISOLATION_STANDARD',
+      );
+      expect(air81.tags, contains('multi-brand-spend'));
+
+      final air82 = sampleDirectives.where((d) => d.id == 'AIR-82').firstOrNull;
+      expect(air82, isNotNull);
+      expect(
+        air82!.code,
+        'FMCG_SUB_BRAND_ISOLATION_AND_CATEGORY_SEGREGATION_STANDARD',
+      );
+      expect(air82.orderIndex, 82);
+      expect(air82.tags, contains('nestle'));
+      expect(air82.tags, contains('nescafe-gold'));
+      expect(air82.tags, contains('kitkat'));
+    });
   });
 }

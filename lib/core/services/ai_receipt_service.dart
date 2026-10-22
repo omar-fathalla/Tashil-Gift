@@ -3743,7 +3743,55 @@ class PromotionalRuleMatcher {
     'goody',
     'هارفست',
     'harvest',
+    // Nestle FMCG sub-brands & categories
+    'كيت كات',
+    'كيت',
+    'kitkat',
+    'نسكافيه',
+    'نسكافية',
+    'nescafe',
+    'جولد',
+    'gold',
+    'كابتشينو',
+    'cappuccino',
+    'اسبرسو',
+    'espresso',
+    'سيريلاك',
+    'cerelac',
+    'اس26',
+    'اس-26',
+    's26',
+    's-26',
+    'بروجرس',
+    'بروميل',
+    'نسكويك',
+    'nesquik',
+    'نستله',
+    'نستلة',
+    'نسله',
+    'nestle',
   };
+
+  static const Set<String> _umbrellaCompanyNames = {
+    'نستله',
+    'نستلة',
+    'نسله',
+    'nestle',
+    'يونيليفر',
+    'unilever',
+    'الضحى',
+    'المراعي',
+    'almarai',
+    'هاينز',
+    'heinz',
+  };
+
+  /// Filters out umbrella company names when specific sub-brands are present.
+  static Set<String> _isolateSubBrands(Iterable<String> brands) {
+    final normalized = brands.map((b) => _normalize(b)).where((b) => b.isNotEmpty).toSet();
+    final specific = normalized.where((b) => !_umbrellaCompanyNames.contains(b)).toSet();
+    return specific.isNotEmpty ? specific : normalized;
+  }
 
   static final RegExp _explicitSizeRegex = RegExp(
     r'(\d{2,4})\s*(ملل|ملى|ملي|مل|ml|جرام|g|لتر|l)\b',
@@ -3940,22 +3988,25 @@ class PromotionalRuleMatcher {
     // 0.04 Strict Brand Root Anchor Guard:
     // If the rule explicitly defines requiredBrands (e.g. ['تريزيمي']), those brands MUST strictly take precedence
     // and lock the allowed brand scope, preventing broad catalog trigger strings (e.g. Unilever 497 items) from leaking foreign brands!
-    final Set<String> triggerBrands = <String>{};
+    final Set<String> rawTriggerBrands = <String>{};
     if (rule != null && rule.requiredBrands.isNotEmpty) {
       for (final rb in rule.requiredBrands) {
         final rbNorm = _normalize(rb);
         if (rbNorm.isNotEmpty) {
-          triggerBrands.add(rbNorm);
+          rawTriggerBrands.add(rbNorm);
         }
         final roots = _getBrandRootsInText(rbNorm, allDynamicBrands);
-        triggerBrands.addAll(roots);
+        rawTriggerBrands.addAll(roots);
       }
     } else {
-      triggerBrands.addAll(_getBrandRootsInText(triggerProduct, allDynamicBrands));
-      if (rule != null && triggerBrands.isEmpty) {
-        triggerBrands.addAll(_getBrandRootsInText(rule.ruleTitle, allDynamicBrands));
+      rawTriggerBrands.addAll(_getBrandRootsInText(triggerProduct, allDynamicBrands));
+      if (rule != null && rawTriggerBrands.isEmpty) {
+        rawTriggerBrands.addAll(_getBrandRootsInText(rule.ruleTitle, allDynamicBrands));
       }
     }
+    // Isolate sub-brands so umbrella parent company names (e.g. نستله / يونيليفر) don't bleed across sub-brands
+    final triggerBrands = _isolateSubBrands(rawTriggerBrands);
+
     if (triggerBrands.isNotEmpty) {
       final Set<String> productBrands = _getBrandRootsInText(pNorm, triggerBrands);
       final bool hasMatchingBrand = triggerBrands.any(
@@ -3984,8 +4035,8 @@ class PromotionalRuleMatcher {
       return false;
     }
 
-    // 0.05 Strict Product Form & Physical Category Collision Guard (حارس التصنيف الفيزيائي للمنتج):
-    // Disallows matching spray rules against roll-on products, and vice versa.
+    // 0.05 Strict Product Form & Physical Category Collision Guard (حارس التصنيف الفيزيائي والفرعي للمنتج):
+    // Disallows matching spray rules against roll-on products, coffee against confectionery, etc.
     final bool isProductRollOn =
         pNorm.contains('رول اون') ||
         pNorm.contains('رول') ||
@@ -4010,6 +4061,43 @@ class PromotionalRuleMatcher {
         pNorm.contains('كلوس اب') ||
         pNorm.contains('كلوساب');
 
+    final bool isProductCoffee =
+        pNorm.contains('نسكافيه') ||
+        pNorm.contains('نسكافية') ||
+        pNorm.contains('nescafe') ||
+        pNorm.contains('جولد') ||
+        pNorm.contains('كابتشينو') ||
+        pNorm.contains('لاتيه') ||
+        pNorm.contains('موكا') ||
+        pNorm.contains('اسبرسو') ||
+        pNorm.contains('قهوة') ||
+        pNorm.contains('coffee');
+
+    final bool isProductConfectionery =
+        pNorm.contains('كيت') ||
+        pNorm.contains('kitkat') ||
+        pNorm.contains('شيكولاتة') ||
+        pNorm.contains('شوكولاتة') ||
+        pNorm.contains('شوكولاته') ||
+        pNorm.contains('ويفر') ||
+        pNorm.contains('لوتس') ||
+        pNorm.contains('براوني') ||
+        pNorm.contains('كراميل صنداي') ||
+        pNorm.contains('شانكي') ||
+        pNorm.contains('سناك');
+
+    final bool isProductInfantFormula =
+        pNorm.contains('اس26') ||
+        pNorm.contains('اس 26') ||
+        pNorm.contains('اس-26') ||
+        pNorm.contains('s26') ||
+        pNorm.contains('s-26') ||
+        pNorm.contains('سيريلاك') ||
+        pNorm.contains('cerelac') ||
+        pNorm.contains('بروجرس') ||
+        pNorm.contains('بروميل') ||
+        pNorm.contains('حليب اطفال');
+
     final bool isTriggerRollOn =
         fullRuleContext.contains('رول') ||
         fullRuleContext.contains('roll') ||
@@ -4030,6 +4118,32 @@ class PromotionalRuleMatcher {
         fullRuleContext.contains('oral') ||
         (rule != null &&
             rule.requiredBrands.any((b) => b.contains('سيجنال') || b.contains('كلوس')));
+
+    final bool isTriggerCoffee =
+        fullRuleContext.contains('نسكافيه') ||
+        fullRuleContext.contains('nescafe') ||
+        fullRuleContext.contains('كابتشينو') ||
+        fullRuleContext.contains('اسبرسو') ||
+        fullRuleContext.contains('قهوة') ||
+        (fullRuleContext.contains('جولد') &&
+            !fullRuleContext.contains('اس26') &&
+            !fullRuleContext.contains('اس-26') &&
+            !fullRuleContext.contains('سيريلاك'));
+
+    final bool isTriggerConfectionery =
+        fullRuleContext.contains('كيت') ||
+        fullRuleContext.contains('kitkat') ||
+        fullRuleContext.contains('شيكولاتة') ||
+        fullRuleContext.contains('شوكولاتة') ||
+        fullRuleContext.contains('ويفر');
+
+    final bool isTriggerInfantFormula =
+        fullRuleContext.contains('اس26') ||
+        fullRuleContext.contains('اس 26') ||
+        fullRuleContext.contains('اس-26') ||
+        fullRuleContext.contains('s26') ||
+        fullRuleContext.contains('سيريلاك') ||
+        fullRuleContext.contains('حليب اطفال');
 
     // Reject deodorant or spray or roll-on or shampoo matching oral care / toothpaste rules (unless trigger also covers that category):
     if (isProductShampoo && isTriggerToothpaste && !isTriggerShampoo) {
@@ -4065,6 +4179,24 @@ class PromotionalRuleMatcher {
     if (isProductToothpaste &&
         (isTriggerShampoo || isTriggerSpray || isTriggerRollOn) &&
         !isTriggerToothpaste) {
+      return false;
+    }
+    // Reject coffee products matching confectionery/chocolate rules:
+    if (isProductCoffee && isTriggerConfectionery && !isTriggerCoffee) {
+      return false;
+    }
+    // Reject confectionery/chocolate matching coffee rules:
+    if (isProductConfectionery && isTriggerCoffee && !isTriggerConfectionery) {
+      return false;
+    }
+    // Reject coffee matching infant nutrition:
+    if (isProductCoffee && isTriggerInfantFormula && !isTriggerCoffee) {
+      return false;
+    }
+    // Reject infant formula matching coffee or chocolate rules:
+    if (isProductInfantFormula &&
+        (isTriggerCoffee || isTriggerConfectionery) &&
+        !isTriggerInfantFormula) {
       return false;
     }
 
@@ -4130,20 +4262,21 @@ class PromotionalRuleMatcher {
 
     // 0.08 Brand Rule Match (including Company-Level Spend Rules):
     // If the rule has requiredBrands OR is a spend-based rule mentioning a brand in its title/trigger:
-    final Set<String> effectiveRuleBrands = <String>{};
+    final Set<String> rawEffectiveRuleBrands = <String>{};
     if (rule != null && rule.requiredBrands.isNotEmpty) {
       for (final rb in rule.requiredBrands) {
         final rbNorm = _normalize(rb);
         if (rbNorm.isNotEmpty) {
-          effectiveRuleBrands.add(rbNorm);
+          rawEffectiveRuleBrands.add(rbNorm);
         }
         final roots = _getBrandRootsInText(rbNorm, allDynamicBrands);
-        effectiveRuleBrands.addAll(roots);
+        rawEffectiveRuleBrands.addAll(roots);
       }
     } else if (rule != null) {
-      effectiveRuleBrands.addAll(_getBrandRootsInText(rule.ruleTitle, allDynamicBrands));
-      effectiveRuleBrands.addAll(_getBrandRootsInText(triggerProduct, allDynamicBrands));
+      rawEffectiveRuleBrands.addAll(_getBrandRootsInText(rule.ruleTitle, allDynamicBrands));
+      rawEffectiveRuleBrands.addAll(_getBrandRootsInText(triggerProduct, allDynamicBrands));
     }
+    final effectiveRuleBrands = _isolateSubBrands(rawEffectiveRuleBrands);
 
     final bool isCompanyProductSpendRule =
         (rule?.conditionType == 'by_spend') && product.isTargetCompany;
@@ -4160,12 +4293,21 @@ class PromotionalRuleMatcher {
       if (hasRuleBrand || isCompanyProductSpendRule) {
         // Form & category validation
         final bool hasCategoryFilter =
-            isTriggerToothpaste || isTriggerSpray || isTriggerRollOn || isTriggerShampoo;
+            isTriggerToothpaste ||
+            isTriggerSpray ||
+            isTriggerRollOn ||
+            isTriggerShampoo ||
+            isTriggerCoffee ||
+            isTriggerConfectionery ||
+            isTriggerInfantFormula;
         final bool matchesCategory =
             (isTriggerToothpaste && isProductToothpaste) ||
             (isTriggerSpray && isProductSpray) ||
             (isTriggerRollOn && isProductRollOn) ||
-            (isTriggerShampoo && isProductShampoo);
+            (isTriggerShampoo && isProductShampoo) ||
+            (isTriggerCoffee && isProductCoffee) ||
+            (isTriggerConfectionery && isProductConfectionery) ||
+            (isTriggerInfantFormula && isProductInfantFormula);
 
         if (hasCategoryFilter && !matchesCategory) {
           // Skip if product category does not match any triggered categories
@@ -4561,6 +4703,26 @@ class PromotionalRuleMatcher {
       baseFamily = 'signal_family';
     } else if (combined.contains('ريكسونا') || combined.contains('اكس')) {
       baseFamily = 'deodorant_general_family';
+    } else if (combined.contains('كيت') || combined.contains('kitkat')) {
+      baseFamily = 'kitkat_family';
+    } else if (combined.contains('نسكافيه') ||
+        combined.contains('nescafe') ||
+        (combined.contains('جولد') &&
+            !combined.contains('سيريلاك') &&
+            !combined.contains('اس26') &&
+            !combined.contains('اس-26'))) {
+      baseFamily = 'nescafe_gold_family';
+    } else if (combined.contains('اس26') ||
+        combined.contains('اس-26') ||
+        combined.contains('s26') ||
+        combined.contains('s-26') ||
+        combined.contains('بروجرس') ||
+        combined.contains('بروميل')) {
+      baseFamily = 's26_family';
+    } else if (combined.contains('سيريلاك') || combined.contains('cerelac')) {
+      baseFamily = 'cerelac_family';
+    } else if (combined.contains('نسكويك') || combined.contains('nesquik')) {
+      baseFamily = 'nesquik_family';
     }
 
     if (baseFamily != null) {

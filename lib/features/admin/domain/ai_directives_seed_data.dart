@@ -1635,6 +1635,28 @@ class AiDirectivesSeedData {
           tags: ['multi-brand-spend', 'multi-category-collision', 'sunsilk', 'dove', 'shampoo-toothpaste-isolation', 'unilever', 'air-81'],
           lastUpdated: '2026-10-21',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-82',
+          code: 'FMCG_SUB_BRAND_ISOLATION_AND_CATEGORY_SEGREGATION_STANDARD',
+          orderIndex: 82,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار عزل العلامات التجارية الفرعية لمجموعات الأغذية ومنع التداخل بين عروض القهوة والشيكولاتة وحليب الأطفال',
+          titleEn: 'FMCG Sub-Brand Isolation & Product Family Category Segregation Standard',
+          descriptionAr:
+              'معيار حوكمة معماري يضمن عزل العلامات التجارية الفرعية التابعة لمظلة واحدة (مثل نستله: كيت كات vs نسكافيه جولد vs سيريلاك vs إس-26) ومنع التداخل أو الاستهلاك المتبادل للإنفاق أو الكميات: 1) تجريد اسم الشركة المظلة (Umbrella Stripping): عند احتواء شرط العرض على علامات فرعية محددة (مثل "كيت كات") بجانب اسم الشركة التابع لها (مثل "نستله")، يقوم المحرك برفع اسم الشركة الأم تلقائياً من علامات القاعدة المطلوبة حتى لا تنطبق القاعدة على كافة منتجات الشركة الأخرى. 2) حراس التصادم الفئوي للسلع سريعة الاستهلاك (FMCG Category Collision Guards): منع احتساب منتجات القهوة والبن (نسكافيه / جولد) في عروض الشيكولاتة والحلويات (كيت كات)، ومنع احتساب أطعمة وحليب الأطفال (سيريلاك / إس-26) في عروض القهوة أو الشيكولاتة. 3) عزل مفاتيح عائلات المنتجات (Family Grouping Segregation): فصل مفاتيح التجميع التنازلي التراكمي (Waterfall Decomposition) بحيث يُنشأ مفتاح تجميع مستقل لكل عائلة فرعية (kitkat_family, nescafe_gold_family, s26_family, cerelac_family) بدلاً من دمجها تحت اسم الشركة الأم.',
+          descriptionEn:
+              'Architectural governance standard ensuring strict isolation between distinct sub-brands under parent corporate umbrellas (e.g. Nestlé: KitKat vs Nescafé Gold vs Cerelac vs S-26), preventing cross-category rule bleeding and premature spend consumption: 1) Umbrella Brand Stripping: when a rule specifies specific sub-brands alongside the parent company name, the parent company token is stripped to avoid matching unrelated company SKUs. 2) FMCG Category Anti-Collision Guards: prevents coffee products (Nescafé Gold) from matching confectionery rules (KitKat) and infant nutrition products (Cerelac, S-26) from matching coffee or chocolate promotions. 3) Product Family Key Segregation: partitions waterfall decomposition keys per sub-brand family (kitkat_family, nescafe_gold_family, etc.) ensuring independent evaluation.',
+          logicAr:
+              '1. في PromotionalRuleMatcher: تطبيق دالة _isolateSubBrands لتنقية requiredBrands ورفع أسماء الشركات الأم (نستله، يونيليفر، المراعي، هاينز، الضحى) إذا حوت القاعدة علامات فرعية خاصة.\n2. تطبيق حراس التصادم الفئوي: isProductCoffee يرفض عروض الحلويات والشيكولاتة (isTriggerConfectionery)، وisProductConfectionery يرفض عروض القهوة (isTriggerCoffee)، وisProductInfantFormula يرفض عروض القهوة والشيكولاتة.\n3. في _getProductGroupKey: عزل عائلات نسكافيه جولد وكيت كات وسيريلاك وإس-26 في مفاتيح تجميع مستقلة.\n4. استهلاك الإنفاق والكميات في نطاق عائلة المنتج المؤهل فقط دون التأثير على عروض الفئات الأخرى.',
+          logicEn:
+              '1. In PromotionalRuleMatcher: applies _isolateSubBrands to strip parent company tokens (Nestlé, Unilever, Almarai, Heinz, El-Doha) when specific sub-brands are present in requiredBrands.\n2. In FMCG collision guards: isProductCoffee rejects confectionery triggers, isProductConfectionery rejects coffee triggers, and isProductInfantFormula rejects coffee/confectionery triggers.\n3. In _getProductGroupKey: segregates nescafe_gold_family, kitkat_family, cerelac_family, and s26_family into independent waterfall decomposition group keys.\n4. Consumes spend and quantities strictly within the qualified product family scope.',
+          exampleInput:
+              'فاتورة أسواق فتح الله للجملة - سموحة (Store 211) تحتوي على 4 برطمانات نسكافيه جولد (414 ج للقطعة، خصم 328 ج، إجمالي صافي 1328 ج.م) على حملة نستله التي تحتوي على عرض كيت كات (أنفق 350 ج واحصل على فاوتشر 100 ج) وعرض نسكافيه جولد (أنفق 500 ج واحصل على فاوتشر 75 ج).',
+          exampleOutput:
+              'عزل عرض كيت كات كلياً وتوجيه الفاتورة حصراً لعرض نسكافيه جولد: احتساب المضاعف x2 لإنفاق 1328 ج.م (الحد الأدنى 500 ج.م) وصرف 2 × قسيمة مشتريات 75 ج.م (إجمالي 150 ج.م) بدقة تامة دون احتساب عرض كيت كات الخاطئ (3 × 100 ج.م).',
+          tags: ['nestle', 'kitkat', 'nescafe-gold', 'fmcg-sub-brand-isolation', 'category-collision-guard', 'air-82'],
+          lastUpdated: '2026-10-22',
+        ),
       ];
 }
 
