@@ -719,11 +719,10 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
             : (activeEvent.availablePrizeNames.isNotEmpty ? activeEvent.availablePrizeNames.first : 'هدية ترويجية مميزة'),
       );
 
-      // Save or Update in Firestore (Upsert)
-      final int totalChances = math.max(
-        result.chancesEarned > 0 ? result.chancesEarned : 1,
-        compositeBundle.totalChances,
-      );
+      // Save or Update in Firestore (Upsert) - Composite bundle chances govern (AIR-83)
+      final int totalChances = compositeBundle.matchedRules.isNotEmpty
+          ? compositeBundle.totalChances
+          : (result.chancesEarned > 0 ? result.chancesEarned : 1);
       final DocumentReference<Map<String, dynamic>> transactionRef =
           existingDoc != null ? existingDoc.reference : firestore.collection('receipts_transactions').doc(deterministicDocId);
       final bool isExistingRecord = existingDoc != null;

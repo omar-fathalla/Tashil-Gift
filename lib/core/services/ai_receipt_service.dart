@@ -1908,76 +1908,57 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           result = result.copyWith(targetCompanyTotal: sumOfExtractedTarget);
         }
 
-        // Calculate / enforce chances & rewards earned based on quantity and spend multipliers
+        // Calculate / enforce chances & rewards earned based on quantity and spend multipliers (AIR-83)
         int calculatedChances = result.chancesEarned;
         if (result.isValid) {
-          int spendChances = 1;
-          if (minimumSpend > 0 && result.targetCompanyTotal >= minimumSpend) {
-            if (allowMultipleChances &&
-                (multiplierBasis == 'spend' || multiplierBasis == 'both')) {
-              final computed = (result.targetCompanyTotal / minimumSpend)
-                  .floor();
-              spendChances = computed > 0 ? computed : 1;
-              if (maxChancesPerReceipt > 0 &&
-                  spendChances > maxChancesPerReceipt) {
-                spendChances = maxChancesPerReceipt;
+          // Pre-resolve deterministic rule matches from Dart engine (AIR-83)
+          final dartMatchedRules = promotionalRules.isNotEmpty
+              ? PromotionalRuleMatcher.matchAllWithMultipliers(
+                  result: result,
+                  promotionalRules: promotionalRules,
+                  allowCampaignMultipliers: allowMultipleChances,
+                )
+              : <MatchedPromotionalRuleResult>[];
+
+          final hasSpendRuleMatch = dartMatchedRules.any((r) => r.rule.isSpendBased);
+          final hasAnyRuleMatch = dartMatchedRules.isNotEmpty;
+
+          if (hasSpendRuleMatch) {
+            // Spend-rule quantity isolation (AIR-83): When a rule is spend-based
+            // (e.g. 150 EGP with Halawa prerequisite), chances MUST strictly depend on spend.
+            // Piece counts (quantity) in the basket must NEVER inflate chances!
+            final ruleTotalChances = dartMatchedRules.fold<int>(0, (sum, r) => sum + r.multiplier);
+            calculatedChances = ruleTotalChances > 0 ? ruleTotalChances : 1;
+            if (maxChancesPerReceipt > 0 && calculatedChances > maxChancesPerReceipt) {
+              calculatedChances = maxChancesPerReceipt;
+            }
+          } else if (hasAnyRuleMatch) {
+            // Pure quantity-based rules (e.g. buy 2 get 1)
+            final ruleTotalChances = dartMatchedRules.fold<int>(0, (sum, r) => sum + r.multiplier);
+            calculatedChances = ruleTotalChances > 0 ? ruleTotalChances : 1;
+            if (maxChancesPerReceipt > 0 && calculatedChances > maxChancesPerReceipt) {
+              calculatedChances = maxChancesPerReceipt;
+            }
+          } else if (promotionalRules.isNotEmpty) {
+            // Campaign has promotional rules, but none matched -> zero fallback prize (Rule 10)
+            calculatedChances = 0;
+          } else {
+            // Campaign without promotional rules: evaluate based on general campaign spend & quantity settings
+            int spendChances = 1;
+            if (minimumSpend > 0 && result.targetCompanyTotal >= minimumSpend) {
+              if (allowMultipleChances &&
+                  (multiplierBasis == 'spend' || multiplierBasis == 'both')) {
+                final computed = (result.targetCompanyTotal / minimumSpend).floor();
+                spendChances = computed > 0 ? computed : 1;
+                if (maxChancesPerReceipt > 0 && spendChances > maxChancesPerReceipt) {
+                  spendChances = maxChancesPerReceipt;
+                }
               }
             }
-          }
 
-          int quantityMultiplier = 1;
-          if (allowMultipleChances &&
-              (multiplierBasis == 'quantity' || multiplierBasis == 'both')) {
-            if (promotionalRules.isNotEmpty) {
-              final matchedRule = promotionalRules
-                  .where((r) => r.id == result.matchedRuleId)
-                  .firstOrNull;
-              if (matchedRule != null && matchedRule.allowMultipliers) {
-                final triggerTokens = PromotionalRuleMatcher._extractTokens(
-                  matchedRule.triggerProduct,
-                );
-                int totalMatchedQty = 0;
-                for (final p in result.extractedProducts) {
-                  final pNorm = PromotionalRuleMatcher._normalize(p.name);
-                  bool matches = false;
-                  for (final token in triggerTokens) {
-                    if (token.length >= 2 && pNorm.contains(token)) {
-                      matches = true;
-                      break;
-                    }
-                  }
-                  if (matches || (triggerTokens.isEmpty && p.isTargetCompany)) {
-                    totalMatchedQty += PromotionalRuleMatcher.getEffectiveProductQuantity(p);
-                  }
-                }
-                if (totalMatchedQty > 0) {
-                  final minQty = matchedRule.minQuantity > 0
-                      ? matchedRule.minQuantity
-                      : 1;
-                  final computed = (totalMatchedQty / minQty).floor();
-                  quantityMultiplier = computed > 0 ? computed : 1;
-                  if (maxChancesPerReceipt > 0 &&
-                      quantityMultiplier > maxChancesPerReceipt) {
-                    quantityMultiplier = maxChancesPerReceipt;
-                  }
-                }
-              } else if (result.extractedProducts.isNotEmpty) {
-                final targetItems = result.extractedProducts
-                    .where((p) => p.isTargetCompany)
-                    .toList();
-                final totalTargetQty = targetItems.fold<int>(
-                  0,
-                  (sum, p) => sum + PromotionalRuleMatcher.getEffectiveProductQuantity(p),
-                );
-                if (totalTargetQty > 1) {
-                  quantityMultiplier = totalTargetQty;
-                  if (maxChancesPerReceipt > 0 &&
-                      quantityMultiplier > maxChancesPerReceipt) {
-                    quantityMultiplier = maxChancesPerReceipt;
-                  }
-                }
-              }
-            } else if (result.extractedProducts.isNotEmpty) {
+            int quantityMultiplier = 1;
+            if (allowMultipleChances &&
+                (multiplierBasis == 'quantity' || multiplierBasis == 'both')) {
               final targetItems = result.extractedProducts
                   .where((p) => p.isTargetCompany)
                   .toList();
@@ -1993,45 +1974,24 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                 }
               }
             }
-          }
 
-          if (promotionalRules.isNotEmpty && result.matchedRuleId.isNotEmpty) {
-            final matchedRule = promotionalRules
-                .where((r) => r.id == result.matchedRuleId)
-                .firstOrNull;
-            if (matchedRule != null && matchedRule.isSpendBased) {
-              final minSp = matchedRule.effectiveMinSpend > 0
-                  ? matchedRule.effectiveMinSpend
-                  : minimumSpend;
-              final ruleSpendChances = minSp > 0
-                  ? (result.targetCompanyTotal / minSp).floor()
-                  : spendChances;
-              calculatedChances = (matchedRule.allowMultipliers || allowMultipleChances)
-                  ? (ruleSpendChances > 0 ? ruleSpendChances : 1)
-                  : 1;
+            if (multiplierBasis == 'quantity') {
+              calculatedChances = quantityMultiplier;
             } else if (multiplierBasis == 'spend') {
               calculatedChances = spendChances;
-            } else if (multiplierBasis == 'both') {
-              calculatedChances = math.max(quantityMultiplier, spendChances);
             } else {
-              calculatedChances = quantityMultiplier;
+              calculatedChances = math.max(quantityMultiplier, spendChances);
             }
-          } else if (multiplierBasis == 'quantity') {
-            calculatedChances = quantityMultiplier;
-          } else if (multiplierBasis == 'spend') {
-            calculatedChances = spendChances;
-          } else {
-            calculatedChances = math.max(quantityMultiplier, spendChances);
-          }
 
-          if (calculatedChances <= 0) {
-            calculatedChances = result.chancesEarned > 0
-                ? result.chancesEarned
-                : 1;
-          }
-          if (maxChancesPerReceipt > 0 &&
-              calculatedChances > maxChancesPerReceipt) {
-            calculatedChances = maxChancesPerReceipt;
+            if (calculatedChances <= 0) {
+              calculatedChances = result.chancesEarned > 0
+                  ? result.chancesEarned
+                  : 1;
+            }
+            if (maxChancesPerReceipt > 0 &&
+                calculatedChances > maxChancesPerReceipt) {
+              calculatedChances = maxChancesPerReceipt;
+            }
           }
         } else {
           calculatedChances = 0;

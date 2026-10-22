@@ -1315,10 +1315,10 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
             ? result.matchedRewardValue.trim()
             : (prizeNames.isNotEmpty ? prizeNames.first : 'هدية ترويجية مميزة'),
       );
-      final totalChances = math.max(
-        result.chancesEarned > 0 ? result.chancesEarned : 1,
-        compositeBundle.totalChances,
-      );
+      // Composite bundle chances govern (AIR-83)
+      final totalChances = compositeBundle.matchedRules.isNotEmpty
+          ? compositeBundle.totalChances
+          : (result.chancesEarned > 0 ? result.chancesEarned : 1);
 
       final ruleLevelGame = (compositeBundle.resolvedGameType != null && compositeBundle.resolvedGameType!.trim().isNotEmpty)
           ? compositeBundle.resolvedGameType!.trim()

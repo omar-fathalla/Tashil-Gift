@@ -1657,6 +1657,28 @@ class AiDirectivesSeedData {
           tags: ['nestle', 'kitkat', 'nescafe-gold', 'fmcg-sub-brand-isolation', 'category-collision-guard', 'air-82'],
           lastUpdated: '2026-10-22',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-83',
+          code: 'SPEND_RULE_QUANTITY_ISOLATION_AND_CONDITIONAL_BASKET_GOVERNANCE_STANDARD',
+          orderIndex: 83,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار عزل كمية القطع عن قواعد الإنفاق وحوكمة السلات الشرطية (سلة الرشيدي الميزان 150 ج مع شرط الحلاوة)',
+          titleEn: 'Spend Rule Quantity Isolation & Conditional Basket Governance Standard',
+          descriptionAr:
+              'معيار حوكمة معماري يضمن العزل التام بين عدد القطع المشتراة وبين احتساب فرص وهدايا عروض الإنفاق المشروط (Spend-based / Combo-spend rules): 1) عندما تكون قاعدة العرض قائمة على إنفاق حد أدنى مالي مع شرط احتواء السلة على صنف محدد (مثل: اشتر بـ 150 ج.م من منتجات الرشيدي الميزان بشرط أن تشمل حلاوة)، يُعتبر الصنف المحدد شرطاً مسبقاً لأهلية السلة (Basket Prerequisite) وليس محفزاً منفصلاً لمنح هدية مستقلة. 2) عزل عدد القطع (Quantity Isolation): احتساب فرص الفاتورة وهداياها يُشتق حصرياً من مضاعف الإنفاق المالي المؤهل (Spend Multiplier = targetSpend / minSpend)، ويُحظر تماماً تسريب عدد القطع (quantityMultiplier) لمضاعفة فرص أو هدايا عروض الإنفاق. 3) حوكمة شاشات الألعاب وعجلة الحظ (Game Screen Invariant): منع دوران عجلة الحظ أو تنفيذ محاولات إضافية تتجاوز totalChances المعتمدة، مع قفل زر الدوران فور استنفاد الفرصة الواحدة.',
+          descriptionEn:
+              'Architectural governance standard ensuring strict isolation between purchased item piece counts and chance/gift calculation for conditional basket spend rules: 1) In conditional basket spend rules (e.g. spend 150 EGP on El-Rashidi El-Mizan with at least 1 Halawa item), the required item acts as an eligibility prerequisite, not an independent gift trigger. 2) Quantity Isolation: chances and gifts are strictly derived from the net spend multiplier (targetSpend / minSpend); piece counts are prevented from inflating chances. 3) Game Screen Invariant: spin the wheel and games strictly lock out further spins once approved chances are consumed.',
+          logicAr:
+              '1. في AiReceiptService: عند مطابقة قاعدة إنفاق ترويجية (isSpendBased / by_spend / combo_spend)، يُلغى اعتماد quantityMultiplier وتُحسب الفرص حصرياً من مضاعفات الإنفاق المعتمدة.\n2. في ValidationScreen و ClientReceiptUploadScreen: اعتماد compositeBundle.totalChances كمرجع حاكم أعلى من chancesEarned لمنع تسريب مضاعف القطع العام.\n3. في SpinTheWheelScreen: قفل دالة _spin() عند استنفاد الفرص (_remainingChances <= 0 || _wonPrizes.length >= widget.totalChances)، وتثبيت _gamePlayed = true.\n4. تصحيح قيود المعاملات السابقة وحصر الهدايا المكتسبة في الجائزة المستحقة فعلياً.',
+          logicEn:
+              '1. In AiReceiptService: when a promotional spend-based rule matches, quantityMultiplier is bypassed and chances are strictly calculated from the promotional spend multiplier.\n2. In ValidationScreen and ClientReceiptUploadScreen: compositeBundle.totalChances governs over raw fallback chances to prevent piece count leakage.\n3. In SpinTheWheelScreen: locks _spin() when chances are exhausted (_remainingChances <= 0 || _wonPrizes.length >= widget.totalChances) and enforces _gamePlayed = true.\n4. Corrects historical transaction records to reflect the strictly earned prize.',
+          exampleInput:
+              'فاتورة أسواق فتح الله للجملة - سموحة رقم 235/1/211/221026 تشمل "الرشيدى الميزان ح" (115 ج.م، قطعة واحدة) و "الميزان طحينه 110" (35 ج.م، قطعة واحدة) بإجمالي 150 ج.م على حملة الرشيدي الميزان (أنفق 150 ج تشمل حلاوة واربح جائزة واحدة).',
+          exampleOutput:
+              '1) تحقق شرط السلة بوجود الحلاوة وتخطي حاجز الـ 150 ج.م بدقة. 2) احتساب فرصة واحدة بالضبط (150 / 150 = 1) وعزل عدد القطع (2 قطع لا تعني فرصتين). 3) صرف جائزة واحدة ("سكينة") ومنع لفة ثانية على عجلة الحظ، وتحديث سجل الفاتورة ليعكس جائزة واحدة فقط.',
+          tags: ['el-rashidi-el-mizan', 'spend-rule-isolation', 'conditional-basket', 'spin-the-wheel-governance', 'air-83'],
+          lastUpdated: '2026-10-22',
+        ),
       ];
 }
 

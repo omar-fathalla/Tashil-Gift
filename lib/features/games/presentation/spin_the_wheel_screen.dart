@@ -103,6 +103,7 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
 
   void _spin() {
     if (_isSpinning || _gamePlayed) return;
+    if (_remainingChances <= 0 || _wonPrizes.length >= widget.totalChances) return;
 
     setState(() {
       _isSpinning = true;
@@ -172,7 +173,7 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
       if (!mounted) return;
 
       setState(() {
-        _gamePlayed = _remainingChances == 0 && !widget.isDemo;
+        _gamePlayed = (_remainingChances <= 0 || _wonPrizes.length >= widget.totalChances) && !widget.isDemo;
         _isSpinning = false;
       });
 
@@ -191,10 +192,12 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
             : null,
         onNextChance: () {
           if (!mounted) return;
-          setState(() {
-            _gamePlayed = false;
-            _currentRound++;
-          });
+          if (_remainingChances > 0 && _wonPrizes.length < widget.totalChances) {
+            setState(() {
+              _gamePlayed = false;
+              _currentRound++;
+            });
+          }
         },
         onNextCustomer: () {
           if (!widget.isDemo && !_whatsappSent && _wonPrizes.isNotEmpty) {
