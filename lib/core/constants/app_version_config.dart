@@ -10,10 +10,10 @@ class AppVersionConfig {
   static const int minor = 0;
 
   /// Patch / Iteration version (Feature additions, enhancements, bugfixes)
-  static const int patch = 112;
+  static const int patch = 114;
 
   /// Global sequential build counter (Increments on every deployment)
-  static const int buildNumber = 167;
+  static const int buildNumber = 169;
 
   /// Release date of the current build
   static const String releaseDate = '2026-10-23';

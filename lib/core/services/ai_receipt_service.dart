@@ -2443,6 +2443,10 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                       'تاريخ الشراء بالفاتورة ($rawDateStr) متأخر عن تاريخ نهاية الحملة ($endStr). عذراً، انتهى العرض.',
                 );
               }
+              // Store normalized and auto-healed date string
+              final normalizedDateStr =
+                  "${parsedDate.day.toString().padLeft(2, '0')}/${parsedDate.month.toString().padLeft(2, '0')}/${parsedDate.year}";
+              result = result.copyWith(receiptDate: normalizedDateStr);
             }
           }
         }
@@ -2672,26 +2676,48 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           int year = int.parse(parts[2]);
           if (year < 100) year += 2000;
 
+          DateTime resolveHealedDate(int y, int m, int d) {
+            final direct = DateTime(y, m, d);
+            if (startDate != null && direct.isBefore(startDate)) {
+              final healedYear = startDate.year;
+              if (y != healedYear) {
+                final healedDate = DateTime(healedYear, m, d);
+                final startBound = DateTime(startDate.year, startDate.month, startDate.day);
+                final endBound = endDate != null
+                    ? DateTime(endDate.year, endDate.month, endDate.day).add(const Duration(days: 1))
+                    : DateTime(2100);
+                final tomorrow = DateTime.now().add(const Duration(days: 1));
+                if (!healedDate.isBefore(startBound) &&
+                    !healedDate.isAfter(endBound) &&
+                    !healedDate.isAfter(tomorrow)) {
+                  // Auto-heal thermal print digit confusion (e.g. broken loop '6' misread as '4' or '5')
+                  return healedDate;
+                }
+              }
+            }
+            return direct;
+          }
+
           // Case 1: YYYY/MM/DD format
           if (a > 1000) {
-            return DateTime(a, b, year);
+            return resolveHealedDate(a, b, year);
           }
 
           // Case 2: Unambiguous day/month
           if (a > 12 && b <= 12) {
             // Must be DD/MM/YYYY
-            return DateTime(year, b, a);
+            return resolveHealedDate(year, b, a);
           }
           if (b > 12 && a <= 12) {
             // Must be MM/DD/YYYY
-            return DateTime(year, a, b);
+            return resolveHealedDate(year, a, b);
           }
 
           // Case 3: Ambiguous (both a <= 12 and b <= 12, e.g. 09/10/26)
           // Candidate 1: DD/MM/YYYY (day=a, month=b)
           // Candidate 2: MM/DD/YYYY (month=a, day=b)
-          final candidateDDMM = DateTime(year, b, a);
-          final candidateMMDD = DateTime(year, a, b);
+          final candidateDDMM = resolveHealedDate(year, b, a);
+          final candidateMMDD = resolveHealedDate(year, a, b);
 
           final now = DateTime.now();
           final tomorrow = now.add(const Duration(days: 1));
@@ -2745,15 +2771,37 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           int a = int.parse(parts[0]);
           int b = int.parse(parts[1]);
           int c = int.parse(parts[2]);
+
+          DateTime resolveHealedDate(int y, int m, int d) {
+            final direct = DateTime(y, m, d);
+            if (startDate != null && direct.isBefore(startDate)) {
+              final healedYear = startDate.year;
+              if (y != healedYear) {
+                final healedDate = DateTime(healedYear, m, d);
+                final startBound = DateTime(startDate.year, startDate.month, startDate.day);
+                final endBound = endDate != null
+                    ? DateTime(endDate.year, endDate.month, endDate.day).add(const Duration(days: 1))
+                    : DateTime(2100);
+                final tomorrow = DateTime.now().add(const Duration(days: 1));
+                if (!healedDate.isBefore(startBound) &&
+                    !healedDate.isAfter(endBound) &&
+                    !healedDate.isAfter(tomorrow)) {
+                  return healedDate;
+                }
+              }
+            }
+            return direct;
+          }
+
           if (a > 1000) {
-            return DateTime(a, b, c);
+            return resolveHealedDate(a, b, c);
           } else {
             int year = c < 100 ? c + 2000 : c;
-            if (a > 12 && b <= 12) return DateTime(year, b, a);
-            if (b > 12 && a <= 12) return DateTime(year, a, b);
+            if (a > 12 && b <= 12) return resolveHealedDate(year, b, a);
+            if (b > 12 && a <= 12) return resolveHealedDate(year, a, b);
 
-            final candidateDDMM = DateTime(year, b, a);
-            final candidateMMDD = DateTime(year, a, b);
+            final candidateDDMM = resolveHealedDate(year, b, a);
+            final candidateMMDD = resolveHealedDate(year, a, b);
             final now = DateTime.now();
             final tomorrow = now.add(const Duration(days: 1));
 

@@ -1723,6 +1723,28 @@ class AiDirectivesSeedData {
           tags: ['fortune-wheel', 'branch-stock-governance', 'zero-stock-exclusion', 'smouha', 'single-slice-duplication', 'air-85'],
           lastUpdated: '2026-10-23',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-86',
+          code: 'THERMAL_PRINT_OCR_YEAR_AUTO_HEALING_STANDARD',
+          orderIndex: 86,
+          category: AiDirectiveCategory.fraudSecurity,
+          titleAr: 'معيار المعالجة الذاتية لأخطاء قراءة سنة الفاتورة في طابعات البونات الحرارية وتوفيقها مع نافذة الحملة',
+          titleEn: 'Thermal Print OCR Year Auto-Healing & Campaign Temporal Reconciliation Standard',
+          descriptionAr:
+              'معيار معماري حاسم لمعالجة إخفاقات نماذج الرؤية الحاسوبية (Gemini Vision OCR) في قراءة أرقام السنوات المطبوعة بنظام النقط الحرارية (Thermal Dot-Matrix POS Printers): 1) ظاهرة تآكل حلقة الرقم 6 (Broken-Loop Digit Confusion): في طابعات البونات الحرارية في سلاسل التجزئة (مثل فتح الله وجملة ماركت)، غالباً ما تُطبع حلقة الرقم "6" بخط باهت أو غير مكتمل فتفسرها نماذج الذكاء الاصطناعي خطأً كرقم "4" أو "5" (مثل قراءة 23/10/2026 كـ 23/10/2024). 2) استحالة تقديم بون ورقي قديم فيزيائياً (Physical Thermal Fading Invariant): من المستحيل فيزيائياً أن يقدم العميل بون كاشير حراري يعود لعامين سابقين؛ فالورق الحراري يبهت ويتحول لأبيض بالكامل خلال شهرين إلى 3 أشهر على الأكثر. 3) المعالجة الذاتية في 0ms (Deterministic Temporal Reconciliation): عندما يقع اليوم والشهر (مثل 23/10) داخل النافذة الزمنية المعتمدة للحملة [startDate, endDate]، وكانت السنة المستخرجة أقدم من سنة انطلاق الحملة، تقوم دالة parseReceiptDate تلقائياً بمعايرة السنة لتطابق سنة الحملة الجارية ما دامت تقع ضمن فترة العرض ولا تتجاوز الغد، مع استبدال تاريخ الفاتورة بالتاريخ المعالج (23/10/2026) لمنع الرفض الخاطئ للعملاء المستحقين.',
+          descriptionEn:
+              'Architectural standard addressing multimodal vision OCR misreadings of year digits on low-density thermal dot-matrix POS receipts: 1) Broken-Loop Digit Confusion: in retail thermal receipt printers, the digit "6" often prints with a faint or severed loop, causing vision models to misread it as "4" or "5" (e.g. 23/10/2026 misread as 23/10/2024). 2) Physical Thermal Fading Invariant: thermal paper receipts chemically fade completely within 2-3 months, making it physically impossible for a customer to present a legitimate 2-year-old thermal receipt. 3) Deterministic 0ms Temporal Reconciliation: when the day and month fall squarely within the active campaign window [startDate, endDate] but the extracted year predates startDate.year, parseReceiptDate auto-heals the year to match the campaign year provided the result is within bounds and not in the future, updating receiptDate to the normalized healed timestamp to prevent false customer rejections.',
+          logicAr:
+              '1. في parseReceiptDate: إضافة دالة resolveHealedDate في كلا فرعي قراءة التواريخ (السلاش / والشرطة -).\n2. فحص الشرط: إذا كان y < startDate.year وكان استبدال y بسنة بداية الحملة (startDate.year) يُنتج تاريخاً يقع ضمن [startDate, endDate] ولا يتجاوز تاريخ الغد (DateTime.now() + 1 day)، يتم اعتماد التاريخ المعالج فورياً.\n3. في processReceipt: تحديث result.receiptDate بالتاريخ الموحد المعالج (DD/MM/YYYY) لضمان اتساق قواعد البيانات وشاشات العرض وسجلات الفواتير.\n4. الحفاظ على الرفض الحقيقي: الفواتير التي تقع أيامها وأشهرها خارج نافذة الحملة لا يتم تصحيحها وتُرفض نظامياً كفواتير منتهية أو خارج العرض.',
+          logicEn:
+              '1. In parseReceiptDate: injects resolveHealedDate in both slash (/) and hyphen (-) date branches.\n2. Condition Check: if y < startDate.year and replacing y with startDate.year produces a valid date within [startDate, endDate] that does not exceed tomorrow, the healed date is immediately returned.\n3. In processReceipt: synchronizes result.receiptDate with the normalized healed timestamp (DD/MM/YYYY) for consistency across Firestore and UI logs.\n4. True Rejection Invariant: receipts whose day/month combinations lie outside the campaign window are not healed and are strictly rejected as expired or out-of-scope.',
+          exampleInput:
+              'فاتورة أسواق فتح الله للجملة برقم 173/3/224/231024 لحملة الرشيدي الميزان (تبدأ 01/10/2026 وتنتهي 29/11/2026)، وقرأ نموذج الرؤية تاريخ الشراء 23/10/2024 بسبب تآكل طابعة الكاشير.',
+          exampleOutput:
+              'معالجة السنة ذاتياً إلى 23/10/2026، وتمرير شرط فحص التاريخ بنجاح، وتسجيل الفاتورة مقبولة ومستحقة لعرض الـ 250 ج (شيكارة أرز 5 كجم).',
+          tags: ['thermal-pos', 'ocr-auto-healing', 'date-reconciliation', 'broken-loop-digit', 'temporal-governance', 'air-86'],
+          lastUpdated: '2026-10-23',
+        ),
       ];
 }
 
