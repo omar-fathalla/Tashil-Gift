@@ -113,7 +113,9 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
       final doc = await ref.read(firestoreProvider).collection('events').doc(widget.eventId).get();
       if (!doc.exists || !mounted) return;
       final event = EventModel.fromFirestore(doc);
-      final branchIdentifier = widget.branchId ?? widget.branchName;
+      final branchIdentifier = (widget.branchName != null && widget.branchName!.trim().isNotEmpty)
+          ? widget.branchName!.trim()
+          : (widget.branchId ?? '');
 
       // Only re-filter if the event strictly manages branch stock
       if (event.allocatedPrizes.isNotEmpty && mounted) {
@@ -416,13 +418,15 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // Celebratory Header Card
+                        // Celebratory or Informational Header Card
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               colors: [
-                                colorScheme.primaryContainer.withValues(alpha: 0.8),
+                                displayList.isEmpty
+                                    ? colorScheme.errorContainer.withValues(alpha: 0.8)
+                                    : colorScheme.primaryContainer.withValues(alpha: 0.8),
                                 colorScheme.surfaceContainerHighest,
                               ],
                             ),
@@ -432,11 +436,17 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Icon(Icons.stars_rounded, color: colorScheme.primary, size: 28),
+                                  Icon(
+                                    displayList.isEmpty ? Icons.warning_amber_rounded : Icons.stars_rounded,
+                                    color: displayList.isEmpty ? colorScheme.error : colorScheme.primary,
+                                    size: 28,
+                                  ),
                                   const SizedBox(width: 8),
                                   Flexible(
                                     child: Text(
-                                      'مبروك! لقد تأهلت للسحب الفوري',
+                                      displayList.isEmpty
+                                          ? 'عذراً، لا تتوفر هدايا للسحب حالياً'
+                                          : 'مبروك! لقد تأهلت للسحب الفوري',
                                       textAlign: TextAlign.center,
                                       style: GoogleFonts.cairo(
                                         fontSize: 20,
@@ -447,7 +457,7 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
                                   ),
                                 ],
                               ),
-                              if (widget.totalChances > 1) ...[
+                              if (widget.totalChances > 1 && displayList.isNotEmpty) ...[
                                 const SizedBox(height: 8),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),

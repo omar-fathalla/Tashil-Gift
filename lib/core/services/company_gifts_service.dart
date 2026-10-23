@@ -689,12 +689,24 @@ class CompanyGiftsService {
           final delta = newAllocatedQuantity - oldAllocated;
           final newRemaining = (oldRemaining + delta).clamp(0, newAllocatedQuantity);
 
+          String resolvedBranchId = matchedIndex != -1 ? prizes[matchedIndex].branchId : '';
+          if (resolvedBranchId.isEmpty && event.branchNames.isNotEmpty) {
+            for (int i = 0; i < event.branchNames.length; i++) {
+              if (matchesBranchName(event.branchNames[i], branchName)) {
+                if (i < event.branchIds.length) {
+                  resolvedBranchId = event.branchIds[i];
+                  break;
+                }
+              }
+            }
+          }
+
           final updatedPrize = AllocatedPrize(
             giftId: finalGiftId,
             name: finalGiftName,
             allocatedQuantity: newAllocatedQuantity,
             remainingQuantity: newRemaining,
-            branchId: matchedIndex != -1 ? prizes[matchedIndex].branchId : '',
+            branchId: resolvedBranchId,
             branchName: branchName,
             giftType: finalGiftType,
             unitValue: finalUnitValue,
@@ -1410,6 +1422,8 @@ class CompanyGiftsService {
           branchId.isNotEmpty &&
           (pBranchId == branchId ||
               pBranchName == branchId ||
+              matchesBranchName(pBranchName, branchId) ||
+              matchesBranchName(pBranchId, branchId) ||
               _normalizePrizeText(pBranchName) == _normalizePrizeText(branchId) ||
               (_normalizePrizeText(branchId).isNotEmpty && _normalizePrizeText(pBranchName).contains(_normalizePrizeText(branchId))));
       final isGeneralBranch = pBranchId.isEmpty && pBranchName.isEmpty;

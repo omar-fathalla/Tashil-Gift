@@ -632,6 +632,65 @@ class EventModel {
   }
 
   /// Returns only prizes that still have remaining stock (> 0) for the given [branch] (branchId or branchName).
+  /// Resolves any branch query (branchId, branchName, store code, normalized token)
+  /// against event.branchIds, event.branchNames, and allocatedPrizes to discover all synonyms.
+  Set<String> resolveBranchAliases(String branchQuery) {
+    final query = branchQuery.trim();
+    if (query.isEmpty) return const {};
+
+    final aliases = <String>{query.toLowerCase()};
+    final normQuery = CompanyGiftsService.normalizeBranchToken(query);
+    if (normQuery.isNotEmpty) aliases.add(normQuery.toLowerCase());
+
+    // 1. Cross-reference with event.branchIds and event.branchNames
+    for (int i = 0; i < branchIds.length; i++) {
+      final bId = branchIds[i].trim().toLowerCase();
+      final bName = i < branchNames.length ? branchNames[i].trim() : '';
+      final bNameNorm = CompanyGiftsService.normalizeBranchToken(bName).toLowerCase();
+
+      final matchesId = bId == query.toLowerCase() ||
+          (query.contains('_') && bId.endsWith(query.toLowerCase())) ||
+          (bId.contains('_') && query == bId.split('_').last);
+      final matchesName = bName.toLowerCase() == query.toLowerCase() ||
+          (bNameNorm.isNotEmpty && bNameNorm == normQuery.toLowerCase()) ||
+          CompanyGiftsService.matchesBranchName(bName, query);
+
+      if (matchesId || matchesName) {
+        if (bId.isNotEmpty) aliases.add(bId);
+        if (bName.isNotEmpty) {
+          aliases.add(bName.toLowerCase());
+          if (bNameNorm.isNotEmpty) aliases.add(bNameNorm);
+        }
+      }
+    }
+
+    // 2. Cross-reference with allocatedPrizes
+    for (final p in allocatedPrizes) {
+      final pId = p.branchId.trim().toLowerCase();
+      final pName = p.branchName.trim();
+      final pNameNorm = CompanyGiftsService.normalizeBranchToken(pName).toLowerCase();
+
+      final matchesId = pId.isNotEmpty &&
+          (pId == query.toLowerCase() || (pId.contains('_') && query == pId.split('_').last));
+      final matchesName = pName.isNotEmpty &&
+          (pName.toLowerCase() == query.toLowerCase() ||
+              (pNameNorm.isNotEmpty && pNameNorm == normQuery.toLowerCase()) ||
+              CompanyGiftsService.matchesBranchName(pName, query));
+
+      if (matchesId || matchesName) {
+        if (pId.isNotEmpty) aliases.add(pId);
+        if (pName.isNotEmpty) {
+          aliases.add(pName.toLowerCase());
+          if (pNameNorm.isNotEmpty) aliases.add(pNameNorm);
+        }
+      }
+    }
+
+    return aliases;
+  }
+
+  /// Returns allocated prizes that still have remaining stock (remainingQuantity > 0),
+  /// strictly filtered for [branch] if specified.
   ///
   /// - If [branch] is provided and the campaign has allocations specifically for this branch,
   ///   it strictly returns those branch allocations where remainingQuantity > 0.
@@ -645,10 +704,15 @@ class EventModel {
       return allocatedPrizes.where((p) => p.remainingQuantity > 0).toList();
     }
 
-    // 1. Check for specific allocations matching this branch
+    final aliases = resolveBranchAliases(targetBranch);
+
+    // 1. Check for specific allocations matching this branch or any of its aliases
     final branchSpecific = allocatedPrizes.where((p) {
       if (p.branchId.trim().isEmpty && p.branchName.trim().isEmpty) return false;
-      return p.matchesBranch(targetBranch);
+      for (final alias in aliases) {
+        if (p.matchesBranch(alias)) return true;
+      }
+      return false;
     }).toList();
 
     if (branchSpecific.isNotEmpty) {
@@ -715,13 +779,17 @@ class EventModel {
 
     final inStockPrizeNames = availablePrizeNamesForBranch(branch);
     final targetBranch = (branch ?? '').trim();
+    final aliases = resolveBranchAliases(targetBranch);
 
     // Find all allocations relevant to this branch (including general ones)
     final relevantAllocations = allocatedPrizes.where((p) {
       if (targetBranch.isEmpty) return true;
-      final isExactBranch = p.matchesBranch(targetBranch);
       final isGeneral = p.branchId.trim().isEmpty && p.branchName.trim().isEmpty;
-      return isExactBranch || isGeneral;
+      if (isGeneral) return true;
+      for (final alias in aliases) {
+        if (p.matchesBranch(alias)) return true;
+      }
+      return false;
     }).toList();
 
     if (candidateGifts.isEmpty) {

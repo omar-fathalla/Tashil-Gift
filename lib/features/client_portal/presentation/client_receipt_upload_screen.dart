@@ -1522,13 +1522,46 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                 .toSet()
                 .toList()
             : prizeNames;
-        final branchFilteredPrizes = currentEvent?.filterGiftsByBranchStock(
-          candidateGifts: candidateGifts,
-          branch: branchIdentifier,
-        ) ?? candidateGifts;
-        final finalWheelPrizes = branchFilteredPrizes.isNotEmpty
-            ? branchFilteredPrizes
-            : (prizeNames.isNotEmpty ? prizeNames : candidateGifts);
+        final branchFilteredPrizes = (currentEvent != null && currentEvent.allocatedPrizes.isNotEmpty)
+            ? currentEvent.filterGiftsByBranchStock(
+                candidateGifts: candidateGifts,
+                branch: branchIdentifier,
+              )
+            : candidateGifts;
+        final finalWheelPrizes = branchFilteredPrizes;
+
+        if (finalWheelPrizes.isEmpty && (currentEvent?.allocatedPrizes.isNotEmpty ?? false)) {
+          final branchDisplay = resolvedCanonicalBranchName.isNotEmpty ? resolvedCanonicalBranchName : result.branchDetected;
+          if (mounted) {
+            await showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (ctx) => AlertDialog(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                title: Row(
+                  children: [
+                    Icon(Icons.inventory_2_outlined, color: Theme.of(ctx).colorScheme.error),
+                    const SizedBox(width: 8),
+                    Text('عذراً، نفدت الهدايا بالفرع', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 18)),
+                  ],
+                ),
+                content: Text(
+                  'الفاتورة صحيحة ومطابقة لشروط العرض، ولكن جميع أصناف الهدايا المخصصة لـ ($branchDisplay) رصيدها صفر حالياً.\nيرجى التواصل مع إدارة الحملة لإعادة تعبئة رصيد الهدايا.',
+                  style: GoogleFonts.cairo(fontSize: 14),
+                ),
+                actions: [
+                  FilledButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: Text('حسناً', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            );
+          }
+          _resetFormForNextCustomer();
+          return;
+        }
+
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => SpinTheWheelScreen(

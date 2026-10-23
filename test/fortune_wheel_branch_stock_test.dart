@@ -165,5 +165,58 @@ void main() {
       expect(displaySlices, ['ماج زجاجي فاخر', 'ماج زجاجي فاخر']);
       expect(displaySlices.length > 1, isTrue); // Guarantees FortuneWheel won't crash
     });
+
+    test('Resolves prizes by branchId even if allocatedPrize has empty branchId and only branchName', () {
+      final eventWithUnsetIds = EventModel(
+        id: 'event-el-rashidi',
+        eventName: 'عروض وحملات الرشيدي الميزان',
+        targetCompany: 'الرشيدى الميزان',
+        companySlug: 'fathalla',
+        minimumSpend: 100.0,
+        startDate: DateTime.now().subtract(const Duration(days: 5)),
+        endDate: DateTime.now().add(const Duration(days: 20)),
+        gameType: 'wheel',
+        branchIds: ['fathalla_224', 'fathalla_221'],
+        branchNames: ['فرع عجمي ستار (الإسكندرية)', 'فرع هانوفيل (الإسكندرية)'],
+        allocatedPrizes: [
+          AllocatedPrize(
+            giftId: 'p-1',
+            name: 'plate',
+            allocatedQuantity: 48,
+            remainingQuantity: 35,
+            branchId: '', // Empty in database!
+            branchName: 'فرع هانوفيل (الإسكندرية)',
+          ),
+          AllocatedPrize(
+            giftId: 'p-2',
+            name: 'lunch box',
+            allocatedQuantity: 10,
+            remainingQuantity: 4,
+            branchId: '', // Empty in database!
+            branchName: 'فرع هانوفيل (الإسكندرية)',
+          ),
+          AllocatedPrize(
+            giftId: 'p-3',
+            name: 'سكينة',
+            allocatedQuantity: 10,
+            remainingQuantity: 0, // OUT OF STOCK
+            branchId: '',
+            branchName: 'فرع هانوفيل (الإسكندرية)',
+          ),
+        ],
+      );
+
+      // Querying with branchId 'fathalla_221' MUST find the prizes!
+      final prizesForId = eventWithUnsetIds.availablePrizeNamesForBranch('fathalla_221');
+      expect(prizesForId, containsAll(['plate', 'lunch box']));
+      expect(prizesForId, isNot(contains('سكينة')));
+
+      // filterGiftsByBranchStock with branchId MUST also succeed
+      final filtered = eventWithUnsetIds.filterGiftsByBranchStock(
+        candidateGifts: ['plate', 'lunch box', 'سكينة'],
+        branch: 'fathalla_221',
+      );
+      expect(filtered, ['plate', 'lunch box']);
+    });
   });
 }
