@@ -1563,6 +1563,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
           docId: docId,
           totalChances: chances,
           resolvedBranchId: winningEval.resolvedBranchId,
+          resolvedBranchName: canonical,
           resolvedLinkedGifts: winningEval.resolvedLinkedGifts,
           resolvedUnitValue: winningEval.resolvedUnitValue,
           resolvedIsVoucher: winningEval.resolvedIsVoucher,
@@ -1883,6 +1884,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
           docId: docId,
           totalChances: chances,
           resolvedBranchId: winningEval.resolvedBranchId,
+          resolvedBranchName: canonical,
           resolvedLinkedGifts: winningEval.resolvedLinkedGifts,
           resolvedUnitValue: winningEval.resolvedUnitValue,
           resolvedIsVoucher: winningEval.resolvedIsVoucher,
@@ -1975,6 +1977,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
     String? docId,
     int totalChances = 1,
     String? resolvedBranchId,
+    String? resolvedBranchName,
     List<LinkedGiftAllocation> resolvedLinkedGifts = const [],
     double? resolvedUnitValue,
     bool resolvedIsVoucher = false,
@@ -1986,18 +1989,24 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
     final isScratch = gameType == 'scratch' || gameType == 'scratchcard';
     final isDirect = gameType == 'directgift' || (!isChooseGift && !isWheel && !isScratch);
 
+    final branchIdOrName = (resolvedBranchName != null && resolvedBranchName.trim().isNotEmpty)
+        ? resolvedBranchName.trim()
+        : resolvedBranchId;
+
     // Extract available candidate prizes
     List<String> candidatePrizes = [];
     if (resolvedLinkedGifts.isNotEmpty) {
       candidatePrizes = resolvedLinkedGifts.map((g) => g.giftName.trim()).where((n) => n.isNotEmpty).toSet().toList();
     }
-    if (candidatePrizes.isEmpty && winningCampaign != null) {
-      candidatePrizes = winningCampaign.allocatedPrizes
-          .where((p) => p.remainingQuantity > 0)
-          .map((p) => p.name.trim())
-          .where((n) => n.isNotEmpty)
-          .toSet()
-          .toList();
+    if (winningCampaign != null) {
+      if (candidatePrizes.isNotEmpty) {
+        final filtered = winningCampaign.filterGiftsByBranchStock(candidateGifts: candidatePrizes, branch: branchIdOrName);
+        if (filtered.isNotEmpty) {
+          candidatePrizes = filtered;
+        }
+      } else {
+        candidatePrizes = winningCampaign.availablePrizeNamesForBranch(branchIdOrName);
+      }
     }
 
     // Clean display title for choice campaigns
@@ -2240,6 +2249,8 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                         eventId: winningCampaign.id,
                         prizes: candidatePrizes,
                         totalChances: totalChances > 0 ? totalChances : 1,
+                        branchId: resolvedBranchId ?? branchIdOrName,
+                        branchName: resolvedBranchName,
                       ),
                     ),
                   );

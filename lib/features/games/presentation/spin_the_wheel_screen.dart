@@ -13,6 +13,7 @@ import '../../../core/widgets/game_sound_controls.dart';
 import '../../../core/utils/error_handler.dart';
 import '../../../core/animations/m3_motion.dart';
 import '../../../core/widgets/switch_point_branding.dart';
+import '../../admin/domain/event_model.dart';
 import '../../company_portal/domain/whatsapp_gateway_service.dart';
 import '../../company_portal/domain/whatsapp_winner_notification_service.dart';
 import 'winner_celebration_dialog.dart';
@@ -25,6 +26,7 @@ class SpinTheWheelScreen extends ConsumerStatefulWidget {
   final int totalChances;
   final bool isDemo;
   final String? branchId;
+  final String? branchName;
   final String? customerPhone;
   final String? customerName;
   final bool? enableWhatsAppWinnerNotification;
@@ -37,6 +39,7 @@ class SpinTheWheelScreen extends ConsumerStatefulWidget {
     this.totalChances = 1,
     this.isDemo = false,
     this.branchId,
+    this.branchName,
     this.customerPhone,
     this.customerName,
     this.enableWhatsAppWinnerNotification,
@@ -49,7 +52,16 @@ class SpinTheWheelScreen extends ConsumerStatefulWidget {
 class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
     with SingleTickerProviderStateMixin {
   final StreamController<int> selected = StreamController<int>();
-  late final List<String> _items;
+  List<String> _items = [];
+
+  List<String> get _displayItems {
+    if (_items.isEmpty) return const [];
+    if (_items.length == 1) {
+      // FortuneWheel asserts items.length > 1; duplicate single item into 2 slices
+      return [_items.first, _items.first];
+    }
+    return _items;
+  }
 
   bool _isSpinning = false;
   bool _gamePlayed = false;
@@ -83,6 +95,8 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
     final seen = <String>{};
     _items = rawList.where((p) => p.trim().isNotEmpty && seen.add(p.trim())).toList();
 
+    _loadLiveBranchStockPrizes();
+
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1400),
@@ -91,6 +105,40 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.06).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
+  }
+
+  Future<void> _loadLiveBranchStockPrizes() async {
+    if (widget.isDemo || widget.eventId.isEmpty) return;
+    try {
+      final doc = await ref.read(firestoreProvider).collection('events').doc(widget.eventId).get();
+      if (!doc.exists || !mounted) return;
+      final event = EventModel.fromFirestore(doc);
+      final branchIdentifier = widget.branchId ?? widget.branchName;
+
+      // Only re-filter if the event strictly manages branch stock
+      if (event.allocatedPrizes.isNotEmpty && mounted) {
+        final liveInStock = event.availablePrizeNamesForBranch(branchIdentifier);
+        final filteredCandidates = event.filterGiftsByBranchStock(
+          candidateGifts: _items.isNotEmpty ? _items : widget.prizes,
+          branch: branchIdentifier,
+        );
+
+        final updatedList = filteredCandidates.isNotEmpty
+            ? filteredCandidates
+            : liveInStock;
+
+        final seen = <String>{};
+        final cleaned = updatedList.where((p) => p.trim().isNotEmpty && seen.add(p.trim())).toList();
+
+        if (mounted) {
+          setState(() {
+            _items = cleaned;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ SpinTheWheelScreen._loadLiveBranchStockPrizes error: $e');
+    }
   }
 
   @override
@@ -104,6 +152,8 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
   void _spin() {
     if (_isSpinning || _gamePlayed) return;
     if (_remainingChances <= 0 || _wonPrizes.length >= widget.totalChances) return;
+    final displayList = _displayItems;
+    if (displayList.isEmpty) return;
 
     setState(() {
       _isSpinning = true;
@@ -121,13 +171,15 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
       }
     });
 
-    // Randomly select a prize
-    _prizeIndex = Random().nextInt(_items.length);
+    // Randomly select a prize from display items
+    _prizeIndex = Random().nextInt(displayList.length);
     selected.add(_prizeIndex);
   }
 
   Future<void> _onSpinEnd(int index) async {
-    final prize = _items[index];
+    final displayList = _displayItems;
+    if (displayList.isEmpty) return;
+    final prize = displayList[index % displayList.length];
 
     try {
       _remainingChances = (_remainingChances - 1).clamp(0, 999);
@@ -158,9 +210,12 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
           await giftsService.decrementCampaignPrize(
             widget.eventId,
             prize,
-            branchId: widget.branchId,
+            branchId: widget.branchId ?? widget.branchName,
             gameType: 'wheel',
           );
+          if (_remainingChances > 0) {
+            unawaited(_loadLiveBranchStockPrizes());
+          }
         }
 
         // Dispatch celebratory WhatsApp message when all spins are completed
@@ -311,7 +366,7 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
     });
   }
 
-  List<Color> _generateSliceColors(ColorScheme colorScheme) {
+  List<Color> _generateSliceColors(ColorScheme colorScheme, int count) {
     final baseColors = [
       colorScheme.primary,
       colorScheme.tertiary,
@@ -322,7 +377,7 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
     ];
 
     List<Color> result = [];
-    for (int i = 0; i < _items.length; i++) {
+    for (int i = 0; i < count; i++) {
       result.add(baseColors[i % baseColors.length]);
     }
     return result;
@@ -332,7 +387,8 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final sliceColors = _generateSliceColors(colorScheme);
+    final displayList = _displayItems;
+    final sliceColors = _generateSliceColors(colorScheme, displayList.length);
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
@@ -369,10 +425,6 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
                                 colorScheme.primaryContainer.withValues(alpha: 0.8),
                                 colorScheme.surfaceContainerHighest,
                               ],
-                            ),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: colorScheme.primary.withValues(alpha: 0.2),
                             ),
                           ),
                           child: Column(
@@ -417,9 +469,11 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
                               Text(
                                 _isSpinning
                                     ? 'العجلة تدور الآن... ترقّب هديتك القيمة!'
-                                    : (widget.totalChances > 1
-                                        ? 'اسحب العجلة لاستخدام الفرصة رقم ($_currentRound)'
-                                        : 'اضغط على زر "لف العجلة" لتدوير العجلة وربح هديتك فوراً'),
+                                    : (displayList.isEmpty
+                                        ? 'عذراً، نفدت الهدايا المخصصة لهذا الفرع حالياً'
+                                        : (widget.totalChances > 1
+                                            ? 'اسحب العجلة لاستخدام الفرصة رقم ($_currentRound)'
+                                            : 'اضغط على زر "لف العجلة" لتدوير العجلة وربح هديتك فوراً')),
                                 textAlign: TextAlign.center,
                                 style: GoogleFonts.cairo(
                                   fontSize: 13,
@@ -431,147 +485,196 @@ class _SpinTheWheelScreenState extends ConsumerState<SpinTheWheelScreen>
                           ),
                         ),
 
-                        const SizedBox(height: 36),
-
-                        // The Fortune Wheel with Glowing Border
-                        Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            // Outer Pulsing Glow
-                            Container(
-                              width: 370,
-                              height: 370,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: colorScheme.primary.withValues(alpha: _isSpinning ? 0.35 : 0.15),
-                                    blurRadius: _isSpinning ? 40 : 24,
-                                    spreadRadius: _isSpinning ? 8 : 2,
-                                  ),
-                                ],
-                              ),
+                        if (displayList.isEmpty) ...[
+                          const SizedBox(height: 36),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                            decoration: BoxDecoration(
+                              color: colorScheme.surfaceContainer,
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(color: colorScheme.error.withValues(alpha: 0.3)),
                             ),
-
-                            // Wheel Frame
-                            Container(
-                              width: 350,
-                              height: 350,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: colorScheme.primaryContainer,
-                                  width: 6,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.25),
-                                    blurRadius: 16,
-                                    offset: const Offset(0, 6),
+                            child: Column(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.errorContainer.withValues(alpha: 0.2),
+                                    shape: BoxShape.circle,
                                   ),
-                                ],
-                              ),
-                              child: ClipOval(
-                                child: SelectionContainer.disabled(
-                                  child: FortuneWheel(
-                                    selected: selected.stream,
-                                  duration: const Duration(seconds: 14), // 14 seconds of thrilling, realistic spin
-                                  rotationCount: 16, // 16 full revolutions starting fast and decelerating smoothly
-                                  curve: FortuneCurve.spin,
-                                  indicators: [
-                                    FortuneIndicator(
-                                      alignment: Alignment.topCenter,
-                                      child: TriangleIndicator(
-                                        color: colorScheme.primaryContainer,
-                                        elevation: 8,
-                                      ),
+                                  child: Icon(Icons.inventory_2_outlined, size: 48, color: colorScheme.error),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'عذراً، نفدت كمية الهدايا في هذا الفرع حالياً',
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: colorScheme.onSurface,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'جميع أصناف الهدايا المخصصة لـ (${widget.branchName ?? widget.branchId ?? 'الفرع المحدد'}) رصيدها صفر حالياً. يرجى التواصل مع إدارة الحملة لإعادة تعبئة رصيد الهدايا.',
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 14,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+                                FilledButton.icon(
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  icon: const Icon(Icons.arrow_back_rounded),
+                                  label: Text('الرجوع للشاشة السابقة', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ] else ...[
+                          const SizedBox(height: 36),
+
+                          // The Fortune Wheel with Glowing Border
+                          Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // Outer Pulsing Glow
+                              Container(
+                                width: 370,
+                                height: 370,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: colorScheme.primary.withValues(alpha: _isSpinning ? 0.35 : 0.15),
+                                      blurRadius: _isSpinning ? 40 : 24,
+                                      spreadRadius: _isSpinning ? 8 : 2,
                                     ),
                                   ],
-                                  onAnimationEnd: () {
-                                    // Pause 600ms on the final winning slice before triggering celebration
-                                    Future.delayed(const Duration(milliseconds: 600), () {
-                                      _onSpinEnd(_prizeIndex);
-                                    });
-                                  },
-                                  items: [
-                                    for (int i = 0; i < _items.length; i++)
-                                      FortuneItem(
-                                        style: FortuneItemStyle(
-                                          color: sliceColors[i],
-                                          borderColor: Colors.white.withValues(alpha: 0.4),
-                                          borderWidth: 2,
-                                        ),
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                                          child: Text(
-                                            _items[i],
-                                            style: GoogleFonts.cairo(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 13,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
+                                ),
+                              ),
+
+                              // Wheel Frame
+                              Container(
+                                width: 350,
+                                height: 350,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: colorScheme.primaryContainer,
+                                    width: 6,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.25),
+                                      blurRadius: 16,
+                                      offset: const Offset(0, 6),
+                                    ),
                                   ],
                                 ),
-                              ),
-                            ),
-                          ),
-
-                            // Center Hub
-                            Container(
-                              width: 54,
-                              height: 54,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: RadialGradient(
-                                  colors: [colorScheme.primaryContainer, colorScheme.primary],
-                                ),
-                                border: Border.all(color: Colors.white, width: 3),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.3),
-                                    blurRadius: 8,
+                                child: ClipOval(
+                                  child: SelectionContainer.disabled(
+                                    child: FortuneWheel(
+                                      selected: selected.stream,
+                                      duration: const Duration(seconds: 14), // 14 seconds of thrilling, realistic spin
+                                      rotationCount: 16, // 16 full revolutions starting fast and decelerating smoothly
+                                      curve: FortuneCurve.spin,
+                                      indicators: [
+                                        FortuneIndicator(
+                                          alignment: Alignment.topCenter,
+                                          child: TriangleIndicator(
+                                            color: colorScheme.primaryContainer,
+                                            elevation: 8,
+                                          ),
+                                        ),
+                                      ],
+                                      onAnimationEnd: () {
+                                        // Pause 600ms on the final winning slice before triggering celebration
+                                        Future.delayed(const Duration(milliseconds: 600), () {
+                                          _onSpinEnd(_prizeIndex);
+                                        });
+                                      },
+                                      items: [
+                                        for (int i = 0; i < displayList.length; i++)
+                                          FortuneItem(
+                                            style: FortuneItemStyle(
+                                              color: sliceColors[i],
+                                              borderColor: Colors.white.withValues(alpha: 0.4),
+                                              borderWidth: 2,
+                                            ),
+                                            child: Padding(
+                                              padding: const EdgeInsets.symmetric(horizontal: 14),
+                                              child: Text(
+                                                displayList[i],
+                                                style: GoogleFonts.cairo(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 13,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
                                   ),
-                                ],
+                                ),
                               ),
-                              child: const Icon(
-                                Icons.card_giftcard_rounded,
-                                size: 26,
-                                color: Colors.white,
+
+                              // Center Hub
+                              Container(
+                                width: 54,
+                                height: 54,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: RadialGradient(
+                                    colors: [colorScheme.primaryContainer, colorScheme.primary],
+                                  ),
+                                  border: Border.all(color: Colors.white, width: 3),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.3),
+                                      blurRadius: 8,
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.card_giftcard_rounded,
+                                  size: 26,
+                                  color: Colors.white,
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
+                            ],
+                          ),
 
-                        const SizedBox(height: 42),
+                          const SizedBox(height: 42),
 
-                        // Pulsing / Interactive Spin Button
-                        if (!_gamePlayed)
-                          AnimatedBuilder(
-                            animation: _pulseAnimation,
-                            builder: (context, child) {
-                              return Transform.scale(
-                                scale: _isSpinning ? 1.0 : _pulseAnimation.value,
-                                child: child,
-                              );
-                            },
-                            child: Tooltip(
-                              message: 'اضغط هنا لتدوير العجلة الفائزة',
-                              waitDuration: const Duration(milliseconds: 400),
-                              child: Container(
-                                constraints: const BoxConstraints(maxWidth: 320),
-                                child: M3ActionButton(
-                                  label: _isSpinning ? 'العجلة تدور الآن...' : 'لف العجلة واربح!',
-                                  icon: _isSpinning ? Icons.refresh_rounded : Icons.play_arrow_rounded,
-                                  isLoading: _isSpinning,
-                                  variant: M3ButtonVariant.filled,
-                                  onPressed: _isSpinning ? null : () async => _spin(),
+                          // Pulsing / Interactive Spin Button
+                          if (!_gamePlayed)
+                            AnimatedBuilder(
+                              animation: _pulseAnimation,
+                              builder: (context, child) {
+                                return Transform.scale(
+                                  scale: _isSpinning ? 1.0 : _pulseAnimation.value,
+                                  child: child,
+                                );
+                              },
+                              child: Tooltip(
+                                message: 'اضغط هنا لتدوير العجلة الفائزة',
+                                waitDuration: const Duration(milliseconds: 400),
+                                child: Container(
+                                  constraints: const BoxConstraints(maxWidth: 320),
+                                  child: M3ActionButton(
+                                    label: _isSpinning ? 'العجلة تدور الآن...' : 'لف العجلة واربح!',
+                                    icon: _isSpinning ? Icons.refresh_rounded : Icons.play_arrow_rounded,
+                                    isLoading: _isSpinning,
+                                    variant: M3ButtonVariant.filled,
+                                    onPressed: _isSpinning ? null : () async => _spin(),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
+                        ],
 
                         if (_gamePlayed)
                           Container(

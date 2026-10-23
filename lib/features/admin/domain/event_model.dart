@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../../core/services/company_gifts_service.dart';
 
 /// Represents a specific quantity of an inventory gift allocated to a promotional rule
 class LinkedGiftAllocation {
@@ -471,6 +472,18 @@ class AllocatedPrize {
       if (imageUrl != null && imageUrl!.isNotEmpty) 'imageUrl': imageUrl,
     };
   }
+
+  /// Checks whether this allocated prize is assigned to or compatible with [branch].
+  /// Matches against branchId, branchName, and fuzzy normalized branch tokens.
+  bool matchesBranch(String branch) {
+    final b = branch.trim();
+    if (b.isEmpty) return true;
+    if (branchId.trim().isEmpty && branchName.trim().isEmpty) return true;
+    if (branchId.trim().toLowerCase() == b.toLowerCase()) return true;
+    if (branchName.trim().toLowerCase() == b.toLowerCase()) return true;
+    return CompanyGiftsService.matchesBranchName(branchName, b) ||
+        CompanyGiftsService.matchesBranchName(branchId, b);
+  }
 }
 
 class EventModel {
@@ -618,17 +631,49 @@ class EventModel {
     return '$retailChainName (${branchNames.length} فروع: ${branchNames.join('، ')})';
   }
 
-  /// Returns only prizes that still have remaining stock.
-  List<AllocatedPrize> get availablePrizes {
-    return allocatedPrizes.where((p) => p.remainingQuantity > 0).toList();
+  /// Returns only prizes that still have remaining stock (> 0) for the given [branch] (branchId or branchName).
+  ///
+  /// - If [branch] is provided and the campaign has allocations specifically for this branch,
+  ///   it strictly returns those branch allocations where remainingQuantity > 0.
+  /// - If no branch allocations match [branch], it checks general allocations (unassigned to any specific branch).
+  /// - If [branch] is null or empty, it returns all allocated prizes with remainingQuantity > 0.
+  List<AllocatedPrize> availablePrizesForBranch([String? branch]) {
+    if (allocatedPrizes.isEmpty) return const [];
+
+    final targetBranch = (branch ?? '').trim();
+    if (targetBranch.isEmpty) {
+      return allocatedPrizes.where((p) => p.remainingQuantity > 0).toList();
+    }
+
+    // 1. Check for specific allocations matching this branch
+    final branchSpecific = allocatedPrizes.where((p) {
+      if (p.branchId.trim().isEmpty && p.branchName.trim().isEmpty) return false;
+      return p.matchesBranch(targetBranch);
+    }).toList();
+
+    if (branchSpecific.isNotEmpty) {
+      // Strictly enforce remainingQuantity > 0 for this specific branch
+      return branchSpecific.where((p) => p.remainingQuantity > 0).toList();
+    }
+
+    // 2. Check for general allocations (accessible across all branches)
+    final generalAllocations = allocatedPrizes.where((p) =>
+        p.branchId.trim().isEmpty && p.branchName.trim().isEmpty).toList();
+
+    if (generalAllocations.isNotEmpty) {
+      return generalAllocations.where((p) => p.remainingQuantity > 0).toList();
+    }
+
+    return const [];
   }
 
-  /// Returns prize names for display in games (only available ones, deduplicated).
-  List<String> get availablePrizeNames {
-    if (availablePrizes.isNotEmpty) {
+  /// Returns clean prize names for display in games (strictly available ones with remainingQuantity > 0 for [branch]).
+  List<String> availablePrizeNamesForBranch([String? branch]) {
+    final available = availablePrizesForBranch(branch);
+    if (available.isNotEmpty) {
       final seen = <String>{};
       final List<String> distinct = [];
-      for (final p in availablePrizes) {
+      for (final p in available) {
         String name = p.name.trim();
         if (p.isVoucher && p.unitValue > 0) {
           final val = p.unitValue == p.unitValue.roundToDouble() ? p.unitValue.toInt() : p.unitValue;
@@ -640,16 +685,12 @@ class EventModel {
           distinct.add(name);
         }
       }
-      if (distinct.isNotEmpty) return distinct;
+      return distinct;
     }
-    if (allocatedPrizes.isNotEmpty) {
-      return allocatedPrizes
-          .map((p) => p.name.trim())
-          .where((n) => n.isNotEmpty)
-          .toSet()
-          .toList();
-    }
-    if (promotionalRules.isNotEmpty) {
+
+    // Only if NO allocated prizes are configured for the entire campaign (legacy/promotional-only campaign),
+    // fallback to promotional rules reward values.
+    if (allocatedPrizes.isEmpty && promotionalRules.isNotEmpty) {
       return promotionalRules
           .map((r) => r.rewardValue.isNotEmpty ? r.rewardValue : r.linkedGiftsSummary)
           .where((n) => n.trim().isNotEmpty)
@@ -657,8 +698,79 @@ class EventModel {
           .toSet()
           .toList();
     }
-    return [];
+
+    return const [];
   }
+
+  /// Filters candidate gifts (e.g. from promotional rules) strictly against remaining stock for [branch].
+  /// Any item with remainingQuantity <= 0 in this branch is strictly excluded.
+  List<String> filterGiftsByBranchStock({
+    required List<String> candidateGifts,
+    String? branch,
+  }) {
+    // If the campaign has no inventory management configured, return raw candidates
+    if (allocatedPrizes.isEmpty) {
+      return candidateGifts.where((g) => g.trim().isNotEmpty).toSet().toList();
+    }
+
+    final inStockPrizeNames = availablePrizeNamesForBranch(branch);
+    final targetBranch = (branch ?? '').trim();
+
+    // Find all allocations relevant to this branch (including general ones)
+    final relevantAllocations = allocatedPrizes.where((p) {
+      if (targetBranch.isEmpty) return true;
+      final isExactBranch = p.matchesBranch(targetBranch);
+      final isGeneral = p.branchId.trim().isEmpty && p.branchName.trim().isEmpty;
+      return isExactBranch || isGeneral;
+    }).toList();
+
+    if (candidateGifts.isEmpty) {
+      return inStockPrizeNames;
+    }
+
+    final List<String> validCandidates = [];
+    for (final candidate in candidateGifts) {
+      final cleanCandidate = candidate.trim();
+      if (cleanCandidate.isEmpty) continue;
+
+      // Find if this candidate matches an allocation
+      final matchedAlloc = relevantAllocations.where((p) {
+        final pName = p.name.trim().toLowerCase();
+        final cName = cleanCandidate.toLowerCase();
+        return pName == cName || pName.contains(cName) || cName.contains(pName);
+      }).firstOrNull;
+
+      if (matchedAlloc != null) {
+        if (matchedAlloc.remainingQuantity > 0) {
+          validCandidates.add(cleanCandidate);
+        }
+      } else {
+        // If not explicitly tracked, but matches an in-stock prize name, keep it
+        final matchesInStock = inStockPrizeNames.any((p) {
+          final pLow = p.toLowerCase();
+          final cLow = cleanCandidate.toLowerCase();
+          return pLow == cLow || pLow.contains(cLow) || cLow.contains(pLow);
+        });
+        if (matchesInStock) {
+          validCandidates.add(cleanCandidate);
+        }
+      }
+    }
+
+    if (validCandidates.isNotEmpty) {
+      return validCandidates.toSet().toList();
+    }
+
+    // Fallback: If candidate gifts were all out of stock in this branch,
+    // return whatever in-stock prizes are available in this branch.
+    return inStockPrizeNames;
+  }
+
+  /// Returns only prizes that still have remaining stock.
+  List<AllocatedPrize> get availablePrizes => availablePrizesForBranch(null);
+
+  /// Returns prize names for display in games (only available ones with remainingQuantity > 0, deduplicated).
+  List<String> get availablePrizeNames => availablePrizeNamesForBranch(null);
 
   /// Calculates the number of lottery/game chances earned based on the receipt spend.
   int calculateChancesEarned(double targetCompanySpend) {

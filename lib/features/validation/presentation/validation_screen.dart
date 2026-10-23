@@ -849,13 +849,6 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         _selectedPreviewIndex = 0;
       });
 
-      // Route based on rule-level game type or fallback to campaign game type
-      final prizeNames = activeEvent.availablePrizeNames;
-      final ruleLevelGame = (compositeBundle.resolvedGameType != null && compositeBundle.resolvedGameType!.trim().isNotEmpty)
-          ? compositeBundle.resolvedGameType!.trim()
-          : null;
-      final gameType = ruleLevelGame ?? activeEvent.gameType;
-
       // Smart branch ID resolution matching AI-detected branch name with campaign branches (AIR-80 & Rule 8)
       String? resolvedBranchId;
       String resolvedCanonicalBranchName = result.branchDetected.trim();
@@ -889,6 +882,15 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           resolvedBranchId = activeEvent.branchIds.first;
         }
       }
+
+      final branchIdentifier = (resolvedCanonicalBranchName.isNotEmpty ? resolvedCanonicalBranchName : resolvedBranchId) ?? result.branchDetected.trim();
+
+      // Route based on rule-level game type or fallback to campaign game type
+      final prizeNames = activeEvent.availablePrizeNamesForBranch(branchIdentifier);
+      final ruleLevelGame = (compositeBundle.resolvedGameType != null && compositeBundle.resolvedGameType!.trim().isNotEmpty)
+          ? compositeBundle.resolvedGameType!.trim()
+          : null;
+      final gameType = ruleLevelGame ?? activeEvent.gameType;
 
       if (gameType == 'directGift' || gameType == 'direct_gift') {
         final designatedPrizeObj = activeEvent.availablePrizes.isNotEmpty
@@ -1036,7 +1038,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           });
         }
       } else {
-        // Default: wheel
+        // Default: wheel (AIR-85: filter prizes strictly by detected branch stock)
         final candidateGifts = compositeBundle.combinedLinkedGifts.isNotEmpty
             ? compositeBundle.combinedLinkedGifts
                 .map((g) => g.giftName.trim())
@@ -1044,13 +1046,22 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
                 .toSet()
                 .toList()
             : prizeNames;
+        final branchFilteredPrizes = activeEvent.filterGiftsByBranchStock(
+          candidateGifts: candidateGifts,
+          branch: branchIdentifier,
+        );
+        final finalWheelPrizes = branchFilteredPrizes.isNotEmpty
+            ? branchFilteredPrizes
+            : (prizeNames.isNotEmpty ? prizeNames : candidateGifts);
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => SpinTheWheelScreen(
               transactionId: transactionRef.id,
               eventId: activeEvent.id,
-              prizes: candidateGifts.isNotEmpty ? candidateGifts : prizeNames,
+              prizes: finalWheelPrizes,
               totalChances: totalChances,
+              branchId: resolvedBranchId ?? branchIdentifier,
+              branchName: resolvedCanonicalBranchName.isNotEmpty ? resolvedCanonicalBranchName : result.branchDetected,
             ),
           ),
         );

@@ -1701,6 +1701,28 @@ class AiDirectivesSeedData {
           tags: ['nestle', 'nescafe-gold', 'premium-coffee-segregation', 'sub-brand-isolation', 'air-84'],
           lastUpdated: '2026-10-23',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-85',
+          code: 'FORTUNE_WHEEL_BRANCH_STOCK_GOVERNANCE_STANDARD',
+          orderIndex: 85,
+          category: AiDirectiveCategory.branchGovernance,
+          titleAr: 'معيار حوكمة رصيد هدايا الفروع في عجلة الحظ واستبعاد الأصناف الصفرية',
+          titleEn: 'Fortune Wheel Branch Stock Governance & Zero-Stock Prize Exclusion Standard',
+          descriptionAr:
+              'معيار حوكمة معماري يضمن ربط هدايا وأصناف عجلة الحظ (Fortune Wheel) بالرصيد الفعلي المتاح في الفرع المكتشف بالفاتورة (مثل: فرع سموحة): 1) استبعاد الأصناف الصفرية (Zero-Stock Prize Exclusion): أي صنف هدية رصيده صفر (remainingQuantity <= 0) في مخصصات ذلك الفرع يُستبعد تماماً وفورياً من شرائح عجلة الحظ، ولا يظهر للعميل أو يُمنح له تحت أي ظرف. 2) حصر شرائح العجلة بالأصناف ذات الرصيد الإيجابي (Positive Stock Slice Invariant): تقتصر شرائح العجلة حصرياً على الهدايا المتاحة برصيد موجب في الفرع المحدد عبر availablePrizeNamesForBranch و filterGiftsByBranchStock. 3) معالجة الجائزة الواحدة ونفاد الرصيد: في حال توافر صنف واحد فقط برصيد في الفرع، يتم مضاعفته تلقائياً إلى شريحتين متناظرتين لتلبية قيد محرك العجلة (items.length > 1) دون إخفاق، وفي حال نفاد كافة الأصناف بالفرع تُعرض بطاقة نفاد المخزون الشفافة. 4) الخصم الفوري بمحددات الفرع: تمرير branchId و branchName لدالة الخصم decrementCampaignPrize لخصم الرصيد من حصة الفرع الدقيقة وتحديث الشرائح فورياً إذا استُنفد صنف بين لفات العجلة.',
+          descriptionEn:
+              'Architectural governance standard binding Fortune Wheel prize slices strictly to the live available inventory in the receipt-detected branch (e.g. Smouha branch): 1) Zero-Stock Prize Exclusion: any prize with remainingQuantity <= 0 in that branch’s allocation is strictly filtered out and never rendered on the wheel. 2) Positive Stock Invariant: wheel slices are strictly populated with positive-stock prizes via availablePrizeNamesForBranch and filterGiftsByBranchStock. 3) Single Item Duplication & Out-of-Stock Handling: when only 1 prize is in stock, it is duplicated into symmetric slices to satisfy FortuneWheel’s items.length > 1 constraint; when 0 items remain, an out-of-stock card is displayed. 4) Branch-Scoped Live Decrement: passes branchId and branchName to decrementCampaignPrize and dynamically refreshes available wheel items after each spin.',
+          logicAr:
+              '1. في EventModel: إضافة matchesBranch للتحقق من تطابق الفرع عبر CompanyGiftsService.matchesBranchName، وإضافة availablePrizesForBranch و availablePrizeNamesForBranch و filterGiftsByBranchStock لحصر الأصناف بالرصيد المتبقي الموجب (> 0) للفرع.\n2. في ValidationScreen و ClientReceiptUploadScreen: استخراج والتحقق من كود واسم الفرع المعتمَد قبل استخراج أسماء الجوائز، وتمرير branchId و branchName لشاشة SpinTheWheelScreen.\n3. في InvoicesLogScreen و PromoterInvoicesDialog: تطبيق فلترة رصيد الفرع للأصناف المرشحة وتمرير معرف واسم الفرع لعجلة الحظ.\n4. في SpinTheWheelScreen: جلب رصيد الفرع الحي من Firestore عبر _loadLiveBranchStockPrizes، ومضاعفة الصنف الواحد لشريحتين، وإعادة تحميل الرصيد الحي بعد كل لفة إذا تبقت فرص للعميل لمنع تكرار صنف نفد رصيده.',
+          logicEn:
+              '1. In EventModel: adds matchesBranch, availablePrizesForBranch, availablePrizeNamesForBranch, and filterGiftsByBranchStock to strictly filter positive branch stock (> 0).\n2. In ValidationScreen and ClientReceiptUploadScreen: resolves canonical branch before computing prizes, and forwards branchId and branchName to SpinTheWheelScreen.\n3. In InvoicesLogScreen and PromoterInvoicesDialog: filters candidate prizes against branch stock before rendering the game.\n4. In SpinTheWheelScreen: fetches live branch stock via _loadLiveBranchStockPrizes, duplicates single items to satisfy length > 1, and refetches stock after spins to prevent awarded items from reappearing if stock hits zero.',
+          exampleInput:
+              'فاتورة أسواق فتح الله للجملة - سموحة (Store 211) لحملة تعمل بعجلة الحظ، وجدول جوائز الفرع يحتوي على "ماج زجاجي" (رصيد 10)، "شنطة قماش" (رصيد 0)، "بولة زجاج" (رصيد 0)، و"كوب شاي" (رصيد 5).',
+          exampleOutput:
+              'استبعاد "شنطة قماش" و"بولة زجاج" فورياً من عجلة الحظ، واقتصار شرائح العجلة حصراً على الأصناف ذات الرصيد الإيجابي في فرع سموحة ("ماج زجاجي" و"كوب شاي")، وخصم الجائزة الفائزة من رصيد سموحة حصراً.',
+          tags: ['fortune-wheel', 'branch-stock-governance', 'zero-stock-exclusion', 'smouha', 'single-slice-duplication', 'air-85'],
+          lastUpdated: '2026-10-23',
+        ),
       ];
 }
 

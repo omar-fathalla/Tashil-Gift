@@ -2795,6 +2795,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
           docId: docId,
           totalChances: chances,
           resolvedBranchId: winningEval.resolvedBranchId,
+          resolvedBranchName: canonical,
           resolvedLinkedGifts: winningEval.resolvedLinkedGifts,
           resolvedUnitValue: winningEval.resolvedUnitValue,
           resolvedIsVoucher: winningEval.resolvedIsVoucher,
@@ -3083,6 +3084,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
           docId: docId,
           totalChances: chances,
           resolvedBranchId: winningEval.resolvedBranchId,
+          resolvedBranchName: canonical,
           resolvedLinkedGifts: winningEval.resolvedLinkedGifts,
           resolvedUnitValue: winningEval.resolvedUnitValue,
           resolvedIsVoucher: winningEval.resolvedIsVoucher,
@@ -3164,6 +3166,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     String? docId,
     int totalChances = 1,
     String? resolvedBranchId,
+    String? resolvedBranchName,
     List<LinkedGiftAllocation> resolvedLinkedGifts = const [],
     double? resolvedUnitValue,
     bool resolvedIsVoucher = false,
@@ -3175,6 +3178,10 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     final bool isScratch = !isChooseGift && (gameType == 'scratch' || gameType == 'scratchcard');
     final bool isDirect = !isChooseGift && !isWheel && !isScratch;
 
+    final branchIdOrName = (resolvedBranchName != null && resolvedBranchName.trim().isNotEmpty)
+        ? resolvedBranchName.trim()
+        : resolvedBranchId;
+
     // Collect candidate prizes for choice or wheel
     List<String> candidatePrizes = [];
     if (resolvedLinkedGifts.isNotEmpty) {
@@ -3184,12 +3191,15 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
           .toSet()
           .toList();
     }
-    if (candidatePrizes.isEmpty && winningCampaign != null && winningCampaign.allocatedPrizes.isNotEmpty) {
-      candidatePrizes = winningCampaign.allocatedPrizes
-          .map((p) => p.name.trim())
-          .where((n) => n.isNotEmpty)
-          .toSet()
-          .toList();
+    if (winningCampaign != null) {
+      if (candidatePrizes.isNotEmpty) {
+        final filtered = winningCampaign.filterGiftsByBranchStock(candidateGifts: candidatePrizes, branch: branchIdOrName);
+        if (filtered.isNotEmpty) {
+          candidatePrizes = filtered;
+        }
+      } else {
+        candidatePrizes = winningCampaign.availablePrizeNamesForBranch(branchIdOrName);
+      }
     }
 
     // Clean display title for choice campaigns
@@ -3432,6 +3442,8 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                         eventId: winningCampaign.id,
                         prizes: candidatePrizes,
                         totalChances: totalChances > 0 ? totalChances : 1,
+                        branchId: resolvedBranchId ?? branchIdOrName,
+                        branchName: resolvedBranchName,
                       ),
                     ),
                   );

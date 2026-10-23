@@ -1306,25 +1306,6 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       // Route customer to prize game based on event settings or total purchase value
       final currentEvent = _activeEvent ?? widget.event;
       final currentEventId = currentEvent?.id ?? '';
-      final prizeNames = currentEvent?.availablePrizeNames ?? <String>[];
-
-      // Composite promotional bundle from matched rules evaluated earlier
-      final compositeBundle = CompositePromotionalBundle.fromMatchedRules(
-        matchedRulesList,
-        fallbackTitle: result.matchedRewardValue.trim().isNotEmpty
-            ? result.matchedRewardValue.trim()
-            : (prizeNames.isNotEmpty ? prizeNames.first : 'هدية ترويجية مميزة'),
-      );
-      // Composite bundle chances govern (AIR-83)
-      final totalChances = compositeBundle.matchedRules.isNotEmpty
-          ? compositeBundle.totalChances
-          : (result.chancesEarned > 0 ? result.chancesEarned : 1);
-
-      final ruleLevelGame = (compositeBundle.resolvedGameType != null && compositeBundle.resolvedGameType!.trim().isNotEmpty)
-          ? compositeBundle.resolvedGameType!.trim()
-          : null;
-      final gameType = ruleLevelGame ?? currentEvent?.gameType ?? (totalValue >= 500 ? 'scratchCard' : 'spinTheWheel');
-
       // Smart branch ID resolution matching AI-detected branch name with campaign branches (AIR-80 & Rule 8)
       String? resolvedBranchId;
       String resolvedCanonicalBranchName = result.branchDetected.trim();
@@ -1358,6 +1339,26 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           resolvedBranchId = currentEvent.branchIds.first;
         }
       }
+
+      final branchIdentifier = (resolvedCanonicalBranchName.isNotEmpty ? resolvedCanonicalBranchName : resolvedBranchId) ?? result.branchDetected.trim();
+      final prizeNames = currentEvent?.availablePrizeNamesForBranch(branchIdentifier) ?? <String>[];
+
+      // Composite promotional bundle from matched rules evaluated earlier
+      final compositeBundle = CompositePromotionalBundle.fromMatchedRules(
+        matchedRulesList,
+        fallbackTitle: result.matchedRewardValue.trim().isNotEmpty
+            ? result.matchedRewardValue.trim()
+            : (prizeNames.isNotEmpty ? prizeNames.first : 'هدية ترويجية مميزة'),
+      );
+      // Composite bundle chances govern (AIR-83)
+      final totalChances = compositeBundle.matchedRules.isNotEmpty
+          ? compositeBundle.totalChances
+          : (result.chancesEarned > 0 ? result.chancesEarned : 1);
+
+      final ruleLevelGame = (compositeBundle.resolvedGameType != null && compositeBundle.resolvedGameType!.trim().isNotEmpty)
+          ? compositeBundle.resolvedGameType!.trim()
+          : null;
+      final gameType = ruleLevelGame ?? currentEvent?.gameType ?? (totalValue >= 500 ? 'scratchCard' : 'spinTheWheel');
 
       if (gameType == 'directGift' || gameType == 'direct_gift') {
         final designatedPrizeObj = (currentEvent?.availablePrizes.isNotEmpty ?? false)
@@ -1521,14 +1522,22 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                 .toSet()
                 .toList()
             : prizeNames;
+        final branchFilteredPrizes = currentEvent?.filterGiftsByBranchStock(
+          candidateGifts: candidateGifts,
+          branch: branchIdentifier,
+        ) ?? candidateGifts;
+        final finalWheelPrizes = branchFilteredPrizes.isNotEmpty
+            ? branchFilteredPrizes
+            : (prizeNames.isNotEmpty ? prizeNames : candidateGifts);
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => SpinTheWheelScreen(
               transactionId: transactionRef.id,
               eventId: currentEventId,
-              prizes: candidateGifts.isNotEmpty ? candidateGifts : prizeNames,
+              prizes: finalWheelPrizes,
               totalChances: totalChances,
-              branchId: resolvedBranchId,
+              branchId: resolvedBranchId ?? branchIdentifier,
+              branchName: resolvedCanonicalBranchName.isNotEmpty ? resolvedCanonicalBranchName : result.branchDetected,
               customerPhone: enteredPhone,
               customerName: enteredName,
               enableWhatsAppWinnerNotification: isWaEnabled,
