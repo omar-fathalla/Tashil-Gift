@@ -97,6 +97,7 @@ class _PortalAuthGuardState extends ConsumerState<PortalAuthGuard> {
 
   void _handleLoginSuccess(PartnerPortalSession session) {
     if (!mounted) return;
+    ref.read(partnerPortalAdminBypassRevokedProvider.notifier).state = false;
     setState(() {
       _activeSession = session;
       _isCheckingSession = false;
@@ -107,17 +108,20 @@ class _PortalAuthGuardState extends ConsumerState<PortalAuthGuard> {
   @override
   Widget build(BuildContext context) {
     final isAdmin = ref.watch(isAdminProvider);
+    final isBypassRevoked = ref.watch(partnerPortalAdminBypassRevokedProvider);
     final sessionEpoch = ref.watch(partnerPortalSessionEpochProvider);
 
     if (_lastCheckedEpoch != -1 && _lastCheckedEpoch != sessionEpoch) {
       _lastCheckedEpoch = sessionEpoch;
+      _activeSession = null;
+      _isCheckingSession = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => _verifySession());
     } else {
       _lastCheckedEpoch = sessionEpoch;
     }
 
-    // System Admin seamless preview bypass
-    if (isAdmin) {
+    // System Admin seamless preview bypass (honored only if bypass was not explicitly revoked via sign out)
+    if (isAdmin && !isBypassRevoked) {
       if (widget.authenticatedBuilder != null) {
         return widget.authenticatedBuilder!(context, _activeSession);
       }

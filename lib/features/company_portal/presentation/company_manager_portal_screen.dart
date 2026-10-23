@@ -95,16 +95,36 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
 
   Future<void> _signOutPortalSession(String effectiveSlug, {String? eventId}) async {
     final authService = ref.read(partnerPortalAuthServiceProvider);
-    final role = widget.isAgencyOpsMode
-        ? PartnerPortalRole.agencyOps
-        : PartnerPortalRole.brandManager;
-    await authService.signOut(
+
+    // 1. Explicitly revoke admin preview bypass so portal login is strictly enforced
+    ref.read(partnerPortalAdminBypassRevokedProvider.notifier).state = true;
+
+    // 2. Sign out active Firebase Auth admin session in this browser if present
+    try {
+      await ref.read(firebaseAuthProvider).signOut();
+    } catch (_) {}
+    try {
+      ref.read(adminSessionEmailProvider.notifier).state = null;
+    } catch (_) {}
+
+    // 3. Purge all stored portal sessions for this company and event across all roles
+    await authService.signOutAllRoles(
       companySlug: effectiveSlug.isNotEmpty ? effectiveSlug : widget.companySlug,
-      role: role,
       eventId: eventId ?? widget.initialEventId,
     );
+    if (effectiveSlug.isNotEmpty && widget.companySlug.isNotEmpty && effectiveSlug != widget.companySlug) {
+      await authService.signOutAllRoles(
+        companySlug: widget.companySlug,
+        eventId: eventId ?? widget.initialEventId,
+      );
+    }
+
     if (!mounted) return;
+
+    // 4. Invalidate memoized UI tabs and trigger reactive guard rebuild
+    _cachedTabWidgets.clear();
     ref.read(partnerPortalSessionEpochProvider.notifier).state++;
+    setState(() {});
   }
 
   @override
@@ -1963,9 +1983,9 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
                                 SizedBox(
                                   width: double.infinity,
                                   child: OutlinedButton.icon(
-                                    onPressed: () {
+                                    onPressed: () async {
                                       Navigator.of(dialogContext).pop();
-                                      _signOutPortalSession(effectiveSlug, eventId: activeEventId);
+                                      await _signOutPortalSession(effectiveSlug, eventId: activeEventId);
                                     },
                                     icon: Icon(Icons.logout_rounded, size: 18, color: dialogColorScheme.error),
                                     label: Text(

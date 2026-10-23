@@ -16,7 +16,7 @@ class AppVersionConfig {
   static const int buildNumber = 165;
 
   /// Release date of the current build
-  static const String releaseDate = '2026-10-22';
+  static const String releaseDate = '2026-10-23';
 
   /// Environment tag
   static const String environment = 'Production (Firebase)';

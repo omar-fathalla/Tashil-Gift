@@ -154,6 +154,10 @@ final partnerPortalAuthServiceProvider = Provider<PartnerPortalAuthService>((ref
 /// Notifier tracking active in-memory portal sessions to trigger immediate UI updates on login/logout.
 final partnerPortalSessionEpochProvider = StateProvider<int>((ref) => 0);
 
+/// Tracks whether the System Admin preview bypass has been explicitly revoked via "تسجيل الخروج من البوابة".
+/// When true, the portal login guard strictly enforces authentication even for logged-in Firebase admins.
+final partnerPortalAdminBypassRevokedProvider = StateProvider<bool>((ref) => false);
+
 class PartnerPortalAuthService {
   final FirebaseFirestore? _firestore;
 
@@ -755,15 +759,20 @@ class PartnerPortalAuthService {
       role: role,
     );
     final rolePrefix = '$_prefsKeyPrefix${role.value}_';
-    final companyPrefix = effectiveSlug.isNotEmpty ? '$rolePrefix${effectiveSlug}_' : null;
+    final targetSlug = effectiveSlug.isNotEmpty ? effectiveSlug : _sanitizeSlug(companySlug);
+    final rawSlug = _sanitizeSlug(companySlug);
     final eventSuffix = cleanEvent.isNotEmpty ? '_$cleanEvent' : null;
 
     _memorySessions.remove(key);
     _memorySessions.remove(companyKey);
     _memorySessions.removeWhere((k, _) {
-      if (!k.startsWith(rolePrefix)) return false;
-      if (eventSuffix != null && k.endsWith(eventSuffix)) return true;
-      if (eventSuffix == null && companyPrefix != null && k.startsWith(companyPrefix)) return true;
+      if (!k.startsWith(_prefsKeyPrefix)) return false;
+      if (k == key || k == companyKey) return true;
+      if (k.startsWith(rolePrefix)) {
+        if (targetSlug.isNotEmpty && (k.contains('_$targetSlug') || k.contains(targetSlug))) return true;
+        if (rawSlug.isNotEmpty && (k.contains('_$rawSlug') || k.contains(rawSlug))) return true;
+        if (eventSuffix != null && k.endsWith(eventSuffix)) return true;
+      }
       return false;
     });
 
@@ -772,15 +781,30 @@ class PartnerPortalAuthService {
       await prefs.remove(key);
       await prefs.remove(companyKey);
       final keysToRemove = prefs.getKeys().where((k) {
-        if (!k.startsWith(rolePrefix)) return false;
-        if (eventSuffix != null && k.endsWith(eventSuffix)) return true;
-        if (eventSuffix == null && companyPrefix != null && k.startsWith(companyPrefix)) return true;
+        if (!k.startsWith(_prefsKeyPrefix)) return false;
+        if (k == key || k == companyKey) return true;
+        if (k.startsWith(rolePrefix)) {
+          if (targetSlug.isNotEmpty && (k.contains('_$targetSlug') || k.contains(targetSlug))) return true;
+          if (rawSlug.isNotEmpty && (k.contains('_$rawSlug') || k.contains(rawSlug))) return true;
+          if (eventSuffix != null && k.endsWith(eventSuffix)) return true;
+        }
         return false;
       }).toList();
       for (final k in keysToRemove) {
         await prefs.remove(k);
       }
     } catch (_) {}
+  }
+
+  /// Exhaustively clears all stored sessions for a company across all roles and events.
+  Future<void> signOutAllRoles({
+    required String companySlug,
+    String? eventId,
+  }) async {
+    for (final role in PartnerPortalRole.values) {
+      await signOut(companySlug: companySlug, role: role, eventId: eventId);
+      await signOut(companySlug: companySlug, role: role, eventId: null);
+    }
   }
 
   /// Saves updated Tier-1 Company Credentials to Firestore and increments `credentialVersion` when password changes.

@@ -625,6 +625,72 @@ void main() {
         );
       },
     );
+
+    test('signOutAllRoles exhaustively clears both Brand and Ops sessions across event and company scopes', () async {
+      final service = PartnerPortalAuthService();
+
+      // Authenticate Brand Manager
+      final brandLogin = await service.authenticate(
+        companySlug: '1440',
+        requiredRole: PartnerPortalRole.brandManager,
+        username: 'brand_1440',
+        password: PartnerPortalAuthService.defaultBrandPassword('1440'),
+        rememberMe: true,
+      );
+      expect(brandLogin.isSuccess, isTrue);
+
+      // Authenticate Ops
+      final opsLogin = await service.authenticate(
+        companySlug: '1440',
+        eventId: 'FCpIla3IiddvKrGZvLKD',
+        requiredRole: PartnerPortalRole.agencyOps,
+        username: 'ops_1440',
+        password: PartnerPortalAuthService.defaultAgencyPassword('1440'),
+        rememberMe: true,
+      );
+      expect(opsLogin.isSuccess, isTrue);
+
+      // Verify sessions are valid
+      expect(await service.getValidSession(companySlug: '1440', requiredRole: PartnerPortalRole.brandManager), isNotNull);
+      expect(await service.getValidSession(companySlug: '1440', eventId: 'FCpIla3IiddvKrGZvLKD', requiredRole: PartnerPortalRole.agencyOps), isNotNull);
+
+      // Call signOutAllRoles
+      await service.signOutAllRoles(
+        companySlug: '1440',
+        eventId: 'FCpIla3IiddvKrGZvLKD',
+      );
+
+      // Verify both sessions are purged
+      expect(await service.getValidSession(companySlug: '1440', requiredRole: PartnerPortalRole.brandManager), isNull);
+      expect(await service.getValidSession(companySlug: '1440', eventId: 'FCpIla3IiddvKrGZvLKD', requiredRole: PartnerPortalRole.agencyOps), isNull);
+      expect(await service.getValidSession(companySlug: '1440', requiredRole: PartnerPortalRole.agencyOps), isNull);
+    });
+
+    testWidgets('PortalAuthGuard respects partnerPortalAdminBypassRevokedProvider when admin is true', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            isAdminProvider.overrideWith((ref) => true),
+            partnerPortalAdminBypassRevokedProvider.overrideWith((ref) => true),
+          ],
+          child: const MaterialApp(
+            home: PortalAuthGuard(
+              companySlug: '1440',
+              requiredRole: PartnerPortalRole.brandManager,
+              child: Text('PROTECTED_PORTAL_CONTENT'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Protected content should NOT be displayed because bypass is revoked
+      expect(find.text('PROTECTED_PORTAL_CONTENT'), findsNothing);
+      // Login screen should be rendered
+      expect(find.byType(PartnerPortalLoginScreen), findsOneWidget);
+    });
   });
 }
+
 
