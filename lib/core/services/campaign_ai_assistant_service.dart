@@ -246,6 +246,26 @@ $rawIdeaText
 
   /// Known Umbrella Sub-Brands taxonomy for FMCG holding companies (AIR-59)
   static final Map<String, List<String>> knownCompanySubBrands = {
+    'نستله': [
+      'كيت كات (KitKat)',
+      'نسكافيه جولد (Nescafe Gold)',
+      'نسكافيه (Nescafe)',
+      'سيريلاك (Cerelac)',
+      'اس-26 (S-26)',
+      'نسكويك (Nesquik)',
+      'ماجي (Maggi)',
+      'نيدو (Nido)',
+    ],
+    'nestle': [
+      'كيت كات (KitKat)',
+      'نسكافيه جولد (Nescafe Gold)',
+      'نسكافيه (Nescafe)',
+      'سيريلاك (Cerelac)',
+      'اس-26 (S-26)',
+      'نسكويك (Nesquik)',
+      'ماجي (Maggi)',
+      'نيدو (Nido)',
+    ],
     'ادكو': [
       'ديفا (Diva)',
       'ديفاتول (Divatol)',

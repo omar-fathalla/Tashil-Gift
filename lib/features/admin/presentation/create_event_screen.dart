@@ -844,6 +844,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       return ['المراعي', 'اليوم', 'لوزين', 'سفن دايز'];
     } else if (slug == 'pg' || slug == 'بي اند جي' || slug == 'procter') {
       return ['بامبرز', 'تايد', 'اريال', 'بانتين', 'هيد اند شولدرز', 'داوني', 'اولويز', 'اورال بي', 'جيليت', 'فيري'];
+    } else if (slug == 'nestle' || slug == 'نستله' || slug == 'نستلة' || slug.contains('nestle')) {
+      return ['كيت كات', 'نسكافيه جولد', 'نسكافيه', 'سيريلاك', 'اس-26', 'نسكويك', 'ماجي', 'نيدو'];
     }
     return [];
   }
@@ -944,6 +946,21 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     }
     if (bNorm == 'سفن دايز' || brand == 'سفن دايز') {
       return tokens.contains('سفن دايز') || rawLower.contains(RegExp(r'\b7days\b'));
+    }
+
+    // 4. Nestle Brands & Sub-Brands (AIR-84)
+    if (bNorm == 'نسكافيه جولد' || brand == 'نسكافيه جولد') {
+      final hasCoffee = tokens.contains('نسكافيه') || tokens.contains('نسكافية') || rawLower.contains('nescafe') || tokens.contains('نسله') || tokens.contains('نستله');
+      final hasGold = tokens.contains('جولد') || rawLower.contains('gold');
+      return hasCoffee && hasGold;
+    }
+    if (bNorm == 'نسكافيه' || brand == 'نسكافيه') {
+      final hasCoffee = tokens.contains('نسكافيه') || tokens.contains('نسكافية') || rawLower.contains('nescafe');
+      final hasGold = tokens.contains('جولد') || rawLower.contains('gold');
+      return hasCoffee && !hasGold;
+    }
+    if (bNorm == 'كيت كات' || brand == 'كيت كات') {
+      return tokens.contains('كيت') || rawLower.contains('kitkat');
     }
 
     // Dynamic brand or fallback token check

@@ -1679,6 +1679,28 @@ class AiDirectivesSeedData {
           tags: ['el-rashidi-el-mizan', 'spend-rule-isolation', 'conditional-basket', 'spin-the-wheel-governance', 'air-83'],
           lastUpdated: '2026-10-22',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-84',
+          code: 'NESCAFE_GOLD_STRICT_PREMIUM_COFFEE_SEGREGATION_STANDARD',
+          orderIndex: 84,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار العزل الصارم لأصناف نسكافيه جولد وحظر تأهيل أصناف نسكافيه العادية وحليب الأطفال',
+          titleEn: 'Nescafe Gold Strict Premium Coffee Segregation & Infant Nutrition Exclusion Standard',
+          descriptionAr:
+              'معيار حوكمة معماري يضمن العزل الصارم بين علامة "نسكافيه جولد" (Nescafe Gold) الفاخرة وبين أصناف نسكافيه العامة والسلع المجاورة في عروض شركة نستله: 1) العزل البات لأصناف القهوة العادية: عندما تشترط قاعدة ترويجية منتجات "نسكافيه جولد" (سواء في العنوان، أو نص الشرط، أو العلامات المطلوبة)، يُحظر تماماً قبول أو تأهيل أصناف نسكافيه العامة (مثل: نسكافيه كلاسيك، نسكافيه بلاك، نسكافيه رد مج، نسكافيه 3 في 1 كلاسيك) حتى لو حملت كلمة نسكافيه. 2) استبعاد منتجات الأطفال والحبوب المجاورة: التحقق من خلو قائمة الأصناف والباركودات المربوطة من أي أصناف مشتقة من البحث المجرد لكلمة "جولد" كحليب الأطفال (اس-26 جولد) ورقائق الكورن فليكس (جولد كورن فليكس). 3) حراس محرك القواعد في 0ms: تطبيق حارس برمجى صارم isTriggerNescafeGold يرفض في 0ms أي صنف قهوة يفتقد لفظ "جولد" أو "gold" صراحةً مع استقلال مفتاح التجميع nescafe_gold_family.',
+          descriptionEn:
+              'Architectural governance standard enforcing strict segregation between premium Nescafe Gold lines and general Nescafe products or adjacent FMCG goods in Nestlé campaigns: 1) General Coffee Exclusion: when a rule specifies "Nescafe Gold", general Nescafe items (Classic, Black, Red Mug, standard 3-in-1) are strictly rejected even though they contain the token "Nescafe". 2) Non-Coffee SKU Sanitization: prevents adjacent items containing the token "Gold" (such as S-26 Gold infant formula or Gold Corn Flakes) from leaking into coffee rules. 3) 0ms Matcher Guard: applies isTriggerNescafeGold in PromotionalRuleMatcher to reject any coffee product missing the explicit "Gold" descriptor and isolates nescafe_gold_family.',
+          logicAr:
+              '1. في PromotionalRuleMatcher: إضافة حارس isTriggerNescafeGold؛ إذا استهدفت القاعدة نسكافيه جولد وكان المنتج لا يجمع بين (نسكافيه/نستله + جولد)، يتم رفضه فورياً (return false).\n2. في الكتالوج وعروض الحملة: تنقية الأصناف الـ 23 المربوطة وحذف الـ 7 أصناف الخاصة بحليب الأطفال والكورن فليكس، وحصر القائمة والباركودات على الأصناف الـ 16 المعتمدة لنسكافيه جولد.\n3. في برومبت الذكاء الاصطناعي (AI Prompt): توجيه حازم وصريح لـ Gemini بأن قاعدة rule_3 مخصصة حصراً لنسكافيه جولد، ويحظر تأهيل نسكافيه كلاسيك أو كيت كات أو غيرها.\n4. في _getProductGroupKey: عزل nescafe_gold_family عن نسكافيه العامة لتفادي التداخل في التفكيك التراكمي.',
+          logicEn:
+              '1. In PromotionalRuleMatcher: applies isTriggerNescafeGold guard; if the rule targets Nescafe Gold and product does not combine coffee + gold tokens, immediately rejects (return false).\n2. In campaign catalog and rules: purges 7 non-coffee infant formula and cereal SKUs from rule_3, locking barcodes strictly to the 16 verified Nescafe Gold items.\n3. In AI Vision Prompt: instructs Gemini that rule_3 strictly requires Nescafe Gold and rejects regular Nescafe Classic, Red Mug, KitKat, or infant formula.\n4. In _getProductGroupKey: isolates nescafe_gold_family from general Nescafe lines.',
+          exampleInput:
+              'فاتورة أسواق فتح الله للجملة برقم 105/21/211 تشمل "نسكافيه كلاسيك 200جم" بقيمة 320 ج.م و "نسكافيه جولد 95جم" بقيمة 520 ج.م على حملة نستله (عرض نسكافيه جولد: أنفق 500 ج واحصل على فاوتشر 75 ج).',
+          exampleOutput:
+              '1) احتساب نسكافيه جولد (520 ج.م) مؤهلاً للعرض وصرف فاوتشر 75 ج.م. 2) استبعاد نسكافيه كلاسيك (320 ج.م) كلياً من قاعدة جولد وعدم دمجه فيها أو منحه مضاعفات إضافية غير مستحقة.',
+          tags: ['nestle', 'nescafe-gold', 'premium-coffee-segregation', 'sub-brand-isolation', 'air-84'],
+          lastUpdated: '2026-10-23',
+        ),
       ];
 }
 

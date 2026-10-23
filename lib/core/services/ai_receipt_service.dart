@@ -3707,6 +3707,9 @@ class PromotionalRuleMatcher {
     'كيت كات',
     'كيت',
     'kitkat',
+    'نسكافيه جولد',
+    'نسكافية جولد',
+    'nescafe gold',
     'نسكافيه',
     'نسكافية',
     'nescafe',
@@ -4157,6 +4160,33 @@ class PromotionalRuleMatcher {
     if (isProductInfantFormula &&
         (isTriggerCoffee || isTriggerConfectionery) &&
         !isTriggerInfantFormula) {
+      return false;
+    }
+
+    // 0.051 Strict Sub-Brand Segregation: Nescafe Gold vs Regular Nescafe & Infant Nutrition (AIR-84):
+    // When a promotional rule specifically targets Nescafe Gold, standard/general Nescafe items
+    // (such as Nescafe Classic, Red Mug, Black, 3-in-1 standard) that lack the "جولد" / "gold" descriptor
+    // must NEVER match the Nescafe Gold promotional rule!
+    final bool isTriggerNescafeGold =
+        fullRuleContext.contains('نسكافيه جولد') ||
+        fullRuleContext.contains('نسكافية جولد') ||
+        fullRuleContext.contains('nescafe gold') ||
+        (rule != null &&
+            rule.requiredBrands.any((b) =>
+                _normalize(b).contains('نسكافيه جولد') ||
+                _normalize(b).contains('نسكافية جولد') ||
+                _normalize(b).contains('nescafe gold')));
+
+    final bool isProductNescafeGold =
+        (pNorm.contains('نسكافيه') ||
+            pNorm.contains('نسكافية') ||
+            pNorm.contains('nescafe') ||
+            pNorm.contains('نسله') ||
+            pNorm.contains('نستله') ||
+            pNorm.contains('نستلة')) &&
+        (pNorm.contains('جولد') || pNorm.contains('gold'));
+
+    if (isTriggerNescafeGold && !isProductNescafeGold) {
       return false;
     }
 
@@ -4665,13 +4695,15 @@ class PromotionalRuleMatcher {
       baseFamily = 'deodorant_general_family';
     } else if (combined.contains('كيت') || combined.contains('kitkat')) {
       baseFamily = 'kitkat_family';
-    } else if (combined.contains('نسكافيه') ||
-        combined.contains('nescafe') ||
+    } else if (combined.contains('نسكافيه جولد') ||
+        combined.contains('nescafe gold') ||
         (combined.contains('جولد') &&
             !combined.contains('سيريلاك') &&
             !combined.contains('اس26') &&
             !combined.contains('اس-26'))) {
       baseFamily = 'nescafe_gold_family';
+    } else if (combined.contains('نسكافيه') || combined.contains('nescafe')) {
+      baseFamily = 'nescafe_regular_family';
     } else if (combined.contains('اس26') ||
         combined.contains('اس-26') ||
         combined.contains('s26') ||

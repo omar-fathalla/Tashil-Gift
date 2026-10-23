@@ -38,10 +38,10 @@ void main() {
       PromotionalRuleItem(
         id: 'rule_3',
         ruleTitle: 'نسكافيه جولد (فاوتشر 75)',
-        triggerProduct: 'منتجات نستله و نستلة و جولد و نسكافيه و نسكافية و اس26 و نسله (23 صنف)',
+        triggerProduct: 'منتجات نسكافيه جولد (16 صنف)',
         conditionType: 'by_spend',
         minSpend: 500,
-        requiredBrands: ['نستله', 'نستلة', 'جولد', 'نسكافيه', 'نسكافية', 'اس26', 'نسله'],
+        requiredBrands: ['نسكافيه جولد', 'نسكافية جولد'],
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 75 ج.م',
         rewardAmount: 75.0,
@@ -74,6 +74,72 @@ void main() {
       expect(matched.first.rule.id, 'rule_3');
       expect(matched.first.multiplier, 2);
       expect(matched.first.totalRewardAmount, 150.0);
+    });
+
+    test('Customer buying regular Nescafe (Classic / Red Mug / 3in1) must NOT match rule_3 (Nescafe Gold)', () {
+      final extractedProducts = [
+        ExtractedProductItem(
+          name: 'نسكافيه كلاسيك 200جم',
+          price: 300.0,
+          originalPrice: 350.0,
+          quantity: 2,
+          isTargetCompany: true,
+          barcode: '',
+        ),
+        ExtractedProductItem(
+          name: 'نسكافيه 3*1 كلاسيك 24 ظرف',
+          price: 150.0,
+          originalPrice: 160.0,
+          quantity: 1,
+          isTargetCompany: true,
+          barcode: '',
+        ),
+      ];
+
+      final matched = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: extractedProducts,
+        promotionalRules: nestleRules,
+        allowCampaignMultipliers: true,
+      );
+
+      // Total spend is 750 EGP, but none are Nescafe Gold -> zero matches
+      expect(matched, isEmpty);
+
+      // Verify unfulfilled reasons accurately point out that products are not covered
+      final reasons = PromotionalRuleMatcher.getUnfulfilledPromotionReasons(
+        extractedProducts: extractedProducts,
+        promotionalRules: nestleRules,
+      );
+      expect(reasons, isNotEmpty);
+    });
+
+    test('Customer buying S-26 infant formula or corn flakes must NOT match rule_3 (Nescafe Gold)', () {
+      final extractedProducts = [
+        ExtractedProductItem(
+          name: 'اس-26 جولد بروجروس 3 900 جم',
+          price: 600.0,
+          originalPrice: 600.0,
+          quantity: 1,
+          isTargetCompany: true,
+          barcode: '8886472105977',
+        ),
+        ExtractedProductItem(
+          name: 'جولد كورن فليكس سادة 375جم',
+          price: 120.0,
+          originalPrice: 120.0,
+          quantity: 1,
+          isTargetCompany: true,
+          barcode: '5900020039316',
+        ),
+      ];
+
+      final matched = PromotionalRuleMatcher.matchAllWithMultipliers(
+        extractedProducts: extractedProducts,
+        promotionalRules: nestleRules,
+        allowCampaignMultipliers: true,
+      );
+
+      expect(matched, isEmpty);
     });
   });
 }
