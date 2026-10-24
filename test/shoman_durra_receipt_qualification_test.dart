@@ -73,11 +73,81 @@ void main() {
         targetCompany: 'شومان',
       );
 
+      // 6. Agricultural corn / spices (AIR-87)
+      final agriculturalCorn = ExtractedProductItem.fromJson(
+        {
+          'name': 'درة ام شوشة فلفل ص',
+          'price': 58.5,
+          'quantity': 3,
+          'isTargetCompany': true,
+        },
+        targetCompany: 'الدره',
+      );
+
+      // 7. Rice brand (AIR-87)
+      final riceBrand = ExtractedProductItem.fromJson(
+        {
+          'name': 'الفراعنة ارز عريض 1.050',
+          'price': 115.0,
+          'quantity': 1,
+          'isTargetCompany': true,
+        },
+        targetCompany: 'الدره',
+      );
+
+      // 8. Spice powders & Dream vanilla
+      final garlicPowder = ExtractedProductItem.fromJson(
+        {
+          'name': 'دره باودر ثوم 100جم',
+          'price': 54.0,
+          'quantity': 1,
+          'isTargetCompany': true,
+        },
+        targetCompany: 'الدره',
+      );
+
+      final vanillaItem = ExtractedProductItem.fromJson(
+        {
+          'name': 'درة فانيليا شوكو',
+          'price': 9.75,
+          'quantity': 1,
+          'isTargetCompany': true,
+        },
+        targetCompany: 'الدره',
+      );
+
+      // 9. Genuine Al-Durra items
+      final tomatoPaste = ExtractedProductItem.fromJson(
+        {
+          'name': 'الدرة معجون طماطم 1ك',
+          'price': 114.0,
+          'quantity': 1,
+          'isTargetCompany': true,
+        },
+        targetCompany: 'الدره',
+      );
+
+      final burgerSauce = ExtractedProductItem.fromJson(
+        {
+          'name': 'الدرة صوص برجر',
+          'price': 38.5,
+          'quantity': 1,
+          'isTargetCompany': true,
+        },
+        targetCompany: 'الدره',
+      );
+
       expect(spacedDorraItem.isTargetCompany, isTrue);
       expect(dorraChiliItem.isTargetCompany, isTrue);
       expect(seyidogluItem.isTargetCompany, isTrue);
+      expect(tomatoPaste.isTargetCompany, isTrue);
+      expect(burgerSauce.isTargetCompany, isTrue);
       expect(competitorHeinz.isTargetCompany, isFalse);
       expect(competitorHarvest.isTargetCompany, isFalse);
+      expect(agriculturalCorn.isTargetCompany, isFalse);
+      expect(riceBrand.isTargetCompany, isFalse);
+      expect(garlicPowder.isTargetCompany, isFalse);
+      expect(vanillaItem.isTargetCompany, isFalse);
     });
 
     test('PromotionalRuleMatcher matches 150 EGP Durra rule for Shoman campaign with receipt 121/1/211/211026', () {

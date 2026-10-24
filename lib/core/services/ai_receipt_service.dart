@@ -189,8 +189,44 @@ class ExtractedProductItem {
         nameLower.contains('امريكانا') ||
         nameLower.contains('أمريكانا');
 
+    final isAgriculturalCornOrSpice = nameLower.contains('شوشة') ||
+        nameLower.contains('شوشه') ||
+        nameLower.contains('فشار') ||
+        nameLower.contains('حبوب') ||
+        nameLower.contains('عطارة') ||
+        nameLower.contains('عطاره') ||
+        nameLower.contains('بهارات') ||
+        nameLower.contains('بذور') ||
+        nameLower.contains('فلفل ص') ||
+        nameLower.contains('باودر') ||
+        nameLower.contains('كمون') ||
+        nameLower.contains('فانيليا') ||
+        nameLower.contains('دريم') ||
+        nameLower.contains('شوكولاتة') ||
+        nameLower.contains('شوكولاته') ||
+        nameLower.contains('كاكاو') ||
+        (nameLower.contains('ذرة') &&
+            !nameLower.contains('صلصة') &&
+            !nameLower.contains('كاتشب') &&
+            !nameLower.contains('صوص') &&
+            !nameLower.contains('مربى') &&
+            !nameLower.contains('معجون') &&
+            !nameLower.contains('خل') &&
+            !nameLower.contains('مايونيز') &&
+            !nameLower.contains('طحينة') &&
+            !nameLower.contains('حلاوة'));
+
+    final isIndependentGrainOrRice = nameLower.contains('فراعنة') ||
+        nameLower.contains('الفراعنة') ||
+        nameLower.contains('الساعة') ||
+        nameLower.contains('الساعه') ||
+        nameLower.contains('ريحانة') ||
+        nameLower.contains('ريحانه') ||
+        nameLower.contains('ارز') ||
+        nameLower.contains('أرز');
+
     if (isShomanTenant || isDorraTenant) {
-      if (hasCompetitorSauceBrand) {
+      if (hasCompetitorSauceBrand || isAgriculturalCornOrSpice || isIndependentGrainOrRice) {
         isTarget = false;
       } else if (hasAuthorizedShomanDorraBrand) {
         isTarget = true;
@@ -198,7 +234,10 @@ class ExtractedProductItem {
     }
 
     // Only auto-infer if isTargetCompany was not explicitly set to false
-    if (!hasExplicitIsTarget && !(isAdco && isCloroxName)) {
+    if (!hasExplicitIsTarget &&
+        !(isAdco && isCloroxName) &&
+        !isAgriculturalCornOrSpice &&
+        !isIndependentGrainOrRice) {
       if (targetCompany != null && targetCompany.trim().isNotEmpty) {
         if (nameLower.contains(targetCompany.trim().toLowerCase())) {
           isTarget = true;
@@ -714,7 +753,7 @@ class AiReceiptService {
         '- شركة أدكو (ADCO): تشمل منتجات النظافة والأرضيات والتواليت علامة "سبيد (Speed)"؛ وتطبعها بعض ماكينات الكاشير بحذف حرف الباء مثل: "سيد منظف ارضيات" أو "سيد باودر" أو "سيد 28.00" - يجب احتسابها صنفاً أصيلاً ومعتمداً لشركة أدكو (isTargetCompany = true) وإدراجها في قائمة extractedProducts وجمع قيمتها في targetCompanyTotal.\n'
         '- علامة "كلوريل (Clorel)" و "فلفيتا (Velveta)" و "ماكسيل ماجيك (Maxel Magic)" و "فيبا (Feba)" و "ديفا (Diva)" هي علامات تابعة لشركة أدكو ويجب استخراج كافة بنودها بعناية دون إسقاط أي صنف منها.\n'
         '- 🛑 معيار الحظر القطعي لأصناف كلوركس واستقلاليتها عن أدكو (AIR-79): شركة أدكو (ADCO) تنتج مبيضات وكلور الملابس تحت علامة "كلوريل (Clorel)" حصراً؛ وتتبع علامة "كلوركس (Clorox)" شركة أخرى مستقلة ومنافسة وليست تابعة لأدكو مطلقاً. يُحظر تماماً وبصرامة احتساب أي منتج باسم "كلوركس" (مثل: كلوركس ألوان، كلوركس أبيض، كلوركس جل، كلوركس منظف) كصنف تابع لأدكو (يجب حتماً تعيين isTargetCompany = false واستبعاده كلياً من targetCompanyTotal وعروض أدكو).\n'
-        '- 🛑 معيار حوكمة ماركات شومان والدرة وسيد أوغلو وعزل الصلصات المتنافسة (AIR-80): شركة "شومان (Shoman)" هي الراعي والمصنع لمنتجات "الدرة (الدرة / درة / دره / د ر ه / Dorra / Durra)" و"سيد أوغلو (Seyidoglu)" في مصر. عند فحص فاتورة لحملة "شومان" أو "الدرة"، تُعد كافة أصناف الدرة وشومان وسيد أوغلو (مثل: دره عرض كاتشب، د ر ه كاتشب، الدرة شيلي صوص، صلصة الدرة، مايونيز، مربى، خل، إلخ) منتجات أصيلة ومؤهلة بنسبة 100% ويجب تعيين isTargetCompany = true وجمع قيمتها فوراً في targetCompanyTotal. أما الشركات المنافسة التي يُحظر قطعياً احتسابها (isTargetCompany = false) واستبعادها كلياً من قيمة العرض فهي: هاينز (Heinz)، قودي (Goody)، هارفست (Harvest)، كنور (Knorr)، فاين فودز (Fine Foods)، أمريكانا (Americana).\n\n'
+        '- 🛑 معيار حوكمة ماركات شومان والدرة وسيد أوغلو وعزل الصلصات والسلع الزراعية المتنافسة (AIR-80 & AIR-87): شركة "شومان (Shoman)" هي الراعي والمصنع لمنتجات "الدرة (الدرة / درة / دره / د ر ه / Dorra / Durra)" و"سيد أوغلو (Seyidoglu)" في مصر. عند فحص فاتورة لحملة "شومان" أو "الدرة"، تُعد كافة أصناف الدرة وشومان وسيد أوغلو المصنعة والمعبأة (مثل: دره عرض كاتشب، د ر ه كاتشب، الدرة صوص برجر، الدرة شيلي صوص، صلصة ومعجون طماطم الدرة، مايونيز، مربى، خل، مخللات، حلاوة وطحينة، إلخ) منتجات أصيلة ومؤهلة بنسبة 100% ويجب تعيين isTargetCompany = true وجمع قيمتها فوراً في targetCompanyTotal. أما السلع والشركات المستبعدة قطعياً (isTargetCompany = false) فهي: 1) الحبوب والسلع الزراعية والعطارة والفشار (مثل: درة أم شوشة، ذرة أم شوشة، ذرة فشار، درة فشار، بهارات، عطارة، ذرة حبوب) حيث تُعد سلعاً عامة مستقلة. 2) ماركات الأرز المستقلة (مثل: الفراعنة أرز، أرز الفراعنة، الساعة، ريحانة) مع الحظر الصارم لأي هلوسة أو استبدال للماركات المطبوعة. 3) ماركات الصلصات المنافسة: هاينز (Heinz)، قودي (Goody)، هارفست (Harvest)، كنور (Knorr)، فاين فودز (Fine Foods)، أمريكانا (Americana).\n\n'
         '🛑 معيار الحظر الصارم لاحتساب أصناف الشوكولاتة والمالتي باك العامة دون علامة تجارية صريحة (AIR-71):\n'
         '- يُمنع منعاً باتاً افتراض أو تخمين تبعية أي صنف عام مطبوع على بون الكاشير تحت مسمى مبهم أو عام مثل: "مالتي باك شوكولات" أو "مالتي باك شوكولاتة" أو "شوكولاتة مشكلة" أو "بسكويت ويفر" لشركة كادبوري (Cadbury) أو مونديليز (Mondelez) ما لم يُذكر في سطر البون صراحة اسم العلامة المعتمدة التابعة للشركة (مثل: كادبوري، ديري ميلك، مورو، بابلي، أوريو، ماندولين، فليك، سي دي ام، CDM).\n'
         '- يُحظر كلياً الاستناد إلى وجود أصناف كادبوري أخرى بالفاتورة لاعتبار الصنف العام تابعاً لكادبري.\n'
@@ -1293,9 +1332,9 @@ class AiReceiptService {
       }
 
       final productsCondition = resolvedRequiredProducts.isNotEmpty
-          ? (resolvedRequiredProducts.length <= 50
+          ? (resolvedRequiredProducts.length <= 120
               ? 'تنبيه خاص بالمنتجات المشروطة بالعرض: المنتجات المشمولة في هذا العرض هي: [${resolvedRequiredProducts.join("، ")}]. يجب أن تحتوي الفاتورة على واحد أو أكثر من هذه المنتجات المحددة، ويتم احتساب إجمالي (targetCompanyTotal) بناءً على أسعار منتجات شركة "$targetCompany" المشمولة بالعرض.'
-              : 'تنبيه خاص بالمنتجات المشروطة بالعرض: العرض يشمل ${resolvedRequiredProducts.length} صنفاً معتمداً لشركة "$targetCompany" (مثل: ${resolvedRequiredProducts.take(20).join("، ")}... إلخ). ابحث عن كافة أصناف وعلامات شركة "$targetCompany" بالفاتورة واحسب إجمالي (targetCompanyTotal) بناءً على المنتجات التابعة للشركة.')
+              : 'تنبيه خاص بالمنتجات المشروطة بالعرض: العرض يشمل ${resolvedRequiredProducts.length} صنفاً معتمداً لشركة "$targetCompany" (مثل: ${resolvedRequiredProducts.take(40).join("، ")}... إلخ). ابحث عن كافة أصناف وعلامات شركة "$targetCompany" بالفاتورة واحسب إجمالي (targetCompanyTotal) بناءً على المنتجات التابعة للشركة.')
           : 'ابحث عن كافة الأصناف المشتراة، وقم بتصفيتها لتحديد المنتجات التابعة لشركة "$targetCompany" فقط وجمع أسعارها.';
 
       String catalogCondition = '';
@@ -1557,10 +1596,13 @@ $promotionalRulesCondition
 $chancesCondition$multiPartInstructions
 
 $subBrandsCondition
-🛑 حوكمة العزل الحصري لعلامات الشركة الراعية والمالتي باك العام (AIR-71 & Strict Tenant Brand Isolation):
+🛑 حوكمة العزل الحصري لعلامات الشركة الراعية والسلع الزراعية (AIR-71 & AIR-87):
 - الفاتورة يتم تدقيقها حصرياً لصالح شركة: "$targetCompany".
-- أي منتج بالفاتورة يتبع علامة تجارية أو شركة منافسة أو غير تابعة لـ "$targetCompany" (مثلاً: إذا كانت الشركة الراعية المراعي، فلا تحتسب منتجات جهينة أو لمار أو بيتي أو دانون أو يونيليفر؛ وإذا كانت الشركة الراعية يونيليفر، فلا تحتسب منتجات لوريال أو نيفيا أو بروكتر أند غامبل أو المراعي) يجب فوراً تعيينه: isTargetCompany = false واستبعاده كلياً من targetCompanyTotal ومن أي عرض ترويجي.
-- 🛑 قاعدة أصناف المالتي باك والشوكولاتة العامة (AIR-71): إذا كان الصنف يحمل اسماً عاماً مثل "مالتي باك شوكولات" أو "مالتي باك شوكولاتة" أو "شوكولاتة مشكلة" دون ذكر صريح لماركة معتمدة تابعة لـ "$targetCompany" (مثل كادبوري، مورو، بابلي، أوريو، ماندولين، فليك)، يُحظر كلياً اعتباره تابعاً للشركة الراعية لمجرد وجود أصناف أخرى تابعة لها بالفاتورة، ويجب حتماً تعيين isTargetCompany = false واستبعاده كلياً من قيمة العرض.
+- أي منتج بالفاتورة يتبع علامة تجارية أو شركة منافسة أو غير تابعة لـ "$targetCompany" (مثلاً: إذا كانت الشركة الراعية المراعي، فلا تحتسب منتجات جهينة أو لمار؛ وإذا كانت الراعية الدرة، فلا تحتسب هاينز أو قودي أو هارفست أو فاين فودز) يجب فوراً تعيينه: isTargetCompany = false واستبعاده كلياً من targetCompanyTotal ومن أي عرض ترويجي.
+- 🛑 استبعاد الحبوب الزراعية والعطارة والفشار وأرز الشركات المستقلة (AIR-87):
+  * شركة "الدرة" (Al-Durra / Dorra) هي شركة منتجات غذائية معبأة (صلصة، كاتشب، مايونيز، صصوصات، خل، مخلل، مربى، طحينة). يُحظر تماماً وبصرامة احتساب أي حبوب زراعية أو بهارات أو عطارة تحمل كلمة "ذرة" أو "درة" (مثل: "درة أم شوشة"، "ذرة أم شوشة"، "ذرة فشار"، "درة فشار"، "ذرة حب"، "فشار"، "بهارات"، "عطارة") كمنتج للدرة، ويجب تعيين isTargetCompany = false واستبعادها كلياً.
+  * يُحظر تماماً على الذكاء الاصطناعي تخمين أو استبدال ماركات الأرز المطبوعة على الفاتورة (Zero-Hallucination)؛ فإذا كان الصنف المطبوع هو "الفراعنة ارز" أو "أرز الفراعنة" أو "أرز الساعة" أو "أرز ريحانة"، يجب نقله كما هو باسمه الحقيقي مع تعيين isTargetCompany = false لعدم تبعيته للدرة، ويُمنع منعاً باتاً تسميته "الدرة ارز".
+- 🛑 قاعدة أصناف المالتي باك والشوكولاتة العامة (AIR-71): إذا كان الصنف يحمل اسماً عاماً مثل "مالتي باك شوكولات" أو "مالتي باك شوكولاتة" دون ذكر صريح لماركة معتمدة تابعة لـ "$targetCompany"، يُحظر كلياً اعتباره تابعاً للشركة الراعية ويجب تعيين isTargetCompany = false.
 - الأصناف المشروعة في (extractedProducts) مع (isTargetCompany = true) هي فقط الأصناف التابعة لشركة "$targetCompany".
 
 🛑 استراتيجية الفلترة الموجهة والمسح السريع الفائق (Targeted Fast-Scan Strategy):
@@ -1604,9 +1646,12 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         8. $chancesCondition$multiPartInstructions
         
         $subBrandsCondition
-        🛑 حوكمة العزل الحصري لعلامات الشركة الراعية (Strict Tenant Brand Isolation):
+        🛑 حوكمة العزل الحصري لعلامات الشركة الراعية والسلع الزراعية (AIR-71 & AIR-87):
         - الفاتورة يتم تدقيقها حصرياً لصالح شركة: "$targetCompany".
-        - أي منتج بالفاتورة يتبع علامة تجارية أو شركة منافسة أو غير تابعة لـ "$targetCompany" (مثلاً: إذا كانت الشركة الراعية المراعي، فلا تحتسب منتجات جهينة أو لمار أو بيتي أو دانون أو يونيليفر؛ وإذا كانت الشركة الراعية يونيليفر، فلا تحتسب منتجات لوريال أو نيفيا أو بروكتر أند غامبل أو المراعي) يجب فوراً تعيينه: isTargetCompany = false واستبعاده كلياً من targetCompanyTotal ومن أي عرض ترويجي.
+        - أي منتج بالفاتورة يتبع علامة تجارية أو شركة منافسة أو غير تابعة لـ "$targetCompany" (مثلاً: إذا كانت الشركة الراعية المراعي، فلا تحتسب منتجات جهينة أو لمار؛ وإذا كانت الراعية الدرة، فلا تحتسب هاينز أو قودي أو هارفست أو فاين فودز) يجب فوراً تعيينه: isTargetCompany = false واستبعاده كلياً من targetCompanyTotal ومن أي عرض ترويجي.
+        - 🛑 استبعاد الحبوب الزراعية والعطارة والفشار وأرز الشركات المستقلة (AIR-87):
+          * شركة "الدرة" (Al-Durra / Dorra) هي شركة منتجات غذائية معبأة (صلصة، كاتشب، مايونيز، صوصات، خل، مخلل، مربى، طحينة). يُحظر تماماً وبصرامة احتساب أي حبوب زراعية أو بهارات أو عطارة تحمل كلمة "ذرة" أو "درة" (مثل: "درة أم شوشة"، "ذرة أم شوشة"، "ذرة فشار"، "درة فشار"، "ذرة حب"، "فشار"، "بهارات"، "عطارة") كمنتج للدرة، ويجب تعيين isTargetCompany = false واستبعادها كلياً.
+          * يُحظر تماماً على الذكاء الاصطناعي تخمين أو استبدال ماركات الأرز المطبوعة على الفاتورة (Zero-Hallucination)؛ فإذا كان الصنف المطبوع هو "الفراعنة ارز" أو "أرز الفراعنة" أو "أرز الساعة" أو "أرز ريحانة"، يجب نقله كما هو باسمه الحقيقي مع تعيين isTargetCompany = false لعدم تبعيته للدرة، ويُمنع منعاً باتاً تسميته "الدرة ارز".
         - الأصناف المشروعة في (extractedProducts) مع (isTargetCompany = true) هي فقط الأصناف التابعة لشركة "$targetCompany".
 
         🛑 استراتيجية الفلترة الموجهة والمسح السريع الفائق (Targeted Fast-Scan Strategy):
@@ -1875,7 +1920,43 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                 nameLower.contains('امريكانا') ||
                 nameLower.contains('أمريكانا');
 
-            if (hasOtherCompetitor) {
+            final isAgriculturalCornOrSpice = nameLower.contains('شوشة') ||
+                nameLower.contains('شوشه') ||
+                nameLower.contains('فشار') ||
+                nameLower.contains('حبوب') ||
+                nameLower.contains('عطارة') ||
+                nameLower.contains('عطاره') ||
+                nameLower.contains('بهارات') ||
+                nameLower.contains('بذور') ||
+                nameLower.contains('فلفل ص') ||
+                nameLower.contains('باودر') ||
+                nameLower.contains('كمون') ||
+                nameLower.contains('فانيليا') ||
+                nameLower.contains('دريم') ||
+                nameLower.contains('شوكولاتة') ||
+                nameLower.contains('شوكولاته') ||
+                nameLower.contains('كاكاو') ||
+                (nameLower.contains('ذرة') &&
+                    !nameLower.contains('صلصة') &&
+                    !nameLower.contains('كاتشب') &&
+                    !nameLower.contains('صوص') &&
+                    !nameLower.contains('مربى') &&
+                    !nameLower.contains('معجون') &&
+                    !nameLower.contains('خل') &&
+                    !nameLower.contains('مايونيز') &&
+                    !nameLower.contains('طحينة') &&
+                    !nameLower.contains('حلاوة'));
+
+            final isIndependentGrainOrRice = nameLower.contains('فراعنة') ||
+                nameLower.contains('الفراعنة') ||
+                nameLower.contains('الساعة') ||
+                nameLower.contains('الساعه') ||
+                nameLower.contains('ريحانة') ||
+                nameLower.contains('ريحانه') ||
+                nameLower.contains('ارز') ||
+                nameLower.contains('أرز');
+
+            if (hasOtherCompetitor || isAgriculturalCornOrSpice || isIndependentGrainOrRice) {
               return p.copyWith(isTargetCompany: false);
             }
             if (hasAuthorizedBrand) {

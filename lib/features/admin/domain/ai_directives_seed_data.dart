@@ -1745,6 +1745,28 @@ class AiDirectivesSeedData {
           tags: ['thermal-pos', 'ocr-auto-healing', 'date-reconciliation', 'broken-loop-digit', 'temporal-governance', 'air-86'],
           lastUpdated: '2026-10-23',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-87',
+          code: 'FMCG_PACKAGED_FOOD_BRAND_ISOLATION_AND_AGRICULTURAL_CORN_RICE_EXCLUSION_STANDARD',
+          orderIndex: 87,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار عزل ماركات الأغذية المعبأة (الدرة) وحظر الحبوب الزراعية (درة أم شوشة/فشار) والأرز المستقل ومنع هلوسة الماركات',
+          titleEn: 'Packaged Food Brand Isolation, Agricultural Grain/Corn Exclusion & Zero-Hallucination Standard',
+          descriptionAr:
+              'معيار حوكمة معماري لحماية دقة فحص فواتير شركة الدرة وشومان ومنع التشابه اللفظي بين اسم الشركة والسلع الزراعية: 1) حظر الحبوب الزراعية والعطارة (Agricultural Corn & Spice Exclusion): شركة "الدرة" الغذائية تنتج حصراً الأغذية المعبأة والمصنعة (صلصة، كاتشب، مايونيز، صوصات، مخلل، مربى، خل، طحينة). يُحظر تماماً وبصرامة احتساب أي حبوب زراعية أو بهارات أو عطارة أو فشار تحمل كلمة "ذرة" أو "درة" (مثل: "درة أم شوشة"، "ذرة أم شوشة"، "ذرة فشار"، "درة فشار"، "ذرة حب"، "فشار"، "بهارات"، "عطارة") كمنتج تابع للدرة، ويجب تعيين isTargetCompany = false واستبعادها كلياً من targetCompanyTotal. 2) حظر تخمين وهلوسة ماركات الأرز المطبوعة (Zero-Hallucination): يُحظر تماماً على الذكاء الاصطناعي استبدال أو تحريف أسماء ماركات الأرز المستقلة المطبوعة على البون (مثل "الفراعنة ارز عريض" أو "أرز الساعة" أو "ريحانة") وتسميتها "الدرة أرز"؛ بل يجب استخراج الاسم المطبوع حرفياً وتعيين isTargetCompany = false لعدم تبعيته للشركة الراعية. 3) استخراج كافة أصناف الدرة الحقيقية: استخراج كافة بنود الدرة المطبوعة بالفاتورة مثل "الدرة صوص برجر" و"الدرة معجون طماطم" دون إسقاطها.',
+          descriptionEn:
+              'Architectural governance standard preventing phonetic brand collisions between FMCG packaged food tenants (Al-Durra / Shoman) and raw agricultural grains: 1) Raw Agricultural Corn & Spices Exclusion: Al-Durra exclusively manufactures packaged food products (sauces, ketchup, mayonnaise, tomato paste, jams, pickles, vinegars, tahina). Agricultural grains, spices, popcorn, and bulk corn (e.g. "درة أم شوشة", "ذرة فشار", "شوشة فلفل", spices) must NEVER be qualified as Al-Durra products (isTargetCompany = false and strictly isolated from targetCompanyTotal). 2) Zero-Hallucination on Printed Rice Brands: multimodal AI must never rename or guess independent printed rice brands (e.g. "الفراعنة ارز عريض", "الساعة", "ريحانة") to "الدرة ارز"; the printed name must be extracted verbatim with isTargetCompany = false. 3) Complete SKU Extraction: ensures genuine Al-Durra items (e.g. "الدرة صوص برجر", "الدرة معجون طماطم") are completely captured.',
+          logicAr:
+              '1. في ExtractedProductItem.fromJson و analyzeReceiptImage: إضافة فاحص سلبي isAgriculturalCornOrSpice و isIndependentGrainOrRice لاستبعاد درة أم شوشة والفشار والبهارات وأرز الفراعنة أو الساعة قبل تفعيل تبعية الدرة.\n2. في التوجيهات البرمجية والـ Prompts: حظر الخلط اللفظي مع الحبوب الزراعية وحظر تخمين أو استبدال ماركات الأرز المطبوعة نهائياً.\n3. رفع سقف مصفوفة المنتجات المشروطة (resolvedRequiredProducts) من 50 إلى 120 لضمان تزويد Gemini بقائمة الكتالوج المعتمدة كاملة.\n4. الحفاظ على المبيعات الحقيقية: احتساب الأصناف الأصيلة التابعة للدرة (مثل صوص البرجر ومعجون الطماطم) بدقة.',
+          logicEn:
+              '1. In ExtractedProductItem.fromJson and analyzeReceiptImage: adds isAgriculturalCornOrSpice and isIndependentGrainOrRice guards to disqualify corn silks/popcorn/spices and independent rice brands before granting Al-Durra brand status.\n2. In prompts: explicitly forbids confusing agricultural commodities with packaged brands and enforces zero-hallucination on printed rice brands.\n3. Expands resolvedRequiredProducts prompt limit from 50 to 120 items so Gemini receives the complete catalog whitelist.\n4. Preserves genuine tenant items (e.g. burger sauce, tomato paste) in targetCompanyTotal.',
+          exampleInput:
+              'فاتورة أسواق فتح الله برقم 193/3/224/241026 تضم "الدرة معجون طماطم 1ك" (114 ج.م)، "الدرة صوص برجر" (38.50 ج.م)، "الفراعنة ارز عريض 1.050" (115 ج.م)، و"ذرة ام شوشة فلفل ص" (175.50 ج.م) لحملة شركة الدرة.',
+          exampleOutput:
+              '1) احتساب معجون طماطم الدرة (114 ج.م) وصوص برجر الدرة (38.50 ج.م) فقط كمنتجات مؤهلة بإجمالي 152.50 ج.م. 2) استبعاد "ذرة ام شوشة" كسلعة زراعية/عطارة (isTargetCompany = false). 3) استخراج أرز الفراعنة باسمه الحقيقي مع استبعاده لعدم تبعيته للدرة (isTargetCompany = false) دون أي هلوسة. 4) تأهيل الفاتورة بنجاح لاستيفاء حد الـ 150 ج.م ومنح هدية الكاتشب.',
+          tags: ['al-durra', 'agricultural-corn-exclusion', 'popcorn-spices', 'independent-rice-isolation', 'zero-hallucination', 'air-87'],
+          lastUpdated: '2026-10-24',
+        ),
       ];
 }
 
