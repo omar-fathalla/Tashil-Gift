@@ -6,7 +6,8 @@
  * Inventory remainingQuantity is changed here with the Admin SDK so clients
  * cannot write stock counters directly.
  */
-const functions = require("firebase-functions");
+// Same v1 builder as index.js. firebase-functions 6 has no root runWith.
+const functions = require("firebase-functions/v1");
 const admin = require("firebase-admin");
 
 const ALLOWED_ROLES = new Set(["super_admin", "admin", "partner"]);

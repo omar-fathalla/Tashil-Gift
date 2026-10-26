@@ -1,4 +1,7 @@
-const functions = require("firebase-functions");
+// firebase-functions 6 exports the v2 API from the package root. These
+// functions are 1st gen HTTPS triggers; the v1 builder keeps the same names,
+// region (us-central1), and trigger type so a deploy updates them in place.
+const functions = require("firebase-functions/v1");
 const admin = require("firebase-admin");
 
 admin.initializeApp();
