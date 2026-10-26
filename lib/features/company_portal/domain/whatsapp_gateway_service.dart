@@ -867,7 +867,7 @@ class WhatsAppGatewayService {
           statusCode: response.statusCode,
         );
       }
-      return sendSingleMessage(
+      return await sendSingleMessage(
         config: config,
         toPhone: toPhone,
         messageText: caption != null && caption.isNotEmpty ? '$caption\n\n$mediaUrl' : mediaUrl,

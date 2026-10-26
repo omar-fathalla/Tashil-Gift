@@ -1,4 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_service.dart';
@@ -1478,11 +1480,45 @@ class CompanyGiftsService {
     return bestIndex;
   }
 
-  /// Decrements the remaining quantity of a prize in a specific campaign after a win.
-  /// [prizeIdentifier] can be a giftId or a prize name.
-  /// If [branchId] is provided, prioritizes matching the specific branch prize.
-  /// [count] is the quantity to decrement (defaults to 1).
-  Future<void> decrementCampaignPrize(
+  bool _isAnonymousCaller() {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      return user == null || user.isAnonymous;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Sends the claim to `decrementCampaignPrize`. Returns true when the function
+  /// accepted the call. Staff may fall back to a direct write only when the
+  /// function is not deployed yet. Anonymous callers never write stock locally.
+  Future<bool> _claimViaCallable({
+    required String eventId,
+    String? receiptId,
+    Map<String, dynamic>? receiptPatch,
+    required List<Map<String, dynamic>> decrements,
+  }) async {
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable('decrementCampaignPrize');
+      await callable.call({
+        'eventId': eventId,
+        if (receiptId != null && receiptId.isNotEmpty) 'receiptId': receiptId,
+        if (receiptPatch != null && receiptPatch.isNotEmpty) 'receiptPatch': receiptPatch,
+        'decrements': decrements,
+      });
+      return true;
+    } on FirebaseFunctionsException catch (e) {
+      final missing = e.code == 'not-found' || e.code == 'unavailable' || e.code == 'unimplemented';
+      if (missing && !_isAnonymousCaller()) return false;
+      rethrow;
+    } catch (e) {
+      if (_isAnonymousCaller()) rethrow;
+      debugPrint('⚠️ decrementCampaignPrize callable unavailable, staff fallback: $e');
+      return false;
+    }
+  }
+
+  Future<void> _decrementCampaignPrizeLocal(
     String eventId,
     String prizeIdentifier, {
     String? branchId,
@@ -1493,7 +1529,6 @@ class CompanyGiftsService {
   }) async {
     if (eventId.isEmpty || prizeIdentifier.isEmpty || count <= 0) return;
 
-    // 1. Sharded Lock-Free Increment (always guaranteed, zero lock contention)
     try {
       await _counterService?.recordClaimEvent(
         eventId: eventId,
@@ -1506,7 +1541,6 @@ class CompanyGiftsService {
       debugPrint('⚠️ CompanyGiftsService.decrementCampaignPrize sharded record error: $e');
     }
 
-    // 2. Decrement on root event document with optimistic safety
     try {
       final doc = await _firestore.collection('events').doc(eventId).get();
       if (!doc.exists) return;
@@ -1533,10 +1567,84 @@ class CompanyGiftsService {
         });
       }
     } catch (e) {
-      // If root document update encounters lock contention (Firestore 1 write/sec limit),
-      // the sharded counter recorded in step 1 guarantees exact claim auditability!
       debugPrint('⚠️ CompanyGiftsService.decrementCampaignPrize root update contention fallback: $e');
     }
+  }
+
+  /// Records a gift claim and decrements campaign stock on the server.
+  ///
+  /// Anonymous field reps cannot update the receipt or the prize counters
+  /// themselves. The callable writes both with the Admin SDK.
+  Future<void> claimCampaignPrizes({
+    required String eventId,
+    String? receiptId,
+    Map<String, dynamic>? receiptPatch,
+    required List<Map<String, dynamic>> decrements,
+  }) async {
+    final cleanDecrements = decrements.where((item) {
+      final id = (item['prizeIdentifier'] ?? '').toString().trim();
+      final count = (item['count'] as num?)?.toInt() ?? 0;
+      return eventId.isNotEmpty && id.isNotEmpty && count > 0;
+    }).toList();
+    final patch = receiptPatch ?? const <String, dynamic>{};
+    if (cleanDecrements.isEmpty && patch.isEmpty) return;
+
+    if (eventId.isNotEmpty) {
+      final handled = await _claimViaCallable(
+        eventId: eventId,
+        receiptId: receiptId,
+        receiptPatch: patch,
+        decrements: cleanDecrements,
+      );
+      if (handled) return;
+    }
+
+    if (receiptId != null && receiptId.isNotEmpty && patch.isNotEmpty) {
+      await _firestore.collection('receipts_transactions').doc(receiptId).update(patch);
+    }
+    for (final item in cleanDecrements) {
+      await _decrementCampaignPrizeLocal(
+        eventId,
+        item['prizeIdentifier'].toString(),
+        branchId: item['branchId']?.toString(),
+        count: (item['count'] as num?)?.toInt() ?? 1,
+        unitValue: (item['unitValue'] as num?)?.toDouble(),
+        isVoucher: item['isVoucher'] as bool?,
+        gameType: (item['gameType'] ?? 'claim').toString(),
+      );
+    }
+  }
+
+  /// Decrements the remaining quantity of a prize in a specific campaign after a win.
+  /// [prizeIdentifier] can be a giftId or a prize name.
+  /// If [branchId] is provided, prioritizes matching the specific branch prize.
+  /// [count] is the quantity to decrement (defaults to 1).
+  Future<void> decrementCampaignPrize(
+    String eventId,
+    String prizeIdentifier, {
+    String? branchId,
+    int count = 1,
+    double? unitValue,
+    bool? isVoucher,
+    String gameType = 'claim',
+    String? receiptId,
+    Map<String, dynamic>? receiptPatch,
+  }) {
+    return claimCampaignPrizes(
+      eventId: eventId,
+      receiptId: receiptId,
+      receiptPatch: receiptPatch,
+      decrements: [
+        {
+          'prizeIdentifier': prizeIdentifier,
+          'branchId': branchId,
+          'count': count,
+          'unitValue': unitValue,
+          'isVoucher': isVoucher,
+          'gameType': gameType,
+        },
+      ],
+    );
   }
 
   /// Restores / Replenishes the remaining quantity of a prize in a campaign (e.g. when an invoice is deleted).

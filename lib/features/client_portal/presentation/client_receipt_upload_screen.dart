@@ -141,17 +141,78 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
     try {
       final firestore = ref.read(firestoreProvider);
 
-      // ⚡ Server-Side Scoped Query (Pillar 3): Stream only events for this specific company
-      Query<Map<String, dynamic>> query = firestore.collection('events');
+      // Active campaigns only. A bare event link reads that one document.
+      // A company link lists active events for that slug.
+      if (slug.isEmpty && targetEventId != null && targetEventId.isNotEmpty) {
+        _eventSubscription = firestore.collection('events').doc(targetEventId).snapshots().listen(
+          (snap) {
+            if (!mounted) return;
+            if (!snap.exists) {
+              setState(() {
+                _activeEvent = null;
+                _availableCompanyEvents = [];
+                _errorMessage = 'لا يوجد أي فعاليات مسجلة لهذه الشركة حالياً.';
+                _isLoadingEvent = false;
+              });
+              return;
+            }
+            _applyLiveEventDocs([snap], targetEventId: targetEventId, slug: slug);
+          },
+          onError: (e) {
+            if (!mounted) return;
+            setState(() {
+              _errorMessage = AppErrorHandler.getFriendlyMessage(
+                e,
+                defaultMessage: 'حدث خطأ أثناء تحميل بيانات الحملة من الخادم.',
+              );
+              _isLoadingEvent = false;
+            });
+          },
+        );
+        return;
+      }
+
+      Query<Map<String, dynamic>> query = firestore
+          .collection('events')
+          .where('isActive', isEqualTo: true);
       if (slug.isNotEmpty) {
         query = query.where('companySlug', isEqualTo: slug);
       }
 
       _eventSubscription = query.snapshots().listen(
-        (snapshot) async {
+        (snapshot) {
           if (!mounted) return;
-          var docs = snapshot.docs;
-          
+          _applyLiveEventDocs(snapshot.docs, targetEventId: targetEventId, slug: slug);
+        },
+        onError: (e) {
+          if (!mounted) return;
+          setState(() {
+            _errorMessage = AppErrorHandler.getFriendlyMessage(
+              e,
+              defaultMessage: 'حدث خطأ أثناء تحميل بيانات الحملة من الخادم.',
+            );
+            _isLoadingEvent = false;
+          });
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'حدث خطأ أثناء الاتصال بالخادم.';
+          _isLoadingEvent = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _applyLiveEventDocs(
+    List<DocumentSnapshot<Map<String, dynamic>>> docs, {
+    required String? targetEventId,
+    required String slug,
+  }) async {
+    if (!mounted) return;
+    final firestore = ref.read(firestoreProvider);
+    {
           // Fallback if scoped query returned empty but targetEventId is provided
           if (docs.isEmpty && targetEventId != null && targetEventId.isNotEmpty) {
             final singleDoc = await firestore.collection('events').doc(targetEventId).get();
@@ -253,25 +314,6 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
               _isLoadingEvent = false;
             });
           }
-        },
-        onError: (e) {
-          if (!mounted) return;
-          setState(() {
-            _errorMessage = AppErrorHandler.getFriendlyMessage(
-              e,
-              defaultMessage: 'حدث خطأ أثناء تحميل بيانات الحملة من الخادم.',
-            );
-            _isLoadingEvent = false;
-          });
-        },
-      );
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _errorMessage = 'حدث خطأ أثناء الاتصال بالخادم.';
-          _isLoadingEvent = false;
-        });
-      }
     }
   }
 
@@ -866,6 +908,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                     'partIndex': '$partNum',
                     'totalParts': '${allBytesList.length}',
                     'uploadedAt': DateTime.now().toIso8601String(),
+                    'uploaderUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
                   },
                 );
 
@@ -1165,6 +1208,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                 'partIndex': '$partNum',
                 'totalParts': '${allBytesList.length}',
                 'uploadedAt': DateTime.now().toIso8601String(),
+                'uploaderUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
               },
             );
 
@@ -1227,6 +1271,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         if (uploadedStoragePaths.length > 1) 'storage_paths': uploadedStoragePaths,
         'parts_count': allBytesList.length,
         'campaignId': _activeEvent!.id,
+        'submittedByUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
         'companySlug': _activeEvent!.companySlug,
         'targetCompany': _activeEvent!.targetCompany,
         'customerPhone': _customerPhoneController.text.toEnglishDigits().trim(),
@@ -3003,6 +3048,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                 'partIndex': '$partNum',
                 'totalParts': '${allBytesList.length}',
                 'uploadedAt': DateTime.now().toIso8601String(),
+                'uploaderUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
               },
             );
 
@@ -3068,6 +3114,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         'customerPhone': _customerPhoneController.text.toEnglishDigits().trim(),
         'customerName': _customerNameController.text.trim(),
         'campaignId': activeEvent.id,
+        'submittedByUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
         'companySlug': activeEvent.companySlug,
         'targetCompany': activeEvent.targetCompany,
         'analysis_duration_seconds': result.durationSeconds,

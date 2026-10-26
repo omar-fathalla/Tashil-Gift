@@ -14,5 +14,8 @@
     "lru-memoizer": "^2.3.0",
     "retry-request": "^7.0.2"
   },
-  "private": true
+  "private": true,
+  "scripts": {
+    "bootstrap:super-admin": "node scripts/bootstrap-super-admin.js"
+  }
 }

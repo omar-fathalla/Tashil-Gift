@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../../core/services/firebase_service.dart';
 import '../../../core/services/company_gifts_service.dart';
 import '../../../core/services/game_audio_service.dart';
 import '../../../core/widgets/game_sound_controls.dart';
@@ -135,27 +134,28 @@ class _MysteryBoxScreenState extends ConsumerState<MysteryBoxScreen>
     // If not demo mode, persist to Firestore
     if (!widget.isDemo && widget.transactionId.isNotEmpty) {
       try {
-        final firestore = ref.read(firestoreProvider);
-        await firestore.collection('receipts_transactions').doc(widget.transactionId).update({
-          'game_played': true,
-          'game_type': 'mysteryBox',
-          'prize_won': _wonPrizes.join(' + '),
-          'prizes_won': _wonPrizes,
-          'remaining_chances': _remainingChances,
-          'event_id': widget.eventId,
-          'claimed_gifts': [{
-            'giftId': '',
-            'giftName': _wonPrize,
-            'quantity': 1,
-            'unitValue': 0.0,
-            'isVoucher': false,
-          }],
-        });
-
-        if (widget.eventId.isNotEmpty) {
-          final giftsService = ref.read(companyGiftsServiceProvider);
-          await giftsService.decrementCampaignPrize(widget.eventId, _wonPrize);
-        }
+        final giftsService = ref.read(companyGiftsServiceProvider);
+        await giftsService.decrementCampaignPrize(
+          widget.eventId,
+          _wonPrize,
+          gameType: 'mysteryBox',
+          receiptId: widget.transactionId,
+          receiptPatch: {
+            'game_played': true,
+            'game_type': 'mysteryBox',
+            'prize_won': _wonPrizes.join(' + '),
+            'prizes_won': _wonPrizes,
+            'remaining_chances': _remainingChances,
+            'event_id': widget.eventId,
+            'claimed_gifts': [{
+              'giftId': '',
+              'giftName': _wonPrize,
+              'quantity': 1,
+              'unitValue': 0.0,
+              'isVoucher': false,
+            }],
+          },
+        );
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

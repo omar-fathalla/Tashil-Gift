@@ -45,6 +45,11 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Rules unit tests
+rules-tests/node_modules/
+rules-tests/firestore.rules
+rules-tests/storage.rules
+
 # Firebase
 .firebase/
 firebase-debug.log

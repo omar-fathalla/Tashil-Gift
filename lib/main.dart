@@ -1,12 +1,11 @@
-import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
+import 'core/services/app_check_bootstrap.dart';
 import 'core/theme/app_theme.dart';
 import 'core/localization/locale_provider.dart';
 import 'core/services/firebase_service.dart';
@@ -37,40 +36,23 @@ void main() async {
     }
   };
 
-  // Initialize Firebase and restore local admin session in parallel for fastest possible boot
-  String? initialAdminSession;
-  await Future.wait([
-    Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    ),
-    () async {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final rememberMe = prefs.getBool('remember_admin_me') ?? true;
-        final activeSession = prefs.getString('active_admin_session');
-        if (rememberMe &&
-            activeSession != null &&
-            isAuthorizedAdminEmail(activeSession)) {
-          initialAdminSession = activeSession.toLowerCase();
-        }
-      } catch (_) {}
-    }(),
-  ]);
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  await activateFirebaseAppCheck();
 
-  // Fire anonymous auth session in the background without blocking initial UI frame render
+  // Field reps never see a login form. Anonymous Auth is their only session.
   try {
     if (FirebaseAuth.instance.currentUser == null) {
-      FirebaseAuth.instance.signInAnonymously().ignore();
+      await FirebaseAuth.instance
+          .signInAnonymously()
+          .timeout(const Duration(seconds: 8));
     }
   } catch (_) {}
-  
+
   runApp(
-    ProviderScope(
-      overrides: [
-        if (initialAdminSession != null)
-          adminSessionEmailProvider.overrideWith((ref) => initialAdminSession),
-      ],
-      child: const MyApp(),
+    const ProviderScope(
+      child: MyApp(),
     ),
   );
 }
@@ -415,8 +397,17 @@ class AdminAuthGuard extends ConsumerWidget {
       final authState = ref.watch(authStateStreamProvider);
       return authState.when(
         data: (user) {
-          if (user != null && !user.isAnonymous && isAuthorizedAdminEmail(user.email)) {
-            return const AdminDashboardScreen();
+          if (user != null && !user.isAnonymous) {
+            final claims = ref.watch(authClaimsProvider);
+            if (claims.isLoading) {
+              final colorScheme = Theme.of(context).colorScheme;
+              return Scaffold(
+                backgroundColor: colorScheme.surface,
+                body: Center(
+                  child: CircularProgressIndicator(color: colorScheme.primary),
+                ),
+              );
+            }
           }
           return const AuthScreen();
         },

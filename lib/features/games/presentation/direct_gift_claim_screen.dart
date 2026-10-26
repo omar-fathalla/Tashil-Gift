@@ -599,7 +599,6 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
       Future<WhatsAppGatewayResult?>? whatsappFuture;
 
       if (!widget.isDemo && widget.transactionId.isNotEmpty) {
-        final firestore = ref.read(firestoreProvider);
         final claimedGiftsList = finalLinkedGifts.isNotEmpty
             ? finalLinkedGifts.map((g) {
                 final gSerials = g.isVoucher
@@ -637,48 +636,47 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
             .where((t) => t.isNotEmpty)
             .toList();
 
-        // 1. Update receipts_transactions record
-        await firestore.collection('receipts_transactions').doc(widget.transactionId).update({
-          'game_played': true,
-          'game_type': 'directGift',
-          'prize_won': displayPrize,
-          'prizes_won': List.filled(effectiveQuantity, finalPrizeName),
-          'claimed_gifts': claimedGiftsList,
-          if (allVoucherSerials.isNotEmpty) 'voucher_serials': allVoucherSerials,
-          'event_id': widget.eventId,
-          'branch_id': widget.branchId ?? '',
-          'remaining_chances': 0,
-          'claim_status': 'handed_over',
-          'claimed_at': DateTime.now().toIso8601String(),
-        });
-
-        // 2. Decrement inventory from campaign/branch
-        if (widget.eventId.isNotEmpty) {
-          final giftsService = ref.read(companyGiftsServiceProvider);
-          if (finalLinkedGifts.isNotEmpty) {
-            for (final giftAlloc in finalLinkedGifts) {
-              await giftsService.decrementCampaignPrize(
-                widget.eventId,
-                giftAlloc.giftId.isNotEmpty ? giftAlloc.giftId : giftAlloc.giftName,
-                branchId: widget.branchId,
-                count: giftAlloc.quantity,
-                unitValue: giftAlloc.unitValue,
-                isVoucher: giftAlloc.isVoucher,
-                gameType: 'directGift',
-              );
-            }
-          } else {
-            await giftsService.decrementCampaignPrize(
-              widget.eventId,
-              finalPrizeName,
-              branchId: widget.branchId,
-              count: effectiveQuantity,
-              unitValue: finalUnitValue,
-              isVoucher: finalIsVoucher,
-              gameType: 'directGift',
-            );
+        final giftsService = ref.read(companyGiftsServiceProvider);
+        final decrements = <Map<String, dynamic>>[];
+        if (finalLinkedGifts.isNotEmpty) {
+          for (final giftAlloc in finalLinkedGifts) {
+            decrements.add({
+              'prizeIdentifier': giftAlloc.giftId.isNotEmpty ? giftAlloc.giftId : giftAlloc.giftName,
+              'branchId': widget.branchId,
+              'count': giftAlloc.quantity,
+              'unitValue': giftAlloc.unitValue,
+              'isVoucher': giftAlloc.isVoucher,
+              'gameType': 'directGift',
+            });
           }
+        } else {
+          decrements.add({
+            'prizeIdentifier': finalPrizeName,
+            'branchId': widget.branchId,
+            'count': effectiveQuantity,
+            'unitValue': finalUnitValue,
+            'isVoucher': finalIsVoucher,
+            'gameType': 'directGift',
+          });
         }
+        await giftsService.claimCampaignPrizes(
+          eventId: widget.eventId,
+          receiptId: widget.transactionId,
+          receiptPatch: {
+            'game_played': true,
+            'game_type': 'directGift',
+            'prize_won': displayPrize,
+            'prizes_won': List.filled(effectiveQuantity, finalPrizeName),
+            'claimed_gifts': claimedGiftsList,
+            if (allVoucherSerials.isNotEmpty) 'voucher_serials': allVoucherSerials,
+            'event_id': widget.eventId,
+            'branch_id': widget.branchId ?? '',
+            'remaining_chances': 0,
+            'claim_status': 'handed_over',
+            'claimed_at': DateTime.now().toIso8601String(),
+          },
+          decrements: decrements,
+        );
 
         // 3. Dispatch automated celebratory WhatsApp message to winner
         whatsappFuture = _dispatchWhatsAppWinnerNotification(

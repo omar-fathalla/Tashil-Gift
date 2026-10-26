@@ -46,7 +46,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           if (savedEmail != null && savedEmail.isNotEmpty) {
             _emailController.text = savedEmail;
           } else {
-            _emailController.text = kPrimaryAdminEmail;
+            _emailController.text = kBootstrapSuperAdminEmail;
           }
         });
       }
@@ -76,14 +76,13 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       try {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('remember_admin_me', _rememberMe);
+        await prefs.remove('active_admin_session');
+        await prefs.remove('saved_admin_password');
         if (_rememberMe) {
           await prefs.setString('saved_admin_email', email);
-          await prefs.setString('active_admin_session', email);
         } else {
           await prefs.remove('saved_admin_email');
-          await prefs.remove('active_admin_session');
         }
-        await prefs.remove('saved_admin_password');
       } catch (_) {}
 
       // On success, navigate to the Admin Dashboard

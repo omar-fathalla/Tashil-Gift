@@ -619,6 +619,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
                 'partIndex': '$partNum',
                 'totalParts': '${allBytesList.length}',
                 'uploadedAt': DateTime.now().toIso8601String(),
+                'uploaderUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
               },
             );
 
@@ -755,6 +756,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         if (uploadedStoragePaths.length > 1) 'storage_paths': uploadedStoragePaths,
         'parts_count': allBytesList.length,
         'promoter_id': ref.read(firebaseAuthProvider).currentUser?.uid,
+        'submittedByUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
         'campaignId': activeEvent.id,
         'companySlug': activeEvent.companySlug,
         'targetCompany': activeEvent.targetCompany,
@@ -2051,6 +2053,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
                 'partIndex': '$partNum',
                 'totalParts': '${allBytesList.length}',
                 'uploadedAt': DateTime.now().toIso8601String(),
+                'uploaderUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
               },
             );
 
@@ -2114,6 +2117,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         if (uploadedStoragePaths.length > 1) 'storage_paths': uploadedStoragePaths,
         'parts_count': allBytesList.length,
         'promoter_id': ref.read(firebaseAuthProvider).currentUser?.uid,
+        'submittedByUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
         'campaignId': activeEvent.id,
         'companySlug': activeEvent.companySlug,
         'targetCompany': activeEvent.targetCompany,

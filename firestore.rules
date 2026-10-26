@@ -2,101 +2,227 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isAuthenticated() {
-      return true;
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    function isSystemAdmin() {
-      return true;
+    function isAnonymous() {
+      return isSignedIn()
+        && request.auth.token.firebase.sign_in_provider == 'anonymous';
     }
 
-    // Allow authenticated sessions (including background anonymous and email auth)
+    function role() {
+      return isSignedIn() ? request.auth.token.get('role', '') : '';
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && !isAnonymous() && role() == 'super_admin';
+    }
+
+    function isAdmin() {
+      return isSignedIn() && !isAnonymous()
+        && (role() == 'super_admin' || role() == 'admin');
+    }
+
+    function isPartner() {
+      return isSignedIn() && !isAnonymous() && role() == 'partner';
+    }
+
+    function partnerSlug() {
+      return isPartner() ? request.auth.token.get('companySlug', '') : '';
+    }
+
+    function isPartnerOps() {
+      return isPartner()
+        && partnerSlug().size() > 0
+        && request.auth.token.get('partnerAccess', 'read') == 'ops';
+    }
+
+    function sameCompany(slug) {
+      return isPartner() && partnerSlug().size() > 0 && slug == partnerSlug();
+    }
+
+    function eventPath(eventId) {
+      return /databases/$(database)/documents/events/$(eventId);
+    }
+
+    function eventData(eventId) {
+      return get(eventPath(eventId)).data;
+    }
+
+    function campaignIsActive(campaignId) {
+      return campaignId is string
+        && campaignId.size() > 0
+        && campaignId.size() <= 128
+        && exists(eventPath(campaignId))
+        && eventData(campaignId).isActive == true;
+    }
+
+    function boundedString(value, maxLen) {
+      return value is string && value.size() <= maxLen;
+    }
+
+    // Kept small on purpose: Firestore rejects a rule that evaluates more than
+    // 1000 expressions, and receipt documents carry many optional OCR fields.
+    function validAnonymousReceipt(data) {
+      return data.keys().size() <= 80
+        && data.keys().size() >= 4
+        && boundedString(data.submittedByUid, 128)
+        && data.submittedByUid == request.auth.uid
+        && data.submittedByUid.size() > 0
+        && boundedString(data.campaignId, 128)
+        && data.campaignId.size() > 0
+        && boundedString(data.companySlug, 128)
+        && data.companySlug.size() > 0
+        && campaignIsActive(data.campaignId)
+        && eventData(data.campaignId).companySlug == data.companySlug
+        && data.timestamp == request.time
+        && (!(('receipt_number') in data) || boundedString(data.receipt_number, 80))
+        && (!(('customerPhone') in data) || boundedString(data.customerPhone, 32))
+        && (!(('customerName') in data) || boundedString(data.customerName, 160))
+        && (!(('total_value') in data) || (data.total_value is number && data.total_value >= 0 && data.total_value < 1000000000))
+        && (!(('extracted_products') in data) || (data.extracted_products is list && data.extracted_products.size() <= 80));
+    }
+
+    function partnerReceiptUpdate() {
+      return isPartnerOps()
+        && sameCompany(resource.data.companySlug)
+        && request.resource.data.companySlug == resource.data.companySlug
+        && request.resource.data.submittedByUid == resource.data.submittedByUid
+        && request.resource.data.campaignId == resource.data.campaignId;
+    }
+
     match /events/{eventId} {
-      allow read, write: if isAuthenticated();
-      match /sharded_counters/{counterId}/shards/{shardId} {
-        allow read, write: if isAuthenticated();
+      allow get: if isAdmin()
+        || (isAnonymous() && resource.data.isActive == true)
+        || sameCompany(resource.data.companySlug);
+      // List is allowed only when every candidate document is an active campaign.
+      // Clients must query isActive == true (and companySlug for a company link).
+      allow list: if isAdmin()
+        || (isAnonymous() && resource.data.isActive == true)
+        || sameCompany(resource.data.companySlug);
+      allow create, update, delete: if isAdmin();
+
+      match /sharded_counters/{counterId} {
+        allow read: if isAdmin() || sameCompany(eventData(eventId).companySlug);
+        allow write: if isAdmin();
+
+        match /shards/{shardId} {
+          allow read: if isAdmin() || sameCompany(eventData(eventId).companySlug);
+          allow write: if isAdmin();
+        }
       }
     }
 
     match /receipts_transactions/{txId} {
-      allow read, write: if isAuthenticated();
+      allow get: if isAdmin()
+        || (isAnonymous() && resource.data.submittedByUid == request.auth.uid)
+        || sameCompany(resource.data.companySlug);
+      allow list: if isAdmin()
+        || (isAnonymous() && resource.data.submittedByUid == request.auth.uid)
+        || sameCompany(resource.data.companySlug);
+      allow create: if isAdmin()
+        || (isAnonymous() && validAnonymousReceipt(request.resource.data))
+        || (isPartnerOps()
+            && sameCompany(request.resource.data.companySlug)
+            && request.resource.data.submittedByUid == request.auth.uid);
+      allow update: if isAdmin() || partnerReceiptUpdate();
+      allow delete: if isAdmin();
     }
 
     match /company_gifts/{giftId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAdmin() || sameCompany(resource.data.companySlug);
+      allow write: if isAdmin();
     }
 
     match /gift_stock_movements/{movementId} {
-      allow read, write: if isAuthenticated();
-    }
-
-    match /shards/{shardId} {
-      allow read, write: if isAuthenticated();
-    }
-
-    match /sharded_counters/{counterId} {
-      allow read, write: if isAuthenticated();
-      match /shards/{shardId} {
-        allow read, write: if isAuthenticated();
-      }
+      allow read: if isAdmin() || sameCompany(resource.data.companySlug);
+      allow create, update, delete: if isAdmin();
     }
 
     match /companies/{companyId} {
-      allow read, write: if isAuthenticated();
+      // Portal passwords live on these documents. Partners must not read them.
+      allow read, write: if isAdmin();
     }
 
     match /company_products/{prodId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAdmin()
+        || isAnonymous()
+        || sameCompany(resource.data.companySlug);
+      allow write: if isAdmin();
     }
 
     match /chain_products_catalog/{catId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isAdmin();
     }
 
     match /branches/{branchId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAdmin() || isPartner() || isAnonymous();
+      allow write: if isAdmin();
     }
 
     match /retail_chains/{chainId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAdmin() || isPartner() || isAnonymous();
+      allow write: if isAdmin();
     }
 
     match /ai_brain_directives/{directiveId} {
-      allow read: if isAuthenticated();
-      allow write: if isSystemAdmin();
+      allow read: if isAdmin();
+      allow write: if isAdmin();
     }
 
     match /system_settings/{settingId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isAdmin();
     }
 
     match /admins/{adminEmail} {
-      allow read: if isAuthenticated();
-      allow write: if isSystemAdmin();
-    }
-
-    match /daily_campaign_branch_sales/{docId} {
-      allow read, write: if isAuthenticated();
-    }
-
-    match /campaign_stock_settlements/{docId} {
-      allow read, write: if isAuthenticated();
-    }
-
-    match /marketing_contacts/{contactId} {
-      allow read, write: if isAuthenticated();
-    }
-
-    match /discovered_products_inbox/{inboxId} {
-      allow read, write: if isAuthenticated();
-    }
-
-    match /portal_access_logs/{logId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isSuperAdmin();
     }
 
     match /portal_credentials/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isSuperAdmin();
+    }
+
+    match /daily_campaign_branch_sales/{docId} {
+      allow read: if isAdmin() || sameCompany(resource.data.companySlug);
+      allow write: if isAdmin();
+    }
+
+    match /campaign_stock_settlements/{docId} {
+      allow read: if isAdmin() || sameCompany(resource.data.companySlug);
+      allow write: if isAdmin();
+    }
+
+    match /marketing_contacts/{contactId} {
+      allow read: if isAdmin() || sameCompany(resource.data.companySlug);
+      allow create: if isAdmin() || (isPartner() && sameCompany(request.resource.data.companySlug));
+      allow update: if isAdmin()
+        || (isPartner()
+            && sameCompany(resource.data.companySlug)
+            && sameCompany(request.resource.data.companySlug));
+      allow delete: if isAdmin() || (isPartner() && sameCompany(resource.data.companySlug));
+    }
+
+    match /discovered_products_inbox/{inboxId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /portal_access_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() || (isPartner() && sameCompany(request.resource.data.companySlug));
+      allow update, delete: if isAdmin();
+    }
+
+    match /shards/{shardId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /sharded_counters/{counterId} {
+      allow read, write: if isAdmin();
+
+      match /shards/{shardId} {
+        allow read, write: if isAdmin();
+      }
     }
 
     match /{document=**} {

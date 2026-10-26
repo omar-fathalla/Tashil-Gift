@@ -1448,11 +1448,8 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                                 child: child,
                               );
                             },
-                            onReorder: (int oldIndex, int newIndex) async {
+                            onReorderItem: (int oldIndex, int newIndex) async {
                               HapticFeedback.mediumImpact();
-                              if (oldIndex < newIndex) {
-                                newIndex -= 1;
-                              }
                               final movedItem = gifts.removeAt(oldIndex);
                               gifts.insert(newIndex, movedItem);
 

@@ -356,7 +356,10 @@ const { analyzeReceiptWithGateway } = require("./gemini_gateway");
  * Cloud Function: analyzeReceipt
  * Proxies and accelerates receipt verification with LRU caching, rate limiting, and exponential backoff retry.
  */
-exports.analyzeReceipt = functions.https.onCall(async (data, context) => {
+exports.analyzeReceipt = functions.runWith({ enforceAppCheck: true }).https.onCall(async (data, context) => {
+  if (!context || context.app == null) {
+    throw new functions.https.HttpsError("failed-precondition", "App Check token is required.");
+  }
   const { campaignId, imagePayload, forceRefresh } = data || {};
   if (!imagePayload) {
     throw new functions.https.HttpsError("invalid-argument", "imagePayload is required");
@@ -470,3 +473,5 @@ exports.wahaProxy = functions.https.onRequest(async (req, res) => {
     });
   }
 });
+
+Object.assign(exports, require("./security_functions"));

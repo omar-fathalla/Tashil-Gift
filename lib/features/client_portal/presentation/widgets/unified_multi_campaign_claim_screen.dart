@@ -271,6 +271,7 @@ class _UnifiedMultiCampaignClaimScreenState
           'bundle_group_id': widget.bundleGroupId,
           'receipt_number': widget.receiptNumber,
           'campaignId': campaign.id,
+          'submittedByUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
           'companySlug': campaign.companySlug,
           'targetCompany': campaign.targetCompany,
           'retail_chain_name': campaign.retailChainName,

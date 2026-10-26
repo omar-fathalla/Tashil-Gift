@@ -145,33 +145,29 @@ class _ScratchCardScreenState extends ConsumerState<ScratchCardScreen> {
       Future<WhatsAppGatewayResult?>? whatsappFuture;
 
       if (!widget.isDemo && widget.transactionId.isNotEmpty) {
-        final firestore = ref.read(firestoreProvider);
-        await firestore.collection('receipts_transactions').doc(widget.transactionId).update({
-          'game_played': true,
-          'game_type': 'scratch',
-          'prize_won': _wonPrizes.join(' + '),
-          'prizes_won': _wonPrizes,
-          'remaining_chances': _remainingChances,
-          'event_id': widget.eventId,
-          'claimed_gifts': _wonPrizes.map((p) => {
-            'giftId': '',
-            'giftName': p,
-            'quantity': 1,
-            'unitValue': 0.0,
-            'isVoucher': p.contains('فواتشر') || p.contains('قسيمة') || p.toLowerCase().contains('voucher'),
-          }).toList(),
-        });
-
-        // Decrement the prize from the campaign's allocated inventory
-        if (widget.eventId.isNotEmpty) {
-          final giftsService = ref.read(companyGiftsServiceProvider);
-          await giftsService.decrementCampaignPrize(
-            widget.eventId,
-            _prize,
-            branchId: widget.branchId,
-            gameType: 'scratch',
-          );
-        }
+        final giftsService = ref.read(companyGiftsServiceProvider);
+        await giftsService.decrementCampaignPrize(
+          widget.eventId,
+          _prize,
+          branchId: widget.branchId,
+          gameType: 'scratch',
+          receiptId: widget.transactionId,
+          receiptPatch: {
+            'game_played': true,
+            'game_type': 'scratch',
+            'prize_won': _wonPrizes.join(' + '),
+            'prizes_won': _wonPrizes,
+            'remaining_chances': _remainingChances,
+            'event_id': widget.eventId,
+            'claimed_gifts': _wonPrizes.map((p) => {
+              'giftId': '',
+              'giftName': p,
+              'quantity': 1,
+              'unitValue': 0.0,
+              'isVoucher': p.contains('فواتشر') || p.contains('قسيمة') || p.toLowerCase().contains('voucher'),
+            }).toList(),
+          },
+        );
 
         if (_remainingChances == 0 && !_whatsappSent) {
           _whatsappSent = true;
