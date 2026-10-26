@@ -1,8 +1,16 @@
-// firebase-functions 6 exports the v2 API from the package root. These
-// functions are 1st gen HTTPS triggers; the v1 builder keeps the same names,
-// region (us-central1), and trigger type so a deploy updates them in place.
-const functions = require("firebase-functions/v1");
+const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
+
+// Production functions are already 2nd gen in us-central1 with 256MiB.
+// These options keep a deploy as an in-place update of the same Cloud Run services.
+const httpsOptions = {
+  region: "us-central1",
+  memory: "256MiB",
+};
+const callableOptions = {
+  ...httpsOptions,
+  enforceAppCheck: true,
+};
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -308,7 +316,7 @@ function buildPreviewHtml({ pageTitle, pageDescription, companyLogoUrl }) {
 /**
  * Cloud Function to generate dynamic OpenGraph link previews for WhatsApp & Social Media
  */
-exports.sharePreview = functions.https.onRequest(async (req, res) => {
+exports.sharePreview = onRequest(httpsOptions, async (req, res) => {
   try {
     const rawPath = req.path || "/";
     const pathSegments = rawPath.split("/").filter(Boolean);
@@ -359,13 +367,14 @@ const { analyzeReceiptWithGateway } = require("./gemini_gateway");
  * Cloud Function: analyzeReceipt
  * Proxies and accelerates receipt verification with LRU caching, rate limiting, and exponential backoff retry.
  */
-exports.analyzeReceipt = functions.runWith({ enforceAppCheck: true }).https.onCall(async (data, context) => {
-  if (!context || context.app == null) {
-    throw new functions.https.HttpsError("failed-precondition", "App Check token is required.");
+exports.analyzeReceipt = onCall(callableOptions, async (request) => {
+  if (!request.app) {
+    throw new HttpsError("failed-precondition", "App Check token is required.");
   }
-  const { campaignId, imagePayload, forceRefresh } = data || {};
+  const data = request.data || {};
+  const { campaignId, imagePayload, forceRefresh } = data;
   if (!imagePayload) {
-    throw new functions.https.HttpsError("invalid-argument", "imagePayload is required");
+    throw new HttpsError("invalid-argument", "imagePayload is required");
   }
 
   try {
@@ -389,9 +398,9 @@ exports.analyzeReceipt = functions.runWith({ enforceAppCheck: true }).https.onCa
   } catch (err) {
     console.error("Gemini gateway analysis failed:", err);
     if (err.code === 429) {
-      throw new functions.https.HttpsError("resource-exhausted", err.message);
+      throw new HttpsError("resource-exhausted", err.message);
     }
-    throw new functions.https.HttpsError("internal", err.message);
+    throw new HttpsError("internal", err.message);
   }
 });
 
@@ -400,7 +409,7 @@ exports.analyzeReceipt = functions.runWith({ enforceAppCheck: true }).https.onCa
  * Secure HTTPS Reverse Proxy for WAHA (WhatsApp HTTP API).
  * Eliminates browser Mixed Content blocks (HTTPS -> HTTP) and CORS restrictions on production domains.
  */
-exports.wahaProxy = functions.https.onRequest(async (req, res) => {
+exports.wahaProxy = onRequest(httpsOptions, async (req, res) => {
   // CORS configuration
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH");

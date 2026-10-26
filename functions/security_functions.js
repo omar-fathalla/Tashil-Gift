@@ -6,9 +6,14 @@
  * Inventory remainingQuantity is changed here with the Admin SDK so clients
  * cannot write stock counters directly.
  */
-// Same v1 builder as index.js. firebase-functions 6 has no root runWith.
-const functions = require("firebase-functions/v1");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
+
+const callableOptions = {
+  region: "us-central1",
+  memory: "256MiB",
+  enforceAppCheck: true,
+};
 
 const ALLOWED_ROLES = new Set(["super_admin", "admin", "partner"]);
 const CLAIM_PATCH_KEYS = new Set([
@@ -29,23 +34,23 @@ const CLAIM_PATCH_KEYS = new Set([
   "is_voucher",
 ]);
 
-function assertAppCheck(context) {
-  if (!context || context.app == null) {
-    throw new functions.https.HttpsError(
+function assertAppCheck(request) {
+  if (!request || request.app == null) {
+    throw new HttpsError(
       "failed-precondition",
       "App Check token is required.",
     );
   }
 }
 
-function assertSignedIn(context) {
-  if (!context.auth || !context.auth.uid) {
-    throw new functions.https.HttpsError("unauthenticated", "Sign-in is required.");
+function assertSignedIn(request) {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError("unauthenticated", "Sign-in is required.");
   }
 }
 
-function callerRole(context) {
-  return (context.auth.token && context.auth.token.role) || "";
+function callerRole(request) {
+  return (request.auth && request.auth.token && request.auth.token.role) || "";
 }
 
 function isStaffRole(role) {
@@ -183,13 +188,12 @@ async function recordShards(db, eventId, decrement) {
   }));
 }
 
-const callable = functions.runWith({ enforceAppCheck: true }).https;
-
-exports.setUserRole = callable.onCall(async (data, context) => {
-  assertAppCheck(context);
-  assertSignedIn(context);
-  if (callerRole(context) !== "super_admin") {
-    throw new functions.https.HttpsError(
+exports.setUserRole = onCall(callableOptions, async (request) => {
+  assertAppCheck(request);
+  assertSignedIn(request);
+  const data = request.data || {};
+  if (callerRole(request) !== "super_admin") {
+    throw new HttpsError(
       "permission-denied",
       "Only a super_admin can grant or remove roles.",
     );
@@ -199,10 +203,10 @@ exports.setUserRole = callable.onCall(async (data, context) => {
   const requestedRole = data && data.role != null ? String(data.role).trim() : "";
   const remove = requestedRole === "" || requestedRole === "none" || data.remove === true;
   if (!email || !email.includes("@")) {
-    throw new functions.https.HttpsError("invalid-argument", "A valid email is required.");
+    throw new HttpsError("invalid-argument", "A valid email is required.");
   }
   if (!remove && !ALLOWED_ROLES.has(requestedRole)) {
-    throw new functions.https.HttpsError(
+    throw new HttpsError(
       "invalid-argument",
       "role must be super_admin, admin, partner, or empty to remove.",
     );
@@ -211,13 +215,13 @@ exports.setUserRole = callable.onCall(async (data, context) => {
   const companySlug = String((data && data.companySlug) || "").trim().toLowerCase();
   const partnerAccess = String((data && data.partnerAccess) || "read").trim();
   if (!remove && requestedRole === "partner" && !companySlug) {
-    throw new functions.https.HttpsError(
+    throw new HttpsError(
       "invalid-argument",
       "companySlug is required when role is partner.",
     );
   }
   if (!remove && requestedRole === "partner" && partnerAccess !== "read" && partnerAccess !== "ops") {
-    throw new functions.https.HttpsError(
+    throw new HttpsError(
       "invalid-argument",
       "partnerAccess must be read or ops.",
     );
@@ -227,14 +231,14 @@ exports.setUserRole = callable.onCall(async (data, context) => {
   try {
     user = await admin.auth().getUserByEmail(email);
   } catch (err) {
-    throw new functions.https.HttpsError(
+    throw new HttpsError(
       "not-found",
       "No Firebase Auth user exists for that email. Create the email/password user first.",
     );
   }
 
-  if (user.uid === context.auth.uid && (remove || requestedRole !== "super_admin")) {
-    throw new functions.https.HttpsError(
+  if (user.uid === request.auth.uid && (remove || requestedRole !== "super_admin")) {
+    throw new HttpsError(
       "failed-precondition",
       "A super_admin cannot remove their own role.",
     );
@@ -264,7 +268,7 @@ exports.setUserRole = callable.onCall(async (data, context) => {
     companySlug: requestedRole === "partner" ? companySlug : admin.firestore.FieldValue.delete(),
     partnerAccess: requestedRole === "partner" ? partnerAccess : admin.firestore.FieldValue.delete(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedBy: context.auth.token.email || context.auth.uid,
+    updatedBy: request.auth.token.email || request.auth.uid,
   }, { merge: true });
 
   return {
@@ -277,33 +281,34 @@ exports.setUserRole = callable.onCall(async (data, context) => {
   };
 });
 
-exports.decrementCampaignPrize = callable.onCall(async (data, context) => {
-  assertAppCheck(context);
-  assertSignedIn(context);
+exports.decrementCampaignPrize = onCall(callableOptions, async (request) => {
+  assertAppCheck(request);
+  assertSignedIn(request);
+  const data = request.data || {};
 
   const eventId = String((data && data.eventId) || "").trim();
   const receiptId = String((data && data.receiptId) || "").trim();
   const decrements = sanitizeDecrements((data && data.decrements) || []);
   const patch = sanitizePatch(data && data.receiptPatch);
   if (!eventId || eventId.length > 128) {
-    throw new functions.https.HttpsError("invalid-argument", "eventId is required.");
+    throw new HttpsError("invalid-argument", "eventId is required.");
   }
   if (decrements.length === 0 && Object.keys(patch).length === 0) {
-    throw new functions.https.HttpsError("invalid-argument", "Nothing to claim.");
+    throw new HttpsError("invalid-argument", "Nothing to claim.");
   }
 
   const db = admin.firestore();
-  const role = callerRole(context);
+  const role = callerRole(request);
   const staff = isStaffRole(role);
   const partner = role === "partner";
-  const anonymous = context.auth.token.firebase &&
-    context.auth.token.firebase.sign_in_provider === "anonymous";
+  const anonymous = request.auth.token.firebase &&
+    request.auth.token.firebase.sign_in_provider === "anonymous";
 
   if (!staff && !partner && !anonymous) {
-    throw new functions.https.HttpsError("permission-denied", "This account cannot dispense gifts.");
+    throw new HttpsError("permission-denied", "This account cannot dispense gifts.");
   }
   if ((anonymous || partner) && !receiptId) {
-    throw new functions.https.HttpsError(
+    throw new HttpsError(
       "permission-denied",
       "A receipt id is required to dispense a gift.",
     );
@@ -315,17 +320,17 @@ exports.decrementCampaignPrize = callable.onCall(async (data, context) => {
   const result = await db.runTransaction(async (tx) => {
     const eventSnap = await tx.get(eventRef);
     if (!eventSnap.exists) {
-      throw new functions.https.HttpsError("not-found", "Campaign not found.");
+      throw new HttpsError("not-found", "Campaign not found.");
     }
     const event = eventSnap.data() || {};
     if (event.isActive !== true && !staff) {
-      throw new functions.https.HttpsError("failed-precondition", "Campaign is not active.");
+      throw new HttpsError("failed-precondition", "Campaign is not active.");
     }
     if (partner) {
-      const slug = String((context.auth.token && context.auth.token.companySlug) || "");
-      const access = String((context.auth.token && context.auth.token.partnerAccess) || "read");
+      const slug = String((request.auth.token && request.auth.token.companySlug) || "");
+      const access = String((request.auth.token && request.auth.token.partnerAccess) || "read");
       if (!slug || event.companySlug !== slug || access !== "ops") {
-        throw new functions.https.HttpsError("permission-denied", "Partner cannot dispense this campaign.");
+        throw new HttpsError("permission-denied", "Partner cannot dispense this campaign.");
       }
     }
 
@@ -333,23 +338,23 @@ exports.decrementCampaignPrize = callable.onCall(async (data, context) => {
     if (receiptRef) {
       const receiptSnap = await tx.get(receiptRef);
       if (!receiptSnap.exists) {
-        throw new functions.https.HttpsError("not-found", "Receipt not found.");
+        throw new HttpsError("not-found", "Receipt not found.");
       }
       receipt = receiptSnap.data() || {};
       const receiptCampaign = String(receipt.campaignId || receipt.event_id || "");
       if (!staff && receiptCampaign && receiptCampaign !== eventId) {
-        throw new functions.https.HttpsError("permission-denied", "Receipt is for a different campaign.");
+        throw new HttpsError("permission-denied", "Receipt is for a different campaign.");
       }
       if (anonymous || partner) {
-        if (receipt.submittedByUid !== context.auth.uid) {
-          throw new functions.https.HttpsError("permission-denied", "You can only claim your own receipt.");
+        if (receipt.submittedByUid !== request.auth.uid) {
+          throw new HttpsError("permission-denied", "You can only claim your own receipt.");
         }
         const played = receipt.game_played === true;
         const remaining = Number(
           receipt.remaining_chances != null ? receipt.remaining_chances : (receipt.chances_earned || 1),
         );
         if (played && remaining <= 0) {
-          throw new functions.https.HttpsError("failed-precondition", "This receipt was already claimed.");
+          throw new HttpsError("failed-precondition", "This receipt was already claimed.");
         }
       }
     }
@@ -361,14 +366,14 @@ exports.decrementCampaignPrize = callable.onCall(async (data, context) => {
     for (const decrement of decrements) {
       const index = findBestPrizeMatchIndex(prizes, decrement.prizeIdentifier, decrement);
       if (index === -1) {
-        throw new functions.https.HttpsError(
+        throw new HttpsError(
           "not-found",
           `No allocated prize matches ${decrement.prizeIdentifier}.`,
         );
       }
       const remaining = Number(prizes[index].remainingQuantity || 0);
       if (remaining < decrement.count) {
-        throw new functions.https.HttpsError("failed-precondition", "Not enough prize stock remaining.");
+        throw new HttpsError("failed-precondition", "Not enough prize stock remaining.");
       }
       prizes[index].remainingQuantity = remaining - decrement.count;
       applied.push({
