@@ -16,7 +16,7 @@
  * Run from the functions directory:
  *   node scripts/bootstrap-super-admin.js
  */
-const admin = require("firebase-admin");
+const admin = require("../admin_sdk");
 
 const DEFAULT_SUPER_ADMIN_EMAIL = "support@sw-point.com";
 

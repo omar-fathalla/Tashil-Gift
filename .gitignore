@@ -46,6 +46,7 @@ app.*.map.json
 /android/app/release
 
 # Rules unit tests
+functions/node_modules/
 rules-tests/node_modules/
 rules-tests/firestore.rules
 rules-tests/storage.rules

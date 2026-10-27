@@ -1,6 +1,6 @@
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
-const admin = require("firebase-admin");
+const admin = require("./admin_sdk");
 const { verifyReceiptImage } = require("./receipt_verification");
 const { applyCampaignPrizeClaim } = require("./security_functions");
 const { handleWahaWebhook } = require("./waha_webhook");
