@@ -3,6 +3,7 @@
  * Client never holds GEMINI_API_KEY — this Function injects it from Secrets.
  */
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { consumeRateLimit, clientKey, RateLimitError } = require("./rate_limit");
 
 const ALLOWED_MODELS = new Set([
   "gemini-2.0-flash",
@@ -72,7 +73,7 @@ function estimateInlineBytes(contents) {
  * @param {import('firebase-functions/params').SecretParam} options.geminiApiKey
  * @param {object} options.callableOptions
  */
-function createGeminiGenerate({ geminiApiKey, callableOptions }) {
+function createGeminiGenerate({ geminiApiKey, callableOptions, getDb }) {
   return onCall(
     {
       ...callableOptions,
@@ -89,6 +90,21 @@ function createGeminiGenerate({ geminiApiKey, callableOptions }) {
           "unauthenticated",
           "Authentication is required (anonymous auth is OK).",
         );
+      }
+
+      if (getDb) {
+        try {
+          await consumeRateLimit({
+            db: getDb(),
+            scope: "gemini",
+            key: clientKey({ uid: request.auth.uid, rawRequest: request.rawRequest }),
+          });
+        } catch (err) {
+          if (err instanceof RateLimitError) {
+            throw new HttpsError("resource-exhausted", err.message, { retryAfterSec: err.retryAfterSec });
+          }
+          throw err;
+        }
       }
 
       const data = request.data || {};

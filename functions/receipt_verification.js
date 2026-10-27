@@ -98,6 +98,7 @@ async function verifyReceiptImage({
   imagePayload,
   forceRefresh = false,
   apiKey,
+  rateLimitKey,
   callGeminiModelFn,
 }) {
   const modelFn = callGeminiModelFn || (async ({ branches, products, imageHash }) => {
@@ -120,6 +121,7 @@ async function verifyReceiptImage({
     campaignId,
     imagePayload,
     forceRefresh,
+    rateLimitKey,
     callGeminiModelFn: modelFn,
   });
 }

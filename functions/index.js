@@ -4,6 +4,7 @@ const admin = require("./admin_sdk");
 const { verifyReceiptImage } = require("./receipt_verification");
 const { applyCampaignPrizeClaim } = require("./security_functions");
 const { handleWahaWebhook } = require("./waha_webhook");
+const { consumeRateLimit, clientKey, RateLimitError } = require("./rate_limit");
 const {
   updateWhatsappWebhookConfig,
   manageWhatsappSenderLink,
@@ -406,6 +407,10 @@ exports.analyzeReceipt = onCall(
         imagePayload,
         forceRefresh: forceRefresh === true,
         apiKey,
+        rateLimitKey: clientKey({
+          uid: request.auth && request.auth.uid,
+          rawRequest: request.rawRequest,
+        }),
       });
     } catch (err) {
       console.error("Gemini gateway analysis failed:", err);
@@ -522,6 +527,17 @@ exports.wahaProxy = onRequest(
     }
 
     try {
+      await consumeRateLimit({ db, scope: "waha", key: clientKey({ uid: authed.uid, rawRequest: req }) });
+    } catch (err) {
+      if (err instanceof RateLimitError) {
+        res.set("Retry-After", String(err.retryAfterSec));
+        return res.status(429).json({ error: "RESOURCE_EXHAUSTED", message: err.message });
+      }
+      console.error("wahaProxy rate limit check failed:", err);
+      return res.status(503).json({ error: "RATE_LIMIT_UNAVAILABLE", message: "Try again shortly." });
+    }
+
+    try {
       let targetUrl = req.url || "/";
       // Strip leading /waha if present in the rewrite path
       if (targetUrl.startsWith("/waha")) {
@@ -600,6 +616,7 @@ const { createGeminiGenerate } = require("./gemini_generate");
 exports.geminiGenerate = createGeminiGenerate({
   geminiApiKey,
   callableOptions,
+  getDb: () => db,
 });
 
 Object.assign(exports, require("./security_functions"));

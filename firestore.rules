@@ -257,6 +257,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // M3: server-only per-client rate limit counters.
+    match /rateLimits/{docId} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
