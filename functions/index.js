@@ -546,8 +546,8 @@ exports.wahaProxy = onRequest(
         });
       }
 
-      // Backend host may still be overridden with WAHA_BACKEND_URL env; IP fallback kept for ops.
-      const backendUrl = (process.env.WAHA_BACKEND_URL || "http://76.13.14.23:3000") + targetUrl;
+      // Backend host may still be overridden with WAHA_BACKEND_URL env; HTTPS default after C1 hardening.
+      const backendUrl = (process.env.WAHA_BACKEND_URL || "https://waha.sw-point.com") + targetUrl;
 
       const forwardHeaders = {
         // Server-owned secret only — never forward client X-Api-Key / Authorization.
@@ -618,7 +618,7 @@ exports.wahaWebhook = onRequest({
     secret: wahaWebhookSecret.value(),
     apiKey: wahaApiKey.value(),
     db: admin.firestore(),
-    baseUrl: process.env.WAHA_BACKEND_URL || "http://76.13.14.23:3000",
+    baseUrl: process.env.WAHA_BACKEND_URL || "https://waha.sw-point.com",
     verifyReceiptImage: (input) => verifyReceiptImage(Object.assign({}, input, {
       apiKey: geminiApiKey.value(),
     })),
