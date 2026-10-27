@@ -225,6 +225,27 @@ service cloud.firestore {
       }
     }
 
+    // WhatsApp webhook state is written only by the Admin SDK (wahaWebhook).
+    match /whatsapp_inbound_messages/{messageId} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    match /whatsapp_message_status/{messageId} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    match /whatsapp_outbox/{messageId} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    match /whatsapp_sender_links/{phone} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

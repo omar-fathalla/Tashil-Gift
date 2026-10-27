@@ -1,10 +1,14 @@
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
+const { verifyReceiptImage } = require("./receipt_verification");
+const { applyCampaignPrizeClaim } = require("./security_functions");
+const { handleWahaWebhook } = require("./waha_webhook");
 
 // Firebase Secrets (set via: firebase functions:secrets:set NAME)
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 const wahaApiKey = defineSecret("WAHA_API_KEY");
+const wahaWebhookSecret = defineSecret("WAHA_WEBHOOK_SECRET");
 
 // Production functions are already 2nd gen in us-central1 with 256MiB.
 // These options keep a deploy as an in-place update of the same Cloud Run services.
@@ -366,96 +370,11 @@ exports.sharePreview = onRequest(httpsOptions, async (req, res) => {
   }
 });
 
-const { analyzeReceiptWithGateway } = require("./gemini_gateway");
-
 /**
  * Cloud Function: analyzeReceipt
- * Proxies and accelerates receipt verification with LRU caching, rate limiting, and exponential backoff retry.
+ * Gateway cache, rate limit, and the shared Gemini callback in receipt_verification.js.
+ * wahaWebhook calls the same verifyReceiptImage helper.
  */
-/**
- * Calls Gemini generateContent with the server-side API key.
- * Client must never hold GEMINI_API_KEY.
- */
-async function callGeminiForReceipt({ apiKey, imagePayload, branches, products, imageHash }) {
-  let mimeType = "image/jpeg";
-  let base64Data = imagePayload;
-  if (typeof imagePayload === "string" && imagePayload.startsWith("data:")) {
-    const match = imagePayload.match(/^data:([^;]+);base64,(.+)$/s);
-    if (match) {
-      mimeType = match[1];
-      base64Data = match[2];
-    }
-  }
-
-  const prompt =
-    "You are a retail receipt OCR assistant for Tashil Gift. " +
-    "Extract structured fields and decide if the receipt is valid for the campaign. " +
-    "Known branches: " + JSON.stringify(branches || []) + ". " +
-    "Eligible products: " + JSON.stringify(products || []) + ". " +
-    "Respond with ONLY compact JSON keys: isValid (bool), receiptNumber, storeChainDetected, " +
-    "branchDetected, isBranchMatched (bool), message.";
-
-  const url =
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" +
-    encodeURIComponent(apiKey);
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [
-        {
-          role: "user",
-          parts: [
-            { text: prompt },
-            { inline_data: { mime_type: mimeType, data: base64Data } },
-          ],
-        },
-      ],
-      generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
-    }),
-  });
-
-  if (!response.ok) {
-    const errBody = await response.text();
-    const error = new Error("Gemini HTTP " + response.status + ": " + errBody.slice(0, 300));
-    error.code = response.status;
-    throw error;
-  }
-
-  const payload = await response.json();
-  const text =
-    (((payload || {}).candidates || [])[0] || {}).content?.parts
-      ?.map((p) => p.text || "")
-      .join("") || "";
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    try {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return {
-        isValid: parsed.isValid === true,
-        receiptNumber: String(parsed.receiptNumber || ("EXT-" + imageHash.substring(0, 8).toUpperCase())),
-        storeChainDetected: String(parsed.storeChainDetected || ""),
-        branchDetected: String(parsed.branchDetected || (branches[0] || "")),
-        isBranchMatched: parsed.isBranchMatched === true,
-        message: String(parsed.message || "تم التحليل عبر Gemini Gateway"),
-      };
-    } catch (_) {
-      // fall through
-    }
-  }
-
-  return {
-    isValid: false,
-    receiptNumber: "EXT-" + imageHash.substring(0, 8).toUpperCase(),
-    storeChainDetected: "",
-    branchDetected: branches[0] || "",
-    isBranchMatched: false,
-    message: "تعذر تفسير رد Gemini",
-    rawText: text.slice(0, 500),
-  };
-}
-
 exports.analyzeReceipt = onCall(
   { ...callableOptions, secrets: [geminiApiKey] },
   async (request) => {
@@ -477,20 +396,12 @@ exports.analyzeReceipt = onCall(
     }
 
     try {
-      return await analyzeReceiptWithGateway({
+      return await verifyReceiptImage({
         db,
         campaignId,
         imagePayload,
         forceRefresh: forceRefresh === true,
-        callGeminiModelFn: async ({ branches, products, imageHash }) => {
-          return callGeminiForReceipt({
-            apiKey,
-            imagePayload,
-            branches,
-            products,
-            imageHash,
-          });
-        },
+        apiKey,
       });
     } catch (err) {
       console.error("Gemini gateway analysis failed:", err);
@@ -687,3 +598,27 @@ exports.geminiGenerate = createGeminiGenerate({
 });
 
 Object.assign(exports, require("./security_functions"));
+
+/**
+ * Cloud Function: wahaWebhook
+ * Server-to-server WAHA receiver. Auth is WAHA_WEBHOOK_SECRET (header + HMAC), not App Check.
+ * Runs on the codebase runtime (nodejs22).
+ */
+exports.wahaWebhook = onRequest({
+  region: "us-central1",
+  memory: "256MiB",
+  invoker: "public",
+  secrets: [wahaWebhookSecret, wahaApiKey, geminiApiKey],
+}, async (req, res) => {
+  return handleWahaWebhook(req, res, {
+    secret: wahaWebhookSecret.value(),
+    apiKey: wahaApiKey.value(),
+    db: admin.firestore(),
+    baseUrl: process.env.WAHA_BACKEND_URL || "http://76.13.14.23:3000",
+    verifyReceiptImage: (input) => verifyReceiptImage(Object.assign({}, input, {
+      apiKey: geminiApiKey.value(),
+    })),
+    applyCampaignPrizeClaim,
+    serverTimestamp: () => admin.firestore.FieldValue.serverTimestamp(),
+  });
+});

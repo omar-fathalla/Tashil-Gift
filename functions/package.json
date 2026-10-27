@@ -16,6 +16,7 @@
   },
   "private": true,
   "scripts": {
-    "bootstrap:super-admin": "node scripts/bootstrap-super-admin.js"
+    "bootstrap:super-admin": "node scripts/bootstrap-super-admin.js",
+    "test": "node --test test/waha_webhook.test.js test/receipt_verification.test.js && node test/gemini_gateway_test.js"
   }
 }

@@ -222,6 +222,22 @@ describe("staff and partner claims", () => {
     await assertSucceeds(updateDoc(doc(partnerOps(), "receipts_transactions/owned"), { status: "rejected" }));
   });
 
+  test("whatsapp webhook collections are readable only by super_admin", async () => {
+    const paths = [
+      "whatsapp_inbound_messages/msg-1",
+      "whatsapp_message_status/msg-1",
+      "whatsapp_outbox/msg-1",
+      "whatsapp_sender_links/201012345678",
+    ];
+    for (const path of paths) {
+      await assertSucceeds(getDoc(doc(superAdmin(), path)));
+      await assertFails(setDoc(doc(superAdmin(), path), { status: "stored" }));
+      await assertFails(getDoc(doc(admin(), path)));
+      await assertFails(setDoc(doc(admin(), path), { status: "stored" }));
+      await assertFails(getDoc(doc(anon(), path)));
+    }
+  });
+
   test("unauthenticated clients cannot read or write", async () => {
     const db = testEnv.unauthenticatedContext().firestore();
     await assertFails(getDoc(doc(db, "events/camp-1")));

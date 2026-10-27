@@ -281,30 +281,29 @@ exports.setUserRole = onCall(callableOptions, async (request) => {
   };
 });
 
-exports.decrementCampaignPrize = onCall(callableOptions, async (request) => {
-  assertAppCheck(request);
-  assertSignedIn(request);
-  const data = request.data || {};
+/**
+ * Same Firestore transaction the callable uses: events.allocatedPrizes and
+ * receipts_transactions, then sharded counters. `actor.allowCreateReceipt`
+ * lets the WhatsApp webhook insert the receipt inside that transaction.
+ */
+async function applyCampaignPrizeClaim(db, input) {
+  const eventId = String((input && input.eventId) || "").trim();
+  const receiptId = String((input && input.receiptId) || "").trim();
+  const decrements = sanitizeDecrements((input && input.decrements) || []);
+  const patch = sanitizePatch(input && input.receiptPatch);
+  const actor = input.actor || {};
+  const staff = actor.staff === true;
+  const partner = actor.partner === true;
+  const anonymous = actor.anonymous === true;
+  const system = actor.system === true;
 
-  const eventId = String((data && data.eventId) || "").trim();
-  const receiptId = String((data && data.receiptId) || "").trim();
-  const decrements = sanitizeDecrements((data && data.decrements) || []);
-  const patch = sanitizePatch(data && data.receiptPatch);
   if (!eventId || eventId.length > 128) {
     throw new HttpsError("invalid-argument", "eventId is required.");
   }
-  if (decrements.length === 0 && Object.keys(patch).length === 0) {
+  if (decrements.length === 0 && Object.keys(patch).length === 0 && !input.receiptCreate) {
     throw new HttpsError("invalid-argument", "Nothing to claim.");
   }
-
-  const db = admin.firestore();
-  const role = callerRole(request);
-  const staff = isStaffRole(role);
-  const partner = role === "partner";
-  const anonymous = request.auth.token.firebase &&
-    request.auth.token.firebase.sign_in_provider === "anonymous";
-
-  if (!staff && !partner && !anonymous) {
+  if (!staff && !partner && !anonymous && !system) {
     throw new HttpsError("permission-denied", "This account cannot dispense gifts.");
   }
   if ((anonymous || partner) && !receiptId) {
@@ -327,34 +326,42 @@ exports.decrementCampaignPrize = onCall(callableOptions, async (request) => {
       throw new HttpsError("failed-precondition", "Campaign is not active.");
     }
     if (partner) {
-      const slug = String((request.auth.token && request.auth.token.companySlug) || "");
-      const access = String((request.auth.token && request.auth.token.partnerAccess) || "read");
+      const slug = String((actor.token && actor.token.companySlug) || "");
+      const access = String((actor.token && actor.token.partnerAccess) || "read");
       if (!slug || event.companySlug !== slug || access !== "ops") {
         throw new HttpsError("permission-denied", "Partner cannot dispense this campaign.");
       }
     }
 
     let receipt = null;
+    let createdReceipt = false;
     if (receiptRef) {
       const receiptSnap = await tx.get(receiptRef);
       if (!receiptSnap.exists) {
-        throw new HttpsError("not-found", "Receipt not found.");
-      }
-      receipt = receiptSnap.data() || {};
-      const receiptCampaign = String(receipt.campaignId || receipt.event_id || "");
-      if (!staff && receiptCampaign && receiptCampaign !== eventId) {
-        throw new HttpsError("permission-denied", "Receipt is for a different campaign.");
-      }
-      if (anonymous || partner) {
-        if (receipt.submittedByUid !== request.auth.uid) {
-          throw new HttpsError("permission-denied", "You can only claim your own receipt.");
+        if (!(actor.allowCreateReceipt && input.receiptCreate)) {
+          throw new HttpsError("not-found", "Receipt not found.");
         }
-        const played = receipt.game_played === true;
-        const remaining = Number(
-          receipt.remaining_chances != null ? receipt.remaining_chances : (receipt.chances_earned || 1),
-        );
-        if (played && remaining <= 0) {
-          throw new HttpsError("failed-precondition", "This receipt was already claimed.");
+        receipt = input.receiptCreate;
+        createdReceipt = true;
+      } else {
+        receipt = receiptSnap.data() || {};
+        const receiptCampaign = String(receipt.campaignId || receipt.event_id || "");
+        if (!staff && receiptCampaign && receiptCampaign !== eventId) {
+          throw new HttpsError("permission-denied", "Receipt is for a different campaign.");
+        }
+        if (anonymous || partner) {
+          if (receipt.submittedByUid !== actor.uid) {
+            throw new HttpsError("permission-denied", "You can only claim your own receipt.");
+          }
+        }
+        if (anonymous || partner || system) {
+          const played = receipt.game_played === true;
+          const remaining = Number(
+            receipt.remaining_chances != null ? receipt.remaining_chances : (receipt.chances_earned || 1),
+          );
+          if (played && remaining <= 0) {
+            throw new HttpsError("failed-precondition", "This receipt was already claimed.");
+          }
         }
       }
     }
@@ -386,10 +393,12 @@ exports.decrementCampaignPrize = onCall(callableOptions, async (request) => {
     if (decrements.length > 0) {
       tx.update(eventRef, { allocatedPrizes: prizes });
     }
-    if (receiptRef && Object.keys(patch).length > 0) {
-      tx.set(receiptRef, Object.assign({}, patch, {
-        claim_processed_at: admin.firestore.FieldValue.serverTimestamp(),
-      }), { merge: true });
+    if (receiptRef && (createdReceipt || Object.keys(patch).length > 0)) {
+      const payload = createdReceipt
+        ? Object.assign({}, receipt, patch)
+        : Object.assign({}, patch);
+      payload.claim_processed_at = admin.firestore.FieldValue.serverTimestamp();
+      tx.set(receiptRef, payload, { merge: true });
     }
     return { applied, hadReceipt: !!receipt };
   });
@@ -399,4 +408,29 @@ exports.decrementCampaignPrize = onCall(callableOptions, async (request) => {
   })));
 
   return { ok: true, eventId, receiptId: receiptId || null, applied: result.applied };
+}
+
+exports.applyCampaignPrizeClaim = applyCampaignPrizeClaim;
+
+exports.decrementCampaignPrize = onCall(callableOptions, async (request) => {
+  assertAppCheck(request);
+  assertSignedIn(request);
+  const data = request.data || {};
+  const token = request.auth.token || {};
+  const role = callerRole(request);
+  return applyCampaignPrizeClaim(admin.firestore(), {
+    eventId: data.eventId,
+    receiptId: data.receiptId,
+    decrements: data.decrements,
+    receiptPatch: data.receiptPatch,
+    actor: {
+      staff: isStaffRole(role),
+      partner: role === "partner",
+      anonymous: !!(token.firebase && token.firebase.sign_in_provider === "anonymous"),
+      system: false,
+      allowCreateReceipt: false,
+      uid: request.auth.uid,
+      token,
+    },
+  });
 });
