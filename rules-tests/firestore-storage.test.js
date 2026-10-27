@@ -297,4 +297,15 @@ describe("storage rules", () => {
       contentType: "text/plain",
     }));
   });
+
+  test("SVG uploads are rejected even for staff (L3)", async () => {
+    const staff = contextFor("super-1", { role: "super_admin" });
+    const svg = new TextEncoder().encode("<svg xmlns='http://www.w3.org/2000/svg'/>");
+    await assertFails(uploadBytes(ref(staff.storage(), "company_logos/x.svg"), svg, {
+      contentType: "image/svg+xml",
+    }));
+    await assertSucceeds(uploadBytes(ref(staff.storage(), "company_logos/x.png"), jpeg, {
+      contentType: "image/png",
+    }));
+  });
 });

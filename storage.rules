@@ -24,7 +24,8 @@ service firebase.storage {
     function isImageUpload() {
       return request.resource != null
         && request.resource.size < 15 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*');
+        && request.resource.contentType.matches('image/(jpeg|png|webp|gif|heic|heif)');
+      // SVG is blocked: logos/gifts are publicly readable and SVG can carry script.
     }
 
     function uploaderMatches() {

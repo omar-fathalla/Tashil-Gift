@@ -125,7 +125,8 @@ service cloud.firestore {
         || (isAnonymous() && validAnonymousReceipt(request.resource.data))
         || (isPartnerOps()
             && sameCompany(request.resource.data.companySlug)
-            && request.resource.data.submittedByUid == request.auth.uid);
+            && request.resource.data.submittedByUid == request.auth.uid
+            && request.resource.data.keys().size() <= 80);
       allow update: if isAdmin() || partnerReceiptUpdate();
       allow delete: if isAdmin();
     }
@@ -195,9 +196,11 @@ service cloud.firestore {
 
     match /marketing_contacts/{contactId} {
       allow read: if isAdmin() || sameCompany(resource.data.companySlug);
-      allow create: if isAdmin() || (isPartner() && sameCompany(request.resource.data.companySlug));
+      allow create: if isAdmin()
+        || (sameCompany(request.resource.data.companySlug)
+            && request.resource.data.keys().size() <= 40);
       allow update: if isAdmin()
-        || (isPartner()
+        || (request.resource.data.keys().size() <= 40
             && sameCompany(resource.data.companySlug)
             && sameCompany(request.resource.data.companySlug));
       allow delete: if isAdmin() || (isPartner() && sameCompany(resource.data.companySlug));
@@ -209,7 +212,9 @@ service cloud.firestore {
 
     match /portal_access_logs/{logId} {
       allow read: if isAdmin();
-      allow create: if isAdmin() || (isPartner() && sameCompany(request.resource.data.companySlug));
+      allow create: if isAdmin()
+        || (sameCompany(request.resource.data.companySlug)
+            && request.resource.data.keys().size() <= 30);
       allow update, delete: if isAdmin();
     }
 
