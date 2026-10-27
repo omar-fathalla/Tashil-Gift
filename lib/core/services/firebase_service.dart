@@ -1,3 +1,4 @@
+import 'anonymous_session_policy.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -157,6 +158,7 @@ class FirebaseService {
 
   Future<void> ensureAuthenticatedSession() async {
     if (_auth.currentUser != null) return;
+    if (!routeNeedsAnonymousSession(Uri.base)) return;
     try {
       await _auth.signInAnonymously();
     } catch (_) {}
@@ -171,7 +173,9 @@ class FirebaseService {
     } catch (_) {}
     try {
       await _auth.signOut();
-      await _auth.signInAnonymously();
+      if (routeNeedsAnonymousSession(Uri.base)) {
+        await _auth.signInAnonymously();
+      }
     } catch (_) {}
   }
 

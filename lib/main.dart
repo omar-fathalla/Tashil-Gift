@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'core/services/anonymous_session_policy.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -41,9 +42,11 @@ void main() async {
   );
   await activateFirebaseAppCheck();
 
-  // Field reps never see a login form. Anonymous Auth is their only session.
+  // Field reps never see a login form. Anonymous Auth is their only session,
+  // so it is created only on public link routes, not on admin visits (M4).
   try {
-    if (FirebaseAuth.instance.currentUser == null) {
+    if (FirebaseAuth.instance.currentUser == null &&
+        routeNeedsAnonymousSession(Uri.base)) {
       await FirebaseAuth.instance
           .signInAnonymously()
           .timeout(const Duration(seconds: 8));
