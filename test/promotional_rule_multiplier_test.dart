@@ -4,9 +4,9 @@ import 'package:al_mraay/core/services/ai_receipt_service.dart';
 import 'package:al_mraay/features/admin/domain/event_model.dart';
 
 void main() {
-  test('AiConfig resolves valid Tier 1 paid API key', () {
-    expect(AiConfig.geminiApiKey, 'REMOVED_SECRET');
-    expect(AiConfig.geminiApiKey.length, greaterThan(20));
+  test('AiConfig exposes model selection without any client API key', () {
+    expect(AiConfig.primaryModel, isNotEmpty);
+    expect(AiConfig.fallbackModel, isNotEmpty);
   });
 
   group('Promotional Rule Multiplier & Multi-Voucher Award Tests', () {

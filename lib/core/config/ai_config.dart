@@ -1,24 +1,9 @@
-import 'dart:convert';
-
-/// Centralized AI Configuration, Dynamic Model Selection & Key Management
+/// Centralized AI Configuration & Dynamic Model Selection
 ///
-/// Supports dynamic injection via `--dart-define=GEMINI_API_KEY=...`
-/// with a secure runtime fallback to prevent IDE secret scanner warnings.
+/// The Gemini API key must NEVER ship in the client binary.
+/// All Gemini traffic goes through the `geminiGenerate` Cloud Function,
+/// which reads `GEMINI_API_KEY` from Firebase Secrets.
 class AiConfig {
-  static const String _envKey = String.fromEnvironment('GEMINI_API_KEY');
-
-  // Obfuscated base64 parts for Tier 1 Gemini AI Studio API Key (Charged & Active)
-  static const String _k1 = 'REMOVED_SECRET';
-  static const String _k2 = 'REMOVED_SECRET';
-
-  /// Returns the active Gemini API Key
-  static String get geminiApiKey {
-    if (_envKey.isNotEmpty) {
-      return _envKey;
-    }
-    return utf8.decode(base64.decode('$_k1$_k2'));
-  }
-
   // --- Dynamic Model & Agent In-Memory State ---
   static String _primaryModel = 'gemini-3.7-flash';
   static String _fallbackModel = 'gemini-3.6-flash';
@@ -28,7 +13,6 @@ class AiConfig {
   static int _thinkingBudget = 0;
 
   /// Returns the currently active global primary model identifier
-  /// (e.g. 'gemini-3.7-flash', 'gemini-3.8-flash', 'gemini-3.8-pro', or custom model)
   static String get primaryModel => _primaryModel;
 
   /// Returns the active fallback model identifier

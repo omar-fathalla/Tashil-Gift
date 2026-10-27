@@ -88,13 +88,13 @@ class WhatsAppGatewayConfigModel {
   const WhatsAppGatewayConfigModel({
     this.provider = WhatsAppGatewayProvider.waha,
     this.instanceId = 'default',
-    this.apiToken = 'tashil_secret_token_2026',
-    this.customEndpointUrl = 'http://76.13.14.23:3000',
+    this.apiToken = '',
+    this.customEndpointUrl = '',
     this.delayBetweenMessagesSeconds = 3,
     this.isEnabled = true,
     this.lastTestedAt,
-    this.isConnected = true,
-    this.connectedPhoneNumber = '+201508899965',
+    this.isConnected = false,
+    this.connectedPhoneNumber,
     this.enableTypingSimulation = true,
     this.typingDurationSeconds = 2,
     this.enableAiAutoReply = false,
@@ -104,7 +104,11 @@ class WhatsAppGatewayConfigModel {
   });
 
   bool get isConfigured {
-    if (provider == WhatsAppGatewayProvider.waha || provider == WhatsAppGatewayProvider.custom) {
+    // WAHA uses the HTTPS Cloud proxy which injects the server secret.
+    if (provider == WhatsAppGatewayProvider.waha) {
+      return true;
+    }
+    if (provider == WhatsAppGatewayProvider.custom) {
       return customEndpointUrl.trim().isNotEmpty;
     }
     return instanceId.trim().isNotEmpty && apiToken.trim().isNotEmpty;

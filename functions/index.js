@@ -1,5 +1,10 @@
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
+const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
+
+// Firebase Secrets (set via: firebase functions:secrets:set NAME)
+const geminiApiKey = defineSecret("GEMINI_API_KEY");
+const wahaApiKey = defineSecret("WAHA_API_KEY");
 
 // Production functions are already 2nd gen in us-central1 with 256MiB.
 // These options keep a deploy as an in-place update of the same Cloud Run services.
@@ -367,123 +372,318 @@ const { analyzeReceiptWithGateway } = require("./gemini_gateway");
  * Cloud Function: analyzeReceipt
  * Proxies and accelerates receipt verification with LRU caching, rate limiting, and exponential backoff retry.
  */
-exports.analyzeReceipt = onCall(callableOptions, async (request) => {
-  if (!request.app) {
-    throw new HttpsError("failed-precondition", "App Check token is required.");
-  }
-  const data = request.data || {};
-  const { campaignId, imagePayload, forceRefresh } = data;
-  if (!imagePayload) {
-    throw new HttpsError("invalid-argument", "imagePayload is required");
+/**
+ * Calls Gemini generateContent with the server-side API key.
+ * Client must never hold GEMINI_API_KEY.
+ */
+async function callGeminiForReceipt({ apiKey, imagePayload, branches, products, imageHash }) {
+  let mimeType = "image/jpeg";
+  let base64Data = imagePayload;
+  if (typeof imagePayload === "string" && imagePayload.startsWith("data:")) {
+    const match = imagePayload.match(/^data:([^;]+);base64,(.+)$/s);
+    if (match) {
+      mimeType = match[1];
+      base64Data = match[2];
+    }
   }
 
-  try {
-    return await analyzeReceiptWithGateway({
-      db,
-      campaignId,
-      imagePayload,
-      forceRefresh: forceRefresh === true,
-      callGeminiModelFn: async ({ branches, products, imageHash }) => {
-        // Mock / placeholder implementation for standalone function invocation
-        return {
-          isValid: true,
-          receiptNumber: "EXT-" + imageHash.substring(0, 8).toUpperCase(),
-          storeChainDetected: "Gomla Market",
-          branchDetected: branches[0] || "Main Branch",
-          isBranchMatched: true,
-          message: "تم التحقق بنجاح من الفاتورة عبر مسار Gemini Gateway",
-        };
-      },
-    });
-  } catch (err) {
-    console.error("Gemini gateway analysis failed:", err);
-    if (err.code === 429) {
-      throw new HttpsError("resource-exhausted", err.message);
-    }
-    throw new HttpsError("internal", err.message);
+  const prompt =
+    "You are a retail receipt OCR assistant for Tashil Gift. " +
+    "Extract structured fields and decide if the receipt is valid for the campaign. " +
+    "Known branches: " + JSON.stringify(branches || []) + ". " +
+    "Eligible products: " + JSON.stringify(products || []) + ". " +
+    "Respond with ONLY compact JSON keys: isValid (bool), receiptNumber, storeChainDetected, " +
+    "branchDetected, isBranchMatched (bool), message.";
+
+  const url =
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" +
+    encodeURIComponent(apiKey);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: prompt },
+            { inline_data: { mime_type: mimeType, data: base64Data } },
+          ],
+        },
+      ],
+      generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
+    }),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    const error = new Error("Gemini HTTP " + response.status + ": " + errBody.slice(0, 300));
+    error.code = response.status;
+    throw error;
   }
-});
+
+  const payload = await response.json();
+  const text =
+    (((payload || {}).candidates || [])[0] || {}).content?.parts
+      ?.map((p) => p.text || "")
+      .join("") || "";
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        isValid: parsed.isValid === true,
+        receiptNumber: String(parsed.receiptNumber || ("EXT-" + imageHash.substring(0, 8).toUpperCase())),
+        storeChainDetected: String(parsed.storeChainDetected || ""),
+        branchDetected: String(parsed.branchDetected || (branches[0] || "")),
+        isBranchMatched: parsed.isBranchMatched === true,
+        message: String(parsed.message || "تم التحليل عبر Gemini Gateway"),
+      };
+    } catch (_) {
+      // fall through
+    }
+  }
+
+  return {
+    isValid: false,
+    receiptNumber: "EXT-" + imageHash.substring(0, 8).toUpperCase(),
+    storeChainDetected: "",
+    branchDetected: branches[0] || "",
+    isBranchMatched: false,
+    message: "تعذر تفسير رد Gemini",
+    rawText: text.slice(0, 500),
+  };
+}
+
+exports.analyzeReceipt = onCall(
+  { ...callableOptions, secrets: [geminiApiKey] },
+  async (request) => {
+    if (!request.app) {
+      throw new HttpsError("failed-precondition", "App Check token is required.");
+    }
+    const data = request.data || {};
+    const { campaignId, imagePayload, forceRefresh } = data;
+    if (!imagePayload) {
+      throw new HttpsError("invalid-argument", "imagePayload is required");
+    }
+
+    const apiKey = geminiApiKey.value();
+    if (!apiKey) {
+      throw new HttpsError(
+        "failed-precondition",
+        "GEMINI_API_KEY secret is not configured on the server.",
+      );
+    }
+
+    try {
+      return await analyzeReceiptWithGateway({
+        db,
+        campaignId,
+        imagePayload,
+        forceRefresh: forceRefresh === true,
+        callGeminiModelFn: async ({ branches, products, imageHash }) => {
+          return callGeminiForReceipt({
+            apiKey,
+            imagePayload,
+            branches,
+            products,
+            imageHash,
+          });
+        },
+      });
+    } catch (err) {
+      console.error("Gemini gateway analysis failed:", err);
+      if (err.code === 429) {
+        throw new HttpsError("resource-exhausted", err.message);
+      }
+      throw new HttpsError("internal", err.message);
+    }
+  },
+);
+
+const WAHA_PROXY_ALLOWED_ORIGINS = new Set([
+  "https://tashil-gift.web.app",
+  "https://tashil-gift.firebaseapp.com",
+  "https://gift.sw-point.com",
+]);
+const WAHA_PROXY_ALLOWED_ROLES = new Set(["super_admin", "admin", "partner"]);
+
+function applyWahaProxyCors(req, res) {
+  const origin = req.headers.origin;
+  if (origin && WAHA_PROXY_ALLOWED_ORIGINS.has(origin)) {
+    res.set("Access-Control-Allow-Origin", origin);
+    res.set("Vary", "Origin");
+  }
+  res.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH");
+  res.set(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, Accept, X-Firebase-AppCheck",
+  );
+  res.set("Access-Control-Max-Age", "3600");
+}
+
+async function requireWahaProxyAuth(req, res) {
+  const appCheckHeader = req.headers["x-firebase-appcheck"];
+  if (!appCheckHeader || typeof appCheckHeader !== "string") {
+    res.status(401).json({
+      error: "UNAUTHENTICATED",
+      message: "Missing X-Firebase-AppCheck header.",
+    });
+    return null;
+  }
+  try {
+    await admin.appCheck().verifyToken(appCheckHeader);
+  } catch (err) {
+    console.warn("wahaProxy App Check rejected:", err && err.message);
+    res.status(401).json({
+      error: "UNAUTHENTICATED",
+      message: "Invalid App Check token.",
+    });
+    return null;
+  }
+
+  const authHeader = req.headers.authorization || "";
+  const match = /^Bearer\s+(.+)$/i.exec(authHeader);
+  if (!match) {
+    res.status(401).json({
+      error: "UNAUTHENTICATED",
+      message: "Missing Authorization Bearer Firebase ID token.",
+    });
+    return null;
+  }
+
+  let decoded;
+  try {
+    decoded = await admin.auth().verifyIdToken(match[1], true);
+  } catch (err) {
+    console.warn("wahaProxy ID token rejected:", err && err.message);
+    res.status(401).json({
+      error: "UNAUTHENTICATED",
+      message: "Invalid Firebase ID token.",
+    });
+    return null;
+  }
+
+  if (decoded.firebase && decoded.firebase.sign_in_provider === "anonymous") {
+    res.status(403).json({
+      error: "PERMISSION_DENIED",
+      message: "Anonymous users cannot use the WhatsApp proxy.",
+    });
+    return null;
+  }
+
+  const role = decoded.role ? String(decoded.role) : "";
+  if (!WAHA_PROXY_ALLOWED_ROLES.has(role)) {
+    res.status(403).json({
+      error: "PERMISSION_DENIED",
+      message: "WhatsApp proxy requires role super_admin, admin, or partner.",
+    });
+    return null;
+  }
+
+  return decoded;
+}
 
 /**
  * Cloud Function: wahaProxy
  * Secure HTTPS Reverse Proxy for WAHA (WhatsApp HTTP API).
- * Eliminates browser Mixed Content blocks (HTTPS -> HTTP) and CORS restrictions on production domains.
+ * Requires Firebase ID token (role: super_admin|admin|partner) + App Check.
+ * Injects WAHA_API_KEY from Firebase Secrets — never trusts a client-supplied x-api-key.
  */
-exports.wahaProxy = onRequest(httpsOptions, async (req, res) => {
-  // CORS configuration
-  res.set("Access-Control-Allow-Origin", "*");
-  res.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH");
-  res.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Api-Key, Accept");
+exports.wahaProxy = onRequest(
+  { ...httpsOptions, secrets: [wahaApiKey], cors: false },
+  async (req, res) => {
+    applyWahaProxyCors(req, res);
 
-  if (req.method === "OPTIONS") {
-    return res.status(204).send("");
-  }
-
-  try {
-    let targetUrl = req.url || "/";
-    // Strip leading /waha if present in the rewrite path
-    if (targetUrl.startsWith("/waha")) {
-      targetUrl = targetUrl.substring(5);
-    }
-    if (!targetUrl.startsWith("/")) {
-      targetUrl = "/" + targetUrl;
+    if (req.method === "OPTIONS") {
+      return res.status(204).send("");
     }
 
-    // Block path traversal or non-API paths
-    if (targetUrl.includes("..") || !targetUrl.startsWith("/api/")) {
-      return res.status(403).json({
-        error: "FORBIDDEN_PROXY_PATH",
-        message: "Only /api/* WAHA endpoints are permitted through the proxy.",
+    const authed = await requireWahaProxyAuth(req, res);
+    if (!authed) {
+      return;
+    }
+
+    try {
+      let targetUrl = req.url || "/";
+      // Strip leading /waha if present in the rewrite path
+      if (targetUrl.startsWith("/waha")) {
+        targetUrl = targetUrl.substring(5);
+      }
+      if (!targetUrl.startsWith("/")) {
+        targetUrl = "/" + targetUrl;
+      }
+
+      // Block path traversal or non-API paths
+      if (targetUrl.includes("..") || !targetUrl.startsWith("/api/")) {
+        return res.status(403).json({
+          error: "FORBIDDEN_PROXY_PATH",
+          message: "Only /api/* WAHA endpoints are permitted through the proxy.",
+        });
+      }
+
+      const secretKey = wahaApiKey.value();
+      if (!secretKey) {
+        return res.status(500).json({
+          error: "WAHA_SECRET_MISSING",
+          message: "WAHA_API_KEY secret is not configured on the server.",
+        });
+      }
+
+      // Backend host may still be overridden with WAHA_BACKEND_URL env; IP fallback kept for ops.
+      const backendUrl = (process.env.WAHA_BACKEND_URL || "http://76.13.14.23:3000") + targetUrl;
+
+      const forwardHeaders = {
+        // Server-owned secret only — never forward client X-Api-Key / Authorization.
+        "x-api-key": secretKey,
+      };
+      if (req.headers["accept"]) {
+        forwardHeaders["accept"] = req.headers["accept"];
+      }
+
+      let bodyToSend;
+      if (req.method !== "GET" && req.method !== "HEAD") {
+        if (req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
+          bodyToSend = JSON.stringify(req.body);
+          forwardHeaders["content-type"] = "application/json";
+        } else if (req.rawBody) {
+          bodyToSend = req.rawBody;
+          forwardHeaders["content-type"] = req.headers["content-type"] || "application/json";
+        } else if (req.body) {
+          bodyToSend = req.body;
+          forwardHeaders["content-type"] = req.headers["content-type"] || "application/json";
+        }
+      }
+
+      const fetchRes = await fetch(backendUrl, {
+        method: req.method,
+        headers: forwardHeaders,
+        body: bodyToSend,
+      });
+
+      res.status(fetchRes.status);
+      const contentType = fetchRes.headers.get("content-type");
+      if (contentType) {
+        res.set("Content-Type", contentType);
+      }
+
+      const arrayBuffer = await fetchRes.arrayBuffer();
+      return res.send(Buffer.from(arrayBuffer));
+    } catch (err) {
+      console.error("WAHA proxy error:", err);
+      return res.status(502).json({
+        error: "WAHA_PROXY_UNAVAILABLE",
+        message: err.message || "Failed to connect to WAHA backend",
       });
     }
+  },
+);
 
-    const backendUrl = (process.env.WAHA_BACKEND_URL || "http://76.13.14.23:3000") + targetUrl;
-
-    const forwardHeaders = {
-      "x-api-key": req.headers["x-api-key"] || process.env.WAHA_API_KEY || "tashil_secret_token_2026",
-    };
-    if (req.headers["accept"]) {
-      forwardHeaders["accept"] = req.headers["accept"];
-    }
-    if (req.headers["authorization"]) {
-      forwardHeaders["authorization"] = req.headers["authorization"];
-    }
-
-    let bodyToSend;
-    if (req.method !== "GET" && req.method !== "HEAD") {
-      if (req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
-        bodyToSend = JSON.stringify(req.body);
-        forwardHeaders["content-type"] = "application/json";
-      } else if (req.rawBody) {
-        bodyToSend = req.rawBody;
-        forwardHeaders["content-type"] = req.headers["content-type"] || "application/json";
-      } else if (req.body) {
-        bodyToSend = req.body;
-        forwardHeaders["content-type"] = req.headers["content-type"] || "application/json";
-      }
-    }
-
-    const fetchRes = await fetch(backendUrl, {
-      method: req.method,
-      headers: forwardHeaders,
-      body: bodyToSend,
-    });
-
-    res.status(fetchRes.status);
-    const contentType = fetchRes.headers.get("content-type");
-    if (contentType) {
-      res.set("Content-Type", contentType);
-    }
-
-    const arrayBuffer = await fetchRes.arrayBuffer();
-    return res.send(Buffer.from(arrayBuffer));
-  } catch (err) {
-    console.error("WAHA proxy error:", err);
-    return res.status(502).json({
-      error: "WAHA_PROXY_UNAVAILABLE",
-      message: err.message || "Failed to connect to WAHA backend",
-    });
-  }
+const { createGeminiGenerate } = require("./gemini_generate");
+exports.geminiGenerate = createGeminiGenerate({
+  geminiApiKey,
+  callableOptions,
 });
 
 Object.assign(exports, require("./security_functions"));

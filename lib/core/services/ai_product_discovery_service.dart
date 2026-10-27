@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 
-import '../config/ai_config.dart';
+import 'gemini_cloud_model.dart';
 import '../utils/arabic_numbers_utils.dart';
 import 'ai_receipt_service.dart';
 import 'company_products_service.dart';
@@ -262,17 +262,16 @@ final aiProductDiscoveryServiceProvider = Provider<AiProductDiscoveryService>((r
 class AiProductDiscoveryService {
   final CompanyProductsService? _productsService;
   final FirebaseFirestore? _firestore;
-  final GenerativeModel _model;
+  final CloudGenerativeModel _model;
 
   AiProductDiscoveryService({
     CompanyProductsService? productsService,
     FirebaseFirestore? firestore,
   })  : _productsService = productsService,
         _firestore = firestore,
-        _model = GenerativeModel(
+        _model = CloudGenerativeModel(
           model: 'gemini-3.7-flash',
-          apiKey: AiConfig.geminiApiKey,
-          generationConfig: GenerationConfig(
+      generationConfig: GenerationConfig(
             responseMimeType: 'application/json',
             temperature: 0.1,
             maxOutputTokens: 3000,

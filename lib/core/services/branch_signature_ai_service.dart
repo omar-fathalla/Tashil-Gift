@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import '../../features/admin/domain/retail_chain_model.dart';
-import '../config/ai_config.dart';
+import 'gemini_cloud_model.dart';
 import '../utils/arabic_numbers_utils.dart';
 
 final branchSignatureAiServiceProvider = Provider<BranchSignatureAiService>((ref) {
@@ -146,18 +146,17 @@ class ExtractedBranchSignatureResult {
 }
 
 class BranchSignatureAiService {
-  late final GenerativeModel _model;
-  late final GenerativeModel _fallbackModel;
+  late final CloudGenerativeModel _model;
+  late final CloudGenerativeModel _fallbackModel;
 
   BranchSignatureAiService() {
     _model = _createModel('gemini-3.7-flash');
     _fallbackModel = _createModel('gemini-3.6-flash');
   }
 
-  static GenerativeModel _createModel(String modelName) {
-    return GenerativeModel(
+  static CloudGenerativeModel _createModel(String modelName) {
+    return CloudGenerativeModel(
       model: modelName,
-      apiKey: AiConfig.geminiApiKey,
       systemInstruction: Content.system(
         'أنت خبير هندسي متخصص في تحليل بصمات وهياكل بونات ونظم نقاط البيع (Retail POS Receipt Architecture & Store Signature Expert). '
         'مهمتك فحص صورة بونة الفاتورة المرفقة واستخراج البصمة الهيكلية القاطعة للسلسلة والفرع لمنع أي تزوير أو تلاعب: '

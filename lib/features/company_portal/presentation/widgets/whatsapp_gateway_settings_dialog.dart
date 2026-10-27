@@ -63,10 +63,12 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
       text: widget.currentConfig.instanceId.isNotEmpty ? widget.currentConfig.instanceId : 'default',
     );
     _apiTokenController = TextEditingController(
-      text: widget.currentConfig.apiToken.isNotEmpty ? widget.currentConfig.apiToken : 'tashil_secret_token_2026',
+      text: widget.currentConfig.apiToken,
     );
     _customEndpointController = TextEditingController(
-      text: widget.currentConfig.customEndpointUrl.isNotEmpty ? widget.currentConfig.customEndpointUrl : 'http://76.13.14.23:3000',
+      text: widget.currentConfig.customEndpointUrl.isNotEmpty
+          ? widget.currentConfig.customEndpointUrl
+          : WhatsAppGatewayService.kDefaultWahaProxyBase,
     );
     _delaySeconds = widget.currentConfig.delayBetweenMessagesSeconds.clamp(1, 15);
     _isEnabled = widget.currentConfig.isEnabled;
@@ -623,7 +625,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                   controller: _customEndpointController,
                   decoration: InputDecoration(
                     labelText: widget.isAr ? 'عنوان سيرفر WAHA (Endpoint URL)' : 'WAHA Server URL',
-                    hintText: 'http://76.13.14.23:3000',
+                    hintText: WhatsAppGatewayService.kDefaultWahaProxyBase,
                     prefixIcon: const Icon(Icons.dns_rounded, size: 20),
                     filled: true,
                     fillColor: cs.surfaceContainerLow,
@@ -639,7 +641,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                   obscureText: true,
                   decoration: InputDecoration(
                     labelText: widget.isAr ? 'مفتاح الـ API الخاص بالسيرفر (X-Api-Key)' : 'Server API Key',
-                    hintText: 'tashil_secret_token_2026',
+                    hintText: widget.isAr ? 'اتركه فارغًا — السيرفر يحقن المفتاح' : 'Leave empty — server injects the key',
                     prefixIcon: const Icon(Icons.key_rounded, size: 20),
                     filled: true,
                     fillColor: cs.surfaceContainerLow,

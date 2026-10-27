@@ -1,30 +1,29 @@
 import 'package:flutter/foundation.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:al_mraay/core/services/gemini_cloud_model.dart';
 
-import '../../../core/config/ai_config.dart';
 import 'whatsapp_gateway_config_model.dart';
 import 'whatsapp_gateway_service.dart';
 
 /// Service for Intelligent WhatsApp Customer Service & AI Auto-Reply
 /// Powered strictly by Google Gemini 3.7 Flash at temperature 0.0 (Rule 5 & Rule 10)
 class WhatsAppAiAutoReplyService {
-  late final GenerativeModel _primaryModel;
-  late final GenerativeModel _fallbackModel;
+  late final CloudGenerativeModel _primaryModel;
+  late final CloudGenerativeModel _fallbackModel;
   final WhatsAppGatewayService _gatewayService;
 
   WhatsAppAiAutoReplyService({
     WhatsAppGatewayService? gatewayService,
-    GenerativeModel? primaryModel,
-    GenerativeModel? fallbackModel,
+    CloudGenerativeModel? primaryModel,
+    CloudGenerativeModel? fallbackModel,
   })  : _gatewayService = gatewayService ?? WhatsAppGatewayService() {
     _primaryModel = primaryModel ?? _buildModel('gemini-3.7-flash');
     _fallbackModel = fallbackModel ?? _buildModel('gemini-3.6-flash');
   }
 
-  static GenerativeModel _buildModel(String modelName) {
-    return GenerativeModel(
+  static CloudGenerativeModel _buildModel(String modelName) {
+    return CloudGenerativeModel(
       model: modelName,
-      apiKey: AiConfig.geminiApiKey,
       generationConfig: GenerationConfig(
         temperature: 0.0, // Zero hallucination invariant (Rule 10)
         maxOutputTokens: 1024,

@@ -61,7 +61,7 @@ void main() {
       final config = const WhatsAppGatewayConfigModel(
         provider: WhatsAppGatewayProvider.waha,
         instanceId: 'default',
-        apiToken: 'tashil_secret_token_2026',
+        apiToken: 'test-waha-token',
         customEndpointUrl: 'http://76.13.14.23:3000',
         delayBetweenMessagesSeconds: 4,
         isEnabled: true,
@@ -77,7 +77,7 @@ void main() {
       final restored = WhatsAppGatewayConfigModel.fromMap(jsonMap);
       expect(restored.provider, equals(WhatsAppGatewayProvider.waha));
       expect(restored.customEndpointUrl, equals('http://76.13.14.23:3000'));
-      expect(restored.apiToken, equals('tashil_secret_token_2026'));
+      expect(restored.apiToken, equals('test-waha-token'));
       expect(restored.delayBetweenMessagesSeconds, equals(4));
       expect(restored.isConnected, isTrue);
       expect(restored.connectedPhoneNumber, equals('201211857725'));
@@ -92,7 +92,9 @@ void main() {
     test('WAHA testConnection returns connected when session is WORKING', () async {
       final mockClient = MockClient((request) async {
         if (request.url.toString().contains('/api/sessions/default')) {
-          expect(request.headers['X-Api-Key'], equals('tashil_secret_token_2026'));
+          expect(request.headers['Authorization'], equals('Bearer test-id-token'));
+          expect(request.headers['X-Firebase-AppCheck'], equals('test-app-check'));
+          expect(request.headers.containsKey('X-Api-Key'), isFalse);
           return http.Response(
             json.encode({
               'name': 'default',
@@ -108,11 +110,16 @@ void main() {
         return http.Response('Not Found', 404);
       });
 
-      final service = WhatsAppGatewayService();
+      final service = WhatsAppGatewayService(
+      wahaAuthHeadersBuilder: () async => {
+        'Authorization': 'Bearer test-id-token',
+        'X-Firebase-AppCheck': 'test-app-check',
+      },
+    );
       final config = const WhatsAppGatewayConfigModel(
         provider: WhatsAppGatewayProvider.waha,
         instanceId: 'default',
-        apiToken: 'tashil_secret_token_2026',
+        apiToken: 'test-waha-token',
         customEndpointUrl: 'http://76.13.14.23:3000',
       );
 
@@ -135,7 +142,12 @@ void main() {
         return http.Response('Not Found', 404);
       });
 
-      final service = WhatsAppGatewayService();
+      final service = WhatsAppGatewayService(
+      wahaAuthHeadersBuilder: () async => {
+        'Authorization': 'Bearer test-id-token',
+        'X-Firebase-AppCheck': 'test-app-check',
+      },
+    );
       final config = const WhatsAppGatewayConfigModel(
         provider: WhatsAppGatewayProvider.greenApi,
         instanceId: '110199',
@@ -151,7 +163,9 @@ void main() {
       final mockClient = MockClient((request) async {
         if (request.url.toString().contains('/api/sendText')) {
           expect(request.method, equals('POST'));
-          expect(request.headers['X-Api-Key'], equals('tashil_secret_token_2026'));
+          expect(request.headers['Authorization'], equals('Bearer test-id-token'));
+          expect(request.headers['X-Firebase-AppCheck'], equals('test-app-check'));
+          expect(request.headers.containsKey('X-Api-Key'), isFalse);
           final body = json.decode(request.body) as Map<String, dynamic>;
           expect(body['session'], equals('default'));
           expect(body['chatId'], equals('201012345678@c.us'));
@@ -166,11 +180,16 @@ void main() {
         return http.Response('Error', 500);
       });
 
-      final service = WhatsAppGatewayService();
+      final service = WhatsAppGatewayService(
+      wahaAuthHeadersBuilder: () async => {
+        'Authorization': 'Bearer test-id-token',
+        'X-Firebase-AppCheck': 'test-app-check',
+      },
+    );
       final config = const WhatsAppGatewayConfigModel(
         provider: WhatsAppGatewayProvider.waha,
         instanceId: 'default',
-        apiToken: 'tashil_secret_token_2026',
+        apiToken: 'test-waha-token',
         customEndpointUrl: 'http://76.13.14.23:3000',
       );
 
@@ -214,11 +233,16 @@ void main() {
         return http.Response('Error', 500);
       });
 
-      final service = WhatsAppGatewayService();
+      final service = WhatsAppGatewayService(
+      wahaAuthHeadersBuilder: () async => {
+        'Authorization': 'Bearer test-id-token',
+        'X-Firebase-AppCheck': 'test-app-check',
+      },
+    );
       final config = const WhatsAppGatewayConfigModel(
         provider: WhatsAppGatewayProvider.waha,
         instanceId: 'default',
-        apiToken: 'tashil_secret_token_2026',
+        apiToken: 'test-waha-token',
         customEndpointUrl: 'http://76.13.14.23:3000',
       );
 
@@ -230,17 +254,24 @@ void main() {
     test('restartInstance sends POST to restart WAHA session', () async {
       final mockClient = MockClient((request) async {
         if (request.url.toString().contains('/api/sessions/default/restart')) {
-          expect(request.headers['X-Api-Key'], equals('tashil_secret_token_2026'));
+          expect(request.headers['Authorization'], equals('Bearer test-id-token'));
+          expect(request.headers['X-Firebase-AppCheck'], equals('test-app-check'));
+          expect(request.headers.containsKey('X-Api-Key'), isFalse);
           return http.Response(json.encode({'status': 'restarted'}), 200);
         }
         return http.Response('Error', 500);
       });
 
-      final service = WhatsAppGatewayService();
+      final service = WhatsAppGatewayService(
+      wahaAuthHeadersBuilder: () async => {
+        'Authorization': 'Bearer test-id-token',
+        'X-Firebase-AppCheck': 'test-app-check',
+      },
+    );
       final config = const WhatsAppGatewayConfigModel(
         provider: WhatsAppGatewayProvider.waha,
         instanceId: 'default',
-        apiToken: 'tashil_secret_token_2026',
+        apiToken: 'test-waha-token',
         customEndpointUrl: 'http://76.13.14.23:3000',
       );
 
@@ -285,11 +316,16 @@ void main() {
         return http.Response('Error', 500);
       });
 
-      final service = WhatsAppGatewayService();
+      final service = WhatsAppGatewayService(
+      wahaAuthHeadersBuilder: () async => {
+        'Authorization': 'Bearer test-id-token',
+        'X-Firebase-AppCheck': 'test-app-check',
+      },
+    );
       final config = const WhatsAppGatewayConfigModel(
         provider: WhatsAppGatewayProvider.waha,
         instanceId: 'default',
-        apiToken: 'tashil_secret_token_2026',
+        apiToken: 'test-waha-token',
         customEndpointUrl: 'http://76.13.14.23:3000',
       );
 
@@ -304,11 +340,16 @@ void main() {
     });
 
     test('sendPollMessage validates question and strips empty options, rejecting < 2 options', () async {
-      final service = WhatsAppGatewayService();
+      final service = WhatsAppGatewayService(
+      wahaAuthHeadersBuilder: () async => {
+        'Authorization': 'Bearer test-id-token',
+        'X-Firebase-AppCheck': 'test-app-check',
+      },
+    );
       const config = WhatsAppGatewayConfigModel(
         provider: WhatsAppGatewayProvider.waha,
         instanceId: 'default',
-        apiToken: 'tashil_secret_token_2026',
+        apiToken: 'test-waha-token',
         customEndpointUrl: 'http://76.13.14.23:3000',
       );
 
@@ -338,11 +379,16 @@ void main() {
         return http.Response('{"error": "Forbidden"}', 403);
       });
 
-      final service = WhatsAppGatewayService();
+      final service = WhatsAppGatewayService(
+      wahaAuthHeadersBuilder: () async => {
+        'Authorization': 'Bearer test-id-token',
+        'X-Firebase-AppCheck': 'test-app-check',
+      },
+    );
       const config = WhatsAppGatewayConfigModel(
         provider: WhatsAppGatewayProvider.waha,
         instanceId: 'default',
-        apiToken: 'tashil_secret_token_2026',
+        apiToken: 'test-waha-token',
         customEndpointUrl: 'http://76.13.14.23:3000',
       );
 

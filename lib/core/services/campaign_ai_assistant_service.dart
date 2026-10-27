@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:al_mraay/features/admin/domain/event_model.dart';
 import 'package:al_mraay/features/admin/domain/company_gift_model.dart';
-import '../config/ai_config.dart';
+import 'gemini_cloud_model.dart';
 
 final campaignAiAssistantServiceProvider = Provider<CampaignAiAssistantService>((ref) {
   return CampaignAiAssistantService();
@@ -48,18 +48,17 @@ class CampaignAiAnalysisResult {
 }
 
 class CampaignAiAssistantService {
-  late final GenerativeModel _model;
-  late final GenerativeModel _fallbackModel;
+  late final CloudGenerativeModel _model;
+  late final CloudGenerativeModel _fallbackModel;
 
   CampaignAiAssistantService() {
     _model = _createModel('gemini-3.7-flash');
     _fallbackModel = _createModel('gemini-3.6-flash');
   }
 
-  static GenerativeModel _createModel(String modelName) {
-    return GenerativeModel(
+  static CloudGenerativeModel _createModel(String modelName) {
+    return CloudGenerativeModel(
       model: modelName,
-      apiKey: AiConfig.geminiApiKey,
       systemInstruction: Content.system(
         'أنت كبير مستشاري التسويق وتدقيق العروض الترويجية لسلاسل السوبرماركت والتجزئة (FMCG Trade Marketing & Audit Specialist). '
         'مهمتك قراءة الأفكار والشروط الترويجية التي يكتبها مسؤول الحملة باللغة العربية (سواء كانت فصحى أو عامية أو شروط شراء محددة Buy X Get Y)، '

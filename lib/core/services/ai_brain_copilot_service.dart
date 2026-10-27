@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import '../config/ai_config.dart';
+import 'gemini_cloud_model.dart';
 import '../../features/admin/domain/ai_directive_model.dart';
 import 'ai_directives_service.dart';
 import 'ai_model_config_service.dart';
@@ -62,8 +63,8 @@ class AiBrainChatMessage {
 class AiBrainCoPilotService {
   final AiDirectivesService _directivesService;
   final String modelName;
-  late final GenerativeModel _model;
-  late final GenerativeModel _fallbackModel;
+  late final CloudGenerativeModel _model;
+  late final CloudGenerativeModel _fallbackModel;
 
   AiBrainCoPilotService(this._directivesService, {String? modelName})
       : modelName = (modelName != null && modelName.isNotEmpty) ? modelName : AiConfig.primaryModel {
@@ -71,10 +72,9 @@ class AiBrainCoPilotService {
     _fallbackModel = _createModel(AiConfig.fallbackModel);
   }
 
-  static GenerativeModel _createModel(String modelName) {
-    return GenerativeModel(
+  static CloudGenerativeModel _createModel(String modelName) {
+    return CloudGenerativeModel(
       model: modelName,
-      apiKey: AiConfig.geminiApiKey,
       systemInstruction: Content.system(
         'أنت "المستشار العلمي ورئيس مهندسي عقل الذكاء الاصطناعي" لنظام تساهيل جفت (Switch Point Smart Systems).\n'
         'مهمتك المحورية هي العمل جنباً إلى جنب مع مسؤولي النظام ومديري الحملات في بيئة تدريب تفاعلية (Human-in-the-Loop AI Brain Studio).\n\n'

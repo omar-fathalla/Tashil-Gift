@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:csv/csv.dart';
 import 'package:excel/excel.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
-import '../config/ai_config.dart';
+import 'gemini_cloud_model.dart';
 import '../utils/arabic_numbers_utils.dart';
 import 'chain_products_intelligence_service.dart';
 import '../../features/admin/domain/retail_chain_model.dart';
@@ -464,9 +464,8 @@ class SmartBranchMatcherService {
     required Uint8List fileBytes,
     required String mimeType,
   }) async {
-    final model = GenerativeModel(
+    final model = CloudGenerativeModel(
       model: 'gemini-3.7-flash',
-      apiKey: AiConfig.geminiApiKey,
       generationConfig: GenerationConfig(
         temperature: 0.0,
         responseMimeType: 'application/json',

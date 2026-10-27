@@ -33,7 +33,7 @@ void main() {
       const configuredGateway = WhatsAppGatewayConfigModel(
         provider: WhatsAppGatewayProvider.waha,
         instanceId: 'default',
-        apiToken: 'tashil_secret_token_2026',
+        apiToken: 'test-waha-token',
         customEndpointUrl: 'http://76.13.14.23:3000',
       );
 
@@ -67,7 +67,7 @@ void main() {
       const configuredGateway = WhatsAppGatewayConfigModel(
         provider: WhatsAppGatewayProvider.waha,
         instanceId: 'default',
-        apiToken: 'tashil_secret_token_2026',
+        apiToken: 'test-waha-token',
         customEndpointUrl: 'http://76.13.14.23:3000',
       );
 

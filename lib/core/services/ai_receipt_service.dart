@@ -6,6 +6,7 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:al_mraay/features/admin/domain/event_model.dart';
 import 'package:al_mraay/features/admin/domain/retail_chain_model.dart';
 import '../config/ai_config.dart';
+import 'gemini_cloud_model.dart';
 import '../utils/arabic_numbers_utils.dart';
 import 'campaign_ai_assistant_service.dart';
 import 'company_gifts_service.dart';
@@ -686,11 +687,11 @@ class AiReceiptAnalysisResult {
 }
 
 class AiReceiptService {
-  late final GenerativeModel _model;
-  late final GenerativeModel _fastModel;
-  late final GenerativeModel _deepAuditModel;
-  late final GenerativeModel _fallbackModel1;
-  late final GenerativeModel _fallbackModel2;
+  late final CloudGenerativeModel _model;
+  late final CloudGenerativeModel _fastModel;
+  late final CloudGenerativeModel _deepAuditModel;
+  late final CloudGenerativeModel _fallbackModel1;
+  late final CloudGenerativeModel _fallbackModel2;
   final String modelName;
   final String fastTierModelName;
   final String deepAuditModelName;
@@ -709,10 +710,9 @@ class AiReceiptService {
     _fallbackModel2 = _createFastTierModel('gemini-3.6-flash');
   }
 
-  static GenerativeModel _createModel(String name) {
-    return GenerativeModel(
+  static CloudGenerativeModel _createModel(String name) {
+    return CloudGenerativeModel(
       model: name,
-      apiKey: AiConfig.geminiApiKey,
       systemInstruction: Content.system(
         'أنت مدقق مالي وأمني فائق السرعة والدقة والصرامة في فحص وتدقيق فواتير السوبر ماركت وكشف التزوير لعروض الشركات الاستهلاكية (FMCG). '
         'مهمتك فحص صور الفواتير فورياً واستخراج البيانات الأساسية: اسم السلسلة، الفرع، رقم الفاتورة، تاريخ الشراء، '
@@ -1099,10 +1099,9 @@ class AiReceiptService {
     ],
   );
 
-  static GenerativeModel _createFastTierModel(String name) {
-    return GenerativeModel(
+  static CloudGenerativeModel _createFastTierModel(String name) {
+    return CloudGenerativeModel(
       model: name,
-      apiKey: AiConfig.geminiApiKey,
       systemInstruction: Content.system(
         'أنت فاحص ومستخرج بيانات فواتير التجزئة والسوبرماركت فائق السرعة والدقة (Gemini Ultra-Fast POS Scanner Tier).\n'
         'مهمتك: فحص صورة بون الكاشير المطبوع واستخراج البيانات الأساسية بأقصى سرعة ممكنة وبأعلى دقة OCR وبصيغة JSON نقية وموجزة.\n\n'
@@ -1127,10 +1126,9 @@ class AiReceiptService {
     );
   }
 
-  static GenerativeModel _createDeepAuditModel(String name) {
-    return GenerativeModel(
+  static CloudGenerativeModel _createDeepAuditModel(String name) {
+    return CloudGenerativeModel(
       model: name,
-      apiKey: AiConfig.geminiApiKey,
       systemInstruction: Content.system(
         'أنت كبير المدققين الجنائيين والماليين لفواتير السوبرماركت المعقدة (Gemini Deep Forensic Audit Tier).\n'
         'تُستدعى مهامك في حالات الاشتباه الأمني، وتضارب أرقام الكاشير، وفحص الفواتير المركبة أو المشكوك في تلاعبها.\n'
@@ -1205,8 +1203,8 @@ class AiReceiptService {
   }
 
   /// Executes Gemini generateContent with automatic exponential backoff retry on HTTP 429 quota errors.
-  Future<GenerateContentResponse> _executeWithExponentialBackoff(
-    GenerativeModel model,
+  Future<CloudGenerateContentResponse> _executeWithExponentialBackoff(
+    CloudGenerativeModel model,
     List<Content> contents, {
     int maxRetries = 3,
     int initialBackoffMs = 1500,
@@ -1693,7 +1691,7 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
       final prompt = TextPart(finalPromptText);
 
       final aiStopwatch = Stopwatch()..start();
-      GenerateContentResponse response;
+      CloudGenerateContentResponse response;
       final targetModel = forceDeepAudit ? _deepAuditModel : _fastModel;
       final primaryFallback = forceDeepAudit ? _model : _fallbackModel1;
       final contentParts = [
