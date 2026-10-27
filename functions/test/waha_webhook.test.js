@@ -298,6 +298,159 @@ test("dedupes a second delivery of the same message id", async () => {
   assert.equal(bag.calls.claim.length, 1);
 });
 
+test("ignores messages when the webhook config is turned off", async () => {
+  const bag = deps({
+    db: createDb({
+      "whatsapp_webhook_config/default": { enabled: false, autoRepliesEnabled: true },
+      "whatsapp_sender_links/201012345678": { campaignId: "camp-1", prizeIdentifier: "Gift A" },
+    }),
+  });
+  const res = response();
+  await handleWahaWebhook(signedRequest({
+    event: "message",
+    payload: {
+      id: "img-off",
+      from: "201012345678@c.us",
+      hasMedia: true,
+      media: { mimetype: "image/jpeg" },
+    },
+  }), res, bag.deps);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.ignored, true);
+  assert.equal(res.body.reason, "webhook_disabled");
+  assert.equal(bag.db.docs.get("whatsapp_inbound_messages/img-off"), undefined);
+  assert.equal(bag.calls.verify.length, 0);
+  assert.equal(bag.db.docs.get("whatsapp_webhook_config/default").lastEventName, "message");
+});
+
+test("rejects an unknown number when allow-list only is on and sends the reply", async () => {
+  const sent = [];
+  const bag = deps({
+    db: createDb({
+      "whatsapp_webhook_config/default": { enabled: true, allowListOnly: true, autoRepliesEnabled: true },
+    }),
+    deps: {
+      sendText: async (input) => {
+        sent.push(input);
+        return { id: "waha-reply-1" };
+      },
+    },
+  });
+  const res = response();
+  await handleWahaWebhook(signedRequest({
+    event: "message",
+    payload: {
+      id: "img-blocked",
+      from: "201099988877@c.us",
+      hasMedia: true,
+      media: { mimetype: "image/jpeg" },
+    },
+  }), res, bag.deps);
+  assert.equal(res.body.notAllowed, true);
+  const stored = bag.db.docs.get("whatsapp_inbound_messages/img-blocked");
+  assert.equal(stored.status, "not_allowed");
+  assert.equal(stored.replySent, true);
+  assert.equal(stored.replyMessageId, "waha-reply-1");
+  assert.match(stored.replyText, /غير مسموح/);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].phone, "201099988877");
+  assert.equal(bag.calls.verify.length, 0);
+});
+
+test("registers an unknown number when the text is an open join code", async () => {
+  const bag = deps({
+    db: createDb({
+      "whatsapp_webhook_config/default": { enabled: true, autoRepliesEnabled: true },
+      "whatsapp_webhook_campaigns/camp-9": {
+        joinCode: "JOIN9",
+        selfRegistrationEnabled: true,
+        campaignName: "Summer",
+        companySlug: "acme",
+      },
+    }),
+    deps: {
+      sendText: async () => ({ id: "reg-1" }),
+    },
+  });
+  const res = response();
+  await handleWahaWebhook(signedRequest({
+    event: "message",
+    payload: { id: "join-1", from: "01055556666@c.us", body: "join JOIN9" },
+  }), res, bag.deps);
+  assert.equal(res.body.registered, true);
+  assert.equal(res.body.campaignId, "camp-9");
+  const link = bag.db.docs.get("whatsapp_sender_links/201055556666");
+  assert.equal(link.campaignId, "camp-9");
+  assert.equal(link.active, true);
+  assert.equal(link.registeredVia, "join_code");
+  const stored = bag.db.docs.get("whatsapp_inbound_messages/join-1");
+  assert.equal(stored.status, "registered");
+  assert.equal(stored.replyMessageId, "reg-1");
+  assert.match(stored.replyText, /Summer/);
+});
+
+test("stores the Gemini analysis and the verified reply on an awarded invoice", async () => {
+  const bag = deps({
+    db: createDb({
+      "whatsapp_webhook_config/default": {
+        enabled: true,
+        autoRepliesEnabled: true,
+        templates: { verified: "Prize {prize} receipt {receipt}" },
+      },
+      "whatsapp_sender_links/201012345678": {
+        campaignId: "camp-1",
+        campaignName: "Durra",
+        prizeIdentifier: "Gift A",
+        displayName: "Nour",
+        active: true,
+      },
+    }),
+    verification: {
+      result: {
+        isValid: true,
+        receiptNumber: "R-77",
+        confidence: 0.91,
+        storeChainDetected: "Gomla",
+        message: "ok",
+        prize_won: "Gift A",
+      },
+    },
+    deps: {
+      sendText: async () => ({ id: "award-reply" }),
+    },
+  });
+  const res = response();
+  await handleWahaWebhook(signedRequest({
+    event: "message",
+    payload: {
+      id: "img-analysis",
+      from: "201012345678@c.us",
+      hasMedia: true,
+      media: { mimetype: "image/jpeg" },
+    },
+  }), res, bag.deps);
+  assert.equal(res.body.awarded, true);
+  const stored = bag.db.docs.get("whatsapp_inbound_messages/img-analysis");
+  assert.equal(stored.analysis.confidence, 0.91);
+  assert.equal(stored.analysis.verdict, "valid");
+  assert.equal(stored.analysis.receiptNumber, "R-77");
+  assert.equal(stored.replyText, "Prize Gift A receipt R-77");
+  assert.equal(stored.replyMessageId, "award-reply");
+});
+
+test("records session status onto the webhook health doc", async () => {
+  const bag = deps();
+  const res = response();
+  await handleWahaWebhook(signedRequest({
+    event: "session.status",
+    session: "default",
+    payload: { status: "WORKING" },
+  }), res, bag.deps);
+  assert.equal(res.statusCode, 200);
+  assert.equal(bag.db.docs.get("whatsapp_webhook_config/default").lastSessionStatus, "WORKING");
+  assert.equal(bag.db.docs.get("whatsapp_webhook_config/default").lastEventName, "session.status");
+});
+
 test("records message.ack and updates an existing outbox row", async () => {
   const bag = deps({
     db: createDb({

@@ -3697,6 +3697,141 @@ class AppStrings {
     hi: 'चयनित समय अवधि के लिए शाखाओं में कोई चालान दर्ज नहीं है',
   );
   String get activeBranchIndicator => _t(ar: 'الفرع المحدد حالياً', en: 'Currently Selected Branch', hi: 'वर्तमान में चयनित शाखा');
+
+  // ---------------------------------------------------------------------------
+  // 27. WhatsApp webhook control (لوحة تحكم وبّهوك واتساب)
+  // ---------------------------------------------------------------------------
+  String get webhookInboxTab => _t(ar: 'وارد الويب هوك', en: 'Webhook Inbox', hi: 'वेबहुक इनबॉक्स');
+  String get webhookStaffOnly => _t(
+    ar: 'إدارة وبّهوك واتساب متاحة للمشرف الأعلى ومدير الشركة فقط.',
+    en: 'WhatsApp webhook controls are available to the super admin and company admin only.',
+    hi: 'व्हाट्सएप वेबहुक नियंत्रण केवल सुपर एडमिन और कंपनी एडमिन के लिए है।',
+  );
+  String get webhookTabControl => _t(ar: 'التحكم', en: 'Control', hi: 'नियंत्रण');
+  String get webhookTabInbox => _t(ar: 'الفواتير الواردة', en: 'Incoming invoices', hi: 'आने वाले चालान');
+  String get webhookTabReplies => _t(ar: 'الردود', en: 'Replies', hi: 'उत्तर');
+  String get webhookTabNumbers => _t(ar: 'الأرقام المسموحة', en: 'Allowed numbers', hi: 'अनुमत नंबर');
+  String get webhookTabInvites => _t(ar: 'روابط الدعوة', en: 'Invite links', hi: 'आमंत्रण लिंक');
+  String get webhookEnabled => _t(ar: 'تشغيل استقبال الويب هوك', en: 'Webhook receiving', hi: 'वेबहुक प्राप्त करना');
+  String get webhookEnabledHint => _t(
+    ar: 'عند الإيقاف يُؤكد الخادم الاستلام ويتجاهل الرسائل دون منح هدايا.',
+    en: 'When off, the server acknowledges the call and ignores messages without awarding gifts.',
+    hi: 'बंद होने पर सर्वर कॉल स्वीकार करता है और संदेशों को अनदेखा करता है।',
+  );
+  String get webhookAutoReplies => _t(ar: 'الردود التلقائية', en: 'Auto replies', hi: 'स्वचालित उत्तर');
+  String get webhookAutoRepliesHint => _t(
+    ar: 'إرسال رد واتساب بعد التحقق أو الرفض أو التسجيل.',
+    en: 'Send a WhatsApp reply after verification, rejection, or registration.',
+    hi: 'सत्यापन, अस्वीकृति या पंजीकरण के बाद व्हाट्सएप उत्तर भेजें।',
+  );
+  String get webhookAllowListOnly => _t(ar: 'القائمة المسموحة فقط', en: 'Allow-list only', hi: 'केवल अनुमति सूची');
+  String get webhookAllowListOnlyHint => _t(
+    ar: 'الأرقام غير المسجلة تُرفض برسالة «غير مسموح» بدل المراجعة.',
+    en: 'Unregistered numbers are rejected with the not-allowed reply instead of pending review.',
+    hi: 'अपंजीकृत नंबर समीक्षा के बजाय अस्वीकृत उत्तर पाते हैं।',
+  );
+  String get webhookHealth => _t(ar: 'حالة الويب هوك', en: 'Webhook health', hi: 'वेबहुक स्थिति');
+  String get webhookNoEventsYet => _t(ar: 'لم يصل أي حدث بعد.', en: 'No events yet.', hi: 'अभी कोई इवेंट नहीं।');
+  String webhookLastEvent(String name, String time) => _t(
+    ar: 'آخر حدث: $name · $time',
+    en: 'Last event: $name · $time',
+    hi: 'अंतिम इवेंट: $name · $time',
+  );
+  String get webhookSessionUnknown => _t(ar: 'حالة الجلسة غير معروفة', en: 'Session status unknown', hi: 'सत्र स्थिति अज्ञात');
+  String get webhookAckCounts => _t(ar: 'حالات التسليم', en: 'Delivery statuses', hi: 'डिलीवरी स्थिति');
+  String get webhookBusinessNumber => _t(ar: 'رقم واتساب المسجّل', en: 'Registered WhatsApp number', hi: 'पंजीकृत व्हाट्सएप नंबर');
+  String get webhookBusinessNumberHint => _t(
+    ar: 'الرقم الظاهر للعملاء في رابط الدعوة. رقم الجلسة الحي يظهر في الشارة أعلاه.',
+    en: 'The number customers see on the invite link. The live session number is the chip above.',
+    hi: 'आमंत्रण लिंक पर ग्राहकों को दिखने वाला नंबर। लाइव सत्र नंबर ऊपर चिप में है।',
+  );
+  String get webhookDisplayName => _t(ar: 'اسم العرض', en: 'Display name', hi: 'प्रदर्शित नाम');
+  String get webhookSearchPhone => _t(ar: 'بحث برقم الهاتف', en: 'Search by phone', hi: 'फ़ोन से खोजें');
+  String get webhookInboxEmpty => _t(ar: 'لا توجد رسائل مطابقة.', en: 'No matching messages.', hi: 'कोई मेल खाता संदेश नहीं।');
+  String get webhookDetailTitle => _t(ar: 'تفاصيل الرسالة', en: 'Message detail', hi: 'संदेश विवरण');
+  String get webhookPhone => _t(ar: 'الهاتف', en: 'Phone', hi: 'फ़ोन');
+  String get webhookReceipt => _t(ar: 'رقم الفاتورة', en: 'Receipt number', hi: 'रसीद संख्या');
+  String get webhookPrize => _t(ar: 'الجائزة', en: 'Prize', hi: 'पुरस्कार');
+  String get webhookPrizeOptional => _t(ar: 'الجائزة (اختياري)', en: 'Prize (optional)', hi: 'पुरस्कार (वैकल्पिक)');
+  String get webhookCampaign => _t(ar: 'الحملة', en: 'Campaign', hi: 'अभियान');
+  String get webhookAnalysis => _t(ar: 'نتيجة التحليل', en: 'Analysis result', hi: 'विश्लेषण परिणाम');
+  String get webhookVerdict => _t(ar: 'الحكم', en: 'Verdict', hi: 'निर्णय');
+  String get webhookConfidence => _t(ar: 'درجة الثقة', en: 'Confidence', hi: 'विश्वास');
+  String get webhookReply => _t(ar: 'الرد التلقائي', en: 'Auto reply', hi: 'स्वचालित उत्तर');
+  String get webhookNoReply => _t(ar: 'لم يُنشأ رد.', en: 'No reply was generated.', hi: 'कोई उत्तर नहीं बना।');
+  String get webhookTemplateHint => _t(
+    ar: 'المتغيرات: {name} {prize} {receipt} {campaign}',
+    en: 'Placeholders: {name} {prize} {receipt} {campaign}',
+    hi: 'प्लेसहोल्डर: {name} {prize} {receipt} {campaign}',
+  );
+  String webhookTemplateLabel(String key) {
+    switch (key) {
+      case 'verified':
+        return _t(ar: 'تم التحقق ومنح الجائزة', en: 'Verified with prize', hi: 'पुरस्कार के साथ सत्यापित');
+      case 'pendingReview':
+        return _t(ar: 'قيد المراجعة', en: 'Pending review', hi: 'समीक्षा लंबित');
+      case 'rejected':
+        return _t(ar: 'مرفوضة', en: 'Rejected', hi: 'अस्वीकृत');
+      case 'notAllowed':
+        return _t(ar: 'رقم غير مسموح', en: 'Number not allowed', hi: 'नंबर अनुमत नहीं');
+      case 'registered':
+        return _t(ar: 'تم التسجيل بكود الدعوة', en: 'Registered with invite code', hi: 'आमंत्रण कोड से पंजीकृत');
+      default:
+        return key;
+    }
+  }
+
+  String webhookStatusLabel(String key) {
+    switch (key) {
+      case 'all':
+        return all;
+      case 'verified':
+        return _t(ar: 'تم التحقق', en: 'Verified', hi: 'सत्यापित');
+      case 'pending_review':
+        return _t(ar: 'قيد المراجعة', en: 'Pending review', hi: 'समीक्षा लंबित');
+      case 'rejected':
+        return _t(ar: 'مرفوضة', en: 'Rejected', hi: 'अस्वीकृत');
+      case 'verified_without_prize':
+        return _t(ar: 'تحققت بدون جائزة', en: 'Verified without prize', hi: 'पुरस्कार के बिना सत्यापित');
+      case 'not_allowed':
+        return _t(ar: 'غير مسموح', en: 'Not allowed', hi: 'अनुमत नहीं');
+      case 'registered':
+        return _t(ar: 'تم التسجيل', en: 'Registered', hi: 'पंजीकृत');
+      case 'stored':
+        return _t(ar: 'نص محفوظ', en: 'Stored text', hi: 'सहेजा पाठ');
+      case 'ignored':
+        return _t(ar: 'تم التجاهل', en: 'Ignored', hi: 'अनदेखा');
+      case 'error':
+        return _t(ar: 'خطأ', en: 'Error', hi: 'त्रुटि');
+      default:
+        return key;
+    }
+  }
+
+  String get webhookCustomerName => _t(ar: 'اسم العميل', en: 'Customer name', hi: 'ग्राहक का नाम');
+  String get webhookNumberActive => _t(ar: 'نشط', en: 'Active', hi: 'सक्रिय');
+  String get webhookNumberInactive => _t(ar: 'موقوف', en: 'Inactive', hi: 'निष्क्रिय');
+  String get webhookNoNumbers => _t(ar: 'لا توجد أرقام مسجّلة.', en: 'No registered numbers.', hi: 'कोई पंजीकृत नंबर नहीं।');
+  String get webhookNoCampaigns => _t(ar: 'لا توجد حملات ظاهرة في هذا النطاق.', en: 'No campaigns are visible in this scope.', hi: 'इस दायरे में कोई अभियान नहीं है।');
+  String get webhookInviteHelp => _t(
+    ar: 'رابط wa.me يفتح محادثة مع رقم النشاط ورسالة تحتوي كود الانضمام. إذا كان التسجيل الذاتي مفعلاً، يُسجَّل الرقم تلقائياً على الحملة.',
+    en: 'The wa.me link opens a chat with the business number and a prefilled join code. When self-registration is on, that number is linked to the campaign.',
+    hi: 'wa.me लिंक व्यवसाय नंबर पर जुड़ने का कोड भरकर चैट खोलता है। स्वयं-पंजीकरण चालू होने पर नंबर अभियान से जुड़ जाता है।',
+  );
+  String get webhookSelfRegistration => _t(ar: 'تسجيل ذاتي لهذه الحملة', en: 'Self-registration for this campaign', hi: 'इस अभियान के लिए स्वयं-पंजीकरण');
+  String get webhookSelfRegistrationHint => _t(
+    ar: 'رسالة تحتوي كوداً صالحاً من رقم غير مسجل تُنشئ ربطاً تلقائياً.',
+    en: 'A message with a valid code from an unknown number creates the sender link.',
+    hi: 'अज्ञात नंबर से मान्य कोड वाला संदेश लिंक बनाता है।',
+  );
+  String get webhookJoinCode => _t(ar: 'كود الانضمام', en: 'Join code', hi: 'जुड़ने का कोड');
+  String get webhookGenerateCode => _t(ar: 'توليد كود', en: 'Generate code', hi: 'कोड बनाएँ');
+  String get webhookInviteNeedsNumber => _t(
+    ar: 'احفظ رقم النشاط وكود الانضمام ليظهر الرابط ورمز QR.',
+    en: 'Save the business number and a join code to show the link and QR code.',
+    hi: 'लिंक और क्यूआर दिखाने के लिए व्यवसाय नंबर और जुड़ने का कोड सहेजें।',
+  );
+  String get webhookShareLink => _t(ar: 'فتح الرابط', en: 'Open link', hi: 'लिंक खोलें');
 }
 
 

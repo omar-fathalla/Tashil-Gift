@@ -225,24 +225,35 @@ service cloud.firestore {
       }
     }
 
-    // WhatsApp webhook state is written only by the Admin SDK (wahaWebhook).
+    // WhatsApp webhook state is written only by the Admin SDK.
+    // Staff (super_admin and admin) can read the control page. Clients cannot write.
     match /whatsapp_inbound_messages/{messageId} {
-      allow read: if isSuperAdmin();
+      allow read: if isAdmin();
       allow write: if false;
     }
 
     match /whatsapp_message_status/{messageId} {
-      allow read: if isSuperAdmin();
+      allow read: if isAdmin();
       allow write: if false;
     }
 
     match /whatsapp_outbox/{messageId} {
-      allow read: if isSuperAdmin();
+      allow read: if isAdmin();
       allow write: if false;
     }
 
     match /whatsapp_sender_links/{phone} {
-      allow read: if isSuperAdmin();
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /whatsapp_webhook_config/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /whatsapp_webhook_campaigns/{campaignId} {
+      allow read: if isAdmin();
       allow write: if false;
     }
 

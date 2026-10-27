@@ -68,6 +68,7 @@ async function callGeminiForReceipt({ apiKey, imagePayload, branches, products, 
         storeChainDetected: String(parsed.storeChainDetected || ""),
         branchDetected: String(parsed.branchDetected || (branches[0] || "")),
         isBranchMatched: parsed.isBranchMatched === true,
+        confidence: typeof parsed.confidence === "number" ? parsed.confidence : null,
         message: String(parsed.message || "تم التحليل عبر Gemini Gateway"),
       };
     } catch (_) {

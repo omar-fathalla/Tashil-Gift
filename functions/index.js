@@ -4,6 +4,10 @@ const admin = require("firebase-admin");
 const { verifyReceiptImage } = require("./receipt_verification");
 const { applyCampaignPrizeClaim } = require("./security_functions");
 const { handleWahaWebhook } = require("./waha_webhook");
+const {
+  updateWhatsappWebhookConfig,
+  manageWhatsappSenderLink,
+} = require("./whatsapp_webhook_admin");
 
 // Firebase Secrets (set via: firebase functions:secrets:set NAME)
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
@@ -622,3 +626,6 @@ exports.wahaWebhook = onRequest({
     serverTimestamp: () => admin.firestore.FieldValue.serverTimestamp(),
   });
 });
+
+exports.updateWhatsappWebhookConfig = updateWhatsappWebhookConfig;
+exports.manageWhatsappSenderLink = manageWhatsappSenderLink;

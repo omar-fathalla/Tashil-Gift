@@ -8,7 +8,17 @@ const TERMINAL_STATUSES = new Set([
   "pending_review",
   "awarded",
   "rejected",
+  "not_allowed",
+  "registered",
 ]);
+
+const DEFAULT_TEMPLATES = {
+  verified: "تم التحقق من فاتورتك رقم {receipt}. جائزتك: {prize}. حملة {campaign}.",
+  pendingReview: "مرحباً {name}، استلمنا رسالتك وهي قيد المراجعة لحملة {campaign}.",
+  rejected: "تعذر قبول الفاتورة {receipt}. {campaign}",
+  notAllowed: "هذا الرقم غير مسموح به. اطلب رابط الدعوة من المسؤول للانضمام.",
+  registered: "تم تسجيلك يا {name} في حملة {campaign}. أرسل صورة الفاتورة الآن.",
+};
 const PROCESSING_LEASE_MS = 2 * 60 * 1000;
 
 const ACK_NAMES = {
@@ -204,6 +214,137 @@ function json(res, status, body) {
   res.status(status).json(body);
 }
 
+function renderTemplate(config, key, vars) {
+  const custom = config && config.templates && config.templates[key];
+  const template = String((custom && String(custom).trim()) || DEFAULT_TEMPLATES[key] || "");
+  const values = vars || {};
+  return template
+    .replaceAll("{name}", String(values.name || ""))
+    .replaceAll("{prize}", String(values.prize || ""))
+    .replaceAll("{receipt}", String(values.receipt || ""))
+    .replaceAll("{campaign}", String(values.campaign || ""));
+}
+
+function extractJoinCode(body) {
+  const text = String(body || "").trim();
+  if (!text || text.length > 80) return "";
+  const prefixed = text.match(/^(?:join|code|انضم|كود)\s*[:#-]?\s*([A-Za-z0-9]{4,16})$/i);
+  if (prefixed) return prefixed[1].toUpperCase();
+  if (/^[A-Za-z0-9]{4,16}$/.test(text)) return text.toUpperCase();
+  return "";
+}
+
+async function loadWebhookConfig(db) {
+  const snap = await db.collection("whatsapp_webhook_config").doc("default").get();
+  const data = snap.exists ? (snap.data() || {}) : {};
+  return {
+    enabled: data.enabled !== false,
+    autoRepliesEnabled: data.autoRepliesEnabled === true,
+    allowListOnly: data.allowListOnly === true,
+    templates: data.templates && typeof data.templates === "object" ? data.templates : {},
+    businessDisplayName: String(data.businessDisplayName || ""),
+  };
+}
+
+async function stampWebhookHealth(db, fields) {
+  await db.collection("whatsapp_webhook_config").doc("default").set(fields, { merge: true });
+}
+
+function analysisFromResult(result) {
+  const value = result || {};
+  return {
+    isValid: value.isValid === true,
+    verdict: value.isValid === true ? "valid" : "rejected",
+    receiptNumber: value.receiptNumber || null,
+    message: value.message || null,
+    storeChainDetected: value.storeChainDetected || null,
+    branchDetected: value.branchDetected || null,
+    isBranchMatched: value.isBranchMatched === true,
+    confidence: typeof value.confidence === "number" ? value.confidence : null,
+    prizeWon: value.prize_won || null,
+    prizesWon: Array.isArray(value.prizes_won) ? value.prizes_won : null,
+  };
+}
+
+function linkIsActive(link) {
+  return !!(link && link.campaignId && link.active !== false);
+}
+
+async function findOpenCampaign(db, code) {
+  if (!code) return null;
+  const snap = await db.collection("whatsapp_webhook_campaigns")
+    .where("joinCode", "==", code)
+    .limit(5)
+    .get();
+  const docs = snap && snap.docs ? snap.docs : [];
+  for (const docSnap of docs) {
+    const data = docSnap.data() || {};
+    if (data.selfRegistrationEnabled === true) {
+      return Object.assign({ campaignId: docSnap.id }, data);
+    }
+  }
+  return null;
+}
+
+async function sendWahaText({ baseUrl, apiKey, session, phone, text, fetchImpl }) {
+  const fetchFn = fetchImpl || fetch;
+  const url = new URL("/api/sendText", baseUrl).toString();
+  const response = await fetchFn(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": apiKey || "",
+    },
+    body: JSON.stringify({
+      session: session || "default",
+      chatId: `${phone}@c.us`,
+      text,
+    }),
+  });
+  if (!response.ok) {
+    const errText = typeof response.text === "function" ? await response.text() : "";
+    throw new Error(`WAHA sendText failed (${response.status}) ${String(errText).slice(0, 180)}`);
+  }
+  const payload = typeof response.json === "function" ? await response.json() : {};
+  const rawId = payload && payload.id;
+  const messageId = typeof rawId === "string"
+    ? rawId
+    : (rawId && (rawId.id || rawId._serialized)) || (payload && payload.key && payload.key.id) || "";
+  return { id: String(messageId || "") };
+}
+
+async function completeInbound(deps, ctx, fields, templateKey, vars) {
+  const replyText = templateKey ? renderTemplate(ctx.config, templateKey, vars) : "";
+  let replyMessageId = "";
+  let replySent = false;
+  let replyError = "";
+  if (ctx.config.autoRepliesEnabled && replyText && ctx.phone) {
+    try {
+      const sender = deps.sendText || sendWahaText;
+      const sent = await sender({
+        baseUrl: deps.baseUrl,
+        apiKey: deps.apiKey,
+        session: ctx.session,
+        phone: ctx.phone,
+        text: replyText,
+        fetchImpl: deps.fetchImpl,
+      });
+      replyMessageId = sent && sent.id ? sent.id : "";
+      replySent = true;
+    } catch (err) {
+      replyError = String(err && err.message || err).slice(0, 300);
+    }
+  }
+  await saveMessage(deps.db, ctx.messageId, Object.assign({}, fields, {
+    replyText: replyText || null,
+    replyMessageId: replyMessageId || null,
+    replySent,
+    replyError: replyError || null,
+    updatedAt: ctx.stamp,
+  }));
+  return { replyText, replyMessageId, replySent };
+}
+
 async function handleWahaWebhook(req, res, deps) {
   if (req.method !== "POST") {
     res.set("Allow", "POST");
@@ -231,9 +372,31 @@ async function handleWahaWebhook(req, res, deps) {
   const now = typeof deps.now === "function" ? deps.now() : Date.now();
   const stamp = typeof deps.serverTimestamp === "function" ? deps.serverTimestamp() : new Date(now).toISOString();
 
+  let config;
+  try {
+    config = await loadWebhookConfig(deps.db);
+  } catch (err) {
+    console.error("WAHA config read failed", err);
+    return json(res, 500, { ok: false, error: "config_unavailable" });
+  }
+
+  const sessionStatus = payload.status || payload.state || "";
+  const health = {
+    lastEventAt: stamp,
+    lastEventAtMs: now,
+    lastEventName: name || "unknown",
+    updatedAt: stamp,
+  };
+  if (name === "session.status") health.lastSessionStatus = String(sessionStatus || "");
+  await stampWebhookHealth(deps.db, health).catch((err) => console.error("WAHA health stamp failed", err));
+
+  if (!config.enabled) {
+    return json(res, 200, { ok: true, ignored: true, reason: "webhook_disabled" });
+  }
+
   if (name === "session.status") {
-    console.log("WAHA session.status", session, payload.status || payload);
-    return json(res, 200, { ok: true, ignored: true, event: name });
+    console.log("WAHA session.status", session, sessionStatus || payload);
+    return json(res, 200, { ok: true, ignored: true, event: name, sessionStatus: String(sessionStatus || "") });
   }
 
   if (name === "message.ack") {
@@ -265,8 +428,49 @@ async function handleWahaWebhook(req, res, deps) {
   }
 
   const phone = phoneFromJid(payload.from);
+  const ctx = { config, messageId, phone, session, stamp };
   try {
     if (!isImageMessage(payload)) {
+      const joinCode = extractJoinCode(payload.body);
+      const campaign = joinCode ? await findOpenCampaign(deps.db, joinCode) : null;
+      if (campaign) {
+        await deps.db.collection("whatsapp_sender_links").doc(phone).set({
+          phone,
+          campaignId: campaign.campaignId,
+          companySlug: campaign.companySlug || "",
+          campaignName: campaign.campaignName || campaign.campaignId,
+          prizeIdentifier: campaign.prizeIdentifier || "",
+          active: true,
+          registeredVia: "join_code",
+          updatedAt: stamp,
+        }, { merge: true });
+        await completeInbound(deps, ctx, {
+          kind: "text",
+          status: "registered",
+          reason: "join_code",
+          phone,
+          body: String(payload.body || "").slice(0, 4000),
+          campaignId: campaign.campaignId,
+          joinCode,
+        }, "registered", {
+          name: phone,
+          campaign: campaign.campaignName || campaign.campaignId,
+        });
+        return json(res, 200, { ok: true, registered: true, messageId, campaignId: campaign.campaignId });
+      }
+
+      const known = linkIsActive(await findSenderLink(deps.db, phone));
+      if (!known && config.allowListOnly) {
+        await completeInbound(deps, ctx, {
+          kind: "text",
+          status: "not_allowed",
+          reason: "not_allowed",
+          phone,
+          body: String(payload.body || "").slice(0, 4000),
+        }, "notAllowed", { name: phone });
+        return json(res, 200, { ok: true, notAllowed: true, messageId });
+      }
+
       console.log("WAHA text message", messageId, phone);
       await saveMessage(deps.db, messageId, {
         kind: "text",
@@ -279,15 +483,24 @@ async function handleWahaWebhook(req, res, deps) {
     }
 
     const link = await findSenderLink(deps.db, phone);
-    if (!link) {
-      await saveMessage(deps.db, messageId, {
+    if (!linkIsActive(link)) {
+      if (config.allowListOnly) {
+        await completeInbound(deps, ctx, {
+          kind: "image",
+          status: "not_allowed",
+          reason: "not_allowed",
+          phone,
+          mimetype: mediaMime(payload),
+        }, "notAllowed", { name: (link && link.displayName) || phone });
+        return json(res, 200, { ok: true, notAllowed: true, messageId });
+      }
+      await completeInbound(deps, ctx, {
         kind: "image",
         status: "pending_review",
         reason: "no_sender_link",
         phone,
         mimetype: mediaMime(payload),
-        updatedAt: stamp,
-      });
+      }, "pendingReview", { name: phone });
       return json(res, 200, { ok: true, pendingReview: true, messageId });
     }
 
@@ -308,29 +521,40 @@ async function handleWahaWebhook(req, res, deps) {
       forceRefresh: false,
     });
     const result = (verified && verified.result) || {};
+    const analysis = analysisFromResult(result);
+    const campaignLabel = link.campaignName || link.campaignId;
+    const senderName = link.displayName || phone;
     if (result.isValid !== true) {
-      await saveMessage(deps.db, messageId, {
+      await completeInbound(deps, ctx, {
         kind: "image",
         status: "rejected",
         reason: "invoice_not_valid",
         phone,
         campaignId: link.campaignId,
         message: result.message || null,
-        updatedAt: stamp,
+        analysis,
+      }, "rejected", {
+        name: senderName,
+        receipt: result.receiptNumber || "",
+        campaign: campaignLabel,
       });
       return json(res, 200, { ok: true, rejected: true, messageId });
     }
 
     const decrements = decrementsForAward(result, link);
     if (!decrements.length) {
-      await saveMessage(deps.db, messageId, {
+      await completeInbound(deps, ctx, {
         kind: "image",
         status: "pending_review",
         reason: "verified_without_prize",
         phone,
         campaignId: link.campaignId,
         receiptNumber: result.receiptNumber || null,
-        updatedAt: stamp,
+        analysis,
+      }, "pendingReview", {
+        name: senderName,
+        receipt: result.receiptNumber || "",
+        campaign: campaignLabel,
       });
       return json(res, 200, { ok: true, pendingReview: true, reason: "verified_without_prize", messageId });
     }
@@ -373,14 +597,21 @@ async function handleWahaWebhook(req, res, deps) {
       },
     });
 
-    await saveMessage(deps.db, messageId, {
+    await completeInbound(deps, ctx, {
       kind: "image",
       status: "awarded",
       phone,
       campaignId: link.campaignId,
       receiptId,
+      receiptNumber,
+      prize: prizeNames.join(", "),
       applied: claimResult.applied || [],
-      updatedAt: stamp,
+      analysis,
+    }, "verified", {
+      name: senderName,
+      prize: prizeNames.join(", "),
+      receipt: receiptNumber,
+      campaign: campaignLabel,
     });
     return json(res, 200, { ok: true, awarded: true, messageId, receiptId });
   } catch (err) {
@@ -478,5 +709,8 @@ module.exports = {
   timingSafeEqualString,
   decrementsForAward,
   resolveMediaUrl,
+  renderTemplate,
+  extractJoinCode,
+  DEFAULT_TEMPLATES,
   handleWahaWebhook,
 };
