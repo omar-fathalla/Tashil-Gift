@@ -1,3 +1,4 @@
+const { consumeRateLimit, RateLimitError } = require("./rate_limit");
 const crypto = require("node:crypto");
 
 const TOKEN_HEADER = "x-webhook-token";
@@ -428,6 +429,17 @@ async function handleWahaWebhook(req, res, deps) {
   }
 
   const phone = phoneFromJid(payload.from);
+  // Per-sender rate limit: drop floods from one number before any Gemini/media work.
+  try {
+    const consume = deps.consumeRateLimit || consumeRateLimit;
+    await consume({ db: deps.db, scope: "wahaSender", key: "phone:" + (phone || payload.from || "unknown"), now });
+  } catch (err) {
+    if (err instanceof RateLimitError) {
+      await saveMessage(deps.db, messageId, { status: "ignored", reason: "rate_limited", updatedAt: stamp });
+      return json(res, 200, { ok: true, ignored: true, reason: "rate_limited", messageId });
+    }
+    console.warn("wahaSender rate limit check failed (fail-open):", err && err.message);
+  }
   const ctx = { config, messageId, phone, session, stamp };
   try {
     if (!isImageMessage(payload)) {

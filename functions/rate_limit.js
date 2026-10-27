@@ -19,6 +19,11 @@ const LIMITS = {
     { name: "min", windowMs: MINUTE, max: 30 },
     { name: "day", windowMs: DAY, max: 500 },
   ],
+  // Inbound WhatsApp messages per sender phone (wahaWebhook).
+  wahaSender: [
+    { name: "min", windowMs: MINUTE, max: 10 },
+    { name: "day", windowMs: DAY, max: 150 },
+  ],
 };
 
 class RateLimitError extends Error {

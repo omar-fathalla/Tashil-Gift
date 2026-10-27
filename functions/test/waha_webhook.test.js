@@ -470,3 +470,26 @@ test("records message.ack and updates an existing outbox row", async () => {
   assert.equal(bag.db.docs.get("whatsapp_outbox/true_2010_ABC").whatsapp_ack_name, "READ");
   assert.equal(bag.db.docs.get("receipts_transactions/rcpt-1").whatsapp_ack, 4);
 });
+
+test("drops messages from a sender over the per-sender rate limit", async () => {
+  const { RateLimitError } = require("../rate_limit");
+  const seen = [];
+  const { deps: d, calls } = deps({
+    deps: {
+      consumeRateLimit: async (args) => {
+        seen.push(args);
+        throw new RateLimitError("wahaSender", "min", 30);
+      },
+    },
+  });
+  const res = response();
+  await handleWahaWebhook(
+    signedRequest({ event: "message", session: "default", payload: { id: "rl1", from: "201000000000@c.us", hasMedia: true, body: "" } }),
+    res,
+    d,
+  );
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].scope, "wahaSender");
+  assert.equal(calls.verify.length, 0);
+  assert.equal(calls.claim.length, 0);
+});
