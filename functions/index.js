@@ -427,7 +427,6 @@ const WAHA_PROXY_ALLOWED_ORIGINS = new Set([
   "https://tashil-gift.firebaseapp.com",
   "https://gift.sw-point.com",
   "https://www.gift.sw-point.com",
-  "https://tashil.gift.sw-point.com",
 ]);
 const WAHA_PROXY_ALLOWED_ROLES = new Set(["super_admin", "admin", "partner"]);
 
