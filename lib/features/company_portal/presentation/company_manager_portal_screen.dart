@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/widgets/portal_data_error_view.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -78,6 +79,31 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
   Stream<QuerySnapshot>? _memoizedEventsStream;
   String? _lastEventsStreamKey;
 
+  // Server-provided branding (name + logo) used when campaign docs are not
+  // readable or carry no branding. Never contains credentials.
+  String _brandName = '';
+  String _brandLogoUrl = '';
+  String? _brandKey;
+
+  void _ensureBranding() {
+    final key = '${widget.companySlug}|${widget.initialEventId ?? ''}';
+    if (_brandKey == key) return;
+    _brandKey = key;
+    () async {
+      try {
+        final r = await ref.read(partnerPortalAuthServiceProvider).resolveCredentials(
+              companySlug: widget.companySlug,
+              eventId: widget.initialEventId,
+            );
+        if (!mounted) return;
+        setState(() {
+          _brandName = r.companyName.trim();
+          _brandLogoUrl = r.companyLogoUrl.trim();
+        });
+      } catch (_) {}
+    }();
+  }
+
   Stream<QuerySnapshot>? _ensureEventsStream(FirebaseFirestore? firestore) {
     if (firestore == null) return null;
     final cleanSlug = widget.companySlug.trim().toLowerCase();
@@ -85,7 +111,9 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     if (_memoizedEventsStream == null || _lastEventsStreamKey != key) {
       _lastEventsStreamKey = key;
       try {
-        _memoizedEventsStream = firestore.collection('events').snapshots();
+        _memoizedEventsStream = cleanSlug.isNotEmpty
+            ? firestore.collection('events').where('companySlug', isEqualTo: cleanSlug).snapshots()
+            : firestore.collection('events').snapshots();
       } catch (_) {
         _memoizedEventsStream = null;
       }
@@ -106,6 +134,8 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
     try {
       ref.read(adminSessionEmailProvider.notifier).state = null;
     } catch (_) {}
+    // Public portal routes need an anonymous session again after logout.
+    await authService.signOutPortalIdentity();
 
     // 3. Purge all stored portal sessions for this company and event across all roles
     await authService.signOutAllRoles(
@@ -449,6 +479,10 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
         companyDisplayName = matchedEvents.first.targetCompany;
       }
     }
+    _ensureBranding();
+    if (companyDisplayName.isEmpty && _brandName.isNotEmpty && _brandName.toLowerCase() != effectiveSlug.toLowerCase()) {
+      companyDisplayName = _brandName;
+    }
     if (companyDisplayName.isEmpty) {
       companyDisplayName = SlugUtils.formatSlugToName(effectiveSlug);
     }
@@ -472,6 +506,9 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
           break;
         }
       }
+    }
+    if (companyLogoUrl.isEmpty && _brandLogoUrl.startsWith('https://')) {
+      companyLogoUrl = _brandLogoUrl;
     }
 
     final bool isSuspended = widget.isAgencyOpsMode
@@ -2097,6 +2134,17 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
         return StreamBuilder<QuerySnapshot>(
           stream: eventsStream,
           builder: (context, snapshot) {
+            if (snapshot.hasError && !snapshot.hasData) {
+              return Scaffold(
+                body: PortalDataErrorView(
+                  error: snapshot.error,
+                  onRetry: () => setState(() {
+                    _memoizedEventsStream = null;
+                    _lastEventsStreamKey = null;
+                  }),
+                ),
+              );
+            }
             final rawDocs = snapshot.data?.docs ?? [];
             final lockedId = session?.lockedEventId;
             final allDocs = (lockedId != null && lockedId.isNotEmpty)

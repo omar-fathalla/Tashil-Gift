@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/widgets/portal_data_error_view.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -277,6 +278,10 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
       Query transactionsQuery = firestore.collection('receipts_transactions');
       if (effectiveEventId != 'all' && effectiveEventId != null && effectiveEventId.isNotEmpty) {
         transactionsQuery = transactionsQuery.where('campaignId', isEqualTo: effectiveEventId);
+        // Partner reads must be constrained by companySlug to satisfy rules.
+        if (widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty) {
+          transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug);
+        }
       } else if (widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty) {
         transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug);
       }
@@ -453,6 +458,9 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
             return StreamBuilder<QuerySnapshot>(
               stream: _transactionsStream,
               builder: (context, transactionsSnapshot) {
+                if (transactionsSnapshot.hasError && !transactionsSnapshot.hasData) {
+                  return PortalDataErrorView(error: transactionsSnapshot.error);
+                }
                 if (transactionsSnapshot.hasData) {
                   final docs = transactionsSnapshot.data!.docs;
                   // Zero-wipe invariant: never wipe cached data with empty transient data

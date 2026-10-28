@@ -45,3 +45,14 @@ test("publicInfo never leaks credentials", () => {
   assert.strictEqual(info.companyName, "Co");
   assert.strictEqual(info.logoUrl, "https://x/l.png");
 });
+
+test("portal token claims", () => {
+  const { portalTokenSpec } = _test;
+  const a = portalTokenSpec("583", { role: "brand_manager", username: "Dina", credentialVersion: 4, isCampaignTier: false });
+  assert.deepStrictEqual(a.claims, { role: "partner", companySlug: "583", partnerAccess: "read", portalRole: "brand_manager", credVersion: 4 });
+  assert.ok(a.uid.startsWith("portal_") && a.uid.length <= 128);
+  const b = portalTokenSpec("583", { role: "agency_ops", username: "x", credentialVersion: 2, isCampaignTier: true, lockedEventId: "e1" });
+  assert.strictEqual(b.claims.partnerAccess, "ops");
+  assert.strictEqual(b.claims.lockedEventId, "e1");
+  assert.notStrictEqual(a.uid, b.uid);
+});

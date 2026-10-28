@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_service.dart';
@@ -159,6 +160,7 @@ final partnerPortalAuthServiceProvider = Provider<PartnerPortalAuthService>((ref
     return PartnerPortalAuthService(
       firestore: firestore,
       functions: FirebaseFunctions.instanceFor(region: 'us-central1'),
+      auth: ref.watch(firebaseAuthProvider),
     );
   } catch (_) {
     return PartnerPortalAuthService(firestore: null);
@@ -186,11 +188,72 @@ class PartnerPortalAuthService {
     _memoryEventOverrides.clear();
   }
 
-  PartnerPortalAuthService({FirebaseFirestore? firestore, FirebaseFunctions? functions})
+  PartnerPortalAuthService({FirebaseFirestore? firestore, FirebaseFunctions? functions, FirebaseAuth? auth})
       : _firestore = firestore,
-        _functions = functions;
+        _functions = functions,
+        _auth = auth;
 
   final FirebaseFunctions? _functions;
+  final FirebaseAuth? _auth;
+
+  static const Set<String> _staffRoles = {'admin', 'super_admin'};
+
+  /// Signs this browser into Firebase as the portal partner (custom token with
+  /// role/companySlug claims) so Firestore rules grant company-scoped reads.
+  /// Never replaces a signed-in admin session.
+  Future<bool> _adoptPortalIdentity(String? customToken) async {
+    final auth = _auth;
+    if (auth == null) return true;
+    final current = auth.currentUser;
+    if (current != null && !current.isAnonymous) {
+      try {
+        final claims = (await current.getIdTokenResult()).claims ?? const {};
+        if (_staffRoles.contains(claims['role'])) return true;
+      } catch (_) {}
+    }
+    if (customToken == null || customToken.isEmpty) return false;
+    try {
+      await auth.signInWithCustomToken(customToken);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// True when the Firebase user can read this portal's data: a staff admin,
+  /// or a partner token for the same company, portal role and credential version.
+  Future<bool> _firebaseIdentityMatches(PartnerPortalSession session) async {
+    final auth = _auth;
+    if (auth == null || _functions == null) return true;
+    final user = auth.currentUser;
+    if (user == null || user.isAnonymous) return false;
+    try {
+      final claims = (await user.getIdTokenResult()).claims ?? const {};
+      final role = claims['role'];
+      if (_staffRoles.contains(role)) return true;
+      return role == 'partner' &&
+          (claims['companySlug'] ?? '').toString().toLowerCase() == session.companySlug.toLowerCase() &&
+          claims['portalRole'] == session.role.value &&
+          _asInt(claims['credVersion'], -1) == session.credentialVersion;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Signs the partner identity out and returns the browser to an anonymous
+  /// session (needed by public routes). Admin sessions are handled elsewhere.
+  Future<void> signOutPortalIdentity({bool restoreAnonymous = true}) async {
+    final auth = _auth;
+    if (auth == null) return;
+    try {
+      final user = auth.currentUser;
+      if (user != null && !user.isAnonymous) {
+        final claims = (await user.getIdTokenResult()).claims ?? const {};
+        if (claims['role'] == 'partner') await auth.signOut();
+      }
+      if (restoreAnonymous && auth.currentUser == null) await auth.signInAnonymously();
+    } catch (_) {}
+  }
 
   static int _asInt(dynamic v, [int fallback = 1]) => v is num ? v.toInt() : (int.tryParse('${v ?? ''}') ?? fallback);
 
@@ -287,6 +350,13 @@ class PartnerPortalAuthService {
           isCampaignTier: sm['isCampaignTier'] == true,
           authenticatedAt: DateTime.now(),
         );
+        final adopted = await _adoptPortalIdentity(m['customToken']?.toString());
+        if (!adopted) {
+          return PortalAuthResult.failure(
+            errorMessageAr: 'تم التحقق من البيانات لكن تعذر فتح جلسة البوابة. حاول مرة أخرى.',
+            errorMessageEn: 'Credentials verified, but the portal session could not be opened. Please try again.',
+          );
+        }
         await _persistSession(session, rememberMe: rememberMe, eventId: eventId);
         return PortalAuthResult.success(session);
       }
@@ -800,6 +870,22 @@ class PartnerPortalAuthService {
   /// Validates an existing session (from memory or SharedPreferences) against Firestore's live `credentialVersion`.
   /// Returns `null` and clears storage if the password was rotated (`credentialVersion` mismatch) or role mismatches.
   Future<PartnerPortalSession?> getValidSession({
+    required String companySlug,
+    required PartnerPortalRole requiredRole,
+    String? eventId,
+  }) async {
+    final session = await _getValidStoredSession(
+      companySlug: companySlug,
+      requiredRole: requiredRole,
+      eventId: eventId,
+    );
+    if (session == null) return null;
+    // Data access needs the matching Firebase identity; otherwise re-login.
+    if (!await _firebaseIdentityMatches(session)) return null;
+    return session;
+  }
+
+  Future<PartnerPortalSession?> _getValidStoredSession({
     required String companySlug,
     required PartnerPortalRole requiredRole,
     String? eventId,

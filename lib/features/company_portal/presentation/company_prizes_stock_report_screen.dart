@@ -153,6 +153,9 @@ class _CompanyPrizesStockReportScreenState
       Query transactionsQuery = firestore.collection('receipts_transactions');
       if (_selectedEventId != null && _selectedEventId != 'ALL' && _selectedEventId != 'all') {
         transactionsQuery = transactionsQuery.where('campaignId', isEqualTo: _selectedEventId);
+        if (slug.isNotEmpty) {
+          transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug.trim());
+        }
       } else if (slug.isNotEmpty) {
         transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug.trim());
       }

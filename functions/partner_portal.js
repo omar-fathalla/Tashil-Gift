@@ -11,7 +11,7 @@
  */
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("./admin_sdk");
-const { RateLimitError, clientKey, consumeRateLimit } = require("./rate_limit");
+const { RateLimitError, clientKey, consumeRateLimit, hash } = require("./rate_limit");
 
 const MINUTE = 60 * 1000;
 const DAY = 24 * 60 * MINUTE;
@@ -160,6 +160,21 @@ async function loadContext(db, rawSlug, rawEventId) {
   return { slug, eventId, event, company };
 }
 
+/** Firebase custom-token uid + claims for an authenticated portal session. */
+function portalTokenSpec(slug, session) {
+  const locked = session.isCampaignTier && session.lockedEventId ? String(session.lockedEventId) : "";
+  const uid = "portal_" + hash(`${slug}|${session.role}|${locked}|${String(session.username).toLowerCase()}`);
+  const claims = {
+    role: "partner",
+    companySlug: slug,
+    partnerAccess: session.role === ROLE_AGENCY ? "ops" : "read",
+    portalRole: session.role,
+    credVersion: session.credentialVersion,
+  };
+  if (locked) claims.lockedEventId = locked;
+  return { uid, claims };
+}
+
 function publicInfo({ slug, eventId, event, company }) {
   const c = company || {};
   const e = event || {};
@@ -226,9 +241,12 @@ const partnerPortalLogin = onCall(callableOptions, async (request) => {
     console.warn("partnerPortalLogin rejected", { slug: ctx.slug, role, reason: result.error });
     return { ok: false, reason: result.error, info };
   }
+  const spec = portalTokenSpec(ctx.slug, result);
+  const customToken = await admin.auth().createCustomToken(spec.uid, spec.claims);
   return {
     ok: true,
     info,
+    customToken,
     session: {
       companySlug: ctx.slug,
       role: result.role,
@@ -243,5 +261,5 @@ const partnerPortalLogin = onCall(callableOptions, async (request) => {
 module.exports = {
   partnerPortalInfo,
   partnerPortalLogin,
-  _test: { verifyCredentials, publicInfo, defaults, deterministicPin },
+  _test: { portalTokenSpec, verifyCredentials, publicInfo, defaults, deterministicPin },
 };

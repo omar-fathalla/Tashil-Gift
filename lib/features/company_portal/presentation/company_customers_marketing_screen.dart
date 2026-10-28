@@ -141,7 +141,10 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
   Stream<QuerySnapshot> _getEventsStream(FirebaseFirestore firestore) {
     if (_lastFirestore != firestore || _eventsStream == null) {
       _lastFirestore = firestore;
-      _eventsStream = firestore.collection('events').snapshots();
+      final scopedSlug = (widget.lockedCompanySlug ?? '').trim().toLowerCase();
+      _eventsStream = scopedSlug.isNotEmpty
+          ? firestore.collection('events').where('companySlug', isEqualTo: scopedSlug).snapshots()
+          : firestore.collection('events').snapshots();
       _lastScopedSlug = null;
     }
     return _eventsStream!;
