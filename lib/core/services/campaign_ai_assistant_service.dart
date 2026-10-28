@@ -552,7 +552,15 @@ $rawIdeaText
     buffer.writeln('3. أصناف وكميات منتجات "$targetCompany" بدقة.');
     buffer.writeln();
 
+    // Sub-brands come from the company dictionary, required products, and the
+    // brands/products declared on the promotional rules (works for any company).
     final resolvedSubBrands = resolveCompanySubBrands(targetCompany, productNames: requiredProducts);
+    for (final r in promotionalRules) {
+      for (final b in r.requiredBrands) {
+        final t = b.trim();
+        if (t.isNotEmpty && !resolvedSubBrands.contains(t)) resolvedSubBrands.add(t);
+      }
+    }
     if (resolvedSubBrands.isNotEmpty) {
       buffer.writeln('🏷️ العلامات والأسماء التجارية المعتمدة للشركة بالفاتورة (Sub-Brands Taxonomy - AIR-59):');
       buffer.writeln('- نظراً لأن أنظمة الكاشير (POS) في السوبرماركت تطبع أسماء الماركات والعلامات الفرعية فقط ولا تطبع اسم الشركة القابضة، فإن منتجات وعلامات شركة "$targetCompany" في هذا العرض تشمل صراحةً العلامات التجارية والماركات الآتية:');
@@ -631,14 +639,50 @@ $rawIdeaText
       }
       buffer.writeln();
       buffer.writeln('⚠️ تعليمات هامة للذكاء الاصطناعي أثناء التدقيق ومطابقة القواعد (Mandatory Invariants):');
-      buffer.writeln('- [حارس العزل الصارم للشكل الفيزيائي للعبوة]:');
-      buffer.writeln('  * أصناف الرول أون (Roll-on بحجم 50 مل) تطابق حصراً قواعد الرول أون، وتطابق كافة اختصاراتها في بونات الكاشير (رول أون، رول، روول، ستيك، roll on) دون اشتراط كلمة "أون"، ويُحظر تماماً مطابقتها مع قواعد الاسبراي (مثل عرض الـ 125 ج.م).');
-      buffer.writeln('  * أصناف الاسبراي (Aerosol Spray بحجم 150 مل) تطابق حصراً قواعد الاسبراي، ويُحظر مطابقتها مع قواعد الرول أون.');
-      buffer.writeln('  * عبوات تريزيمي 400 مل تطابق حصراً قاعدة تريزيمي، وعبوات كلير 360 مل تطابق حصراً قاعدة كلير.');
-      buffer.writeln('  * أصناف العناية بالفم (معجون أسنان سيجنال أو كلوس اب) تطابق حصراً قواعد حزم العناية بالفم (Oral Care Bundles).');
-      buffer.writeln('- [قاعدة الحزم المدمجة Combo Bundles]:');
-      buffer.writeln('  * إذا اشترطت الحزمة وجود علامتين معاً (مثل Signal و Closeup معاً)، يجب التأكد من وجود صنف واحد على الأقل من كل علامة، وبلوغ إجمالي مشترياتهما معاً الحد الأدنى للإنفاق (مثال: 100 ج.م أو 150 ج.م).');
-      buffer.writeln('  * في حال وجود مستويات متعددة من الإنفاق أو الكميات، امنح العميل القاعدة ذات المستوى الأعلى المحقق من نفس الفئة (مثل: 200 ج.م تفوز بقاعدة الـ 75 ج.م وليس 25 ج.م).');
+      // Item-specific guards are only emitted when the campaign actually
+      // references those items (avoids leaking one company's rules into others).
+      final itemCorpus = <String>[
+        ...requiredProducts,
+        for (final r in promotionalRules) ...[
+          r.ruleTitle,
+          r.triggerProduct,
+          ...r.requiredBrands,
+          ...r.selectedProductNames,
+        ],
+      ].join(' ').toLowerCase();
+      bool mentions(List<String> keys) => keys.any((k) => itemCorpus.contains(k.toLowerCase()));
+      final hasRollOn = mentions(['رول', 'روول', 'roll on', 'roll-on', 'rollon']);
+      final hasSpray = mentions(['اسبراي', 'سبراي', 'بخاخ', 'spray', 'aerosol']);
+      final hasTresemme = mentions(['تريزيمي', 'tresemme', 'tresemmé']);
+      final hasClear = mentions(['كلير', 'clear']);
+      final hasOralCare = mentions(['سيجنال', 'كلوس اب', 'كلوزاب', 'signal', 'closeup', 'close up']);
+      final hasCombo = promotionalRules.any((r) => r.isCombo);
+      final hasTiers = promotionalRules.length > 1;
+
+      final guardLines = <String>[];
+      if (hasRollOn && hasSpray) {
+        guardLines.add('  * أصناف الرول أون (Roll-on بحجم 50 مل) تطابق حصراً قواعد الرول أون، وتطابق كافة اختصاراتها في بونات الكاشير (رول أون، رول، روول، ستيك، roll on) دون اشتراط كلمة "أون"، ويُحظر تماماً مطابقتها مع قواعد الاسبراي.');
+        guardLines.add('  * أصناف الاسبراي (Aerosol Spray بحجم 150 مل) تطابق حصراً قواعد الاسبراي، ويُحظر مطابقتها مع قواعد الرول أون.');
+      }
+      if (hasTresemme && hasClear) {
+        guardLines.add('  * عبوات تريزيمي 400 مل تطابق حصراً قاعدة تريزيمي، وعبوات كلير 360 مل تطابق حصراً قاعدة كلير.');
+      }
+      if (hasOralCare) {
+        guardLines.add('  * أصناف العناية بالفم (معجون أسنان سيجنال أو كلوس اب) تطابق حصراً قواعد حزم العناية بالفم (Oral Care Bundles).');
+      }
+      if (guardLines.isNotEmpty) {
+        buffer.writeln('- [حارس العزل الصارم للشكل الفيزيائي للعبوة]:');
+        guardLines.forEach(buffer.writeln);
+      }
+      if (hasCombo || hasTiers) {
+        buffer.writeln('- [قاعدة الحزم والمستويات]:');
+        if (hasCombo) {
+          buffer.writeln('  * إذا اشترطت القاعدة وجود أكثر من علامة معاً، يجب التأكد من وجود صنف واحد على الأقل من كل علامة، وبلوغ إجمالي مشترياتها معاً الحد الأدنى للإنفاق المحدد في القاعدة.');
+        }
+        if (hasTiers) {
+          buffer.writeln('  * في حال وجود مستويات متعددة من الإنفاق أو الكميات لنفس الفئة، امنح العميل القاعدة ذات المستوى الأعلى المحقق فقط.');
+        }
+      }
       buffer.writeln('- ضع في حقل (matchedRuleId) معرف القاعدة الفائزة بدقة (مثل "rule_1" أو "rule_3").');
       buffer.writeln('- ضع في حقل (matchedRewardValue) اسم الجائزة المستحقة بدقة.');
       buffer.writeln('- إذا لم تتحقق أي قاعدة خاصة، اترك (matchedRuleId) فارغاً.');

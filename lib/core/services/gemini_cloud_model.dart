@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
@@ -80,7 +82,11 @@ class CloudGenerativeModel {
         'geminiGenerate',
         options: HttpsCallableOptions(timeout: const Duration(seconds: 120)),
       );
-      final result = await callable.call(payload);
+      // Normalize to plain JSON (Maps/Lists/primitives). google_generative_ai's
+      // toJson() leaves nested objects (e.g. Schema under responseSchema) that
+      // the web callable cannot serialize ("e.hasOwnProperty is not a function").
+      final safePayload = jsonDecode(jsonEncode(payload));
+      final result = await callable.call(safePayload);
       final data = result.data;
       if (data is Map) {
         final map = Map<String, dynamic>.from(
@@ -111,7 +117,10 @@ class CloudGenerativeModel {
       rethrow;
     } catch (e, st) {
       debugPrint('geminiGenerate proxy failed: $e\n$st');
-      rethrow;
+      throw FirebaseFunctionsException(
+        code: 'internal',
+        message: 'AI_SERVICE_ERROR: $e',
+      );
     }
   }
 }

@@ -1800,6 +1800,22 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     }
   }
 
+  static final RegExp _generatedPromptCompanyRe =
+      RegExp(r'^أنت مدقق فواتير فائق الدقة ومسؤول عن فحص وتدقيق فواتير عروض ومهرجانات شركة "([^"]*)"');
+
+  /// True when the current prompt was produced by the rules generator for a
+  /// different company than the one now selected (or is empty). Hand-written
+  /// prompts are never touched.
+  bool _promptNeedsCompanyRefresh() {
+    final company = _targetCompanyController.text.trim();
+    if (company.isEmpty) return false;
+    final prompt = _customPromptController.text.trim();
+    if (prompt.isEmpty) return true;
+    final m = _generatedPromptCompanyRe.firstMatch(prompt);
+    if (m == null) return false;
+    return m.group(1)!.trim() != company;
+  }
+
   void _syncPromptFromRules({bool showSnackbar = true}) {
     final targetCompany = _targetCompanyController.text.trim().isNotEmpty
         ? _targetCompanyController.text.trim()
@@ -3915,6 +3931,11 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           ? productsText.split(',').map((e) => e.trim()).toList() 
           : <String>[];
 
+      // Never persist an auto-generated prompt that names another company.
+      if (_promptNeedsCompanyRefresh()) {
+        _syncPromptFromRules(showSnackbar: false);
+      }
+
       final rawSlug = _companySlugController.text.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '-');
 
       // Upload company logo to Firebase Storage if a new one was picked
@@ -4796,6 +4817,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                           _companyLogoUrl = comp.logoUrl;
                                         }
                                       });
+                                      if (_promptNeedsCompanyRefresh()) {
+                                        _syncPromptFromRules(showSnackbar: false);
+                                      }
                                       _loadCompanyProducts(comp.slug);
                                       _loadCompanyGifts(comp.slug);
                                       _loadCompanyLogo(comp.slug);

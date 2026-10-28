@@ -79,6 +79,14 @@ class AppErrorHandler {
       return 'خدمة التحليل بالذكاء الاصطناعي مشغولة حالياً بكثرة الطلبات. يرجى الانتظار ثوانٍ معدودة والمحاولة مرة أخرى.';
     }
 
+    // AI proxy (geminiGenerate) failures: client-side request errors or
+    // server-side function errors. Show a clear AI-service message.
+    if (str.contains('ai_service_error') ||
+        str.contains('geminigenerate') ||
+        (error is FirebaseException && error.plugin == 'firebase_functions')) {
+      return 'تعذر الاتصال بخدمة التحليل بالذكاء الاصطناعي حالياً. يرجى المحاولة مرة أخرى بعد قليل، وإذا تكررت المشكلة تواصل مع الدعم الفني.';
+    }
+
     // Timeout / Deadline
     if (str.contains('timeout') ||
         str.contains('timed out') ||
