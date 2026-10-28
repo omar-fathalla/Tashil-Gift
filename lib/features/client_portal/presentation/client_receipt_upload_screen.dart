@@ -73,6 +73,10 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
   StreamSubscription? _eventSubscription;
 
   final List<XFile> _receiptImages = [];
+  // Bytes read once at pick time, keyed by XFile.path. Used to render previews
+  // with Image.memory on web (avoids fetching blob: URLs, which CanvasKit does
+  // via XHR and a strict CSP connect-src can block -> blank white preview).
+  final Map<String, Uint8List> _receiptImageBytes = {};
   int _selectedPreviewIndex = 0;
   bool _isAiLoading = false;
   int _aiPhase = 0;
@@ -107,6 +111,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
     _customerNameController.clear();
     _customerPhoneController.clear();
     _receiptImages.clear();
+    _receiptImageBytes.clear();
     _selectedPreviewIndex = 0;
     _aiPhaseText = '';
     if (mounted) {
@@ -317,6 +322,63 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
     }
   }
 
+  Widget _receiptImageErrorFallback({required bool compact}) {
+    final isAr = ref.read(localeProvider).languageCode == 'ar';
+    return Container(
+      color: Colors.grey.shade200,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.broken_image_outlined,
+              size: compact ? 22 : 48, color: Colors.grey.shade600),
+          if (!compact) ...[
+            const SizedBox(height: 8),
+            Text(
+              isAr
+                  ? 'تعذر عرض المعاينة، الصورة محفوظة وسيتم رفعها'
+                  : 'Preview unavailable — the image is saved and will be uploaded',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReceiptImage(
+    XFile file, {
+    BoxFit fit = BoxFit.cover,
+    double? width,
+    bool compact = false,
+  }) {
+    Widget onError(BuildContext context, Object error, StackTrace? stackTrace) =>
+        _receiptImageErrorFallback(compact: compact);
+    if (!kIsWeb) {
+      return Image.file(File(file.path),
+          fit: fit, width: width, errorBuilder: onError);
+    }
+    final cached = _receiptImageBytes[file.path];
+    if (cached != null) {
+      return Image.memory(cached,
+          fit: fit, width: width, gaplessPlayback: true, errorBuilder: onError);
+    }
+    return FutureBuilder<Uint8List>(
+      future: file.readAsBytes(),
+      builder: (context, snap) {
+        if (snap.hasData) {
+          _receiptImageBytes[file.path] = snap.data!;
+          return Image.memory(snap.data!,
+              fit: fit, width: width, gaplessPlayback: true, errorBuilder: onError);
+        }
+        if (snap.hasError) return _receiptImageErrorFallback(compact: compact);
+        return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      },
+    );
+  }
+
   Future<void> _pickImage(ImageSource source, [bool append = false]) async {
     if (append && _receiptImages.length >= 4) {
       final strings = AppStrings.of(ref);
@@ -336,7 +398,18 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         imageQuality: 92,
       );
       if (pickedFile != null) {
+        Uint8List? pickedBytes;
+        try {
+          pickedBytes = await pickedFile.readAsBytes();
+        } catch (_) {
+          pickedBytes = null;
+        }
+        if (!mounted) return;
         setState(() {
+          if (pickedBytes != null) {
+            if (!append) _receiptImageBytes.clear();
+            _receiptImageBytes[pickedFile.path] = pickedBytes;
+          }
           if (append) {
             _receiptImages.add(pickedFile);
             _selectedPreviewIndex = _receiptImages.length - 1;
@@ -447,7 +520,10 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
   void _removePart(int index) {
     if (index >= 0 && index < _receiptImages.length) {
       setState(() {
-        _receiptImages.removeAt(index);
+        final removed = _receiptImages.removeAt(index);
+        if (!_receiptImages.any((f) => f.path == removed.path)) {
+          _receiptImageBytes.remove(removed.path);
+        }
         if (_selectedPreviewIndex >= _receiptImages.length) {
           _selectedPreviewIndex = math.max(0, _receiptImages.length - 1);
         }
@@ -458,6 +534,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
   void _clearAllParts() {
     setState(() {
       _receiptImages.clear();
+    _receiptImageBytes.clear();
       _selectedPreviewIndex = 0;
     });
   }
@@ -943,6 +1020,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           // Reset image preview and analysis state immediately
           setState(() {
             _receiptImages.clear();
+    _receiptImageBytes.clear();
             _selectedPreviewIndex = 0;
             _isAiLoading = false;
             _aiPhaseText = '';
@@ -1345,6 +1423,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       // Reset image preview immediately
       setState(() {
         _receiptImages.clear();
+    _receiptImageBytes.clear();
         _selectedPreviewIndex = 0;
       });
 
@@ -2389,17 +2468,11 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                       children: [
                                         ClipRRect(
                                           borderRadius: BorderRadius.circular(18),
-                                          child: kIsWeb
-                                              ? Image.network(
-                                                  _receiptImages[_selectedPreviewIndex].path,
-                                                  fit: BoxFit.contain,
-                                                  width: double.infinity,
-                                                )
-                                              : Image.file(
-                                                  File(_receiptImages[_selectedPreviewIndex].path),
-                                                  fit: BoxFit.contain,
-                                                  width: double.infinity,
-                                                ),
+                                          child: _buildReceiptImage(
+                                                _receiptImages[_selectedPreviewIndex],
+                                                fit: BoxFit.contain,
+                                                width: double.infinity,
+                                              ),
                                         ),
                                         // Top part indicator badge and remove button
                                         Positioned(
@@ -2529,15 +2602,11 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                           children: [
                                             ClipRRect(
                                               borderRadius: BorderRadius.circular(8),
-                                              child: kIsWeb
-                                                  ? Image.network(
-                                                      _receiptImages[index].path,
-                                                      fit: BoxFit.cover,
-                                                    )
-                                                  : Image.file(
-                                                      File(_receiptImages[index].path),
-                                                      fit: BoxFit.cover,
-                                                    ),
+                                              child: _buildReceiptImage(
+                                                    _receiptImages[index],
+                                                    fit: BoxFit.cover,
+                                                    compact: true,
+                                                  ),
                                             ),
                                             Positioned(
                                               bottom: 2,
