@@ -1717,7 +1717,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         customActions: [
           // 1. Campaign Concept & Offer Rules Action Button (Brief & Conditions)
           Tooltip(
-            message: strings.promoterCampaignBriefTooltip,
+            message: isAr ? 'فكرة وشروط العرض + دليل وقواعد الحملة' : 'Offer brief, terms & campaign guide',
             waitDuration: const Duration(milliseconds: 400),
             child: IconButton.filledTonal(
               icon: Icon(
@@ -2732,107 +2732,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 1. Supporting Pane Header Card
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: colorScheme.primary.withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(Icons.info_outline_rounded, color: colorScheme.primary, size: 22),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            isAr ? 'دليل وقواعد الحملة' : 'Campaign Guide',
-                            style: GoogleFonts.cairo(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: colorScheme.onSurface,
-                            ),
-                          ),
-                          Text(
-                            isAr ? 'مرجع سريع للبروموتر والمبيعات' : 'Promoter Quick Reference',
-                            style: GoogleFonts.cairo(
-                              fontSize: 11,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                // Quick Dialog Launchers
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => CampaignBriefDialog.show(context, event),
-                        icon: const Icon(Icons.campaign_rounded, size: 16),
-                        label: Text(
-                          isAr ? 'الشروط' : 'Rules',
-                          style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => CampaignGiftBalanceDialog.show(context, event),
-                        icon: const Icon(Icons.card_giftcard_rounded, size: 16),
-                        label: Text(
-                          isAr ? 'الهدايا' : 'Prizes',
-                          style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => PromoterInvoicesDialog.show(context, event),
-                        icon: const Icon(Icons.receipt_long_rounded, size: 16),
-                        label: Text(
-                          isAr ? 'الفواتير' : 'Invoices',
-                          style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.bold),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
+          // Campaign guide card merged into the header brief dialog (megaphone icon).
           // 2. Minimum Spend & Campaign Identity Card
           Container(
             padding: const EdgeInsets.all(16),

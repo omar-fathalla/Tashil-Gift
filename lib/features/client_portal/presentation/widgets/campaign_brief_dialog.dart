@@ -8,6 +8,8 @@ import '../../../../core/services/firebase_service.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/constants/country_currency_config.dart';
 import '../../../admin/domain/event_model.dart';
+import 'campaign_gift_balance_dialog.dart';
+import 'promoter_invoices_dialog.dart';
 
 /// Interactive Material Design 3 Dialog displaying the Campaign Concept, Brief, and Structured Promotional Rules
 class CampaignBriefDialog extends ConsumerStatefulWidget {
@@ -145,6 +147,16 @@ class _CampaignBriefDialogState extends ConsumerState<CampaignBriefDialog> {
                             event: liveEvent,
                             currencySymbol: currencySymbol,
                             isMobile: isMobile,
+                          ),
+
+                          const SizedBox(height: 14),
+
+                          // Campaign Guide (merged from the former side-pane card)
+                          _buildCampaignGuideSection(
+                            context: context,
+                            colorScheme: colorScheme,
+                            event: liveEvent,
+                            isAr: isAr,
                           ),
 
                           const SizedBox(height: 18),
@@ -332,6 +344,69 @@ class _CampaignBriefDialogState extends ConsumerState<CampaignBriefDialog> {
             icon: const Icon(Icons.close_rounded),
             tooltip: strings.closeBriefDialog,
             onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// "دليل وقواعد الحملة" quick reference, merged into the brief so the promoter
+  /// page no longer needs a separate guide card.
+  Widget _buildCampaignGuideSection({
+    required BuildContext context,
+    required ColorScheme colorScheme,
+    required EventModel event,
+    required bool isAr,
+  }) {
+    Widget btn(IconData icon, String label, VoidCallback onTap) => Expanded(
+          child: OutlinedButton.icon(
+            onPressed: onTap,
+            icon: Icon(icon, size: 16),
+            label: Text(
+              label,
+              style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        );
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.menu_book_rounded, color: colorScheme.primary, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  isAr ? 'دليل وقواعد الحملة' : 'Campaign Guide',
+                  style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          Text(
+            isAr ? 'مرجع سريع للبروموتر والمبيعات' : 'Promoter quick reference',
+            style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              btn(Icons.card_giftcard_rounded, isAr ? 'الهدايا' : 'Prizes',
+                  () => CampaignGiftBalanceDialog.show(context, event)),
+              const SizedBox(width: 8),
+              btn(Icons.receipt_long_rounded, isAr ? 'الفواتير' : 'Invoices',
+                  () => PromoterInvoicesDialog.show(context, event)),
+            ],
           ),
         ],
       ),

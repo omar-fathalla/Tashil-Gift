@@ -326,59 +326,90 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
     required bool showTheme,
     bool dense = false,
   }) {
-    final items = <Widget>[
-      if (showLanguage)
-        _buildLanguageSelector(context, ref, colorScheme, dense, isAr),
-      if (showCurrency)
-        _buildCountryCurrencySelector(
-          context,
-          ref,
-          colorScheme,
-          dense,
-          activeCountry,
-        ),
-      if (showTheme) _buildThemeModeButton(ref, colorScheme, isDark, dense),
-    ];
-    if (items.isEmpty) return const SizedBox.shrink();
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.6),
-        ),
-      ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: items),
-    );
-  }
+    if (!showLanguage && !showCurrency && !showTheme) {
+      return const SizedBox.shrink();
+    }
+    final lang = ref.watch(localeProvider).languageCode;
+    final isHi = lang == 'hi';
+    final settingsLabel = isAr ? 'الإعدادات' : (isHi ? 'सेटिंग्स' : 'Settings');
+    final themeLabel = isDark
+        ? (isAr ? 'الوضع الفاتح' : (isHi ? 'लाइट मोड' : 'Light mode'))
+        : (isAr ? 'الوضع الداكن' : (isHi ? 'डार्क मोड' : 'Dark mode'));
+    final languageLabel = isAr ? 'اللغة' : (isHi ? 'भाषा' : 'Language');
+    final countryLabel = isAr
+        ? 'الدولة والعملة'
+        : (isHi ? 'देश और मुद्रा' : 'Country & currency');
 
-  Widget _compactIcon({
-    required ColorScheme colorScheme,
-    required IconData icon,
-    required bool dense,
-    String? badge,
-  }) {
-    final box = dense ? 34.0 : 38.0;
-    return SizedBox(
-      width: box,
-      height: box,
-      child: Stack(
-        alignment: Alignment.center,
-        clipBehavior: Clip.none,
-        children: [
-          Icon(icon, size: dense ? 19 : 21, color: colorScheme.primary),
-          if (badge != null)
-            PositionedDirectional(
-              bottom: dense ? 3 : 4,
-              end: dense ? 2 : 3,
-              child: Text(
-                badge,
-                style: TextStyle(fontSize: dense ? 10 : 11, height: 1),
-              ),
-            ),
-        ],
-      ),
+    return M3ActionMenu(
+      tooltip: settingsLabel,
+      anchorBuilder: (context, controller, child) {
+        return Semantics(
+          button: true,
+          label: settingsLabel,
+          child: IconButton.filledTonal(
+            tooltip: settingsLabel,
+            visualDensity: dense
+                ? VisualDensity.compact
+                : VisualDensity.standard,
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () =>
+                controller.isOpen ? controller.close() : controller.open(),
+          ),
+        );
+      },
+      children: [
+        if (showTheme)
+          M3ActionMenu.item(
+            context: context,
+            label: themeLabel,
+            icon: isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+            onPressed: () {
+              ref.read(themeModeProvider.notifier).state = isDark
+                  ? ThemeMode.light
+                  : ThemeMode.dark;
+            },
+          ),
+        if (showLanguage)
+          M3ActionMenu.submenu(
+            context: context,
+            label: '$languageLabel: ${ref.currentAppLanguage.label}',
+            icon: Icons.translate_rounded,
+            children: AppLanguage.values.map((l) {
+              return M3ActionMenu.item(
+                context: context,
+                label: l.label,
+                leading: Text(
+                  l.flagEmoji,
+                  style: const TextStyle(fontSize: 18),
+                ),
+                isSelected: lang == l.code,
+                onPressed: () => ref.setLocale(l.code),
+              );
+            }).toList(),
+          ),
+        if (showCurrency)
+          M3ActionMenu.submenu(
+            context: context,
+            label:
+                '$countryLabel: ${activeCountry.flagEmoji} ${activeCountry.currencySymbolFor(lang)}',
+            icon: Icons.payments_outlined,
+            children: CountryCurrencyConfig.supportedCountries.map((country) {
+              return M3ActionMenu.item(
+                context: context,
+                label:
+                    '${country.fullName(lang)} (${country.currencySymbolFor(lang)})',
+                leading: Text(
+                  country.flagEmoji,
+                  style: const TextStyle(fontSize: 18),
+                ),
+                isSelected: country.code == activeCountry.code,
+                onPressed: () {
+                  ref.read(activeCountryProvider.notifier).state = country;
+                },
+              );
+            }).toList(),
+          ),
+      ],
     );
   }
 
@@ -435,152 +466,6 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
         padding: EdgeInsets.symmetric(horizontal: 2, vertical: 4),
         child: TashilGiftLogo(size: 34),
       ),
-    );
-  }
-
-  Widget _buildThemeModeButton(
-    WidgetRef ref,
-    ColorScheme colorScheme,
-    bool isDark,
-    bool isMobile,
-  ) {
-    return Tooltip(
-      message: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
-      child: Semantics(
-        button: true,
-        label: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () {
-            ref.read(themeModeProvider.notifier).state = isDark
-                ? ThemeMode.light
-                : ThemeMode.dark;
-          },
-          child: _compactIcon(
-            colorScheme: colorScheme,
-            icon: isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-            dense: isMobile,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLanguageSelector(
-    BuildContext context,
-    WidgetRef ref,
-    ColorScheme colorScheme,
-    bool isMobile,
-    bool isAr,
-  ) {
-    return M3ActionMenu(
-      tooltip: isAr
-          ? 'تغيير لغة النظام'
-          : (ref.isHindi ? 'भाषा बदलें' : 'Change System Language'),
-      anchorBuilder: (context, controller, child) {
-        return InkWell(
-          onTap: () {
-            if (controller.isOpen) {
-              controller.close();
-            } else {
-              controller.open();
-            }
-          },
-          borderRadius: BorderRadius.circular(12),
-          child: Semantics(
-            button: true,
-            label:
-                '${isAr ? 'اللغة' : 'Language'}: ${ref.currentAppLanguage.label}',
-            child: _compactIcon(
-              colorScheme: colorScheme,
-              icon: Icons.translate_rounded,
-              dense: isMobile,
-            ),
-          ),
-        );
-      },
-      children: [
-        M3ActionMenu.header(
-          context: context,
-          title: isAr ? 'اللغة / Language' : 'Select Language',
-        ),
-        ...AppLanguage.values.map((lang) {
-          final isSelected =
-              ref.watch(localeProvider).languageCode == lang.code;
-          return M3ActionMenu.item(
-            context: context,
-            label: lang.label,
-            leading: Text(lang.flagEmoji, style: const TextStyle(fontSize: 18)),
-            isSelected: isSelected,
-            onPressed: () {
-              ref.setLocale(lang.code);
-            },
-          );
-        }),
-      ],
-    );
-  }
-
-  Widget _buildCountryCurrencySelector(
-    BuildContext context,
-    WidgetRef ref,
-    ColorScheme colorScheme,
-    bool isMobile,
-    CountryCurrency activeCountry,
-  ) {
-    final lang = ref.watch(localeProvider).languageCode;
-    final countryTooltip = lang == 'ar'
-        ? 'الدولة والعملة النشطة: ${activeCountry.fullNameAr} (${activeCountry.currencySymbol})'
-        : (lang == 'hi'
-              ? 'सक्रिय देश और मुद्रा: ${activeCountry.fullName(lang)} (${activeCountry.currencySymbolFor(lang)})'
-              : 'Active Country & Currency: ${activeCountry.fullName(lang)} (${activeCountry.currencySymbolFor(lang)})');
-
-    return M3ActionMenu(
-      tooltip: countryTooltip,
-      anchorBuilder: (context, controller, child) {
-        return InkWell(
-          onTap: () {
-            if (controller.isOpen) {
-              controller.close();
-            } else {
-              controller.open();
-            }
-          },
-          borderRadius: BorderRadius.circular(12),
-          child: Semantics(
-            button: true,
-            label: countryTooltip,
-            child: _compactIcon(
-              colorScheme: colorScheme,
-              icon: Icons.payments_outlined,
-              dense: isMobile,
-              badge: activeCountry.flagEmoji,
-            ),
-          ),
-        );
-      },
-      children: [
-        M3ActionMenu.header(
-          context: context,
-          title: lang == 'ar' ? 'الدولة والعملة' : 'Country & Currency',
-        ),
-        ...CountryCurrencyConfig.supportedCountries.map((country) {
-          final isCurrent = country.code == activeCountry.code;
-          return M3ActionMenu.item(
-            context: context,
-            label:
-                '${country.fullName(lang)} (${country.currencySymbolFor(lang)})',
-            leading: Text(
-              country.flagEmoji,
-              style: const TextStyle(fontSize: 18),
-            ),
-            isSelected: isCurrent,
-            onPressed: () {
-              ref.read(activeCountryProvider.notifier).state = country;
-            },
-          );
-        }),
-      ],
     );
   }
 }

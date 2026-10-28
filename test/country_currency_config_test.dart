@@ -74,10 +74,9 @@ void main() {
       );
 
       // Verify default Egypt flag & currency badge is shown
-      expect(find.text('🇪🇬'), findsOneWidget);
-      expect(find.byIcon(Icons.payments_outlined), findsOneWidget);
-
-      // Tap on the compact country/currency selector button
+      await tester.tap(find.byIcon(Icons.settings_outlined));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('🇪🇬'), findsWidgets);
       await tester.tap(find.byIcon(Icons.payments_outlined));
       await tester.pumpAndSettle();
 
@@ -89,9 +88,10 @@ void main() {
       await tester.tap(find.textContaining('المملكة العربية السعودية'));
       await tester.pumpAndSettle();
 
-      // Verify the header now shows Saudi Arabia
-      expect(find.text('🇸🇦'), findsOneWidget);
-      expect(find.text('🇪🇬'), findsNothing);
+      // Verify the settings menu now shows Saudi Arabia
+      await tester.tap(find.byIcon(Icons.settings_outlined));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('🇸🇦'), findsWidgets);
     });
   });
 }
