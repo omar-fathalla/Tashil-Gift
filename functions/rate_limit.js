@@ -19,6 +19,11 @@ const LIMITS = {
     { name: "min", windowMs: MINUTE, max: 30 },
     { name: "day", windowMs: DAY, max: 500 },
   ],
+  // Server-side receipt duplicate checks (checkReceiptDuplicate callable).
+  receiptCheck: [
+    { name: "min", windowMs: MINUTE, max: 30 },
+    { name: "day", windowMs: DAY, max: 300 },
+  ],
   // Inbound WhatsApp messages per sender phone (wahaWebhook).
   wahaSender: [
     { name: "min", windowMs: MINUTE, max: 10 },

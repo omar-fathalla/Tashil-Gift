@@ -1230,30 +1230,15 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         return;
       }
 
-      // Check for existing receipt in this specific campaign to update/upsert
-      DocumentSnapshot<Map<String, dynamic>>? existingDoc;
       final deterministicDocId = ReceiptDeduplicationHelper.getDeterministicDocId(
         campaignId: _activeEvent!.id,
         receiptNumber: receiptNumber,
       );
 
-      if (receiptNumber.isNotEmpty) {
-        final directSnap = await firestore.collection('receipts_transactions').doc(deterministicDocId).get();
-        if (directSnap.exists) {
-          existingDoc = directSnap;
-        } else {
-          final existing = await firestore
-              .collection('receipts_transactions')
-              .where('receipt_number', isEqualTo: receiptNumber)
-              .where('campaignId', isEqualTo: _activeEvent!.id)
-              .limit(1)
-              .get();
-
-          if (existing.docs.isNotEmpty) {
-            existingDoc = existing.docs.first;
-          }
-        }
-      }
+      // Duplicate detection runs server-side (checkReceiptDuplicate) before this
+      // point. Anonymous reps cannot read receipts (firestore.rules), so the
+      // receipt is always created at its deterministic ID; if it already exists
+      // the create is denied by the rules and handled as a duplicate below.
 
       // 2. Upload image to Firebase Storage named by Receipt Number and Campaign ID
       setState(() {
@@ -1318,10 +1303,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
 
       final int calculatedChances = result.chancesEarned > 0 ? result.chancesEarned : 1;
       final DocumentReference<Map<String, dynamic>> transactionRef =
-          existingDoc != null ? existingDoc.reference : firestore.collection('receipts_transactions').doc(deterministicDocId);
-      final bool isExistingRecord = existingDoc != null;
-      final existingData = existingDoc?.data() ?? {};
-      final bool wasGamePlayed = existingData['game_played'] == true;
+          firestore.collection('receipts_transactions').doc(deterministicDocId);
 
       final Map<String, dynamic> transactionData = {
         'receipt_number': receiptNumber,
@@ -1362,15 +1344,21 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         'allow_multiple_chances': _activeEvent!.allowMultipleChances,
       };
 
-      if (isExistingRecord) {
-        transactionData['updated_at'] = FieldValue.serverTimestamp();
-        transactionData['is_updated_via_ai'] = true;
-        await transactionRef.set(transactionData, SetOptions(merge: true));
-      } else {
-        transactionData['timestamp'] = FieldValue.serverTimestamp();
-        transactionData['game_played'] = false;
-        transactionData['prize_won'] = null;
+      transactionData['timestamp'] = FieldValue.serverTimestamp();
+      transactionData['game_played'] = false;
+      transactionData['prize_won'] = null;
+      try {
         await transactionRef.set(transactionData);
+      } on FirebaseException catch (e) {
+        if (!ReceiptDeduplicationHelper.isDuplicateWriteDenied(e)) rethrow;
+        debugPrint('Receipt create denied (already exists for campaign): $e');
+        if (!mounted) return;
+        _showPopupMessage(
+          AppStrings.of(ref).duplicateReceiptAlreadyDrawnTitle,
+          ReceiptDeduplicationHelper.duplicateMessage(receiptNumber),
+          isError: true,
+        );
+        return;
       }
 
       // Harvest discovered products asynchronously for the AI Product Discovery Hub
@@ -1389,36 +1377,6 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       ));
 
       if (!mounted) return;
-
-      if (isExistingRecord && wasGamePlayed) {
-        final activeCountry = ref.read(activeCountryProvider);
-        final strings = AppStrings.of(ref);
-        showReceiptValidationReportDialog(
-          context: context,
-          title: strings.duplicateReceiptAlreadyDrawnTitle,
-          subtitle: strings.duplicateReceiptAlreadyDrawnSubtitle,
-          conditions: [
-            ValidationConditionItem(
-              title: strings.duplicateReceiptConditionTitle,
-              description: strings.duplicateReceiptConditionDesc,
-              icon: Icons.history_toggle_off_rounded,
-              isMet: false,
-            ),
-          ],
-          receiptNumber: receiptNumber,
-          storeChain: result.storeChainDetected,
-          branch: result.branchDetected,
-          receiptDate: result.receiptDate,
-          totalValue: totalValue,
-          requiredMinimum: _activeEvent!.minimumSpend,
-          currencySymbol: activeCountry.currencySymbol,
-          imageUrl: primaryImageUrl.isNotEmpty ? primaryImageUrl : previewImgUrl,
-          imageUrls: previewUrls,
-          isDuplicate: true,
-        );
-        _resetFormForNextCustomer();
-        return;
-      }
 
       // Reset image preview immediately
       setState(() {
@@ -3041,20 +2999,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       final String primaryImageUrl = uploadedImageUrls.isNotEmpty ? uploadedImageUrls.first : '';
       final String primaryStoragePath = uploadedStoragePaths.isNotEmpty ? uploadedStoragePaths.first : '';
 
-      DocumentSnapshot<Map<String, dynamic>>? existingDoc;
-      if (receiptNumber.isNotEmpty) {
-        final existing = await firestore
-            .collection('receipts_transactions')
-            .where('receipt_number', isEqualTo: receiptNumber)
-            .where('campaignId', isEqualTo: activeEvent.id)
-            .limit(1)
-            .get();
-        if (existing.docs.isNotEmpty) {
-          existingDoc = existing.docs.first;
-        }
-      }
-
-      final docRef = existingDoc != null ? existingDoc.reference : firestore.collection('receipts_transactions').doc();
+      // Rejected receipts are logged as new docs; anonymous reps cannot query
+      // existing receipts (firestore.rules), so there is no client-side lookup.
+      final docRef = firestore.collection('receipts_transactions').doc();
       final Map<String, dynamic> transactionData = {
         'receipt_number': receiptNumber.isNotEmpty ? receiptNumber : cleanReceiptNumber,
         'is_valid': false,
@@ -3094,14 +3041,8 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         'prize_won': null,
       };
 
-      if (existingDoc != null) {
-        transactionData['updated_at'] = FieldValue.serverTimestamp();
-        transactionData['is_updated_via_ai'] = true;
-        await docRef.set(transactionData, SetOptions(merge: true));
-      } else {
-        transactionData['timestamp'] = FieldValue.serverTimestamp();
-        await docRef.set(transactionData);
-      }
+      transactionData['timestamp'] = FieldValue.serverTimestamp();
+      await docRef.set(transactionData);
 
       // Harvest discovered products asynchronously even if receipt didn't meet spend threshold
       unawaited(ref.read(aiProductDiscoveryServiceProvider).autoHarvestFromReceiptAnalysis(

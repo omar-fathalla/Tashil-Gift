@@ -422,6 +422,15 @@ exports.analyzeReceipt = onCall(
   },
 );
 
+const { checkReceiptDuplicateHandler } = require("./receipt_duplicate_check");
+/**
+ * Server-side duplicate check for a scanned receipt (Admin SDK). Anonymous reps
+ * cannot read other users' receipts under firestore.rules; this returns only
+ * {duplicate, existingStatus}.
+ */
+exports.checkReceiptDuplicate = onCall(callableOptions, (request) =>
+  checkReceiptDuplicateHandler(db, request));
+
 const WAHA_PROXY_ALLOWED_ORIGINS = new Set([
   "https://tashil-gift.web.app",
   "https://tashil-gift.firebaseapp.com",

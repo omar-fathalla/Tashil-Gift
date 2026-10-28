@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
 /// Result of checking a receipt for duplication in Firestore.
@@ -106,105 +107,51 @@ class ReceiptDeduplicationHelper {
       return ReceiptDuplicateCheckResult.notDuplicate;
     }
 
+    // Anonymous reps cannot read other users' receipts under firestore.rules,
+    // so the cross-user lookup runs server-side (checkReceiptDuplicate, Admin SDK).
+    // [firestore] is kept for API compatibility. On any server failure the result
+    // is "unknown" (not duplicate): the deterministic-ID create is still blocked
+    // by the rules if the receipt already exists for the campaign.
     try {
-      // 1. Direct deterministic document lookup if campaignId is known
-      if (campaignId != null && campaignId.isNotEmpty) {
-        final deterministicId = getDeterministicDocId(
-          campaignId: campaignId,
-          receiptNumber: cleanNumber,
-        );
-        final directDoc = await firestore
-            .collection('receipts_transactions')
-            .doc(deterministicId)
-            .get();
-
-        if (directDoc.exists && directDoc.data() != null) {
-          final data = directDoc.data()!;
-          if (isTransactionClaimed(data)) {
-            final prizeDesc = data['prize_won'] ?? 'هدية/قسيمة معتمدة';
-            final dateStr = data['receipt_date'] ?? '';
-            return ReceiptDuplicateCheckResult(
-              isDuplicate: true,
-              receiptNumber: cleanNumber,
-              existingCampaignId: data['campaignId'] ?? campaignId,
-              existingCampaignName: data['targetCompany'] ?? '',
-              existingPrizeWon: prizeDesc.toString(),
-              existingClaimedAt: data['claimed_at']?.toString(),
-              existingStoreChain: data['store_chain_detected']?.toString(),
-              existingBranch: data['branch_detected']?.toString(),
-              rejectionMessage: 'الفاتورة رقم ($cleanNumber) مسجلة بالنظام ومصروفة مسبقاً في هذه الحملة (الجائزة: $prizeDesc${dateStr.isNotEmpty ? ' - تاريخ البون: $dateStr' : ''}). لا يمكن تكرار استخدام الفاتورة لنفس العرض.',
-              existingData: data,
-            );
-          }
-        }
-      }
-
-      // 2. Query Firestore by receipt_number
-      final snapshot = await firestore
-          .collection('receipts_transactions')
-          .where('receipt_number', isEqualTo: cleanNumber)
-          .limit(10)
-          .get();
-
-      if (snapshot.docs.isEmpty) {
-        return ReceiptDuplicateCheckResult.notDuplicate;
-      }
-
-      for (final doc in snapshot.docs) {
-        final data = doc.data();
-        if (!isTransactionClaimed(data)) {
-          continue; // Skip rejected or unfulfilled receipts
-        }
-
-        final docCampaignId = data['campaignId']?.toString();
-        final docCompanySlug = data['companySlug']?.toString();
-        final isMultiBundle = data['is_multi_campaign_bundle'] == true || data['bundle_group_id'] != null;
-
-        // Condition A: In Multi-Scan mode, any claimed receipt under this company or multi-bundle is rejected
-        if (isMultiScan) {
-          if (docCompanySlug == companySlug || isMultiBundle) {
-            final prizeDesc = data['prize_won'] ?? 'قسائم/هدايا معتمدة';
-            final dateStr = data['receipt_date'] ?? '';
-            return ReceiptDuplicateCheckResult(
-              isDuplicate: true,
-              receiptNumber: cleanNumber,
-              existingCampaignId: docCampaignId,
-              existingCampaignName: data['targetCompany'] ?? '',
-              existingPrizeWon: prizeDesc.toString(),
-              existingClaimedAt: data['claimed_at']?.toString(),
-              existingStoreChain: data['store_chain_detected']?.toString(),
-              existingBranch: data['branch_detected']?.toString(),
-              rejectionMessage: 'الفاتورة رقم ($cleanNumber) مسجلة بالنظام ومصروفة مسبقاً في عروض الشركة (الجائزة: $prizeDesc${dateStr.isNotEmpty ? ' - تاريخ البون: $dateStr' : ''}). لا يمكن إعادة صرف الفاتورة في وضع الفحص المتوازي.',
-              existingData: data,
-            );
-          }
-        }
-
-        // Condition B: In Single-Scan mode, match specific campaign or multi-bundle
-        if (campaignId != null && campaignId.isNotEmpty) {
-          if (docCampaignId == campaignId || (isMultiBundle && docCompanySlug == companySlug)) {
-            final prizeDesc = data['prize_won'] ?? 'هدية/قسيمة معتمدة';
-            final dateStr = data['receipt_date'] ?? '';
-            return ReceiptDuplicateCheckResult(
-              isDuplicate: true,
-              receiptNumber: cleanNumber,
-              existingCampaignId: docCampaignId,
-              existingCampaignName: data['targetCompany'] ?? '',
-              existingPrizeWon: prizeDesc.toString(),
-              existingClaimedAt: data['claimed_at']?.toString(),
-              existingStoreChain: data['store_chain_detected']?.toString(),
-              existingBranch: data['branch_detected']?.toString(),
-              rejectionMessage: 'الفاتورة رقم ($cleanNumber) مسجلة بالنظام ومصروفة مسبقاً (الجائزة: $prizeDesc${dateStr.isNotEmpty ? ' - تاريخ البون: $dateStr' : ''}). لا يمكن استخدام نفس الفاتورة للمطالبة بهدايا مرة أخرى.',
-              existingData: data,
-            );
-          }
-        }
-      }
-
-      return ReceiptDuplicateCheckResult.notDuplicate;
+      final res = await FirebaseFunctions.instanceFor(region: 'us-central1')
+          .httpsCallable(
+            'checkReceiptDuplicate',
+            options: HttpsCallableOptions(timeout: const Duration(seconds: 20)),
+          )
+          .call<dynamic>({
+        'receiptNumber': cleanNumber,
+        'companySlug': companySlug,
+        'campaignId': (campaignId != null && campaignId.isNotEmpty) ? campaignId : null,
+        'isMultiScan': isMultiScan,
+      });
+      final data = res.data;
+      final isDup = data is Map && data['duplicate'] == true;
+      if (!isDup) return ReceiptDuplicateCheckResult.notDuplicate;
+      return ReceiptDuplicateCheckResult(
+        isDuplicate: true,
+        receiptNumber: cleanNumber,
+        existingCampaignId: campaignId,
+        rejectionMessage: duplicateMessage(cleanNumber, isMultiScan: isMultiScan),
+      );
     } catch (e) {
-      debugPrint('Receipt duplicate check notice: $e');
+      debugPrint('Receipt duplicate check unavailable (treated as unknown): $e');
       return ReceiptDuplicateCheckResult.notDuplicate;
     }
+  }
+
+  /// Friendly message for an already-used receipt (no other users' data shown).
+  static String duplicateMessage(String receiptNumber, {bool isMultiScan = false}) {
+    final n = normalizeReceiptNumber(receiptNumber);
+    return isMultiScan
+        ? 'الفاتورة رقم ($n) مسجلة بالنظام ومصروفة مسبقاً في عروض الشركة. لا يمكن إعادة صرف الفاتورة في وضع الفحص المتوازي.'
+        : 'الفاتورة رقم ($n) مسجلة بالنظام ومستخدمة مسبقاً في هذا العرض. لا يمكن استخدام نفس الفاتورة للمطالبة بهدايا مرة أخرى.';
+  }
+
+  /// True when a Firestore write failed because the deterministic receipt doc
+  /// already exists (rules allow create only, so re-creating is denied).
+  static bool isDuplicateWriteDenied(Object e) {
+    final s = e.toString().toLowerCase();
+    return s.contains('permission-denied') || s.contains('permission_denied') ||
+        s.contains('missing or insufficient permissions');
   }
 }
