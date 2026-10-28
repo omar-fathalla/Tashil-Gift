@@ -33,6 +33,7 @@ class WhatsAppWinnerNotificationService {
     List<String> voucherSerials = const [],
     String? receiptNumber,
     DateTime? claimDate,
+    String? customerPhone,
   }) {
     final effectiveName = (customerName != null && customerName.trim().isNotEmpty)
         ? customerName.trim()
@@ -73,6 +74,8 @@ class WhatsAppWinnerNotificationService {
 
     return template
         .replaceAll('{customer_name}', effectiveName)
+        .replaceAll('{phone}', (customerPhone ?? '').trim())
+        .replaceAll('{whatsapp}', (customerPhone ?? '').trim())
         .replaceAll('{retail_chain}', effectiveRetailChain)
         .replaceAll('{branch_name}', effectiveBranch)
         .replaceAll('{company_name}', effectiveCompany)
@@ -132,6 +135,7 @@ class WhatsAppWinnerNotificationService {
         voucherSerials: voucherSerials,
         receiptNumber: receiptNumber,
         claimDate: claimDate,
+        customerPhone: toPhone,
       );
 
       debugPrint('🚀 Dispatching WhatsApp winner notification to $cleanPhone ($prizeName)...');

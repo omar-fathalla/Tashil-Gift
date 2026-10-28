@@ -11,7 +11,8 @@ const { consumeRateLimit, clientKey, RateLimitError } = require("./rate_limit");
 
 // Same default as WhatsAppGatewayConfigModel.defaultWinnerTemplate (client).
 const DEFAULT_TEMPLATE =
-  "🎉 ألف مبروك يا {customer_name}! 🎁\n\n" +
+  "🎉 ألف مبروك يا {customer_name}! 🎁\n" +
+  "📱 رقم الواتساب: {phone}\n\n" +
   "يسر {retail_chain} - {branch_name}\n" +
   "بالتعاون مع {company_name}\n" +
   "تهنئتكم بالفوز بـ:\n" +
@@ -94,6 +95,8 @@ function buildMessage(template, f) {
   const voucherDetails = f.serials.length ? `🎟️ كود الفواتشر / الرقم التسلسلي: ${f.serials.join(" ، ")}\n` : "";
   return (s(template) || DEFAULT_TEMPLATE)
     .split("{customer_name}").join(f.customerName || "عميلنا العزيز")
+    .split("{phone}").join(f.phone || "")
+    .split("{whatsapp}").join(f.phone || "")
     .split("{retail_chain}").join(f.chain || "المتجر")
     .split("{branch_name}").join(f.branch)
     .split("{company_name}").join(f.company || "إدارة العروض الترويجية")
@@ -191,6 +194,7 @@ async function sendWinnerWhatsAppHandler(db, request, apiKey) {
   const { prize, serials } = giftInfo(d);
   const text = buildMessage(cfg.winnerNotificationTemplate, {
     customerName: s(d.customerName || d.customer_name),
+    phone: toWesternDigits(s(d.customerPhone || d.customer_phone || d.phone)) || phone,
     chain: s(d.retail_chain_name || ev.retailChainName || d.store_chain_detected),
     branch: s(d.canonical_branch || d.branch_detected),
     company: s(d.targetCompany || ev.targetCompany),

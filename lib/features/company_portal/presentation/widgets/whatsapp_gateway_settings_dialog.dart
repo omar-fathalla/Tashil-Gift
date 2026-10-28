@@ -457,6 +457,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
       campaignName: 'مهرجان التوفير والجوائز',
       voucherSerials: ['TEST-VCH-2026'],
       receiptNumber: 'REC-99401',
+      customerPhone: '01000000000',
     );
 
     final res = await _service.sendSingleMessage(
@@ -1041,6 +1042,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                         runSpacing: 4,
                         children: [
                           '{customer_name}',
+                          '{phone}',
                           '{retail_chain}',
                           '{branch_name}',
                           '{company_name}',

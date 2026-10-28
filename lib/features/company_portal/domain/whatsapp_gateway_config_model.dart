@@ -73,7 +73,8 @@ class WhatsAppGatewayConfigModel {
   final String winnerNotificationTemplate;
 
   static const String defaultWinnerTemplate =
-      '🎉 ألف مبروك يا {customer_name}! 🎁\n\n'
+      '🎉 ألف مبروك يا {customer_name}! 🎁\n'
+      '📱 رقم الواتساب: {phone}\n\n'
       'يسر {retail_chain} - {branch_name}\n'
       'بالتعاون مع {company_name}\n'
       'تهنئتكم بالفوز بـ:\n'
