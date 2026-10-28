@@ -44,7 +44,7 @@ void main() {
       );
 
       expect(find.text(SwitchPointInfo.platformName), findsOneWidget);
-      expect(find.text('عربي'), findsOneWidget); // Active language selector badge
+      expect(find.byIcon(Icons.translate_rounded), findsOneWidget); // Compact language selector
       expect(find.byIcon(Icons.dark_mode_rounded), findsOneWidget); // Theme toggle icon
     });
 
