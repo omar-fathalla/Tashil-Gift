@@ -17,6 +17,7 @@ const {
 } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
 const { getStorage } = require("firebase-admin/storage");
+const { getAppCheck } = require("firebase-admin/app-check");
 
 function firestore(...args) {
   return getFirestore(...args);
@@ -37,5 +38,6 @@ module.exports = {
   firestore,
   auth: (...args) => getAuth(...args),
   storage: (...args) => getStorage(...args),
+  appCheck: (...args) => getAppCheck(...args),
   credential: { cert, applicationDefault },
 };
