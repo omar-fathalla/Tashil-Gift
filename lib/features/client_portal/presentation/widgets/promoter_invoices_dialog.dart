@@ -3500,7 +3500,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                         unitValue: resolvedUnitValue,
                         isVoucher: resolvedIsVoucher,
                         linkedGifts: resolvedLinkedGifts,
-                        requireVoucherSerials: winningCampaign.requireVoucherSerials,
+                        requireVoucherSerials: winningCampaign.requireVoucherSerials, voucherSerialMode: winningCampaign.voucherSerialMode,
                       ),
                     ),
                   );

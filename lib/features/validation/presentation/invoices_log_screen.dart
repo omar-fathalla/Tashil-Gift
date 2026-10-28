@@ -2307,7 +2307,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                         unitValue: resolvedUnitValue,
                         isVoucher: resolvedIsVoucher,
                         linkedGifts: resolvedLinkedGifts,
-                        requireVoucherSerials: winningCampaign.requireVoucherSerials,
+                        requireVoucherSerials: winningCampaign.requireVoucherSerials, voucherSerialMode: winningCampaign.voucherSerialMode,
                       ),
                     ),
                   );

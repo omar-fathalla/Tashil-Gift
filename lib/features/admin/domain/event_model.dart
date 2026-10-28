@@ -545,6 +545,17 @@ class EventModel {
   /// Whether entering voucher card serial numbers is strictly mandatory for promoters upon gift claim (false = optional by default).
   final bool requireVoucherSerials;
 
+  /// Voucher serial entry mode on gift handover: 'required' | 'optional' | 'hidden'.
+  /// Backward compatible: missing value derives from [requireVoucherSerials].
+  final String voucherSerialMode;
+
+  static String resolveVoucherSerialMode(Map<String, dynamic> data) {
+    final raw = (data['voucherSerialMode'] ?? data['voucher_serial_mode'])?.toString().trim().toLowerCase();
+    if (raw == 'required' || raw == 'optional' || raw == 'hidden') return raw!;
+    final legacy = data['requireVoucherSerials'] == true || data['require_voucher_serials'] == true;
+    return legacy ? 'required' : 'optional';
+  }
+
   /// Whether to allow complementary / multi-receipt spend aggregation for this campaign (strictly false by default - AIR-61).
   final bool allowComplementaryReceipts;
 
@@ -590,6 +601,7 @@ class EventModel {
     this.multiplierBasis = 'both',
     this.maxChancesPerReceipt = 0,
     this.requireVoucherSerials = false,
+    this.voucherSerialMode = 'optional',
     this.allowComplementaryReceipts = false,
     this.enableWhatsAppWinnerNotification = true,
     this.hasCustomAgencyCredentials = false,
@@ -919,7 +931,8 @@ class EventModel {
       allowMultipleChances: data['allowMultipleChances'] == true,
       multiplierBasis: (data['multiplierBasis'] ?? 'both').toString(),
       maxChancesPerReceipt: (data['maxChancesPerReceipt'] as num?)?.toInt() ?? 0,
-      requireVoucherSerials: data['requireVoucherSerials'] == true || data['require_voucher_serials'] == true,
+      requireVoucherSerials: EventModel.resolveVoucherSerialMode(data) == 'required',
+      voucherSerialMode: EventModel.resolveVoucherSerialMode(data),
       allowComplementaryReceipts: data['allowComplementaryReceipts'] == true || data['allow_complementary_receipts'] == true,
       enableWhatsAppWinnerNotification: data['enableWhatsAppWinnerNotification'] != false && data['enable_whatsapp_winner_notification'] != false,
       hasCustomAgencyCredentials: data['hasCustomAgencyCredentials'] == true,
@@ -987,7 +1000,8 @@ class EventModel {
       'allowMultipleChances': allowMultipleChances,
       'multiplierBasis': multiplierBasis,
       'maxChancesPerReceipt': maxChancesPerReceipt,
-      'requireVoucherSerials': requireVoucherSerials,
+      'requireVoucherSerials': voucherSerialMode == 'required',
+      'voucherSerialMode': voucherSerialMode,
       'allowComplementaryReceipts': allowComplementaryReceipts,
       'enableWhatsAppWinnerNotification': enableWhatsAppWinnerNotification,
       'hasCustomAgencyCredentials': hasCustomAgencyCredentials,
@@ -1030,6 +1044,7 @@ class EventModel {
     String? multiplierBasis,
     int? maxChancesPerReceipt,
     bool? requireVoucherSerials,
+    String? voucherSerialMode,
     bool? allowComplementaryReceipts,
     bool? enableWhatsAppWinnerNotification,
     bool? hasCustomAgencyCredentials,
@@ -1070,6 +1085,7 @@ class EventModel {
       multiplierBasis: multiplierBasis ?? this.multiplierBasis,
       maxChancesPerReceipt: maxChancesPerReceipt ?? this.maxChancesPerReceipt,
       requireVoucherSerials: requireVoucherSerials ?? this.requireVoucherSerials,
+      voucherSerialMode: voucherSerialMode ?? (requireVoucherSerials == null ? this.voucherSerialMode : (requireVoucherSerials ? 'required' : 'optional')),
       allowComplementaryReceipts: allowComplementaryReceipts ?? this.allowComplementaryReceipts,
       enableWhatsAppWinnerNotification: enableWhatsAppWinnerNotification ?? this.enableWhatsAppWinnerNotification,
       hasCustomAgencyCredentials: hasCustomAgencyCredentials ?? this.hasCustomAgencyCredentials,

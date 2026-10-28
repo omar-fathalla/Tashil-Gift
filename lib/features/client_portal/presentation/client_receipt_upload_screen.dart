@@ -24,7 +24,6 @@ import '../../../core/widgets/switch_point_branding.dart';
 import '../../../core/constants/country_currency_config.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
-import '../../../core/widgets/m3_adaptive_scaffold.dart';
 import '../../../core/animations/m3_motion.dart';
 import '../../admin/domain/event_model.dart';
 import '../../admin/domain/retail_chain_model.dart';
@@ -44,7 +43,6 @@ import '../../../core/widgets/campaign_suspended_screen.dart';
 import '../../../core/utils/receipt_image_calibrator.dart';
 import '../../../core/widgets/optimistic_receipt_scanner_card.dart';
 
-
 class ClientReceiptUploadScreen extends ConsumerStatefulWidget {
   final String? companySlug;
   final EventModel? event;
@@ -58,10 +56,12 @@ class ClientReceiptUploadScreen extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<ClientReceiptUploadScreen> createState() => _ClientReceiptUploadScreenState();
+  ConsumerState<ClientReceiptUploadScreen> createState() =>
+      _ClientReceiptUploadScreenState();
 }
 
-class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadScreen> {
+class _ClientReceiptUploadScreenState
+    extends ConsumerState<ClientReceiptUploadScreen> {
   ColorScheme get colorScheme => Theme.of(context).colorScheme;
 
   static const String kAutoAllCampaignsId = '__AUTO_ALL__';
@@ -84,7 +84,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
   String _aiPhaseText = '';
   CalibratedImageResult? _latestCalibration;
   Uint8List? _previewImageBytes;
-  
+
   final _customerPhoneController = TextEditingController();
   final _customerNameController = TextEditingController();
   final _picker = ImagePicker();
@@ -150,31 +150,41 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       // Active campaigns only. A bare event link reads that one document.
       // A company link lists active events for that slug.
       if (slug.isEmpty && targetEventId != null && targetEventId.isNotEmpty) {
-        _eventSubscription = firestore.collection('events').doc(targetEventId).snapshots().listen(
-          (snap) {
-            if (!mounted) return;
-            if (!snap.exists) {
-              setState(() {
-                _activeEvent = null;
-                _availableCompanyEvents = [];
-                _errorMessage = 'لا يوجد أي فعاليات مسجلة لهذه الشركة حالياً.';
-                _isLoadingEvent = false;
-              });
-              return;
-            }
-            _applyLiveEventDocs([snap], targetEventId: targetEventId, slug: slug);
-          },
-          onError: (e) {
-            if (!mounted) return;
-            setState(() {
-              _errorMessage = AppErrorHandler.getFriendlyMessage(
-                e,
-                defaultMessage: 'حدث خطأ أثناء تحميل بيانات الحملة من الخادم.',
-              );
-              _isLoadingEvent = false;
-            });
-          },
-        );
+        _eventSubscription = firestore
+            .collection('events')
+            .doc(targetEventId)
+            .snapshots()
+            .listen(
+              (snap) {
+                if (!mounted) return;
+                if (!snap.exists) {
+                  setState(() {
+                    _activeEvent = null;
+                    _availableCompanyEvents = [];
+                    _errorMessage =
+                        'لا يوجد أي فعاليات مسجلة لهذه الشركة حالياً.';
+                    _isLoadingEvent = false;
+                  });
+                  return;
+                }
+                _applyLiveEventDocs(
+                  [snap],
+                  targetEventId: targetEventId,
+                  slug: slug,
+                );
+              },
+              onError: (e) {
+                if (!mounted) return;
+                setState(() {
+                  _errorMessage = AppErrorHandler.getFriendlyMessage(
+                    e,
+                    defaultMessage:
+                        'حدث خطأ أثناء تحميل بيانات الحملة من الخادم.',
+                  );
+                  _isLoadingEvent = false;
+                });
+              },
+            );
         return;
       }
 
@@ -188,7 +198,11 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       _eventSubscription = query.snapshots().listen(
         (snapshot) {
           if (!mounted) return;
-          _applyLiveEventDocs(snapshot.docs, targetEventId: targetEventId, slug: slug);
+          _applyLiveEventDocs(
+            snapshot.docs,
+            targetEventId: targetEventId,
+            slug: slug,
+          );
         },
         onError: (e) {
           if (!mounted) return;
@@ -219,107 +233,129 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
     if (!mounted) return;
     final firestore = ref.read(firestoreProvider);
     {
-          // Fallback if scoped query returned empty but targetEventId is provided
-          if (docs.isEmpty && targetEventId != null && targetEventId.isNotEmpty) {
-            final singleDoc = await firestore.collection('events').doc(targetEventId).get();
-            if (singleDoc.exists && mounted) {
-              final singleEvent = EventModel.fromFirestore(singleDoc);
-              setState(() {
-                _availableCompanyEvents = [singleEvent];
-                _activeEvent = singleEvent;
-                _isLoadingEvent = false;
-                _errorMessage = null;
-              });
-              return;
-            }
-          }
+      // Fallback if scoped query returned empty but targetEventId is provided
+      if (docs.isEmpty && targetEventId != null && targetEventId.isNotEmpty) {
+        final singleDoc = await firestore
+            .collection('events')
+            .doc(targetEventId)
+            .get();
+        if (singleDoc.exists && mounted) {
+          final singleEvent = EventModel.fromFirestore(singleDoc);
+          setState(() {
+            _availableCompanyEvents = [singleEvent];
+            _activeEvent = singleEvent;
+            _isLoadingEvent = false;
+            _errorMessage = null;
+          });
+          return;
+        }
+      }
 
-          if (docs.isEmpty) {
-            setState(() {
-              _activeEvent = null;
-              _availableCompanyEvents = [];
-              _errorMessage = 'لا يوجد أي فعاليات مسجلة لهذه الشركة حالياً.';
-              _isLoadingEvent = false;
-            });
-            return;
-          }
+      if (docs.isEmpty) {
+        setState(() {
+          _activeEvent = null;
+          _availableCompanyEvents = [];
+          _errorMessage = 'لا يوجد أي فعاليات مسجلة لهذه الشركة حالياً.';
+          _isLoadingEvent = false;
+        });
+        return;
+      }
 
-          // Convert all valid event models
-          final events = docs.map((d) {
+      // Convert all valid event models
+      final events = docs
+          .map((d) {
             try {
               return EventModel.fromFirestore(d);
             } catch (_) {
               return null;
             }
-          }).whereType<EventModel>().toList();
+          })
+          .whereType<EventModel>()
+          .toList();
 
-          // 1. If targetEventId was provided, find that specific event first
-          EventModel? initialMatched;
-          if (targetEventId != null && targetEventId.isNotEmpty) {
-            initialMatched = events.cast<EventModel?>().firstWhere(
-              (e) => e!.id == targetEventId,
-              orElse: () => null,
-            );
+      // 1. If targetEventId was provided, find that specific event first
+      EventModel? initialMatched;
+      if (targetEventId != null && targetEventId.isNotEmpty) {
+        initialMatched = events.cast<EventModel?>().firstWhere(
+          (e) => e!.id == targetEventId,
+          orElse: () => null,
+        );
+      }
+
+      // 2. Identify target company key/slug
+      final effectiveSlug =
+          (initialMatched != null && initialMatched.companySlug.isNotEmpty)
+          ? initialMatched.companySlug.trim().toLowerCase()
+          : (slug.isNotEmpty
+                ? slug
+                : (initialMatched?.targetCompany.toLowerCase().trim() ?? ''));
+
+      // 3. Find all campaigns for this company (active and promoter active)
+      List<EventModel> companyEvents = events.where((e) {
+        final eSlug = e.companySlug.trim().toLowerCase();
+        final eTargetSlug = SlugUtils.toSlug(e.targetCompany).toLowerCase();
+        final eTargetName = e.targetCompany.trim().toLowerCase();
+        final matchesCompany =
+            eSlug == effectiveSlug ||
+            eTargetSlug == effectiveSlug ||
+            eTargetName == effectiveSlug ||
+            e.id == effectiveSlug ||
+            (effectiveSlug.isNotEmpty &&
+                (eTargetName.contains(effectiveSlug) ||
+                    effectiveSlug.contains(eTargetName)));
+        return matchesCompany && e.isActive && e.isPromoterActive;
+      }).toList();
+
+      // Sort by creation date descending
+      companyEvents.sort((a, b) {
+        final aDate =
+            a.createdAt ??
+            a.startDate ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        final bDate =
+            b.createdAt ??
+            b.startDate ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        return bDate.compareTo(aDate);
+      });
+
+      // Fallback if no promoter-active campaigns found
+      if (companyEvents.isEmpty && initialMatched != null) {
+        companyEvents = [initialMatched];
+      }
+
+      if (companyEvents.isNotEmpty) {
+        // Determine active event
+        EventModel selected;
+        if (_activeEvent != null &&
+            companyEvents.any((e) => e.id == _activeEvent!.id)) {
+          selected = companyEvents.firstWhere((e) => e.id == _activeEvent!.id);
+        } else if (initialMatched != null &&
+            companyEvents.any((e) => e.id == initialMatched!.id)) {
+          selected = companyEvents.firstWhere(
+            (e) => e.id == initialMatched!.id,
+          );
+        } else {
+          selected = companyEvents.first;
+        }
+
+        setState(() {
+          _availableCompanyEvents = companyEvents;
+          _activeEvent = selected;
+          if (companyEvents.length > 1) {
+            _isAutoMultiCampaignMode = true;
           }
-
-          // 2. Identify target company key/slug
-          final effectiveSlug = (initialMatched != null && initialMatched.companySlug.isNotEmpty)
-              ? initialMatched.companySlug.trim().toLowerCase()
-              : (slug.isNotEmpty ? slug : (initialMatched?.targetCompany.toLowerCase().trim() ?? ''));
-
-          // 3. Find all campaigns for this company (active and promoter active)
-          List<EventModel> companyEvents = events.where((e) {
-            final eSlug = e.companySlug.trim().toLowerCase();
-            final eTargetSlug = SlugUtils.toSlug(e.targetCompany).toLowerCase();
-            final eTargetName = e.targetCompany.trim().toLowerCase();
-            final matchesCompany = eSlug == effectiveSlug ||
-                eTargetSlug == effectiveSlug ||
-                eTargetName == effectiveSlug ||
-                e.id == effectiveSlug ||
-                (effectiveSlug.isNotEmpty && (eTargetName.contains(effectiveSlug) || effectiveSlug.contains(eTargetName)));
-            return matchesCompany && e.isActive && e.isPromoterActive;
-          }).toList();
-
-          // Sort by creation date descending
-          companyEvents.sort((a, b) {
-            final aDate = a.createdAt ?? a.startDate ?? DateTime.fromMillisecondsSinceEpoch(0);
-            final bDate = b.createdAt ?? b.startDate ?? DateTime.fromMillisecondsSinceEpoch(0);
-            return bDate.compareTo(aDate);
-          });
-
-          // Fallback if no promoter-active campaigns found
-          if (companyEvents.isEmpty && initialMatched != null) {
-            companyEvents = [initialMatched];
-          }
-
-          if (companyEvents.isNotEmpty) {
-            // Determine active event
-            EventModel selected;
-            if (_activeEvent != null && companyEvents.any((e) => e.id == _activeEvent!.id)) {
-              selected = companyEvents.firstWhere((e) => e.id == _activeEvent!.id);
-            } else if (initialMatched != null && companyEvents.any((e) => e.id == initialMatched!.id)) {
-              selected = companyEvents.firstWhere((e) => e.id == initialMatched!.id);
-            } else {
-              selected = companyEvents.first;
-            }
-
-            setState(() {
-              _availableCompanyEvents = companyEvents;
-              _activeEvent = selected;
-              if (companyEvents.length > 1) {
-                _isAutoMultiCampaignMode = true;
-              }
-              _isLoadingEvent = false;
-              _errorMessage = null;
-            });
-          } else {
-            setState(() {
-              _availableCompanyEvents = [];
-              _activeEvent = null;
-              _errorMessage = 'لا توجد حملة مفعالة لهذه الشركة حالياً.';
-              _isLoadingEvent = false;
-            });
-          }
+          _isLoadingEvent = false;
+          _errorMessage = null;
+        });
+      } else {
+        setState(() {
+          _availableCompanyEvents = [];
+          _activeEvent = null;
+          _errorMessage = 'لا توجد حملة مفعالة لهذه الشركة حالياً.';
+          _isLoadingEvent = false;
+        });
+      }
     }
   }
 
@@ -332,8 +368,11 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.broken_image_outlined,
-              size: compact ? 22 : 48, color: Colors.grey.shade600),
+          Icon(
+            Icons.broken_image_outlined,
+            size: compact ? 22 : 48,
+            color: Colors.grey.shade600,
+          ),
           if (!compact) ...[
             const SizedBox(height: 8),
             Text(
@@ -355,24 +394,41 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
     double? width,
     bool compact = false,
   }) {
-    Widget onError(BuildContext context, Object error, StackTrace? stackTrace) =>
-        _receiptImageErrorFallback(compact: compact);
+    Widget onError(
+      BuildContext context,
+      Object error,
+      StackTrace? stackTrace,
+    ) => _receiptImageErrorFallback(compact: compact);
     if (!kIsWeb) {
-      return Image.file(File(file.path),
-          fit: fit, width: width, errorBuilder: onError);
+      return Image.file(
+        File(file.path),
+        fit: fit,
+        width: width,
+        errorBuilder: onError,
+      );
     }
     final cached = _receiptImageBytes[file.path];
     if (cached != null) {
-      return Image.memory(cached,
-          fit: fit, width: width, gaplessPlayback: true, errorBuilder: onError);
+      return Image.memory(
+        cached,
+        fit: fit,
+        width: width,
+        gaplessPlayback: true,
+        errorBuilder: onError,
+      );
     }
     return FutureBuilder<Uint8List>(
       future: file.readAsBytes(),
       builder: (context, snap) {
         if (snap.hasData) {
           _receiptImageBytes[file.path] = snap.data!;
-          return Image.memory(snap.data!,
-              fit: fit, width: width, gaplessPlayback: true, errorBuilder: onError);
+          return Image.memory(
+            snap.data!,
+            fit: fit,
+            width: width,
+            gaplessPlayback: true,
+            errorBuilder: onError,
+          );
         }
         if (snap.hasError) return _receiptImageErrorFallback(compact: compact);
         return const Center(child: CircularProgressIndicator(strokeWidth: 2));
@@ -474,16 +530,23 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                   leading: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: colorScheme.primaryContainer.withValues(alpha: 0.6),
+                      color: colorScheme.primaryContainer.withValues(
+                        alpha: 0.6,
+                      ),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.camera_alt_rounded, color: colorScheme.primary),
+                    child: Icon(
+                      Icons.camera_alt_rounded,
+                      color: colorScheme.primary,
+                    ),
                   ),
                   title: Text(
                     strings.captureNextPartCamera,
                     style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
                   ),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                   onTap: () {
                     Navigator.pop(ctx);
                     _pickImage(ImageSource.camera, true);
@@ -494,16 +557,23 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                   leading: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: colorScheme.secondaryContainer.withValues(alpha: 0.6),
+                      color: colorScheme.secondaryContainer.withValues(
+                        alpha: 0.6,
+                      ),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.photo_library_rounded, color: colorScheme.secondary),
+                    child: Icon(
+                      Icons.photo_library_rounded,
+                      color: colorScheme.secondary,
+                    ),
                   ),
                   title: Text(
                     strings.pickNextPartGallery,
                     style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
                   ),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                   onTap: () {
                     Navigator.pop(ctx);
                     _pickImage(ImageSource.gallery, true);
@@ -535,7 +605,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
   void _clearAllParts() {
     setState(() {
       _receiptImages.clear();
-    _receiptImageBytes.clear();
+      _receiptImageBytes.clear();
       _selectedPreviewIndex = 0;
     });
   }
@@ -580,16 +650,23 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                   leading: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: colorScheme.primaryContainer.withValues(alpha: 0.6),
+                      color: colorScheme.primaryContainer.withValues(
+                        alpha: 0.6,
+                      ),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.camera_alt_rounded, color: colorScheme.primary),
+                    child: Icon(
+                      Icons.camera_alt_rounded,
+                      color: colorScheme.primary,
+                    ),
                   ),
                   title: Text(
                     strings.captureReceiptAction,
                     style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
                   ),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                   onTap: () {
                     Navigator.pop(ctx);
                     _pickImage(ImageSource.camera);
@@ -600,16 +677,23 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                   leading: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: colorScheme.secondaryContainer.withValues(alpha: 0.6),
+                      color: colorScheme.secondaryContainer.withValues(
+                        alpha: 0.6,
+                      ),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.photo_library_rounded, color: colorScheme.secondary),
+                    child: Icon(
+                      Icons.photo_library_rounded,
+                      color: colorScheme.secondary,
+                    ),
                   ),
                   title: Text(
                     strings.pickFromGalleryAction,
                     style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
                   ),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                   onTap: () {
                     Navigator.pop(ctx);
                     _pickImage(ImageSource.gallery);
@@ -630,8 +714,13 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       return;
     }
 
-    final bool isMultiScan = _isAutoMultiCampaignMode && _availableCompanyEvents.length > 1;
-    final EventModel? primaryTargetEvent = _activeEvent ?? (isMultiScan && _availableCompanyEvents.isNotEmpty ? _availableCompanyEvents.first : widget.event);
+    final bool isMultiScan =
+        _isAutoMultiCampaignMode && _availableCompanyEvents.length > 1;
+    final EventModel? primaryTargetEvent =
+        _activeEvent ??
+        (isMultiScan && _availableCompanyEvents.isNotEmpty
+            ? _availableCompanyEvents.first
+            : widget.event);
 
     if (primaryTargetEvent == null) {
       _showIssue(ReceiptIssueKind.campaignUnavailable);
@@ -648,13 +737,25 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       // 1. Check event active dates if single focused campaign mode
       if (!isMultiScan && _activeEvent != null) {
         if (_activeEvent!.isExpired) {
-          final endStr = "${_activeEvent!.endDate!.day}/${_activeEvent!.endDate!.month}/${_activeEvent!.endDate!.year}";
-          _showIssue(ReceiptIssueKind.campaignEnded, subtitle: _isAr ? 'انتهت الحملة بتاريخ $endStr. لا يمكن قبول فواتير جديدة.' : 'The campaign ended on $endStr. New receipts can no longer be accepted.');
+          final endStr =
+              "${_activeEvent!.endDate!.day}/${_activeEvent!.endDate!.month}/${_activeEvent!.endDate!.year}";
+          _showIssue(
+            ReceiptIssueKind.campaignEnded,
+            subtitle: _isAr
+                ? 'انتهت الحملة بتاريخ $endStr. لا يمكن قبول فواتير جديدة.'
+                : 'The campaign ended on $endStr. New receipts can no longer be accepted.',
+          );
           return;
         }
         if (_activeEvent!.isNotStartedYet) {
-          final startStr = "${_activeEvent!.startDate!.day}/${_activeEvent!.startDate!.month}/${_activeEvent!.startDate!.year}";
-          _showIssue(ReceiptIssueKind.campaignNotStarted, subtitle: _isAr ? 'تبدأ الحملة بتاريخ $startStr.' : 'The campaign starts on $startStr.');
+          final startStr =
+              "${_activeEvent!.startDate!.day}/${_activeEvent!.startDate!.month}/${_activeEvent!.startDate!.year}";
+          _showIssue(
+            ReceiptIssueKind.campaignNotStarted,
+            subtitle: _isAr
+                ? 'تبدأ الحملة بتاريخ $startStr.'
+                : 'The campaign starts on $startStr.',
+          );
           return;
         }
       }
@@ -673,7 +774,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       }
 
       // Step 1: Calibrate primary image & thermal contrast
-      final primaryCalib = await ReceiptImageCalibrator.calibrateReceiptBytes(rawPrimaryBytes);
+      final primaryCalib = await ReceiptImageCalibrator.calibrateReceiptBytes(
+        rawPrimaryBytes,
+      );
       final bytes = primaryCalib.bytes;
       final mimeType = primaryCalib.mimeType;
 
@@ -682,7 +785,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       final List<String> additionalMimesList = [];
       for (int i = 1; i < _receiptImages.length; i++) {
         final addRaw = await _receiptImages[i].readAsBytes();
-        final addCalib = await ReceiptImageCalibrator.calibrateReceiptBytes(addRaw);
+        final addCalib = await ReceiptImageCalibrator.calibrateReceiptBytes(
+          addRaw,
+        );
         additionalBytesList.add(addCalib.bytes);
         additionalMimesList.add(addCalib.mimeType);
       }
@@ -706,18 +811,25 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
 
       try {
         final results = await Future.wait([
-          productsService.getProductsForCompany(primaryTargetEvent.companySlug).catchError((_) => <CompanyProductItem>[]),
-          ref.read(retailChainsServiceProvider).getBranchesForEvent(
-            retailChainId: primaryTargetEvent.retailChainId,
-            branchIds: primaryTargetEvent.branchIds,
-            branchNames: primaryTargetEvent.branchNames,
-          ).catchError((_) => <BranchModel>[]),
+          productsService
+              .getProductsForCompany(primaryTargetEvent.companySlug)
+              .catchError((_) => <CompanyProductItem>[]),
+          ref
+              .read(retailChainsServiceProvider)
+              .getBranchesForEvent(
+                retailChainId: primaryTargetEvent.retailChainId,
+                branchIds: primaryTargetEvent.branchIds,
+                branchNames: primaryTargetEvent.branchNames,
+              )
+              .catchError((_) => <BranchModel>[]),
         ]);
 
         final catalogItems = results[0] as List<CompanyProductItem>;
         chainBranches = results[1] as List<BranchModel>;
 
-        registeredBarcodes = catalogItems.map((e) => "${e.productName} (${e.barcode})").toList();
+        registeredBarcodes = catalogItems
+            .map((e) => "${e.productName} (${e.barcode})")
+            .toList();
         catalogBarcodeMap = {
           for (final item in catalogItems)
             if (item.productName.isNotEmpty && item.barcode.isNotEmpty)
@@ -759,7 +871,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         combinedRequiredProducts = reqProdSet.toList();
         combinedAllowedBranches = branchSet.toList();
       } else {
-        final Set<String> singleReqProds = Set<String>.from(_activeEvent!.requiredProducts);
+        final Set<String> singleReqProds = Set<String>.from(
+          _activeEvent!.requiredProducts,
+        );
         for (final r in _activeEvent!.promotionalRules) {
           for (final sp in r.selectedProductNames) {
             if (sp.trim().isNotEmpty) singleReqProds.add(sp.trim());
@@ -777,9 +891,12 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       final double effectiveCampaignMinSpend = isMultiScan
           ? 0.0
           : (combinedPromotionalRules
-              .where((r) => r.isSpendBased)
-              .map((r) => r.effectiveMinSpend)
-              .fold<double>(_activeEvent!.minimumSpend, (min, s) => s > 0 && (min <= 0 || s < min) ? s : min));
+                .where((r) => r.isSpendBased)
+                .map((r) => r.effectiveMinSpend)
+                .fold<double>(
+                  _activeEvent!.minimumSpend,
+                  (min, s) => s > 0 && (min <= 0 || s < min) ? s : min,
+                ));
 
       // Run Gemini AI analysis
       final result = await aiService.analyzeReceiptImage(
@@ -801,9 +918,12 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         customPrompt: isMultiScan ? '' : _activeEvent!.customPrompt,
         allowMultipleChances: true,
         multiplierBasis: isMultiScan ? 'both' : _activeEvent!.multiplierBasis,
-        maxChancesPerReceipt: isMultiScan ? 0 : _activeEvent!.maxChancesPerReceipt,
+        maxChancesPerReceipt: isMultiScan
+            ? 0
+            : _activeEvent!.maxChancesPerReceipt,
         promotionalRules: combinedPromotionalRules,
-        allowComplementaryReceipts: _activeEvent?.allowComplementaryReceipts ?? false,
+        allowComplementaryReceipts:
+            _activeEvent?.allowComplementaryReceipts ?? false,
       );
 
       final previewImgUrl = 'data:$mimeType;base64,${base64Encode(bytes)}';
@@ -813,21 +933,24 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
 
       // Asynchronously stage any newly harvested branch metadata for admin review & merge
       unawaited(
-        ref.read(retailChainsServiceProvider).stageBranchEnrichment(
-          chainName: result.storeChainDetected.isNotEmpty
-              ? result.storeChainDetected
-              : primaryTargetEvent.retailChainName,
-          branchName: result.branchDetected,
-          storeId: result.storeId,
-          posNumber: result.posNumber,
-          taxNumber: result.taxNumber,
-          commercialReg: result.commercialReg,
-          hotline: result.hotline,
-          branchAddress: result.branchAddress,
-          receiptNumber: result.receiptNumber,
-          receiptDate: result.receiptDate,
-          sourceReceiptUrl: previewImgUrl,
-        ).catchError((_) => false),
+        ref
+            .read(retailChainsServiceProvider)
+            .stageBranchEnrichment(
+              chainName: result.storeChainDetected.isNotEmpty
+                  ? result.storeChainDetected
+                  : primaryTargetEvent.retailChainName,
+              branchName: result.branchDetected,
+              storeId: result.storeId,
+              posNumber: result.posNumber,
+              taxNumber: result.taxNumber,
+              commercialReg: result.commercialReg,
+              hotline: result.hotline,
+              branchAddress: result.branchAddress,
+              receiptNumber: result.receiptNumber,
+              receiptDate: result.receiptDate,
+              sourceReceiptUrl: previewImgUrl,
+            )
+            .catchError((_) => false),
       );
 
       if (!result.isValid) {
@@ -836,11 +959,15 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         final unfulfilledList = result.unfulfilledConditions.isNotEmpty
             ? result.unfulfilledConditions
             : (_activeEvent!.promotionalRules.isNotEmpty
-                ? PromotionalRuleMatcher.getUnfulfilledPromotionReasons(
-                    result: result,
-                    promotionalRules: _activeEvent!.promotionalRules,
-                  )
-                : [result.message.trim().isNotEmpty ? result.message.trim() : 'الفاتورة غير مطابقة لشروط الحملة']);
+                  ? PromotionalRuleMatcher.getUnfulfilledPromotionReasons(
+                      result: result,
+                      promotionalRules: _activeEvent!.promotionalRules,
+                    )
+                  : [
+                      result.message.trim().isNotEmpty
+                          ? result.message.trim()
+                          : 'الفاتورة غير مطابقة لشروط الحملة',
+                    ]);
 
         final conditions = buildValidationConditionItems(
           isValid: false,
@@ -857,7 +984,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           allowedBranches: _activeEvent!.branchNames,
           isAllBranches: _activeEvent!.isAllBranches,
           receiptDate: result.receiptDate,
-          hasTargetProducts: result.extractedProducts.any((p) => p.isTargetCompany) || result.targetCompanyTotal > 0,
+          hasTargetProducts:
+              result.extractedProducts.any((p) => p.isTargetCompany) ||
+              result.targetCompanyTotal > 0,
           isHandwritten: result.isHandwritten,
           isThermalPosReceipt: result.isThermalPosReceipt,
           isTampered: result.isTampered,
@@ -879,9 +1008,20 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         );
 
         _showIssue(
-          _kindForInvalidResult(result, unfulfilledList, effectiveCampaignMinSpend),
-          chips: _receiptChips(result, minimumSpend: effectiveCampaignMinSpend, currency: activeCountry.currencySymbol),
-          extraReasons: <String>{...unfulfilledList, ...conditions.map((c) => c.description)}.toList(),
+          _kindForInvalidResult(
+            result,
+            unfulfilledList,
+            effectiveCampaignMinSpend,
+          ),
+          chips: _receiptChips(
+            result,
+            minimumSpend: effectiveCampaignMinSpend,
+            currency: activeCountry.currencySymbol,
+          ),
+          extraReasons: <String>{
+            ...unfulfilledList,
+            ...conditions.map((c) => c.description),
+          }.toList(),
           onPrimary: _clearPhotosForRetake,
         );
         return;
@@ -889,13 +1029,14 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
 
       final candidateReceiptNumber = result.receiptNumber.trim();
       if (candidateReceiptNumber.isNotEmpty) {
-        final duplicateCheck = await ReceiptDeduplicationHelper.checkReceiptDuplicate(
-          firestore: firestore,
-          receiptNumber: candidateReceiptNumber,
-          companySlug: primaryTargetEvent.companySlug,
-          campaignId: isMultiScan ? null : _activeEvent?.id,
-          isMultiScan: isMultiScan,
-        );
+        final duplicateCheck =
+            await ReceiptDeduplicationHelper.checkReceiptDuplicate(
+              firestore: firestore,
+              receiptNumber: candidateReceiptNumber,
+              companySlug: primaryTargetEvent.companySlug,
+              campaignId: isMultiScan ? null : _activeEvent?.id,
+              isMultiScan: isMultiScan,
+            );
 
         if (duplicateCheck.isDuplicate) {
           if (!mounted) return;
@@ -919,8 +1060,11 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           });
 
           final receiptNumber = result.receiptNumber.trim();
-          final cleanReceiptNumber = (receiptNumber.isNotEmpty ? receiptNumber : "INV_${DateTime.now().millisecondsSinceEpoch}")
-              .replaceAll(RegExp(r'[/\\?%*:|"<>]'), '_');
+          final cleanReceiptNumber =
+              (receiptNumber.isNotEmpty
+                      ? receiptNumber
+                      : "INV_${DateTime.now().millisecondsSinceEpoch}")
+                  .replaceAll(RegExp(r'[/\\?%*:|"<>]'), '_');
 
           final List<String> uploadedImageUrls = [];
           final List<String> uploadedStoragePaths = [];
@@ -944,20 +1088,27 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                     'partIndex': '$partNum',
                     'totalParts': '${allBytesList.length}',
                     'uploadedAt': DateTime.now().toIso8601String(),
-                    'uploaderUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
+                    'uploaderUid':
+                        ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
                   },
                 );
 
                 await storageRef
                     .putData(allBytesList[index], metadata)
                     .timeout(const Duration(seconds: 15));
-                final url = await storageRef.getDownloadURL().timeout(const Duration(seconds: 10));
+                final url = await storageRef.getDownloadURL().timeout(
+                  const Duration(seconds: 10),
+                );
                 uploadedImageUrls.add(url);
                 uploadedStoragePaths.add(sPath);
               } catch (e) {
-                debugPrint('Firebase Storage upload notice for part $partNum: $e');
+                debugPrint(
+                  'Firebase Storage upload notice for part $partNum: $e',
+                );
                 if (allBytesList[index].lengthInBytes <= 400 * 1024) {
-                  uploadedImageUrls.add('data:image/jpeg;base64,${base64Encode(allBytesList[index])}');
+                  uploadedImageUrls.add(
+                    'data:image/jpeg;base64,${base64Encode(allBytesList[index])}',
+                  );
                 } else {
                   uploadedImageUrls.add('');
                 }
@@ -967,35 +1118,44 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           );
 
           // Harvest discovered products asynchronously
-          unawaited(ref.read(aiProductDiscoveryServiceProvider).autoHarvestFromReceiptAnalysis(
-            companySlug: primaryTargetEvent.companySlug,
-            companyName: primaryTargetEvent.targetCompany,
-            retailChain: result.storeChainDetected,
-            branch: result.branchDetected,
-            receiptNumber: receiptNumber,
-            extractedProducts: result.extractedProducts,
-          ));
+          unawaited(
+            ref
+                .read(aiProductDiscoveryServiceProvider)
+                .autoHarvestFromReceiptAnalysis(
+                  companySlug: primaryTargetEvent.companySlug,
+                  companyName: primaryTargetEvent.targetCompany,
+                  retailChain: result.storeChainDetected,
+                  branch: result.branchDetected,
+                  receiptNumber: receiptNumber,
+                  extractedProducts: result.extractedProducts,
+                ),
+          );
 
           // Reset image preview and analysis state immediately
           setState(() {
             _receiptImages.clear();
-    _receiptImageBytes.clear();
+            _receiptImageBytes.clear();
             _selectedPreviewIndex = 0;
             _isAiLoading = false;
             _aiPhaseText = '';
           });
 
-          final bundleGroupId = 'BUNDLE_${DateTime.now().millisecondsSinceEpoch}_${math.Random().nextInt(9999)}';
+          final bundleGroupId =
+              'BUNDLE_${DateTime.now().millisecondsSinceEpoch}_${math.Random().nextInt(9999)}';
           if (!mounted) return;
           await Navigator.of(context).push(
             MaterialPageRoute(
               builder: (context) => UnifiedMultiCampaignClaimScreen(
                 bundleGroupId: bundleGroupId,
                 receiptNumber: receiptNumber,
-                customerPhone: _customerPhoneController.text.toEnglishDigits().trim(),
+                customerPhone: _customerPhoneController.text
+                    .toEnglishDigits()
+                    .trim(),
                 customerName: _customerNameController.text.trim(),
                 qualifiedCampaigns: summary.qualifiedCampaigns,
-                imageUrls: uploadedImageUrls.isNotEmpty ? uploadedImageUrls : previewUrls,
+                imageUrls: uploadedImageUrls.isNotEmpty
+                    ? uploadedImageUrls
+                    : previewUrls,
                 initialAiMetadata: {
                   'store_chain_detected': result.storeChainDetected,
                   'branch_detected': result.branchDetected,
@@ -1003,7 +1163,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                   'analysis_duration_seconds': result.durationSeconds,
                   'analysis_duration_ms': result.durationMs,
                   'ai_kpi_rating': result.kpiRating,
-                  'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
+                  'extracted_products': result.extractedProducts
+                      .map((p) => p.toJson())
+                      .toList(),
                 },
                 onDisbursalCompleted: () {
                   _resetFormForNextCustomer();
@@ -1053,8 +1215,14 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
 
           _showIssue(
             ReceiptIssueKind.multiNoMatch,
-            chips: _receiptChips(result, minimumSpend: 0, currency: activeCountry.currencySymbol),
-            extraReasons: conditions.map((c) => '${c.title}: ${c.description}').toList(),
+            chips: _receiptChips(
+              result,
+              minimumSpend: 0,
+              currency: activeCountry.currencySymbol,
+            ),
+            extraReasons: conditions
+                .map((c) => '${c.title}: ${c.description}')
+                .toList(),
           );
           _resetFormForNextCustomer();
           return;
@@ -1062,11 +1230,12 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       }
 
       final double totalValue = result.targetCompanyTotal;
-      if (_activeEvent!.minimumSpend > 0 && totalValue < _activeEvent!.minimumSpend) {
+      if (_activeEvent!.minimumSpend > 0 &&
+          totalValue < _activeEvent!.minimumSpend) {
         if (!mounted) return;
         final activeCountry = ref.read(activeCountryProvider);
         final unfulfilledList = [
-          'إجمالي مشتريات منتجات ${_activeEvent!.targetCompany} في الفاتورة ($totalValue ${activeCountry.currencySymbol}) أقل من الحد الأدنى المطلوب لدخول السحب (${_activeEvent!.minimumSpend} ${activeCountry.currencySymbol}).'
+          'إجمالي مشتريات منتجات ${_activeEvent!.targetCompany} في الفاتورة ($totalValue ${activeCountry.currencySymbol}) أقل من الحد الأدنى المطلوب لدخول السحب (${_activeEvent!.minimumSpend} ${activeCountry.currencySymbol}).',
         ];
         final conditions = [
           ValidationConditionItem(
@@ -1074,7 +1243,8 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
             description: unfulfilledList.first,
             icon: Icons.price_check_rounded,
             isMet: false,
-            value: '$totalValue / ${_activeEvent!.minimumSpend} ${activeCountry.currencySymbol}',
+            value:
+                '$totalValue / ${_activeEvent!.minimumSpend} ${activeCountry.currencySymbol}',
           ),
         ];
 
@@ -1084,14 +1254,19 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           allBytesList: allBytesList,
           allImagesList: allImagesList,
           activeEvent: _activeEvent!,
-          rejectionReason: 'الحد الأدنى لقيمة المشتريات غير مستوفى ($totalValue / ${_activeEvent!.minimumSpend} ${activeCountry.currencySymbol})',
+          rejectionReason:
+              'الحد الأدنى لقيمة المشتريات غير مستوفى ($totalValue / ${_activeEvent!.minimumSpend} ${activeCountry.currencySymbol})',
           unfulfilledConditions: unfulfilledList,
           totalValue: totalValue,
         );
 
         _showIssue(
           ReceiptIssueKind.belowMinimum,
-          chips: _receiptChips(result, minimumSpend: _activeEvent!.minimumSpend, currency: activeCountry.currencySymbol),
+          chips: _receiptChips(
+            result,
+            minimumSpend: _activeEvent!.minimumSpend,
+            currency: activeCountry.currencySymbol,
+          ),
           extraReasons: conditions.map((c) => c.description).toList(),
         );
         return;
@@ -1106,13 +1281,15 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         allowCampaignMultipliers: _activeEvent!.allowMultipleChances,
       );
 
-      if (_activeEvent!.promotionalRules.isNotEmpty && matchedRulesList.isEmpty) {
+      if (_activeEvent!.promotionalRules.isNotEmpty &&
+          matchedRulesList.isEmpty) {
         if (!mounted) return;
         final activeCountry = ref.read(activeCountryProvider);
-        final unfulfilledPromoList = PromotionalRuleMatcher.getUnfulfilledPromotionReasons(
-          result: result,
-          promotionalRules: _activeEvent!.promotionalRules,
-        );
+        final unfulfilledPromoList =
+            PromotionalRuleMatcher.getUnfulfilledPromotionReasons(
+              result: result,
+              promotionalRules: _activeEvent!.promotionalRules,
+            );
 
         final conditions = [
           ValidationConditionItem(
@@ -1140,29 +1317,41 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
 
         // Harvest unlisted company products so they immediately appear in "تحديث الأصناف" for review & one-click catalog addition
         if (result.extractedProducts.any((p) => p.isTargetCompany)) {
-          unawaited(ref.read(aiProductDiscoveryServiceProvider).autoHarvestFromReceiptAnalysis(
-            companySlug: _activeEvent!.companySlug,
-            companyName: _activeEvent!.targetCompany,
-            retailChain: result.storeChainDetected,
-            branch: result.branchDetected,
-            receiptNumber: receiptNumber,
-            extractedProducts: result.extractedProducts,
-          ));
+          unawaited(
+            ref
+                .read(aiProductDiscoveryServiceProvider)
+                .autoHarvestFromReceiptAnalysis(
+                  companySlug: _activeEvent!.companySlug,
+                  companyName: _activeEvent!.targetCompany,
+                  retailChain: result.storeChainDetected,
+                  branch: result.branchDetected,
+                  receiptNumber: receiptNumber,
+                  extractedProducts: result.extractedProducts,
+                ),
+          );
         }
 
         _showIssue(
           ReceiptIssueKind.promoNotMet,
-          chips: _receiptChips(result, minimumSpend: _activeEvent!.minimumSpend, currency: activeCountry.currencySymbol),
-          extraReasons: <String>{...unfulfilledPromoList, ...conditions.map((c) => c.description)}.toList(),
+          chips: _receiptChips(
+            result,
+            minimumSpend: _activeEvent!.minimumSpend,
+            currency: activeCountry.currencySymbol,
+          ),
+          extraReasons: <String>{
+            ...unfulfilledPromoList,
+            ...conditions.map((c) => c.description),
+          }.toList(),
         );
         _resetFormForNextCustomer();
         return;
       }
 
-      final deterministicDocId = ReceiptDeduplicationHelper.getDeterministicDocId(
-        campaignId: _activeEvent!.id,
-        receiptNumber: receiptNumber,
-      );
+      final deterministicDocId =
+          ReceiptDeduplicationHelper.getDeterministicDocId(
+            campaignId: _activeEvent!.id,
+            receiptNumber: receiptNumber,
+          );
 
       // Duplicate detection runs server-side (checkReceiptDuplicate) before this
       // point. Anonymous reps cannot read receipts (firestore.rules), so the
@@ -1174,8 +1363,11 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         _aiPhaseText = '2/3 جاري حفظ صورة الفاتورة في التخزين السحابي...';
       });
 
-      final cleanReceiptNumber = (receiptNumber.isNotEmpty ? receiptNumber : "INV_${DateTime.now().millisecondsSinceEpoch}")
-          .replaceAll(RegExp(r'[/\\?%*:|"<>]'), '_');
+      final cleanReceiptNumber =
+          (receiptNumber.isNotEmpty
+                  ? receiptNumber
+                  : "INV_${DateTime.now().millisecondsSinceEpoch}")
+              .replaceAll(RegExp(r'[/\\?%*:|"<>]'), '_');
 
       final List<String> uploadedImageUrls = [];
       final List<String> uploadedStoragePaths = [];
@@ -1200,20 +1392,25 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                 'partIndex': '$partNum',
                 'totalParts': '${allBytesList.length}',
                 'uploadedAt': DateTime.now().toIso8601String(),
-                'uploaderUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
+                'uploaderUid':
+                    ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
               },
             );
 
             await storageRef
                 .putData(allBytesList[index], metadata)
                 .timeout(const Duration(seconds: 15));
-            final url = await storageRef.getDownloadURL().timeout(const Duration(seconds: 10));
+            final url = await storageRef.getDownloadURL().timeout(
+              const Duration(seconds: 10),
+            );
             uploadedImageUrls.add(url);
             uploadedStoragePaths.add(sPath);
           } catch (e) {
             debugPrint('Firebase Storage upload notice for part $partNum: $e');
             if (allBytesList[index].lengthInBytes <= 400 * 1024) {
-              uploadedImageUrls.add('data:image/jpeg;base64,${base64Encode(allBytesList[index])}');
+              uploadedImageUrls.add(
+                'data:image/jpeg;base64,${base64Encode(allBytesList[index])}',
+              );
             } else {
               uploadedImageUrls.add('');
             }
@@ -1222,17 +1419,24 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         }),
       );
 
-      final String primaryImageUrl = uploadedImageUrls.isNotEmpty ? uploadedImageUrls.first : '';
-      final String primaryStoragePath = uploadedStoragePaths.isNotEmpty ? uploadedStoragePaths.first : '';
+      final String primaryImageUrl = uploadedImageUrls.isNotEmpty
+          ? uploadedImageUrls.first
+          : '';
+      final String primaryStoragePath = uploadedStoragePaths.isNotEmpty
+          ? uploadedStoragePaths.first
+          : '';
 
       // 3. Store transaction in Firestore with Duration & KPI metrics (Upsert)
       setState(() {
         _aiPhaseText = '3/3 جاري حفظ المعاملة وتجهيز الجائزة...';
       });
 
-      final int calculatedChances = result.chancesEarned > 0 ? result.chancesEarned : 1;
-      final DocumentReference<Map<String, dynamic>> transactionRef =
-          firestore.collection('receipts_transactions').doc(deterministicDocId);
+      final int calculatedChances = result.chancesEarned > 0
+          ? result.chancesEarned
+          : 1;
+      final DocumentReference<Map<String, dynamic>> transactionRef = firestore
+          .collection('receipts_transactions')
+          .doc(deterministicDocId);
 
       final Map<String, dynamic> transactionData = {
         'receipt_number': receiptNumber,
@@ -1243,7 +1447,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         'total_value': totalValue,
         'target_company_total': totalValue,
         'receipt_date': result.receiptDate,
-        'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
+        'extracted_products': result.extractedProducts
+            .map((p) => p.toJson())
+            .toList(),
         'store_chain_detected': result.storeChainDetected,
         'branch_detected': result.branchDetected,
         'is_branch_matched': result.isBranchMatched,
@@ -1257,7 +1463,8 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         if (primaryImageUrl.isNotEmpty) 'image_url': primaryImageUrl,
         if (primaryStoragePath.isNotEmpty) 'storage_path': primaryStoragePath,
         if (uploadedImageUrls.length > 1) 'image_urls': uploadedImageUrls,
-        if (uploadedStoragePaths.length > 1) 'storage_paths': uploadedStoragePaths,
+        if (uploadedStoragePaths.length > 1)
+          'storage_paths': uploadedStoragePaths,
         'parts_count': allBytesList.length,
         'campaignId': _activeEvent!.id,
         'submittedByUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
@@ -1270,8 +1477,10 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         'analysis_duration_ms': result.durationMs,
         'ai_kpi_rating': result.kpiRating,
         'chances_earned': calculatedChances,
-        if (result.matchedRuleId.isNotEmpty) 'matched_rule_id': result.matchedRuleId,
-        if (result.matchedRewardValue.isNotEmpty) 'matched_reward_value': result.matchedRewardValue,
+        if (result.matchedRuleId.isNotEmpty)
+          'matched_rule_id': result.matchedRuleId,
+        if (result.matchedRewardValue.isNotEmpty)
+          'matched_reward_value': result.matchedRewardValue,
         'allow_multiple_chances': _activeEvent!.allowMultipleChances,
       };
 
@@ -1296,26 +1505,32 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       }
 
       // Harvest discovered products asynchronously for the AI Product Discovery Hub
-      unawaited(ref.read(aiProductDiscoveryServiceProvider).autoHarvestFromReceiptAnalysis(
-        companySlug: _activeEvent!.companySlug,
-        companyName: _activeEvent!.targetCompany,
-        retailChain: result.storeChainDetected,
-        branch: result.branchDetected,
-        receiptNumber: receiptNumber,
-        extractedProducts: result.extractedProducts,
-      ));
+      unawaited(
+        ref
+            .read(aiProductDiscoveryServiceProvider)
+            .autoHarvestFromReceiptAnalysis(
+              companySlug: _activeEvent!.companySlug,
+              companyName: _activeEvent!.targetCompany,
+              retailChain: result.storeChainDetected,
+              branch: result.branchDetected,
+              receiptNumber: receiptNumber,
+              extractedProducts: result.extractedProducts,
+            ),
+      );
 
       // Live Ingest into Cross-Chain Price Intelligence & Competitor Threat Catalog (0ms dynamic radar update)
-      unawaited(ref.read(chainProductsIntelligenceServiceProvider).ingestReceiptLive(
-        receiptData: transactionData,
-      ));
+      unawaited(
+        ref
+            .read(chainProductsIntelligenceServiceProvider)
+            .ingestReceiptLive(receiptData: transactionData),
+      );
 
       if (!mounted) return;
 
       // Reset image preview immediately
       setState(() {
         _receiptImages.clear();
-    _receiptImageBytes.clear();
+        _receiptImageBytes.clear();
         _selectedPreviewIndex = 0;
       });
 
@@ -1326,11 +1541,18 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       String? resolvedBranchId;
       String resolvedCanonicalBranchName = result.branchDetected.trim();
       if (currentEvent != null && currentEvent.branchIds.isNotEmpty) {
-        final detectedBranchClean = CompanyGiftsService.normalizeBranchToken(result.branchDetected);
+        final detectedBranchClean = CompanyGiftsService.normalizeBranchToken(
+          result.branchDetected,
+        );
         if (detectedBranchClean.isNotEmpty) {
           for (int i = 0; i < currentEvent.branchNames.length; i++) {
-            final bName = CompanyGiftsService.normalizeBranchToken(currentEvent.branchNames[i]);
-            if (bName.isNotEmpty && (bName == detectedBranchClean || bName.contains(detectedBranchClean) || detectedBranchClean.contains(bName))) {
+            final bName = CompanyGiftsService.normalizeBranchToken(
+              currentEvent.branchNames[i],
+            );
+            if (bName.isNotEmpty &&
+                (bName == detectedBranchClean ||
+                    bName.contains(detectedBranchClean) ||
+                    detectedBranchClean.contains(bName))) {
               if (i < currentEvent.branchIds.length) {
                 resolvedBranchId = currentEvent.branchIds[i];
                 resolvedCanonicalBranchName = currentEvent.branchNames[i];
@@ -1340,9 +1562,16 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           }
           if (resolvedBranchId == null) {
             for (final p in currentEvent.allocatedPrizes) {
-              final pBranchName = CompanyGiftsService.normalizeBranchToken(p.branchName);
-              if (pBranchName.isNotEmpty && (pBranchName == detectedBranchClean || pBranchName.contains(detectedBranchClean) || detectedBranchClean.contains(pBranchName))) {
-                resolvedBranchId = p.branchId.isNotEmpty ? p.branchId : p.branchName;
+              final pBranchName = CompanyGiftsService.normalizeBranchToken(
+                p.branchName,
+              );
+              if (pBranchName.isNotEmpty &&
+                  (pBranchName == detectedBranchClean ||
+                      pBranchName.contains(detectedBranchClean) ||
+                      detectedBranchClean.contains(pBranchName))) {
+                resolvedBranchId = p.branchId.isNotEmpty
+                    ? p.branchId
+                    : p.branchName;
                 if (p.branchName.trim().isNotEmpty) {
                   resolvedCanonicalBranchName = p.branchName.trim();
                 }
@@ -1351,13 +1580,21 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
             }
           }
         }
-        if (resolvedBranchId == null && (detectedBranchClean.isEmpty || currentEvent.branchIds.length == 1)) {
+        if (resolvedBranchId == null &&
+            (detectedBranchClean.isEmpty ||
+                currentEvent.branchIds.length == 1)) {
           resolvedBranchId = currentEvent.branchIds.first;
         }
       }
 
-      final branchIdentifier = (resolvedCanonicalBranchName.isNotEmpty ? resolvedCanonicalBranchName : resolvedBranchId) ?? result.branchDetected.trim();
-      final prizeNames = currentEvent?.availablePrizeNamesForBranch(branchIdentifier) ?? <String>[];
+      final branchIdentifier =
+          (resolvedCanonicalBranchName.isNotEmpty
+              ? resolvedCanonicalBranchName
+              : resolvedBranchId) ??
+          result.branchDetected.trim();
+      final prizeNames =
+          currentEvent?.availablePrizeNamesForBranch(branchIdentifier) ??
+          <String>[];
 
       // Composite promotional bundle from matched rules evaluated earlier
       final compositeBundle = CompositePromotionalBundle.fromMatchedRules(
@@ -1371,17 +1608,23 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           ? compositeBundle.totalChances
           : (result.chancesEarned > 0 ? result.chancesEarned : 1);
 
-      final ruleLevelGame = (compositeBundle.resolvedGameType != null && compositeBundle.resolvedGameType!.trim().isNotEmpty)
+      final ruleLevelGame =
+          (compositeBundle.resolvedGameType != null &&
+              compositeBundle.resolvedGameType!.trim().isNotEmpty)
           ? compositeBundle.resolvedGameType!.trim()
           : null;
-      final gameType = ruleLevelGame ?? currentEvent?.gameType ?? (totalValue >= 500 ? 'scratchCard' : 'spinTheWheel');
+      final gameType =
+          ruleLevelGame ??
+          currentEvent?.gameType ??
+          (totalValue >= 500 ? 'scratchCard' : 'spinTheWheel');
 
       if (gameType == 'directGift' || gameType == 'direct_gift') {
-        final designatedPrizeObj = (currentEvent?.availablePrizes.isNotEmpty ?? false)
+        final designatedPrizeObj =
+            (currentEvent?.availablePrizes.isNotEmpty ?? false)
             ? currentEvent!.availablePrizes.first
             : ((currentEvent?.allocatedPrizes.isNotEmpty ?? false)
-                ? currentEvent!.allocatedPrizes.first
-                : null);
+                  ? currentEvent!.allocatedPrizes.first
+                  : null);
 
         String designatedPrize;
         List<LinkedGiftAllocation> resolvedLinkedGifts = [];
@@ -1392,7 +1635,8 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           resolvedLinkedGifts = compositeBundle.combinedLinkedGifts;
           designatedPrize = compositeBundle.compositePrizeTitle;
 
-          resolvedIsVoucher = compositeBundle.totalVoucherValue > 0 ||
+          resolvedIsVoucher =
+              compositeBundle.totalVoucherValue > 0 ||
               resolvedLinkedGifts.any((g) => g.isVoucher) ||
               designatedPrize.contains('فواتشر') ||
               designatedPrize.toLowerCase().contains('voucher') ||
@@ -1400,20 +1644,24 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
 
           resolvedUnitValue = resolvedIsVoucher
               ? (compositeBundle.totalVoucherValue > 0
-                  ? compositeBundle.totalVoucherValue
-                  : designatedPrizeObj?.unitValue)
+                    ? compositeBundle.totalVoucherValue
+                    : designatedPrizeObj?.unitValue)
               : 0.0;
         } else if (result.matchedRewardValue.trim().isNotEmpty) {
           designatedPrize = result.matchedRewardValue.trim();
-          resolvedIsVoucher = result.matchedRewardType == 'voucher' ||
+          resolvedIsVoucher =
+              result.matchedRewardType == 'voucher' ||
               result.matchedRewardAmount > 0 ||
               designatedPrize.contains('فواتشر') ||
               designatedPrize.contains('قسيمة');
           resolvedUnitValue = resolvedIsVoucher
-              ? (result.matchedRewardAmount > 0 ? result.matchedRewardAmount : designatedPrizeObj?.unitValue)
+              ? (result.matchedRewardAmount > 0
+                    ? result.matchedRewardAmount
+                    : designatedPrizeObj?.unitValue)
               : 0.0;
         } else {
-          designatedPrize = designatedPrizeObj?.name ??
+          designatedPrize =
+              designatedPrizeObj?.name ??
               (prizeNames.isNotEmpty ? prizeNames.first : '');
           resolvedUnitValue = designatedPrizeObj?.unitValue;
           resolvedIsVoucher = designatedPrizeObj?.isVoucher ?? false;
@@ -1425,14 +1673,26 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
             designatedPrize == 'هدية ترويجية مميزة' ||
             RegExp(r'^[a-zA-Z0-9_-]{15,35}$').hasMatch(designatedPrize)) {
           if (resolvedLinkedGifts.isNotEmpty) {
-            designatedPrize = resolvedLinkedGifts.map((g) => g.quantity > 1 ? '${g.quantity} × ${g.giftName}' : g.giftName).join(' + ');
+            designatedPrize = resolvedLinkedGifts
+                .map(
+                  (g) => g.quantity > 1
+                      ? '${g.quantity} × ${g.giftName}'
+                      : g.giftName,
+                )
+                .join(' + ');
             resolvedIsVoucher = resolvedLinkedGifts.any((g) => g.isVoucher);
             resolvedUnitValue = resolvedIsVoucher
-                ? resolvedLinkedGifts.fold<double>(0.0, (acc, g) => acc + g.totalMonetaryValue)
+                ? resolvedLinkedGifts.fold<double>(
+                    0.0,
+                    (acc, g) => acc + g.totalMonetaryValue,
+                  )
                 : 0.0;
-          } else if (resolvedIsVoucher || (resolvedUnitValue != null && resolvedUnitValue > 0)) {
+          } else if (resolvedIsVoucher ||
+              (resolvedUnitValue != null && resolvedUnitValue > 0)) {
             final val = (resolvedUnitValue != null && resolvedUnitValue > 0)
-                ? (resolvedUnitValue == resolvedUnitValue.roundToDouble() ? resolvedUnitValue.toInt() : resolvedUnitValue)
+                ? (resolvedUnitValue == resolvedUnitValue.roundToDouble()
+                      ? resolvedUnitValue.toInt()
+                      : resolvedUnitValue)
                 : 50;
             designatedPrize = 'فواتشر بقيمة $val جنيه';
             resolvedIsVoucher = true;
@@ -1446,10 +1706,15 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
 
         final promoQuantity = resolvedLinkedGifts.isNotEmpty
             ? 1
-            : ((currentEvent?.allowMultipleChances ?? false) ? totalChances : 1);
-        final enteredPhone = _customerPhoneController.text.toEnglishDigits().trim();
+            : ((currentEvent?.allowMultipleChances ?? false)
+                  ? totalChances
+                  : 1);
+        final enteredPhone = _customerPhoneController.text
+            .toEnglishDigits()
+            .trim();
         final enteredName = _customerNameController.text.trim();
-        final isWaEnabled = currentEvent?.enableWhatsAppWinnerNotification ?? true;
+        final isWaEnabled =
+            currentEvent?.enableWhatsAppWinnerNotification ?? true;
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => DirectGiftClaimScreen(
@@ -1461,11 +1726,16 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
               unitValue: resolvedUnitValue,
               isVoucher: resolvedIsVoucher,
               linkedGifts: resolvedLinkedGifts,
-              requireVoucherSerials: currentEvent?.requireVoucherSerials ?? false,
+              requireVoucherSerials:
+                  currentEvent?.requireVoucherSerials ?? false,
+              voucherSerialMode: currentEvent?.voucherSerialMode,
               customerPhone: enteredPhone,
               customerName: enteredName,
-              retailChainName: currentEvent?.retailChainName ?? result.storeChainDetected,
-              branchName: resolvedCanonicalBranchName.isNotEmpty ? resolvedCanonicalBranchName : result.branchDetected,
+              retailChainName:
+                  currentEvent?.retailChainName ?? result.storeChainDetected,
+              branchName: resolvedCanonicalBranchName.isNotEmpty
+                  ? resolvedCanonicalBranchName
+                  : result.branchDetected,
               companyName: currentEvent?.targetCompany ?? '',
               receiptNumber: receiptNumber,
               companySlug: currentEvent?.companySlug,
@@ -1475,15 +1745,18 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         );
         _resetFormForNextCustomer();
       } else if (gameType == 'chooseGift') {
-        final enteredPhone = _customerPhoneController.text.toEnglishDigits().trim();
+        final enteredPhone = _customerPhoneController.text
+            .toEnglishDigits()
+            .trim();
         final enteredName = _customerNameController.text.trim();
-        final isWaEnabled = currentEvent?.enableWhatsAppWinnerNotification ?? true;
+        final isWaEnabled =
+            currentEvent?.enableWhatsAppWinnerNotification ?? true;
         final candidateGifts = compositeBundle.combinedLinkedGifts.isNotEmpty
             ? compositeBundle.combinedLinkedGifts
-                .map((g) => g.giftName.trim())
-                .where((n) => n.isNotEmpty)
-                .toSet()
-                .toList()
+                  .map((g) => g.giftName.trim())
+                  .where((n) => n.isNotEmpty)
+                  .toSet()
+                  .toList()
             : prizeNames;
         await Navigator.of(context).push(
           MaterialPageRoute(
@@ -1501,16 +1774,21 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           ),
         );
         _resetFormForNextCustomer();
-      } else if (gameType == 'scratch' || gameType == 'scratchCard' || (gameType.isEmpty && totalValue >= 500)) {
-        final enteredPhone = _customerPhoneController.text.toEnglishDigits().trim();
+      } else if (gameType == 'scratch' ||
+          gameType == 'scratchCard' ||
+          (gameType.isEmpty && totalValue >= 500)) {
+        final enteredPhone = _customerPhoneController.text
+            .toEnglishDigits()
+            .trim();
         final enteredName = _customerNameController.text.trim();
-        final isWaEnabled = currentEvent?.enableWhatsAppWinnerNotification ?? true;
+        final isWaEnabled =
+            currentEvent?.enableWhatsAppWinnerNotification ?? true;
         final candidateGifts = compositeBundle.combinedLinkedGifts.isNotEmpty
             ? compositeBundle.combinedLinkedGifts
-                .map((g) => g.giftName.trim())
-                .where((n) => n.isNotEmpty)
-                .toSet()
-                .toList()
+                  .map((g) => g.giftName.trim())
+                  .where((n) => n.isNotEmpty)
+                  .toSet()
+                  .toList()
             : prizeNames;
         await Navigator.of(context).push(
           MaterialPageRoute(
@@ -1528,17 +1806,21 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         );
         _resetFormForNextCustomer();
       } else {
-        final enteredPhone = _customerPhoneController.text.toEnglishDigits().trim();
+        final enteredPhone = _customerPhoneController.text
+            .toEnglishDigits()
+            .trim();
         final enteredName = _customerNameController.text.trim();
-        final isWaEnabled = currentEvent?.enableWhatsAppWinnerNotification ?? true;
+        final isWaEnabled =
+            currentEvent?.enableWhatsAppWinnerNotification ?? true;
         final candidateGifts = compositeBundle.combinedLinkedGifts.isNotEmpty
             ? compositeBundle.combinedLinkedGifts
-                .map((g) => g.giftName.trim())
-                .where((n) => n.isNotEmpty)
-                .toSet()
-                .toList()
+                  .map((g) => g.giftName.trim())
+                  .where((n) => n.isNotEmpty)
+                  .toSet()
+                  .toList()
             : prizeNames;
-        final branchFilteredPrizes = (currentEvent != null && currentEvent.allocatedPrizes.isNotEmpty)
+        final branchFilteredPrizes =
+            (currentEvent != null && currentEvent.allocatedPrizes.isNotEmpty)
             ? currentEvent.filterGiftsByBranchStock(
                 candidateGifts: candidateGifts,
                 branch: branchIdentifier,
@@ -1546,19 +1828,33 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
             : candidateGifts;
         final finalWheelPrizes = branchFilteredPrizes;
 
-        if (finalWheelPrizes.isEmpty && (currentEvent?.allocatedPrizes.isNotEmpty ?? false)) {
-          final branchDisplay = resolvedCanonicalBranchName.isNotEmpty ? resolvedCanonicalBranchName : result.branchDetected;
+        if (finalWheelPrizes.isEmpty &&
+            (currentEvent?.allocatedPrizes.isNotEmpty ?? false)) {
+          final branchDisplay = resolvedCanonicalBranchName.isNotEmpty
+              ? resolvedCanonicalBranchName
+              : result.branchDetected;
           if (mounted) {
             await showDialog(
               context: context,
               barrierDismissible: false,
               builder: (ctx) => AlertDialog(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
                 title: Row(
                   children: [
-                    Icon(Icons.inventory_2_outlined, color: Theme.of(ctx).colorScheme.error),
+                    Icon(
+                      Icons.inventory_2_outlined,
+                      color: Theme.of(ctx).colorScheme.error,
+                    ),
                     const SizedBox(width: 8),
-                    Text('عذراً، نفدت الهدايا بالفرع', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 18)),
+                    Text(
+                      'عذراً، نفدت الهدايا بالفرع',
+                      style: GoogleFonts.cairo(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
                   ],
                 ),
                 content: Text(
@@ -1568,7 +1864,10 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                 actions: [
                   FilledButton(
                     onPressed: () => Navigator.of(ctx).pop(),
-                    child: Text('حسناً', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                    child: Text(
+                      'حسناً',
+                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ],
               ),
@@ -1586,7 +1885,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
               prizes: finalWheelPrizes,
               totalChances: totalChances,
               branchId: resolvedBranchId ?? branchIdentifier,
-              branchName: resolvedCanonicalBranchName.isNotEmpty ? resolvedCanonicalBranchName : result.branchDetected,
+              branchName: resolvedCanonicalBranchName.isNotEmpty
+                  ? resolvedCanonicalBranchName
+                  : result.branchDetected,
               customerPhone: enteredPhone,
               customerName: enteredName,
               enableWhatsAppWinnerNotification: isWaEnabled,
@@ -1599,7 +1900,12 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       debugPrint('Receipt processing error: $e\n$stack');
       if (mounted) {
         final kind = classifyReceiptException(e);
-        _showIssue(kind, onPrimary: _receiptImages.isNotEmpty ? _submitAndValidateReceipt : null);
+        _showIssue(
+          kind,
+          onPrimary: _receiptImages.isNotEmpty
+              ? _submitAndValidateReceipt
+              : null,
+        );
       }
     } finally {
       if (mounted) {
@@ -1641,7 +1947,11 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       details: details,
       extraReasons: extraReasons.where((r) => r.trim().isNotEmpty).toList(),
       subtitleOverride: subtitle,
-      onPrimary: onPrimary ?? (spec.action == ReceiptIssueAction.retake ? _clearPhotosForRetake : null),
+      onPrimary:
+          onPrimary ??
+          (spec.action == ReceiptIssueAction.retake
+              ? _clearPhotosForRetake
+              : null),
     );
   }
 
@@ -1655,39 +1965,75 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
     }
 
     final currency = ref.read(activeCountryProvider).currencySymbol;
-    String gift(String v) => RegExp(r'^\d+(\.\d+)?$').hasMatch(v) ? '$v $currency' : v;
+    String gift(String v) =>
+        RegExp(r'^\d+(\.\d+)?$').hasMatch(v) ? '$v $currency' : v;
     _showIssue(
       ReceiptIssueKind.alreadyRedeemed,
       details: [
-        if (dup.receiptNumber.isNotEmpty) ReceiptIssueDetail(Icons.tag_rounded, 'رقم الفاتورة', 'Receipt no.', dup.receiptNumber),
+        if (dup.receiptNumber.isNotEmpty)
+          ReceiptIssueDetail(
+            Icons.tag_rounded,
+            'رقم الفاتورة',
+            'Receipt no.',
+            dup.receiptNumber,
+          ),
         if ((dup.existingClaimedAt ?? '').isNotEmpty)
-          ReceiptIssueDetail(Icons.event_available_rounded, 'تاريخ الصرف', 'Redeemed on', fmtDate(dup.existingClaimedAt)),
+          ReceiptIssueDetail(
+            Icons.event_available_rounded,
+            'تاريخ الصرف',
+            'Redeemed on',
+            fmtDate(dup.existingClaimedAt),
+          ),
         if ((dup.existingCampaignName ?? '').isNotEmpty)
-          ReceiptIssueDetail(Icons.campaign_rounded, 'الحملة', 'Campaign', dup.existingCampaignName!),
+          ReceiptIssueDetail(
+            Icons.campaign_rounded,
+            'الحملة',
+            'Campaign',
+            dup.existingCampaignName!,
+          ),
         if ((dup.existingPrizeWon ?? '').isNotEmpty)
-          ReceiptIssueDetail(Icons.card_giftcard_rounded, 'الهدية / القسيمة', 'Gift / voucher', gift(dup.existingPrizeWon!)),
+          ReceiptIssueDetail(
+            Icons.card_giftcard_rounded,
+            'الهدية / القسيمة',
+            'Gift / voucher',
+            gift(dup.existingPrizeWon!),
+          ),
         if ((dup.existingBranch ?? '').isNotEmpty)
-          ReceiptIssueDetail(Icons.storefront_rounded, 'الفرع', 'Branch', dup.existingBranch!),
+          ReceiptIssueDetail(
+            Icons.storefront_rounded,
+            'الفرع',
+            'Branch',
+            dup.existingBranch!,
+          ),
       ],
     );
   }
 
-  ReceiptIssueKind _kindForInvalidResult(AiReceiptAnalysisResult r, List<String> reasons, double minimumSpend) {
+  ReceiptIssueKind _kindForInvalidResult(
+    AiReceiptAnalysisResult r,
+    List<String> reasons,
+    double minimumSpend,
+  ) {
     final msg = '${r.message} ${reasons.join(' ')}';
     if (r.isHandwritten) return ReceiptIssueKind.handwritten;
     if (r.isTampered) return ReceiptIssueKind.tampered;
     if (r.isScreenCapture) return ReceiptIssueKind.screenCapture;
     if (!r.isThermalPosReceipt) return ReceiptIssueKind.notReceipt;
     final fromText = classifyConditionText(msg);
-    if (fromText == ReceiptIssueKind.unreadable || fromText == ReceiptIssueKind.incomplete || fromText == ReceiptIssueKind.notReceipt) {
+    if (fromText == ReceiptIssueKind.unreadable ||
+        fromText == ReceiptIssueKind.incomplete ||
+        fromText == ReceiptIssueKind.notReceipt) {
       return fromText;
     }
-    final hasProducts = r.extractedProducts.any((p) => p.isTargetCompany) || r.targetCompanyTotal > 0;
+    final hasProducts =
+        r.extractedProducts.any((p) => p.isTargetCompany) ||
+        r.targetCompanyTotal > 0;
     if (!hasProducts) return ReceiptIssueKind.noProducts;
     if (_chainMet(r) == false) return ReceiptIssueKind.wrongChain;
     if (!r.isBranchMatched) return ReceiptIssueKind.wrongBranch;
     if (_dateMet(r) == false) return ReceiptIssueKind.outOfDate;
-    if (minimumSpend > 0 && r.targetCompanyTotal < minimumSpend) return ReceiptIssueKind.belowMinimum;
+    if (minimumSpend > 0 && r.targetCompanyTotal < minimumSpend)
+      return ReceiptIssueKind.belowMinimum;
     return reasons.isNotEmpty ? classifyConditionText(reasons.first) : fromText;
   }
 
@@ -1695,38 +2041,71 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
     final allowed = (_activeEvent?.retailChainName ?? '').trim();
     final got = r.storeChainDetected.trim();
     if (allowed.isEmpty || got.isEmpty) return null;
-    String n(String x) => x.replaceAll(RegExp(r'[\sـ]'), '').replaceAll('أ', 'ا').replaceAll('إ', 'ا').replaceAll('ة', 'ه').replaceAll('ى', 'ي');
+    String n(String x) => x
+        .replaceAll(RegExp(r'[\sـ]'), '')
+        .replaceAll('أ', 'ا')
+        .replaceAll('إ', 'ا')
+        .replaceAll('ة', 'ه')
+        .replaceAll('ى', 'ي');
     final g = n(got);
-    return allowed.split('•').map((c) => n(c)).where((c) => c.isNotEmpty).any((c) => g.contains(c) || c.contains(g));
+    return allowed
+        .split('•')
+        .map((c) => n(c))
+        .where((c) => c.isNotEmpty)
+        .any((c) => g.contains(c) || c.contains(g));
   }
 
   bool? _dateMet(AiReceiptAnalysisResult r) {
-    final m = RegExp(r'(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})').firstMatch(r.receiptDate);
+    final m = RegExp(
+      r'(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})',
+    ).firstMatch(r.receiptDate);
     final ev = _activeEvent;
-    if (m == null || ev == null || (ev.startDate == null && ev.endDate == null)) return null;
+    if (m == null || ev == null || (ev.startDate == null && ev.endDate == null))
+      return null;
     var y = int.parse(m.group(3)!);
     if (y < 100) y += 2000;
     final d = DateTime(y, int.parse(m.group(2)!), int.parse(m.group(1)!));
-    final start = ev.startDate == null ? null : DateTime(ev.startDate!.year, ev.startDate!.month, ev.startDate!.day);
-    final end = ev.endDate == null ? null : DateTime(ev.endDate!.year, ev.endDate!.month, ev.endDate!.day);
+    final start = ev.startDate == null
+        ? null
+        : DateTime(ev.startDate!.year, ev.startDate!.month, ev.startDate!.day);
+    final end = ev.endDate == null
+        ? null
+        : DateTime(ev.endDate!.year, ev.endDate!.month, ev.endDate!.day);
     if (start != null && d.isBefore(start)) return false;
     if (end != null && d.isAfter(end)) return false;
     return true;
   }
 
-  List<ReceiptCheckChip> _receiptChips(AiReceiptAnalysisResult r, {required double minimumSpend, required String currency}) {
-    String num(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
+  List<ReceiptCheckChip> _receiptChips(
+    AiReceiptAnalysisResult r, {
+    required double minimumSpend,
+    required String currency,
+  }) {
+    String num(double v) =>
+        v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
     final chain = _chainMet(r);
     final date = _dateMet(r);
-    final hasProducts = r.extractedProducts.any((p) => p.isTargetCompany) || r.targetCompanyTotal > 0;
+    final hasProducts =
+        r.extractedProducts.any((p) => p.isTargetCompany) ||
+        r.targetCompanyTotal > 0;
     return [
       if (chain != null) ReceiptCheckChip('السلسلة', 'Chain', chain),
       ReceiptCheckChip('الفرع', 'Branch', r.isBranchMatched),
-      if (date != null) ReceiptCheckChip('التاريخ', 'Date', date, value: r.receiptDate.isNotEmpty ? r.receiptDate : null),
+      if (date != null)
+        ReceiptCheckChip(
+          'التاريخ',
+          'Date',
+          date,
+          value: r.receiptDate.isNotEmpty ? r.receiptDate : null,
+        ),
       ReceiptCheckChip('المنتجات', 'Products', hasProducts),
       if (minimumSpend > 0)
-        ReceiptCheckChip('الحد الأدنى', 'Min. spend', r.targetCompanyTotal >= minimumSpend,
-            value: '${num(r.targetCompanyTotal)}/${num(minimumSpend)} $currency'),
+        ReceiptCheckChip(
+          'الحد الأدنى',
+          'Min. spend',
+          r.targetCompanyTotal >= minimumSpend,
+          value: '${num(r.targetCompanyTotal)}/${num(minimumSpend)} $currency',
+        ),
     ];
   }
 
@@ -1761,7 +2140,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       );
     }
 
-    if (_errorMessage != null || (_activeEvent != null && (!_activeEvent!.isActive || !_activeEvent!.isPromoterActive))) {
+    if (_errorMessage != null ||
+        (_activeEvent != null &&
+            (!_activeEvent!.isActive || !_activeEvent!.isPromoterActive))) {
       return CampaignSuspendedScreen(
         portalType: SuspendedPortalType.promoter,
         event: _activeEvent,
@@ -1787,7 +2168,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         customActions: [
           // 1. Campaign Concept & Offer Rules Action Button (Brief & Conditions)
           Tooltip(
-            message: isAr ? 'فكرة وشروط العرض + دليل وقواعد الحملة' : 'Offer brief, terms & campaign guide',
+            message: isAr
+                ? 'فكرة وشروط العرض + دليل وقواعد الحملة'
+                : 'Offer brief, terms & campaign guide',
             waitDuration: const Duration(milliseconds: 400),
             child: IconButton.filledTonal(
               icon: Icon(
@@ -1804,7 +2187,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                   : null,
               padding: EdgeInsets.all(isMobile ? 5 : 8),
               constraints: isMobile ? const BoxConstraints() : null,
-              visualDensity: isMobile ? VisualDensity.compact : VisualDensity.standard,
+              visualDensity: isMobile
+                  ? VisualDensity.compact
+                  : VisualDensity.standard,
               onPressed: () {
                 CampaignBriefDialog.show(context, event);
               },
@@ -1831,7 +2216,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                   : null,
               padding: EdgeInsets.all(isMobile ? 5 : 8),
               constraints: isMobile ? const BoxConstraints() : null,
-              visualDensity: isMobile ? VisualDensity.compact : VisualDensity.standard,
+              visualDensity: isMobile
+                  ? VisualDensity.compact
+                  : VisualDensity.standard,
               onPressed: () {
                 CampaignGiftBalanceDialog.show(context, event);
               },
@@ -1858,7 +2245,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                   : null,
               padding: EdgeInsets.all(isMobile ? 5 : 8),
               constraints: isMobile ? const BoxConstraints() : null,
-              visualDensity: isMobile ? VisualDensity.compact : VisualDensity.standard,
+              visualDensity: isMobile
+                  ? VisualDensity.compact
+                  : VisualDensity.standard,
               onPressed: () {
                 PromoterInvoicesDialog.show(context, event);
               },
@@ -1871,10 +2260,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       body: Column(
         children: [
           Expanded(
-            child: M3SupportingPaneLayout(
-              supportingPaneWidth: 380.0,
-              showDivider: true,
-              body: SingleChildScrollView(
+            child: SingleChildScrollView(
               padding: EdgeInsets.only(
                 left: isMobile ? 12 : (isTablet ? 20 : 28),
                 right: isMobile ? 12 : (isTablet ? 20 : 28),
@@ -1886,11 +2272,15 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                   constraints: const BoxConstraints(maxWidth: 640),
                   child: Card(
                     elevation: isMobile ? 0 : 2,
-                    color: isMobile ? colorScheme.surfaceContainerLowest : colorScheme.surfaceContainerLow,
+                    color: isMobile
+                        ? colorScheme.surfaceContainerLowest
+                        : colorScheme.surfaceContainerLow,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(isMobile ? 20 : 28),
                       side: BorderSide(
-                        color: colorScheme.outlineVariant.withValues(alpha: isMobile ? 0.6 : 0.4),
+                        color: colorScheme.outlineVariant.withValues(
+                          alpha: isMobile ? 0.6 : 0.4,
+                        ),
                       ),
                     ),
                     child: Padding(
@@ -1914,10 +2304,14 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
-                              borderRadius: BorderRadius.circular(isMobile ? 18 : 22),
+                              borderRadius: BorderRadius.circular(
+                                isMobile ? 18 : 22,
+                              ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: colorScheme.primary.withValues(alpha: 0.28),
+                                  color: colorScheme.primary.withValues(
+                                    alpha: 0.28,
+                                  ),
                                   blurRadius: 16,
                                   offset: const Offset(0, 6),
                                 ),
@@ -1936,13 +2330,17 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                       shape: BoxShape.circle,
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.black.withValues(alpha: 0.18),
+                                          color: Colors.black.withValues(
+                                            alpha: 0.18,
+                                          ),
                                           blurRadius: 10,
                                           offset: const Offset(0, 4),
                                         ),
                                       ],
                                       border: Border.all(
-                                        color: Colors.white.withValues(alpha: 0.9),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.9,
+                                        ),
                                         width: 2.5,
                                       ),
                                     ),
@@ -1950,17 +2348,21 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                       child: Image.network(
                                         event.companyLogoUrl,
                                         fit: BoxFit.contain,
-                                        errorBuilder: (context, error, stackTrace) => Icon(
-                                          Icons.business_rounded,
-                                          size: isMobile ? 32 : 38,
-                                          color: colorScheme.primary,
-                                        ),
+                                        errorBuilder:
+                                            (context, error, stackTrace) =>
+                                                Icon(
+                                                  Icons.business_rounded,
+                                                  size: isMobile ? 32 : 38,
+                                                  color: colorScheme.primary,
+                                                ),
                                       ),
                                     ),
                                   ),
                                 ],
                                 Text(
-                                  event.welcomeTitle.isNotEmpty ? event.welcomeTitle : strings.campaignOffersTitle,
+                                  event.welcomeTitle.isNotEmpty
+                                      ? event.welcomeTitle
+                                      : strings.campaignOffersTitle,
                                   textAlign: TextAlign.center,
                                   style: GoogleFonts.cairo(
                                     color: colorScheme.onPrimary,
@@ -1976,7 +2378,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                       : strings.uploadReceiptInstruction,
                                   textAlign: TextAlign.center,
                                   style: GoogleFonts.cairo(
-                                    color: colorScheme.onPrimary.withValues(alpha: 0.92),
+                                    color: colorScheme.onPrimary.withValues(
+                                      alpha: 0.92,
+                                    ),
                                     fontSize: isMobile ? 12.5 : 14,
                                     height: 1.4,
                                   ),
@@ -1984,12 +2388,19 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                 if (event.minimumSpend > 0) ...[
                                   const SizedBox(height: 12),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 6,
+                                    ),
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.22),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.22,
+                                      ),
                                       borderRadius: BorderRadius.circular(16),
                                       border: Border.all(
-                                        color: Colors.white.withValues(alpha: 0.35),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.35,
+                                        ),
                                         width: 1,
                                       ),
                                     ),
@@ -2029,10 +2440,13 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                 vertical: isMobile ? 10 : 12,
                               ),
                               decoration: BoxDecoration(
-                                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                                color: colorScheme.surfaceContainerHighest
+                                    .withValues(alpha: 0.35),
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(
-                                  color: colorScheme.primary.withValues(alpha: 0.35),
+                                  color: colorScheme.primary.withValues(
+                                    alpha: 0.35,
+                                  ),
                                   width: 1.5,
                                 ),
                               ),
@@ -2044,8 +2458,12 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                       Container(
                                         padding: const EdgeInsets.all(5),
                                         decoration: BoxDecoration(
-                                          color: colorScheme.primary.withValues(alpha: 0.12),
-                                          borderRadius: BorderRadius.circular(8),
+                                          color: colorScheme.primary.withValues(
+                                            alpha: 0.12,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
                                         ),
                                         child: Icon(
                                           Icons.layers_rounded,
@@ -2056,7 +2474,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
-                                          isAr ? 'اختر الحملة / العرض المستهدف للفاتورة:' : 'Select Target Offer / Campaign:',
+                                          isAr
+                                              ? 'اختر الحملة / العرض المستهدف للفاتورة:'
+                                              : 'Select Target Offer / Campaign:',
                                           style: GoogleFonts.cairo(
                                             fontSize: isMobile ? 12 : 13,
                                             fontWeight: FontWeight.bold,
@@ -2065,17 +2485,23 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                         ),
                                       ),
                                       Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 7,
+                                          vertical: 2,
+                                        ),
                                         decoration: BoxDecoration(
                                           color: colorScheme.primaryContainer,
-                                          borderRadius: BorderRadius.circular(8),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
                                         ),
                                         child: Text(
                                           '${_availableCompanyEvents.length} ${isAr ? 'عروض متاحة' : 'Offers'}',
                                           style: GoogleFonts.cairo(
                                             fontSize: 10,
                                             fontWeight: FontWeight.bold,
-                                            color: colorScheme.onPrimaryContainer,
+                                            color:
+                                                colorScheme.onPrimaryContainer,
                                           ),
                                         ),
                                       ),
@@ -2083,26 +2509,40 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                   ),
                                   const SizedBox(height: 8),
                                   DropdownButtonFormField<String>(
-                                    initialValue: (_isAutoMultiCampaignMode && _availableCompanyEvents.length > 1)
+                                    initialValue:
+                                        (_isAutoMultiCampaignMode &&
+                                            _availableCompanyEvents.length > 1)
                                         ? kAutoAllCampaignsId
                                         : _activeEvent?.id,
                                     isExpanded: true,
                                     decoration: InputDecoration(
                                       isDense: true,
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 10,
+                                          ),
                                       filled: true,
                                       fillColor: colorScheme.surface,
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(12),
-                                        borderSide: BorderSide(color: colorScheme.outlineVariant),
+                                        borderSide: BorderSide(
+                                          color: colorScheme.outlineVariant,
+                                        ),
                                       ),
                                       enabledBorder: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(12),
-                                        borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.7)),
+                                        borderSide: BorderSide(
+                                          color: colorScheme.outlineVariant
+                                              .withValues(alpha: 0.7),
+                                        ),
                                       ),
                                       focusedBorder: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(12),
-                                        borderSide: BorderSide(color: colorScheme.primary, width: 2),
+                                        borderSide: BorderSide(
+                                          color: colorScheme.primary,
+                                          width: 2,
+                                        ),
                                       ),
                                     ),
                                     items: [
@@ -2112,15 +2552,20 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                           child: Row(
                                             children: [
                                               Container(
-                                                padding: const EdgeInsets.all(3),
+                                                padding: const EdgeInsets.all(
+                                                  3,
+                                                ),
                                                 decoration: BoxDecoration(
-                                                  color: colorScheme.secondaryContainer,
-                                                  borderRadius: BorderRadius.circular(6),
+                                                  color: colorScheme
+                                                      .secondaryContainer,
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
                                                 ),
                                                 child: Icon(
                                                   Icons.auto_awesome_rounded,
                                                   size: 15,
-                                                  color: colorScheme.onSecondaryContainer,
+                                                  color: colorScheme
+                                                      .onSecondaryContainer,
                                                 ),
                                               ),
                                               const SizedBox(width: 8),
@@ -2130,11 +2575,14 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                                       ? '✨ فحص ذكي لكافة عروض الشركة (تحديد تلقائي)'
                                                       : '✨ Smart Auto-Match (All Company Offers)',
                                                   style: GoogleFonts.cairo(
-                                                    fontSize: isMobile ? 12 : 13,
+                                                    fontSize: isMobile
+                                                        ? 12
+                                                        : 13,
                                                     fontWeight: FontWeight.bold,
                                                     color: colorScheme.primary,
                                                   ),
-                                                  overflow: TextOverflow.ellipsis,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                 ),
                                               ),
                                             ],
@@ -2149,7 +2597,10 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                           child: Row(
                                             children: [
                                               Icon(
-                                                ev.gameType == 'wheel' ? Icons.donut_large_rounded : Icons.card_giftcard_rounded,
+                                                ev.gameType == 'wheel'
+                                                    ? Icons.donut_large_rounded
+                                                    : Icons
+                                                          .card_giftcard_rounded,
                                                 size: 16,
                                                 color: colorScheme.primary,
                                               ),
@@ -2158,11 +2609,15 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                                 child: Text(
                                                   '${ev.eventName}$minSpendStr',
                                                   style: GoogleFonts.cairo(
-                                                    fontSize: isMobile ? 12 : 13,
+                                                    fontSize: isMobile
+                                                        ? 12
+                                                        : 13,
                                                     fontWeight: FontWeight.bold,
-                                                    color: colorScheme.onSurface,
+                                                    color:
+                                                        colorScheme.onSurface,
                                                   ),
-                                                  overflow: TextOverflow.ellipsis,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                 ),
                                               ),
                                             ],
@@ -2176,8 +2631,13 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                           _isAutoMultiCampaignMode = true;
                                           _resetFormForNextCustomer();
                                         });
-                                      } else if (selectedId != null && (selectedId != _activeEvent?.id || _isAutoMultiCampaignMode)) {
-                                        final newActive = _availableCompanyEvents.firstWhere((e) => e.id == selectedId);
+                                      } else if (selectedId != null &&
+                                          (selectedId != _activeEvent?.id ||
+                                              _isAutoMultiCampaignMode)) {
+                                        final newActive =
+                                            _availableCompanyEvents.firstWhere(
+                                              (e) => e.id == selectedId,
+                                            );
                                         setState(() {
                                           _isAutoMultiCampaignMode = false;
                                           _activeEvent = newActive;
@@ -2197,19 +2657,29 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                             controller: _customerNameController,
                             textInputAction: TextInputAction.next,
                             onChanged: (_) => setState(() {}),
-                            style: GoogleFonts.cairo(fontSize: isMobile ? 14 : 15),
+                            style: GoogleFonts.cairo(
+                              fontSize: isMobile ? 14 : 15,
+                            ),
                             decoration: InputDecoration(
                               labelText: strings.customerNameOptional,
-                              labelStyle: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant),
+                              labelStyle: GoogleFonts.cairo(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
                               prefixIcon: Icon(
                                 Icons.person_outline_rounded,
                                 color: colorScheme.primary,
                                 size: isMobile ? 22 : 24,
                               ),
-                              suffixIcon: _customerNameController.text.isNotEmpty
+                              suffixIcon:
+                                  _customerNameController.text.isNotEmpty
                                   ? IconButton(
-                                      icon: const Icon(Icons.clear_rounded, size: 20),
-                                      tooltip: isAr ? 'مسح اسم العميل' : 'Clear name',
+                                      icon: const Icon(
+                                        Icons.clear_rounded,
+                                        size: 20,
+                                      ),
+                                      tooltip: isAr
+                                          ? 'مسح اسم العميل'
+                                          : 'Clear name',
                                       onPressed: () {
                                         _customerNameController.clear();
                                         setState(() {});
@@ -2217,24 +2687,32 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                     )
                                   : null,
                               filled: true,
-                              fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                              fillColor: colorScheme.surfaceContainerHighest
+                                  .withValues(alpha: 0.35),
                               contentPadding: EdgeInsets.symmetric(
                                 horizontal: 16,
                                 vertical: isMobile ? 14 : 16,
                               ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(16),
-                                borderSide: BorderSide(color: colorScheme.outlineVariant),
+                                borderSide: BorderSide(
+                                  color: colorScheme.outlineVariant,
+                                ),
                               ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(16),
                                 borderSide: BorderSide(
-                                  color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+                                  color: colorScheme.outlineVariant.withValues(
+                                    alpha: 0.5,
+                                  ),
                                 ),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(16),
-                                borderSide: BorderSide(color: colorScheme.primary, width: 2),
+                                borderSide: BorderSide(
+                                  color: colorScheme.primary,
+                                  width: 2,
+                                ),
                               ),
                             ),
                           ),
@@ -2246,20 +2724,32 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                             keyboardType: TextInputType.phone,
                             textInputAction: TextInputAction.done,
                             onChanged: (_) => setState(() {}),
-                            inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
-                            style: GoogleFonts.cairo(fontSize: isMobile ? 14 : 15),
+                            inputFormatters: [
+                              const ArabicToEnglishDigitsFormatter.digitsOnly(),
+                            ],
+                            style: GoogleFonts.cairo(
+                              fontSize: isMobile ? 14 : 15,
+                            ),
                             decoration: InputDecoration(
                               labelText: strings.customerPhoneLabel,
-                              labelStyle: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant),
+                              labelStyle: GoogleFonts.cairo(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
                               prefixIcon: Icon(
                                 Icons.phone_outlined,
                                 color: colorScheme.primary,
                                 size: isMobile ? 22 : 24,
                               ),
-                              suffixIcon: _customerPhoneController.text.isNotEmpty
+                              suffixIcon:
+                                  _customerPhoneController.text.isNotEmpty
                                   ? IconButton(
-                                      icon: const Icon(Icons.clear_rounded, size: 20),
-                                      tooltip: isAr ? 'مسح رقم الهاتف' : 'Clear phone',
+                                      icon: const Icon(
+                                        Icons.clear_rounded,
+                                        size: 20,
+                                      ),
+                                      tooltip: isAr
+                                          ? 'مسح رقم الهاتف'
+                                          : 'Clear phone',
                                       onPressed: () {
                                         _customerPhoneController.clear();
                                         setState(() {});
@@ -2267,7 +2757,8 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                     )
                                   : null,
                               filled: true,
-                              fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                              fillColor: colorScheme.surfaceContainerHighest
+                                  .withValues(alpha: 0.35),
                               contentPadding: EdgeInsets.symmetric(
                                 horizontal: 16,
                                 vertical: isMobile ? 14 : 16,
@@ -2282,17 +2773,24 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                               ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(16),
-                                borderSide: BorderSide(color: colorScheme.outlineVariant),
+                                borderSide: BorderSide(
+                                  color: colorScheme.outlineVariant,
+                                ),
                               ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(16),
                                 borderSide: BorderSide(
-                                  color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+                                  color: colorScheme.outlineVariant.withValues(
+                                    alpha: 0.5,
+                                  ),
                                 ),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(16),
-                                borderSide: BorderSide(color: colorScheme.primary, width: 2),
+                                borderSide: BorderSide(
+                                  color: colorScheme.primary,
+                                  width: 2,
+                                ),
                               ),
                             ),
                           ),
@@ -2306,13 +2804,17 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                               border: Border.all(
                                 color: _receiptImages.isNotEmpty
                                     ? colorScheme.primary
-                                    : colorScheme.outlineVariant.withValues(alpha: 0.7),
+                                    : colorScheme.outlineVariant.withValues(
+                                        alpha: 0.7,
+                                      ),
                                 width: _receiptImages.isNotEmpty ? 2.0 : 1.2,
                               ),
                               borderRadius: BorderRadius.circular(22),
                               boxShadow: [
                                 BoxShadow(
-                                  color: colorScheme.shadow.withValues(alpha: 0.04),
+                                  color: colorScheme.shadow.withValues(
+                                    alpha: 0.04,
+                                  ),
                                   blurRadius: 16,
                                   offset: const Offset(0, 4),
                                 ),
@@ -2326,12 +2828,16 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                     ),
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: [
                                         Container(
-                                          padding: EdgeInsets.all(isMobile ? 14 : 18),
+                                          padding: EdgeInsets.all(
+                                            isMobile ? 14 : 18,
+                                          ),
                                           decoration: BoxDecoration(
-                                            color: colorScheme.primaryContainer.withValues(alpha: 0.5),
+                                            color: colorScheme.primaryContainer
+                                                .withValues(alpha: 0.5),
                                             shape: BoxShape.circle,
                                           ),
                                           child: Icon(
@@ -2356,16 +2862,24 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                         SizedBox(
                                           width: double.infinity,
                                           child: AnimatedPressable(
-                                            onTap: () => _pickImage(ImageSource.camera),
+                                            onTap: () =>
+                                                _pickImage(ImageSource.camera),
                                             child: FilledButton.icon(
-                                              onPressed: () => _pickImage(ImageSource.camera),
-                                              icon: const Icon(Icons.camera_alt_rounded, size: 22),
+                                              onPressed: () => _pickImage(
+                                                ImageSource.camera,
+                                              ),
+                                              icon: const Icon(
+                                                Icons.camera_alt_rounded,
+                                                size: 22,
+                                              ),
                                               label: Text(
                                                 strings.captureReceiptAction,
                                                 textAlign: TextAlign.center,
                                                 style: GoogleFonts.cairo(
                                                   fontWeight: FontWeight.bold,
-                                                  fontSize: isMobile ? 14.5 : 16,
+                                                  fontSize: isMobile
+                                                      ? 14.5
+                                                      : 16,
                                                 ),
                                               ),
                                               style: FilledButton.styleFrom(
@@ -2374,7 +2888,8 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                                   vertical: isMobile ? 15 : 17,
                                                 ),
                                                 shape: RoundedRectangleBorder(
-                                                  borderRadius: BorderRadius.circular(18),
+                                                  borderRadius:
+                                                      BorderRadius.circular(18),
                                                 ),
                                                 elevation: 2,
                                               ),
@@ -2386,29 +2901,44 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                         SizedBox(
                                           width: double.infinity,
                                           child: AnimatedPressable(
-                                            onTap: () => _pickImage(ImageSource.gallery),
+                                            onTap: () =>
+                                                _pickImage(ImageSource.gallery),
                                             child: FilledButton.tonalIcon(
-                                              onPressed: () => _pickImage(ImageSource.gallery),
-                                              icon: const Icon(Icons.photo_library_rounded, size: 22),
+                                              onPressed: () => _pickImage(
+                                                ImageSource.gallery,
+                                              ),
+                                              icon: const Icon(
+                                                Icons.photo_library_rounded,
+                                                size: 22,
+                                              ),
                                               label: Text(
                                                 strings.pickFromGalleryAction,
                                                 textAlign: TextAlign.center,
                                                 style: GoogleFonts.cairo(
                                                   fontWeight: FontWeight.bold,
-                                                  fontSize: isMobile ? 14.5 : 16,
+                                                  fontSize: isMobile
+                                                      ? 14.5
+                                                      : 16,
                                                 ),
                                               ),
                                               style: FilledButton.styleFrom(
-                                                backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.85),
-                                                foregroundColor: colorScheme.primary,
+                                                backgroundColor: colorScheme
+                                                    .surfaceContainerHighest
+                                                    .withValues(alpha: 0.85),
+                                                foregroundColor:
+                                                    colorScheme.primary,
                                                 padding: EdgeInsets.symmetric(
                                                   horizontal: 20,
                                                   vertical: isMobile ? 15 : 17,
                                                 ),
                                                 shape: RoundedRectangleBorder(
-                                                  borderRadius: BorderRadius.circular(18),
+                                                  borderRadius:
+                                                      BorderRadius.circular(18),
                                                   side: BorderSide(
-                                                    color: colorScheme.primary.withValues(alpha: 0.25),
+                                                    color: colorScheme.primary
+                                                        .withValues(
+                                                          alpha: 0.25,
+                                                        ),
                                                   ),
                                                 ),
                                               ),
@@ -2418,12 +2948,20 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                         const SizedBox(height: 16),
                                         // Long Receipt Tip
                                         Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 8,
+                                          ),
                                           decoration: BoxDecoration(
-                                            color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                                            borderRadius: BorderRadius.circular(12),
+                                            color: colorScheme
+                                                .surfaceContainerHighest
+                                                .withValues(alpha: 0.5),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
                                             border: Border.all(
-                                              color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+                                              color: colorScheme.outlineVariant
+                                                  .withValues(alpha: 0.4),
                                             ),
                                           ),
                                           child: Row(
@@ -2440,7 +2978,8 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                                   strings.longReceiptTip,
                                                   style: GoogleFonts.cairo(
                                                     fontSize: 12,
-                                                    color: colorScheme.onSurfaceVariant,
+                                                    color: colorScheme
+                                                        .onSurfaceVariant,
                                                     fontWeight: FontWeight.w600,
                                                   ),
                                                   textAlign: TextAlign.center,
@@ -2458,12 +2997,14 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                       alignment: Alignment.center,
                                       children: [
                                         ClipRRect(
-                                          borderRadius: BorderRadius.circular(18),
+                                          borderRadius: BorderRadius.circular(
+                                            18,
+                                          ),
                                           child: _buildReceiptImage(
-                                                _receiptImages[_selectedPreviewIndex],
-                                                fit: BoxFit.contain,
-                                                width: double.infinity,
-                                              ),
+                                            _receiptImages[_selectedPreviewIndex],
+                                            fit: BoxFit.contain,
+                                            width: double.infinity,
+                                          ),
                                         ),
                                         // Top part indicator badge and remove button
                                         Positioned(
@@ -2471,21 +3012,30 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                           left: 10,
                                           right: 10,
                                           child: Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
                                             children: [
                                               Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 10,
+                                                      vertical: 4,
+                                                    ),
                                                 decoration: BoxDecoration(
-                                                  color: Colors.black.withValues(alpha: 0.75),
-                                                  borderRadius: BorderRadius.circular(12),
+                                                  color: Colors.black
+                                                      .withValues(alpha: 0.75),
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
                                                 ),
                                                 child: Row(
-                                                  mainAxisSize: MainAxisSize.min,
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
                                                   children: [
                                                     Icon(
                                                       Icons.layers_rounded,
                                                       size: 14,
-                                                      color: colorScheme.primaryFixedDim,
+                                                      color: colorScheme
+                                                          .primaryFixedDim,
                                                     ),
                                                     const SizedBox(width: 6),
                                                     Text(
@@ -2495,22 +3045,34 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                                       style: GoogleFonts.cairo(
                                                         color: Colors.white,
                                                         fontSize: 11.5,
-                                                        fontWeight: FontWeight.bold,
+                                                        fontWeight:
+                                                            FontWeight.bold,
                                                       ),
                                                     ),
                                                   ],
                                                 ),
                                               ),
                                               Tooltip(
-                                                message: strings.deletePartTooltip,
-                                                waitDuration: const Duration(milliseconds: 400),
+                                                message:
+                                                    strings.deletePartTooltip,
+                                                waitDuration: const Duration(
+                                                  milliseconds: 400,
+                                                ),
                                                 child: IconButton.filled(
-                                                  icon: const Icon(Icons.close_rounded, color: Colors.white, size: 18),
-                                                  style: IconButton.styleFrom(
-                                                    backgroundColor: colorScheme.error,
-                                                    padding: const EdgeInsets.all(6),
+                                                  icon: const Icon(
+                                                    Icons.close_rounded,
+                                                    color: Colors.white,
+                                                    size: 18,
                                                   ),
-                                                  onPressed: () => _removePart(_selectedPreviewIndex),
+                                                  style: IconButton.styleFrom(
+                                                    backgroundColor:
+                                                        colorScheme.error,
+                                                    padding:
+                                                        const EdgeInsets.all(6),
+                                                  ),
+                                                  onPressed: () => _removePart(
+                                                    _selectedPreviewIndex,
+                                                  ),
                                                 ),
                                               ),
                                             ],
@@ -2521,18 +3083,30 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                           bottom: 10,
                                           child: InkWell(
                                             onTap: _showImageSourcePicker,
-                                            borderRadius: BorderRadius.circular(20),
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
                                             child: Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 14,
+                                                    vertical: 6,
+                                                  ),
                                               decoration: BoxDecoration(
-                                                color: colorScheme.surface.withValues(alpha: 0.9),
-                                                borderRadius: BorderRadius.circular(20),
+                                                color: colorScheme.surface
+                                                    .withValues(alpha: 0.9),
+                                                borderRadius:
+                                                    BorderRadius.circular(20),
                                                 border: Border.all(
-                                                  color: colorScheme.primary.withValues(alpha: 0.4),
+                                                  color: colorScheme.primary
+                                                      .withValues(alpha: 0.4),
                                                 ),
                                                 boxShadow: [
                                                   BoxShadow(
-                                                    color: Colors.black.withValues(alpha: 0.15),
+                                                    color: Colors.black
+                                                        .withValues(
+                                                          alpha: 0.15,
+                                                        ),
                                                     blurRadius: 8,
                                                     offset: const Offset(0, 2),
                                                   ),
@@ -2541,14 +3115,22 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                               child: Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
-                                                  Icon(Icons.cached_rounded, size: 16, color: colorScheme.primary),
+                                                  Icon(
+                                                    Icons.cached_rounded,
+                                                    size: 16,
+                                                    color: colorScheme.primary,
+                                                  ),
                                                   const SizedBox(width: 6),
                                                   Text(
-                                                    strings.isAr ? 'إعادة التقاط / تغيير' : 'Retake / Change',
+                                                    strings.isAr
+                                                        ? 'إعادة التقاط / تغيير'
+                                                        : 'Retake / Change',
                                                     style: GoogleFonts.cairo(
                                                       fontSize: 11.5,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: colorScheme.primary,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color:
+                                                          colorScheme.primary,
                                                     ),
                                                   ),
                                                 ],
@@ -2570,47 +3152,65 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                 child: ListView.separated(
                                   scrollDirection: Axis.horizontal,
                                   itemCount: _receiptImages.length,
-                                  separatorBuilder: (context, _) => const SizedBox(width: 8),
+                                  separatorBuilder: (context, _) =>
+                                      const SizedBox(width: 8),
                                   itemBuilder: (context, index) {
-                                    final isSelected = index == _selectedPreviewIndex;
+                                    final isSelected =
+                                        index == _selectedPreviewIndex;
                                     return InkWell(
-                                      onTap: () => setState(() => _selectedPreviewIndex = index),
+                                      onTap: () => setState(
+                                        () => _selectedPreviewIndex = index,
+                                      ),
                                       borderRadius: BorderRadius.circular(10),
                                       child: Container(
                                         width: 60,
                                         decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(10),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
                                           border: Border.all(
-                                            color: isSelected ? colorScheme.primary : colorScheme.outlineVariant,
+                                            color: isSelected
+                                                ? colorScheme.primary
+                                                : colorScheme.outlineVariant,
                                             width: isSelected ? 2.5 : 1,
                                           ),
                                           color: isSelected
-                                              ? colorScheme.primaryContainer.withValues(alpha: 0.3)
-                                              : colorScheme.surfaceContainerHighest,
+                                              ? colorScheme.primaryContainer
+                                                    .withValues(alpha: 0.3)
+                                              : colorScheme
+                                                    .surfaceContainerHighest,
                                         ),
                                         child: Stack(
                                           fit: StackFit.expand,
                                           children: [
                                             ClipRRect(
-                                              borderRadius: BorderRadius.circular(8),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
                                               child: _buildReceiptImage(
-                                                    _receiptImages[index],
-                                                    fit: BoxFit.cover,
-                                                    compact: true,
-                                                  ),
+                                                _receiptImages[index],
+                                                fit: BoxFit.cover,
+                                                compact: true,
+                                              ),
                                             ),
                                             Positioned(
                                               bottom: 2,
                                               left: 2,
                                               right: 2,
                                               child: Container(
-                                                padding: const EdgeInsets.symmetric(vertical: 1),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      vertical: 1,
+                                                    ),
                                                 decoration: BoxDecoration(
-                                                  color: Colors.black.withValues(alpha: 0.75),
-                                                  borderRadius: BorderRadius.circular(4),
+                                                  color: Colors.black
+                                                      .withValues(alpha: 0.75),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
                                                 ),
                                                 child: Text(
-                                                  strings.partIndexLabel(index + 1),
+                                                  strings.partIndexLabel(
+                                                    index + 1,
+                                                  ),
                                                   style: GoogleFonts.cairo(
                                                     fontSize: 10,
                                                     color: Colors.white,
@@ -2636,7 +3236,10 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                 width: double.infinity,
                                 child: FilledButton.tonalIcon(
                                   onPressed: _showAddPartModal,
-                                  icon: const Icon(Icons.add_a_photo_rounded, size: 20),
+                                  icon: const Icon(
+                                    Icons.add_a_photo_rounded,
+                                    size: 20,
+                                  ),
                                   label: Text(
                                     strings.addNextReceiptPartBtn,
                                     style: GoogleFonts.cairo(
@@ -2677,7 +3280,10 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                                 ),
                                 style: TextButton.styleFrom(
                                   foregroundColor: colorScheme.error,
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 6,
+                                  ),
                                 ),
                               ),
                             ),
@@ -2700,13 +3306,17 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                               label: _isAiLoading
                                   ? strings.auditingProgressText
                                   : (_receiptImages.length > 1
-                                      ? strings.analyzeMultiPartsBtn(_receiptImages.length)
-                                      : strings.auditReceiptActionBtn),
+                                        ? strings.analyzeMultiPartsBtn(
+                                            _receiptImages.length,
+                                          )
+                                        : strings.auditReceiptActionBtn),
                               icon: Icons.auto_awesome_rounded,
                               isLoading: _isAiLoading,
                               variant: M3ButtonVariant.filled,
                               height: isMobile ? 50 : 54,
-                              onPressed: _isAiLoading ? null : _submitAndValidateReceipt,
+                              onPressed: _isAiLoading
+                                  ? null
+                                  : _submitAndValidateReceipt,
                             ),
                           ],
 
@@ -2716,10 +3326,13 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                             Container(
                               padding: EdgeInsets.all(isMobile ? 14 : 18),
                               decoration: BoxDecoration(
-                                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                                color: colorScheme.surfaceContainerHighest
+                                    .withValues(alpha: 0.35),
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(
-                                  color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+                                  color: colorScheme.outlineVariant.withValues(
+                                    alpha: 0.4,
+                                  ),
                                 ),
                               ),
                               child: Column(
@@ -2765,205 +3378,8 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                 ),
               ),
             ),
-            supportingPane: _buildPromoterSupportingPane(
-                context: context,
-                event: event,
-                strings: strings,
-                isAr: isAr,
-                colorScheme: colorScheme,
-              ),
-            ),
           ),
           if (!isMobile) const SwitchPointFooter(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPromoterSupportingPane({
-    required BuildContext context,
-    required EventModel event,
-    required AppStrings strings,
-    required bool isAr,
-    required ColorScheme colorScheme,
-  }) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Campaign guide card merged into the header brief dialog (megaphone icon).
-          // 2. Minimum Spend & Campaign Identity Card
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerLowest,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.monetization_on_outlined, size: 18, color: colorScheme.onTertiaryFixedVariant),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        isAr ? 'الحد الأدنى للشراء:' : 'Minimum Spend:',
-                        style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: colorScheme.tertiaryContainer,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: colorScheme.tertiaryFixedDim),
-                      ),
-                      child: Text(
-                        event.minimumSpend > 0 ? '${event.minimumSpend} ج.م' : (isAr ? 'بدون حد أدنى' : 'No Minimum'),
-                        style: GoogleFonts.cairo(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.onTertiaryFixedVariant,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                if (event.branchNames.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Icon(Icons.storefront_rounded, size: 18, color: colorScheme.primary),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          isAr ? 'عدد الفروع المعتمدة:' : 'Active Branches:',
-                          style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '${event.branchNames.length} ${isAr ? 'فرع' : 'branches'}',
-                        style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // 3. Promotional Rules Summary (if any)
-          if (event.promotionalRules.isNotEmpty) ...[
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: colorScheme.surfaceContainerLowest,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.rule_rounded, size: 18, color: colorScheme.secondary),
-                      const SizedBox(width: 8),
-                      Text(
-                        isAr ? 'عروض وقواعد الاستحقاق (${event.promotionalRules.length})' : 'Promotional Rules (${event.promotionalRules.length})',
-                        style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  ...event.promotionalRules.take(4).map((rule) {
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceContainerHigh.withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            rule.ruleTitle,
-                            style: GoogleFonts.cairo(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: colorScheme.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '🎁 ${isAr ? 'الهدية المستحقة:' : 'Reward:'} ${rule.rewardValue.isNotEmpty ? rule.rewardValue : (rule.linkedGifts.isNotEmpty ? rule.linkedGifts.map((g) => "${g.quantity}x ${g.giftName}").join(", ") : (rule.linkedGiftName ?? ''))}',
-                            style: GoogleFonts.cairo(
-                              fontSize: 11,
-                              color: colorScheme.onTertiaryFixedVariant,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-
-          // 4. Photography Guidelines for Faster AI Processing
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: colorScheme.secondaryContainer.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: colorScheme.secondaryFixedDim),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.tips_and_updates_rounded, size: 18, color: colorScheme.onSecondaryFixedVariant),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        isAr ? 'إرشادات التصوير السريع:' : 'Quick Scanning Tips:',
-                        style: GoogleFonts.cairo(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.onSecondaryContainer,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  isAr
-                      ? '• ضع الفاتورة مفرودة في إضاءة واضحة.\n• تأكد من ظهور اسم السلسلة، التاريخ، وأسطر المنتجات.\n• في الفواتير الطويلة، التقط حتى 4 أجزاء متتابعة.'
-                      : '• Lay receipt flat with good lighting.\n• Ensure store name, date, and product lines are legible.\n• For long receipts, capture up to 4 consecutive parts.',
-                  style: GoogleFonts.cairo(
-                    fontSize: 11.5,
-                    height: 1.5,
-                    color: colorScheme.onSecondaryContainer,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
@@ -2981,8 +3397,11 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
     try {
       final firestore = ref.read(firestoreProvider);
       final receiptNumber = result.receiptNumber.trim();
-      final cleanReceiptNumber = (receiptNumber.isNotEmpty ? receiptNumber : "REJ_${DateTime.now().millisecondsSinceEpoch}")
-          .replaceAll(RegExp(r'[/\\?%*:|"<>]'), '_');
+      final cleanReceiptNumber =
+          (receiptNumber.isNotEmpty
+                  ? receiptNumber
+                  : "REJ_${DateTime.now().millisecondsSinceEpoch}")
+              .replaceAll(RegExp(r'[/\\?%*:|"<>]'), '_');
 
       final List<String> uploadedImageUrls = [];
       final List<String> uploadedStoragePaths = [];
@@ -3008,35 +3427,51 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
                 'partIndex': '$partNum',
                 'totalParts': '${allBytesList.length}',
                 'uploadedAt': DateTime.now().toIso8601String(),
-                'uploaderUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
+                'uploaderUid':
+                    ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
               },
             );
 
             if (kIsWeb) {
-              await storageRef.putData(allBytesList[index], metadata).timeout(const Duration(seconds: 10));
+              await storageRef
+                  .putData(allBytesList[index], metadata)
+                  .timeout(const Duration(seconds: 10));
             } else if (index < allImagesList.length) {
-              await storageRef.putFile(File(allImagesList[index].path), metadata).timeout(const Duration(seconds: 10));
+              await storageRef
+                  .putFile(File(allImagesList[index].path), metadata)
+                  .timeout(const Duration(seconds: 10));
             }
-            final url = await storageRef.getDownloadURL().timeout(const Duration(seconds: 8));
+            final url = await storageRef.getDownloadURL().timeout(
+              const Duration(seconds: 8),
+            );
             uploadedImageUrls.add(url);
             uploadedStoragePaths.add(sPath);
           } catch (e) {
-            debugPrint('Storage upload for rejected receipt part $partNum skipped or timed out: $e');
-            final fallbackUrl = 'data:image/jpeg;base64,${base64Encode(allBytesList[index])}';
+            debugPrint(
+              'Storage upload for rejected receipt part $partNum skipped or timed out: $e',
+            );
+            final fallbackUrl =
+                'data:image/jpeg;base64,${base64Encode(allBytesList[index])}';
             uploadedImageUrls.add(fallbackUrl);
             uploadedStoragePaths.add(sPath);
           }
         }),
       );
 
-      final String primaryImageUrl = uploadedImageUrls.isNotEmpty ? uploadedImageUrls.first : '';
-      final String primaryStoragePath = uploadedStoragePaths.isNotEmpty ? uploadedStoragePaths.first : '';
+      final String primaryImageUrl = uploadedImageUrls.isNotEmpty
+          ? uploadedImageUrls.first
+          : '';
+      final String primaryStoragePath = uploadedStoragePaths.isNotEmpty
+          ? uploadedStoragePaths.first
+          : '';
 
       // Rejected receipts are logged as new docs; anonymous reps cannot query
       // existing receipts (firestore.rules), so there is no client-side lookup.
       final docRef = firestore.collection('receipts_transactions').doc();
       final Map<String, dynamic> transactionData = {
-        'receipt_number': receiptNumber.isNotEmpty ? receiptNumber : cleanReceiptNumber,
+        'receipt_number': receiptNumber.isNotEmpty
+            ? receiptNumber
+            : cleanReceiptNumber,
         'is_valid': false,
         'status': 'rejected',
         'rejection_reason': rejectionReason,
@@ -3044,7 +3479,9 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         'total_value': totalValue,
         'target_company_total': totalValue,
         'receipt_date': result.receiptDate,
-        'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
+        'extracted_products': result.extractedProducts
+            .map((p) => p.toJson())
+            .toList(),
         'store_chain_detected': result.storeChainDetected,
         'branch_detected': result.branchDetected,
         'is_branch_matched': result.isBranchMatched,
@@ -3058,7 +3495,8 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         if (primaryImageUrl.isNotEmpty) 'image_url': primaryImageUrl,
         if (primaryStoragePath.isNotEmpty) 'storage_path': primaryStoragePath,
         if (uploadedImageUrls.length > 1) 'image_urls': uploadedImageUrls,
-        if (uploadedStoragePaths.length > 1) 'storage_paths': uploadedStoragePaths,
+        if (uploadedStoragePaths.length > 1)
+          'storage_paths': uploadedStoragePaths,
         'parts_count': allBytesList.length,
         'customerPhone': _customerPhoneController.text.toEnglishDigits().trim(),
         'customerName': _customerNameController.text.trim(),
@@ -3078,21 +3516,29 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       await docRef.set(transactionData);
 
       // Harvest discovered products asynchronously even if receipt didn't meet spend threshold
-      unawaited(ref.read(aiProductDiscoveryServiceProvider).autoHarvestFromReceiptAnalysis(
-        companySlug: activeEvent.companySlug,
-        companyName: activeEvent.targetCompany,
-        retailChain: result.storeChainDetected,
-        branch: result.branchDetected,
-        receiptNumber: receiptNumber,
-        extractedProducts: result.extractedProducts,
-      ));
+      unawaited(
+        ref
+            .read(aiProductDiscoveryServiceProvider)
+            .autoHarvestFromReceiptAnalysis(
+              companySlug: activeEvent.companySlug,
+              companyName: activeEvent.targetCompany,
+              retailChain: result.storeChainDetected,
+              branch: result.branchDetected,
+              receiptNumber: receiptNumber,
+              extractedProducts: result.extractedProducts,
+            ),
+      );
 
       // Live Ingest into Cross-Chain Price Intelligence & Competitor Threat Catalog (0ms dynamic radar update)
-      unawaited(ref.read(chainProductsIntelligenceServiceProvider).ingestReceiptLive(
-        receiptData: transactionData,
-      ));
+      unawaited(
+        ref
+            .read(chainProductsIntelligenceServiceProvider)
+            .ingestReceiptLive(receiptData: transactionData),
+      );
     } catch (e) {
-      debugPrint('Error recording rejected receipt transaction to Firestore: $e');
+      debugPrint(
+        'Error recording rejected receipt transaction to Firestore: $e',
+      );
     }
   }
 }

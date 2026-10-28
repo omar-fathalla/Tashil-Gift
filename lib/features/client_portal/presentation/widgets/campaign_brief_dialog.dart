@@ -421,6 +421,7 @@ class _CampaignBriefDialogState extends ConsumerState<CampaignBriefDialog> {
     required String currencySymbol,
     required bool isMobile,
   }) {
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
     final dateFormat = DateFormat('yyyy/MM/dd');
     final startDateStr = event.startDate != null ? dateFormat.format(event.startDate!) : '—';
     final endDateStr = event.endDate != null ? dateFormat.format(event.endDate!) : '—';
@@ -446,10 +447,12 @@ class _CampaignBriefDialogState extends ConsumerState<CampaignBriefDialog> {
         children: [
           Row(
             children: [
-              Icon(Icons.business_rounded, color: colorScheme.primary, size: 18),
+              Icon(Icons.storefront_rounded, color: colorScheme.primary, size: 18),
               const SizedBox(width: 8),
               Text(
-                event.targetCompany,
+                isAr
+                    ? 'الجهات والفروع المشاركة'
+                    : 'Participating organizations & branches',
                 style: GoogleFonts.cairo(
                   fontSize: 14.5,
                   fontWeight: FontWeight.bold,
@@ -507,14 +510,108 @@ class _CampaignBriefDialogState extends ConsumerState<CampaignBriefDialog> {
                 label: 'ساري: $startDateStr إلى $endDateStr',
                 colorScheme: colorScheme,
               ),
-              if (event.retailChainName.isNotEmpty)
-                _buildInfoBadge(
-                  icon: Icons.storefront_outlined,
-                  label: event.retailChainName,
-                  colorScheme: colorScheme,
-                ),
             ],
           ),
+          const SizedBox(height: 10),
+          ..._organizationGroups(event, isAr).map(
+            (g) => _buildOrganizationTile(
+              orgName: g.key,
+              branches: g.value,
+              isAr: isAr,
+              colorScheme: colorScheme,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Groups the campaign's participating branches by organization (retail chain).
+  /// The campaign model stores one organization (retailChainName) with its
+  /// branchNames; multiple organizations are supported if the name field
+  /// carries several chains separated by "،" / "," / "|".
+  List<MapEntry<String, List<String>>> _organizationGroups(EventModel event, bool isAr) {
+    final orgs = event.retailChainName
+        .split(RegExp(r'[،,|]'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    final branches = <String>[];
+    for (var i = 0; i < event.branchIds.length || i < event.branchNames.length; i++) {
+      final n = i < event.branchNames.length ? event.branchNames[i].trim() : '';
+      final id = i < event.branchIds.length ? event.branchIds[i].trim() : '';
+      final label = n.isNotEmpty ? n : id;
+      if (label.isNotEmpty && !branches.contains(label)) branches.add(label);
+    }
+    if (orgs.isEmpty) {
+      if (branches.isEmpty) return const [];
+      return [MapEntry(isAr ? 'الفروع المشاركة' : 'Participating branches', branches)];
+    }
+    if (orgs.length == 1) return [MapEntry(orgs.first, branches)];
+    // Several organizations: attach each branch to the org whose name it mentions.
+    final map = {for (final o in orgs) o: <String>[]};
+    final unmatched = <String>[];
+    for (final b in branches) {
+      final o = orgs.firstWhere((o) => b.contains(o), orElse: () => '');
+      (o.isEmpty ? unmatched : map[o]!).add(b);
+    }
+    if (unmatched.isNotEmpty) map[orgs.first]!.addAll(unmatched);
+    return map.entries.toList();
+  }
+
+  Widget _buildOrganizationTile({
+    required String orgName,
+    required List<String> branches,
+    required bool isAr,
+    required ColorScheme colorScheme,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLowest.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.business_rounded, size: 16, color: colorScheme.primary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  orgName,
+                  style: GoogleFonts.cairo(fontSize: 13.5, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+                ),
+              ),
+              Text(
+                branches.isEmpty
+                    ? (isAr ? 'كل الفروع' : 'All branches')
+                    : (isAr ? '${branches.length} فرع' : '${branches.length} branches'),
+                style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+          if (branches.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: branches
+                  .map((b) => Chip(
+                        avatar: Icon(Icons.location_on_outlined, size: 14, color: colorScheme.onSecondaryContainer),
+                        label: Text(b, style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSecondaryContainer)),
+                        backgroundColor: colorScheme.secondaryContainer.withValues(alpha: 0.7),
+                        side: BorderSide.none,
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                      ))
+                  .toList(),
+            ),
+          ],
         ],
       ),
     );

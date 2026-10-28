@@ -54,6 +54,7 @@ class DirectGiftClaimScreen extends ConsumerStatefulWidget {
   final bool? isVoucher;
   final List<LinkedGiftAllocation> linkedGifts;
   final bool? requireVoucherSerials;
+  final String? voucherSerialMode;
   final String? customerPhone;
   final String? customerName;
   final String? retailChainName;
@@ -75,6 +76,7 @@ class DirectGiftClaimScreen extends ConsumerStatefulWidget {
     this.isVoucher,
     this.linkedGifts = const [],
     this.requireVoucherSerials,
+    this.voucherSerialMode,
     this.customerPhone,
     this.customerName,
     this.retailChainName,
@@ -105,10 +107,17 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
   bool? _resolvedIsVoucher;
   List<LinkedGiftAllocation>? _resolvedLinkedGifts;
   bool? _requireVoucherSerials;
+  String? _voucherSerialMode;
   bool? _enableWhatsAppWinnerNotification;
   String? _resolvedCustomerPhone;
 
-  bool get _isVoucherSerialsRequired => _requireVoucherSerials ?? widget.requireVoucherSerials ?? false;
+  String get _effectiveVoucherSerialMode {
+    final m = _voucherSerialMode ?? widget.voucherSerialMode;
+    if (m == 'required' || m == 'optional' || m == 'hidden') return m!;
+    return (_requireVoucherSerials ?? widget.requireVoucherSerials ?? false) ? 'required' : 'optional';
+  }
+  bool get _isVoucherSerialsHidden => _effectiveVoucherSerialMode == 'hidden';
+  bool get _isVoucherSerialsRequired => _effectiveVoucherSerialMode == 'required';
   bool get _isWhatsAppWinnerNotificationEnabled =>
       _enableWhatsAppWinnerNotification ?? widget.enableWhatsAppWinnerNotification ?? true;
 
@@ -424,6 +433,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
         if (mounted) {
           setState(() {
             _requireVoucherSerials = data['requireVoucherSerials'] == true || data['require_voucher_serials'] == true;
+            _voucherSerialMode = EventModel.resolveVoucherSerialMode(Map<String, dynamic>.from(data));
             _enableWhatsAppWinnerNotification = data['enableWhatsAppWinnerNotification'] != false && data['enable_whatsapp_winner_notification'] != false;
             _remainingStock = foundRemaining >= 0 ? foundRemaining : null;
             _resolvedBranchName = branchNameFound;
@@ -487,7 +497,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
     _syncVoucherSlots();
 
     // 1. Validate physical voucher serial numbers (mandatory if _isVoucherSerialsRequired, or optional)
-    if (_voucherSlots.isNotEmpty) {
+    if (_voucherSlots.isNotEmpty && !_isVoucherSerialsHidden) {
       final strings = AppStrings.of(ref);
       final List<String> enteredSerials = [];
 
@@ -1422,20 +1432,6 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                                   : (isOutOfStock ? Icons.block_rounded : Icons.check_circle_rounded),
                               isLoading: _isClaiming,
                             ),
-                            const SizedBox(height: 12),
-
-                            // Back / Cancel text button
-                            TextButton.icon(
-                              onPressed: _isClaiming ? null : () => Navigator.of(context).pop(),
-                              icon: Icon(Icons.arrow_back_rounded, size: 18, color: colorScheme.onSurfaceVariant),
-                              label: Text(
-                                isAr ? 'العودة لشاشة الفحص' : 'Back to Validation',
-                                style: GoogleFonts.cairo(
-                                  fontSize: 14,
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ),
                           ],
                         ),
                       ),
@@ -1457,7 +1453,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
     AppStrings strings,
     bool isAr,
   ) {
-    if (_voucherSlots.isEmpty) return const SizedBox.shrink();
+    if (_voucherSlots.isEmpty || _isVoucherSerialsHidden) return const SizedBox.shrink();
 
     final isMandatory = _isVoucherSerialsRequired;
     final sectionTitle = isMandatory

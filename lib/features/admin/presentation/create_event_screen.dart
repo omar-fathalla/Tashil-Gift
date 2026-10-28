@@ -83,7 +83,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   late final TextEditingController _maxChancesController;
   bool _allowMultipleChances = false;
   String _multiplierBasis = 'both';
-  bool _requireVoucherSerials = false;
+  String _voucherSerialMode = 'optional';
   bool _allowComplementaryReceipts = false;
   bool _enableWhatsAppWinnerNotification = true;
   bool _hasCustomAgencyCredentials = false;
@@ -207,7 +207,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     _requiredProductsController = TextEditingController(text: e?.requiredProducts.join(', ') ?? '');
     _allowMultipleChances = e?.allowMultipleChances ?? false;
     _multiplierBasis = e?.multiplierBasis ?? 'both';
-    _requireVoucherSerials = e?.requireVoucherSerials ?? false;
+    _voucherSerialMode = e?.voucherSerialMode ?? 'optional';
     _allowComplementaryReceipts = e?.allowComplementaryReceipts ?? false;
     _enableWhatsAppWinnerNotification = e?.enableWhatsAppWinnerNotification ?? true;
     _hasCustomAgencyCredentials = e?.hasCustomAgencyCredentials ?? false;
@@ -4129,7 +4129,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           }
           return rule;
         }).toList(),
-        requireVoucherSerials: _requireVoucherSerials,
+        requireVoucherSerials: _voucherSerialMode == 'required',
+        voucherSerialMode: _voucherSerialMode,
         allowComplementaryReceipts: _allowComplementaryReceipts,
         enableWhatsAppWinnerNotification: _enableWhatsAppWinnerNotification,
       );
@@ -6069,103 +6070,84 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     ColorScheme colorScheme,
     bool isMobile,
   ) {
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
+    final mode = _voucherSerialMode;
+    final active = mode != 'hidden';
+    String desc;
+    switch (mode) {
+      case 'required':
+        desc = isAr
+            ? 'يلزم البروموتر بإدخال أرقام كروت الفواتشرات قبل تأكيد تسليم الهدية.'
+            : 'The promoter must enter voucher card numbers before confirming the handover.';
+        break;
+      case 'hidden':
+        desc = isAr
+            ? 'حقل أرقام الكروت لا يظهر إطلاقاً في شاشة تسليم الهدية.'
+            : 'The card number field is not shown at all on the gift handover screen.';
+        break;
+      default:
+        desc = isAr
+            ? 'إدخال أرقام الكروت اختياري، ويمكن تأكيد التسليم بدونها.'
+            : 'Entering card numbers is optional; handover can be confirmed without them.';
+    }
     return Container(
+      key: const ValueKey('voucherSerialModeSection'),
       margin: const EdgeInsets.only(top: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _requireVoucherSerials
+        color: active
             ? colorScheme.secondaryContainer.withValues(alpha: 0.55)
             : colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: _requireVoucherSerials
-              ? colorScheme.primaryFixedDim
-              : colorScheme.outlineVariant.withValues(alpha: 0.4),
-          width: _requireVoucherSerials ? 1.5 : 1,
+          color: mode == 'required' ? colorScheme.primaryFixedDim : colorScheme.outlineVariant.withValues(alpha: 0.4),
+          width: mode == 'required' ? 1.5 : 1,
         ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: _requireVoucherSerials
-                  ? colorScheme.secondary
-                  : colorScheme.surfaceContainerHighest,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.confirmation_number_rounded,
-              size: 20,
-              color: _requireVoucherSerials
-                  ? Colors.white
-                  : colorScheme.onSurfaceVariant,
-            ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: active ? colorScheme.secondary : colorScheme.surfaceContainerHighest,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  active ? Icons.confirmation_number_rounded : Icons.visibility_off_rounded,
+                  size: 20,
+                  color: active ? colorScheme.onSecondary : colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  isAr ? 'أرقام كروت الفواتشرات' : 'Voucher card numbers',
+                  style: GoogleFonts.cairo(fontSize: 14.5, fontWeight: FontWeight.w700, color: colorScheme.onSurface),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    Text(
-                      'تسجيل أرقام كروت الفواتشرات',
-                      style: GoogleFonts.cairo(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w700,
-                        color: colorScheme.onSurface,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: _requireVoucherSerials
-                            ? colorScheme.errorContainer
-                            : colorScheme.tertiaryContainer,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        _requireVoucherSerials ? 'إلزامي للبروموتر' : 'اختياري (الافتراضي)',
-                        style: GoogleFonts.cairo(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: _requireVoucherSerials
-                              ? colorScheme.onErrorContainer
-                              : colorScheme.onTertiaryContainer,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  _requireVoucherSerials
-                      ? 'يلزم البروموتر بإدخال الأرقام التسلسلية لكروت الفواتشرات المسلمة للعميل قبل تأكيد تسليم الهدية.'
-                      : 'إدخال أرقام الفواتشرات اختياري للبروموتر، ويمكنه تأكيد تسليم الهدية مباشرة دون إدخالها.',
-                  style: GoogleFonts.cairo(
-                    fontSize: 12,
-                    color: colorScheme.onSurfaceVariant,
-                    height: 1.35,
-                  ),
-                ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<String>(
+              showSelectedIcon: !isMobile,
+              segments: [
+                ButtonSegment(value: 'required', icon: const Icon(Icons.lock_rounded, size: 18), label: Text(isAr ? 'إجباري' : 'Required', style: GoogleFonts.cairo(fontSize: 13))),
+                ButtonSegment(value: 'optional', icon: const Icon(Icons.edit_note_rounded, size: 18), label: Text(isAr ? 'اختياري' : 'Optional', style: GoogleFonts.cairo(fontSize: 13))),
+                ButtonSegment(value: 'hidden', icon: const Icon(Icons.visibility_off_rounded, size: 18), label: Text(isAr ? 'مخفي' : 'Hidden', style: GoogleFonts.cairo(fontSize: 13))),
               ],
+              selected: {mode},
+              onSelectionChanged: (v) => setState(() {
+                _voucherSerialMode = v.first;
+              }),
             ),
           ),
-          const SizedBox(width: 8),
-          Switch.adaptive(
-            value: _requireVoucherSerials,
-            activeTrackColor: colorScheme.secondary,
-            onChanged: (val) {
-              setState(() {
-                _requireVoucherSerials = val;
-              });
-            },
-          ),
+          const SizedBox(height: 8),
+          Text(desc, style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant, height: 1.35)),
         ],
       ),
     );
