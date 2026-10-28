@@ -77,8 +77,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.settings_outlined));
       await tester.pumpAndSettle();
       expect(find.textContaining('🇪🇬'), findsWidgets);
-      await tester.tap(find.byIcon(Icons.payments_outlined));
-      await tester.pumpAndSettle();
+
 
       // Verify the popup menu opens with options
       expect(find.textContaining('المملكة العربية السعودية'), findsOneWidget);

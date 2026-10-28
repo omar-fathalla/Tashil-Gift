@@ -48,7 +48,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.settings_outlined));
       await tester.pumpAndSettle();
       expect(find.byIcon(Icons.dark_mode_outlined), findsOneWidget); // Theme toggle item
-      expect(find.byIcon(Icons.translate_rounded), findsOneWidget); // Language submenu
+      expect(find.text('اللغة'), findsOneWidget); // Language section
     });
 
     testWidgets('SwitchPointFooter renders desktop layout with full pills on large screen', (WidgetTester tester) async {

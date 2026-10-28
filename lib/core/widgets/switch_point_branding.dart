@@ -369,46 +369,38 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
                   : ThemeMode.dark;
             },
           ),
-        if (showLanguage)
-          M3ActionMenu.submenu(
-            context: context,
-            label: '$languageLabel: ${ref.currentAppLanguage.label}',
-            icon: Icons.translate_rounded,
-            children: AppLanguage.values.map((l) {
-              return M3ActionMenu.item(
-                context: context,
-                label: l.label,
-                leading: Text(
-                  l.flagEmoji,
-                  style: const TextStyle(fontSize: 18),
-                ),
-                isSelected: lang == l.code,
-                onPressed: () => ref.setLocale(l.code),
-              );
-            }).toList(),
-          ),
-        if (showCurrency)
-          M3ActionMenu.submenu(
-            context: context,
-            label:
-                '$countryLabel: ${activeCountry.flagEmoji} ${activeCountry.currencySymbolFor(lang)}',
-            icon: Icons.payments_outlined,
-            children: CountryCurrencyConfig.supportedCountries.map((country) {
-              return M3ActionMenu.item(
-                context: context,
-                label:
-                    '${country.fullName(lang)} (${country.currencySymbolFor(lang)})',
-                leading: Text(
-                  country.flagEmoji,
-                  style: const TextStyle(fontSize: 18),
-                ),
-                isSelected: country.code == activeCountry.code,
-                onPressed: () {
-                  ref.read(activeCountryProvider.notifier).state = country;
-                },
-              );
-            }).toList(),
-          ),
+        if (showLanguage) ...[
+          M3ActionMenu.divider(),
+          M3ActionMenu.header(context: context, title: languageLabel),
+          ...AppLanguage.values.map((l) {
+            return M3ActionMenu.item(
+              context: context,
+              label: l.label,
+              leading: Text(l.flagEmoji, style: const TextStyle(fontSize: 18)),
+              isSelected: lang == l.code,
+              onPressed: () => ref.setLocale(l.code),
+            );
+          }),
+        ],
+        if (showCurrency) ...[
+          M3ActionMenu.divider(),
+          M3ActionMenu.header(context: context, title: countryLabel),
+          ...CountryCurrencyConfig.supportedCountries.map((country) {
+            return M3ActionMenu.item(
+              context: context,
+              label:
+                  '${country.fullName(lang)} (${country.currencySymbolFor(lang)})',
+              leading: Text(
+                country.flagEmoji,
+                style: const TextStyle(fontSize: 18),
+              ),
+              isSelected: country.code == activeCountry.code,
+              onPressed: () {
+                ref.read(activeCountryProvider.notifier).state = country;
+              },
+            );
+          }),
+        ],
       ],
     );
   }
