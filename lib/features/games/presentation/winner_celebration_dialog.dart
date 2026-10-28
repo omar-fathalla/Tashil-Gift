@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/services/game_audio_service.dart';
 import '../../admin/domain/event_model.dart';
 import '../../company_portal/domain/whatsapp_gateway_service.dart';
+import '../../../core/localization/locale_provider.dart';
 
 /// Shows a world-class, celebratory M3 Winner Dialog with Confetti and Spring Motion
 Future<void> showWinnerCelebrationDialog({
@@ -803,6 +804,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                 final resolvedPhone = (result?.recipientPhone ?? widget.recipientPhone ?? '').trim();
 
                                 final isFailed = !isWaiting && result != null && !result.isSuccess;
+                                final isEnUi = ref.read(localeProvider).languageCode == 'en';
                                 final bgColor = isFailed
                                     ? colorScheme.secondaryContainer
                                     : colorScheme.tertiaryContainer.withValues(alpha: 0.6);
@@ -854,7 +856,9 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                               isWaiting
                                                   ? 'جاري إرسال رسالة الواتساب...'
                                                   : (isFailed
-                                                      ? 'تعذر إرسال الواتساب'
+                                                      ? (isEnUi
+                                                          ? (resolvedPhone.isNotEmpty ? 'Message could not reach $resolvedPhone' : 'Message could not be delivered')
+                                                          : (resolvedPhone.isNotEmpty ? 'تعذر وصول الرسالة إلى الرقم $resolvedPhone' : 'تعذر وصول الرسالة'))
                                                       : 'تم إرسال الواتساب بنجاح'),
                                               style: GoogleFonts.cairo(
                                                 fontSize: 13,
@@ -872,7 +876,7 @@ class _WinnerCelebrationDialogState extends ConsumerState<WinnerCelebrationDialo
                                                 ? 'يتم الآن إرسال تفاصيل الهدية إلى الرقم ($resolvedPhone)'
                                                 : 'يتم الآن إرسال رسالة تهنئة الهدية للعميل عبر الواتساب')
                                             : (isFailed
-                                                ? 'تعذر توصيل الرسالة إلى الرقم ($resolvedPhone) — تأكد من تفعيل الرقم على الواتساب'
+                                                ? (isEnUi ? 'Make sure the number is active on WhatsApp' : 'تأكد من تفعيل الرقم على الواتساب')
                                                 : (resolvedPhone.isNotEmpty
                                                     ? 'تم إرسال رسالة التهنئة وتفاصيل الهدية للعميل على الرقم ($resolvedPhone)'
                                                     : 'تم إرسال رسالة التهنئة وتفاصيل الهدية للعميل عبر الواتساب')),
