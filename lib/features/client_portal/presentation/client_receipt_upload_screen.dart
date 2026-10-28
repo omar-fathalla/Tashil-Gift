@@ -2032,8 +2032,9 @@ class _ClientReceiptUploadScreenState
     if (_chainMet(r) == false) return ReceiptIssueKind.wrongChain;
     if (!r.isBranchMatched) return ReceiptIssueKind.wrongBranch;
     if (_dateMet(r) == false) return ReceiptIssueKind.outOfDate;
-    if (minimumSpend > 0 && r.targetCompanyTotal < minimumSpend)
+    if (minimumSpend > 0 && r.targetCompanyTotal < minimumSpend) {
       return ReceiptIssueKind.belowMinimum;
+    }
     return reasons.isNotEmpty ? classifyConditionText(reasons.first) : fromText;
   }
 
@@ -2060,8 +2061,9 @@ class _ClientReceiptUploadScreenState
       r'(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})',
     ).firstMatch(r.receiptDate);
     final ev = _activeEvent;
-    if (m == null || ev == null || (ev.startDate == null && ev.endDate == null))
+    if (m == null || ev == null || (ev.startDate == null && ev.endDate == null)) {
       return null;
+    }
     var y = int.parse(m.group(3)!);
     if (y < 100) y += 2000;
     final d = DateTime(y, int.parse(m.group(2)!), int.parse(m.group(1)!));
