@@ -8,6 +8,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'firebase_options.dart';
 import 'core/services/app_check_bootstrap.dart';
 import 'core/theme/app_theme.dart';
+import 'core/update/app_update_checker.dart';
 import 'core/localization/locale_provider.dart';
 import 'core/services/firebase_service.dart';
 import 'core/utils/app_url_strategy.dart';
@@ -59,6 +60,11 @@ void main() async {
     ),
   );
 }
+
+final GlobalKey<ScaffoldMessengerState> _updateMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
+final AppUpdateChecker _updateChecker =
+    AppUpdateChecker(messengerKey: _updateMessengerKey);
 
 class MyApp extends ConsumerWidget {
   const MyApp({super.key});
@@ -350,8 +356,10 @@ class MyApp extends ConsumerWidget {
     final currentLocale = ref.watch(localeProvider);
     final isAr = currentLocale.languageCode == 'ar';
 
+    _updateChecker.start();
     return MaterialApp(
       title: 'Tashil Gift',
+      scaffoldMessengerKey: _updateMessengerKey,
       theme: AppTheme.getLightTheme(),
       darkTheme: AppTheme.getDarkTheme(),
       themeMode: themeMode,
