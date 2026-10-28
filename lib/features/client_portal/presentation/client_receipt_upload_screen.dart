@@ -33,6 +33,7 @@ import '../../games/presentation/scratch_card_screen.dart';
 import '../../games/presentation/direct_gift_claim_screen.dart';
 import '../../games/presentation/choose_gift_screen.dart';
 import '../../validation/presentation/widgets/receipt_validation_dialog.dart';
+import 'widgets/receipt_issue_dialog.dart';
 import 'widgets/campaign_gift_balance_dialog.dart';
 import 'widgets/campaign_brief_dialog.dart';
 import 'widgets/promoter_invoices_dialog.dart';
@@ -625,7 +626,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
 
   Future<void> _submitAndValidateReceipt() async {
     if (_receiptImages.isEmpty) {
-      _showPopupMessage('تنبيه', 'يرجى التقاط أو اختيار صورة الفاتورة أولاً.');
+      _showIssue(ReceiptIssueKind.noImage);
       return;
     }
 
@@ -633,7 +634,7 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
     final EventModel? primaryTargetEvent = _activeEvent ?? (isMultiScan && _availableCompanyEvents.isNotEmpty ? _availableCompanyEvents.first : widget.event);
 
     if (primaryTargetEvent == null) {
-      _showPopupMessage('خطأ', 'بيانات الحملة غير متوفرة.');
+      _showIssue(ReceiptIssueKind.campaignUnavailable);
       return;
     }
 
@@ -648,20 +649,12 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
       if (!isMultiScan && _activeEvent != null) {
         if (_activeEvent!.isExpired) {
           final endStr = "${_activeEvent!.endDate!.day}/${_activeEvent!.endDate!.month}/${_activeEvent!.endDate!.year}";
-          _showPopupMessage(
-            'عفواً، الحملة منتهية',
-            'انتهت سريان فترة هذه الحملة بتاريخ $endStr. لا يمكن قبول فواتير جديدة.',
-            isError: true,
-          );
+          _showIssue(ReceiptIssueKind.campaignEnded, subtitle: _isAr ? 'انتهت الحملة بتاريخ $endStr. لا يمكن قبول فواتير جديدة.' : 'The campaign ended on $endStr. New receipts can no longer be accepted.');
           return;
         }
         if (_activeEvent!.isNotStartedYet) {
           final startStr = "${_activeEvent!.startDate!.day}/${_activeEvent!.startDate!.month}/${_activeEvent!.startDate!.year}";
-          _showPopupMessage(
-            'عفواً، الحملة لم تبدأ بعد',
-            'تبدأ هذه الحملة في تاريخ $startStr. يرجى العودة عند بدء الحملة.',
-            isError: true,
-          );
+          _showIssue(ReceiptIssueKind.campaignNotStarted, subtitle: _isAr ? 'تبدأ الحملة بتاريخ $startStr.' : 'The campaign starts on $startStr.');
           return;
         }
       }
@@ -885,20 +878,11 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           totalValue: result.targetCompanyTotal,
         );
 
-        showReceiptValidationReportDialog(
-          context: context,
-          title: 'عفواً، الفاتورة غير مطابقة للشروط',
-          subtitle: 'تم فحص الفاتورة بالذكاء الاصطناعي وتبيّن عدم استيفاء الشروط التالية:',
-          conditions: conditions,
-          receiptNumber: result.receiptNumber,
-          storeChain: result.storeChainDetected,
-          branch: result.branchDetected,
-          receiptDate: result.receiptDate,
-          totalValue: result.targetCompanyTotal,
-          requiredMinimum: isMultiScan ? 0.0 : _activeEvent!.minimumSpend,
-          currencySymbol: activeCountry.currencySymbol,
-          imageUrl: previewImgUrl,
-          imageUrls: previewUrls,
+        _showIssue(
+          _kindForInvalidResult(result, unfulfilledList, effectiveCampaignMinSpend),
+          chips: _receiptChips(result, minimumSpend: effectiveCampaignMinSpend, currency: activeCountry.currencySymbol),
+          extraReasons: <String>{...unfulfilledList, ...conditions.map((c) => c.description)}.toList(),
+          onPrimary: _clearPhotosForRetake,
         );
         return;
       }
@@ -915,33 +899,8 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
 
         if (duplicateCheck.isDuplicate) {
           if (!mounted) return;
-          final activeCountry = ref.read(activeCountryProvider);
-          final strings = AppStrings.of(ref);
 
-          showReceiptValidationReportDialog(
-            context: context,
-            title: strings.duplicateReceiptAlreadyDrawnTitle,
-            subtitle: duplicateCheck.rejectionMessage,
-            conditions: [
-              ValidationConditionItem(
-                title: strings.duplicateReceiptConditionTitle,
-                description: duplicateCheck.rejectionMessage,
-                icon: Icons.history_toggle_off_rounded,
-                isMet: false,
-                value: duplicateCheck.existingPrizeWon,
-              ),
-            ],
-            receiptNumber: candidateReceiptNumber,
-            storeChain: result.storeChainDetected,
-            branch: result.branchDetected,
-            receiptDate: result.receiptDate,
-            totalValue: result.targetCompanyTotal,
-            requiredMinimum: isMultiScan ? 0.0 : (_activeEvent?.minimumSpend ?? 0.0),
-            currencySymbol: activeCountry.currencySymbol,
-            imageUrl: previewImgUrl,
-            imageUrls: previewUrls,
-            isDuplicate: true,
-          );
+          _showAlreadyRedeemed(duplicateCheck);
           _resetFormForNextCustomer();
           return;
         }
@@ -1092,20 +1051,10 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
             totalValue: result.targetCompanyTotal,
           );
 
-          showReceiptValidationReportDialog(
-            context: context,
-            title: 'الفاتورة غير مطابقة لأي من عروض الشركة',
-            subtitle: 'تم فحص الفاتورة بالذكاء الاصطناعي مقابل (${summary.allEvaluations.length}) عروض ولم تستوفِ شروط أي منها:',
-            conditions: conditions,
-            receiptNumber: result.receiptNumber,
-            storeChain: result.storeChainDetected,
-            branch: result.branchDetected,
-            receiptDate: result.receiptDate,
-            totalValue: result.targetCompanyTotal,
-            requiredMinimum: 0,
-            currencySymbol: activeCountry.currencySymbol,
-            imageUrl: previewImgUrl,
-            imageUrls: previewUrls,
+          _showIssue(
+            ReceiptIssueKind.multiNoMatch,
+            chips: _receiptChips(result, minimumSpend: 0, currency: activeCountry.currencySymbol),
+            extraReasons: conditions.map((c) => '${c.title}: ${c.description}').toList(),
           );
           _resetFormForNextCustomer();
           return;
@@ -1140,20 +1089,10 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           totalValue: totalValue,
         );
 
-        showReceiptValidationReportDialog(
-          context: context,
-          title: 'مبلغ المشتريات غير كافٍ',
-          subtitle: 'تم فحص الفاتورة وتبيّن عدم بلوغ الحد الأدنى للمشاركة في العرض:',
-          conditions: conditions,
-          receiptNumber: result.receiptNumber,
-          storeChain: result.storeChainDetected,
-          branch: result.branchDetected,
-          receiptDate: result.receiptDate,
-          totalValue: totalValue,
-          requiredMinimum: _activeEvent!.minimumSpend,
-          currencySymbol: activeCountry.currencySymbol,
-          imageUrl: previewImgUrl,
-          imageUrls: previewUrls,
+        _showIssue(
+          ReceiptIssueKind.belowMinimum,
+          chips: _receiptChips(result, minimumSpend: _activeEvent!.minimumSpend, currency: activeCountry.currencySymbol),
+          extraReasons: conditions.map((c) => c.description).toList(),
         );
         return;
       }
@@ -1211,20 +1150,10 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
           ));
         }
 
-        showReceiptValidationReportDialog(
-          context: context,
-          title: 'عفواً، شروط العرض غير مستوفاة',
-          subtitle: 'تم فحص الفاتورة بالذكاء الاصطناعي وتبيّن عدم استيفاء الشروط الترويجية التالية:',
-          conditions: conditions,
-          receiptNumber: result.receiptNumber,
-          storeChain: result.storeChainDetected,
-          branch: result.branchDetected,
-          receiptDate: result.receiptDate,
-          totalValue: totalValue,
-          requiredMinimum: _activeEvent!.minimumSpend,
-          currencySymbol: activeCountry.currencySymbol,
-          imageUrl: previewImgUrl,
-          imageUrls: previewUrls,
+        _showIssue(
+          ReceiptIssueKind.promoNotMet,
+          chips: _receiptChips(result, minimumSpend: _activeEvent!.minimumSpend, currency: activeCountry.currencySymbol),
+          extraReasons: <String>{...unfulfilledPromoList, ...conditions.map((c) => c.description)}.toList(),
         );
         _resetFormForNextCustomer();
         return;
@@ -1341,6 +1270,8 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         'analysis_duration_ms': result.durationMs,
         'ai_kpi_rating': result.kpiRating,
         'chances_earned': calculatedChances,
+        if (result.matchedRuleId.isNotEmpty) 'matched_rule_id': result.matchedRuleId,
+        if (result.matchedRewardValue.isNotEmpty) 'matched_reward_value': result.matchedRewardValue,
         'allow_multiple_chances': _activeEvent!.allowMultipleChances,
       };
 
@@ -1353,11 +1284,14 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
         if (!ReceiptDeduplicationHelper.isDuplicateWriteDenied(e)) rethrow;
         debugPrint('Receipt create denied (already exists for campaign): $e');
         if (!mounted) return;
-        _showPopupMessage(
-          AppStrings.of(ref).duplicateReceiptAlreadyDrawnTitle,
-          ReceiptDeduplicationHelper.duplicateMessage(receiptNumber),
-          isError: true,
+        final dup = await ReceiptDeduplicationHelper.checkReceiptDuplicate(
+          firestore: firestore,
+          receiptNumber: receiptNumber,
+          companySlug: _activeEvent!.companySlug,
+          campaignId: _activeEvent!.id,
         );
+        if (!mounted) return;
+        _showAlreadyRedeemed(dup);
         return;
       }
 
@@ -1664,11 +1598,8 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
     } catch (e, stack) {
       debugPrint('Receipt processing error: $e\n$stack');
       if (mounted) {
-        _showPopupMessage(
-          'تنبيه النظام',
-          AppErrorHandler.getFriendlyMessage(e, defaultMessage: 'حدث خطأ أثناء معالجة وإرسال الفاتورة.'),
-          isError: true,
-        );
+        final kind = classifyReceiptException(e);
+        _showIssue(kind, onPrimary: _receiptImages.isNotEmpty ? _submitAndValidateReceipt : null);
       }
     } finally {
       if (mounted) {
@@ -1681,20 +1612,122 @@ class _ClientReceiptUploadScreenState extends ConsumerState<ClientReceiptUploadS
     }
   }
 
-  void _showPopupMessage(String title, String message, {bool isError = false}) {
-    showReceiptValidationReportDialog(
+  bool get _isAr => ref.read(localeProvider).languageCode == 'ar';
+
+  void _clearPhotosForRetake() {
+    if (!mounted) return;
+    setState(() {
+      _receiptImages.clear();
+      _receiptImageBytes.clear();
+      _selectedPreviewIndex = 0;
+    });
+  }
+
+  void _showIssue(
+    ReceiptIssueKind kind, {
+    List<ReceiptCheckChip> chips = const [],
+    List<ReceiptIssueDetail> details = const [],
+    List<String> extraReasons = const [],
+    String? subtitle,
+    VoidCallback? onPrimary,
+  }) {
+    if (!mounted) return;
+    final spec = receiptIssueSpecs[kind]!;
+    showReceiptIssueDialog(
       context: context,
-      title: title,
-      isDuplicate: isError && (title.contains('مسجلة') || title.contains('مسبقاً')),
-      conditions: [
-        ValidationConditionItem(
-          title: title,
-          description: message,
-          icon: isError ? Icons.report_problem_rounded : Icons.info_outline_rounded,
-          isMet: !isError,
-        ),
+      kind: kind,
+      isArabic: _isAr,
+      chips: chips,
+      details: details,
+      extraReasons: extraReasons.where((r) => r.trim().isNotEmpty).toList(),
+      subtitleOverride: subtitle,
+      onPrimary: onPrimary ?? (spec.action == ReceiptIssueAction.retake ? _clearPhotosForRetake : null),
+    );
+  }
+
+  /// Already-redeemed receipt: show when/where/what it was redeemed for (no personal data).
+  void _showAlreadyRedeemed(ReceiptDuplicateCheckResult dup) {
+    String fmtDate(String? iso) {
+      final d = iso == null ? null : DateTime.tryParse(iso)?.toLocal();
+      if (d == null) return iso ?? '';
+      String two(int n) => n.toString().padLeft(2, '0');
+      return '${two(d.day)}/${two(d.month)}/${d.year}  ${two(d.hour)}:${two(d.minute)}';
+    }
+
+    final currency = ref.read(activeCountryProvider).currencySymbol;
+    String gift(String v) => RegExp(r'^\d+(\.\d+)?$').hasMatch(v) ? '$v $currency' : v;
+    _showIssue(
+      ReceiptIssueKind.alreadyRedeemed,
+      details: [
+        if (dup.receiptNumber.isNotEmpty) ReceiptIssueDetail(Icons.tag_rounded, 'رقم الفاتورة', 'Receipt no.', dup.receiptNumber),
+        if ((dup.existingClaimedAt ?? '').isNotEmpty)
+          ReceiptIssueDetail(Icons.event_available_rounded, 'تاريخ الصرف', 'Redeemed on', fmtDate(dup.existingClaimedAt)),
+        if ((dup.existingCampaignName ?? '').isNotEmpty)
+          ReceiptIssueDetail(Icons.campaign_rounded, 'الحملة', 'Campaign', dup.existingCampaignName!),
+        if ((dup.existingPrizeWon ?? '').isNotEmpty)
+          ReceiptIssueDetail(Icons.card_giftcard_rounded, 'الهدية / القسيمة', 'Gift / voucher', gift(dup.existingPrizeWon!)),
+        if ((dup.existingBranch ?? '').isNotEmpty)
+          ReceiptIssueDetail(Icons.storefront_rounded, 'الفرع', 'Branch', dup.existingBranch!),
       ],
     );
+  }
+
+  ReceiptIssueKind _kindForInvalidResult(AiReceiptAnalysisResult r, List<String> reasons, double minimumSpend) {
+    final msg = '${r.message} ${reasons.join(' ')}';
+    if (r.isHandwritten) return ReceiptIssueKind.handwritten;
+    if (r.isTampered) return ReceiptIssueKind.tampered;
+    if (r.isScreenCapture) return ReceiptIssueKind.screenCapture;
+    if (!r.isThermalPosReceipt) return ReceiptIssueKind.notReceipt;
+    final fromText = classifyConditionText(msg);
+    if (fromText == ReceiptIssueKind.unreadable || fromText == ReceiptIssueKind.incomplete || fromText == ReceiptIssueKind.notReceipt) {
+      return fromText;
+    }
+    final hasProducts = r.extractedProducts.any((p) => p.isTargetCompany) || r.targetCompanyTotal > 0;
+    if (!hasProducts) return ReceiptIssueKind.noProducts;
+    if (_chainMet(r) == false) return ReceiptIssueKind.wrongChain;
+    if (!r.isBranchMatched) return ReceiptIssueKind.wrongBranch;
+    if (_dateMet(r) == false) return ReceiptIssueKind.outOfDate;
+    if (minimumSpend > 0 && r.targetCompanyTotal < minimumSpend) return ReceiptIssueKind.belowMinimum;
+    return reasons.isNotEmpty ? classifyConditionText(reasons.first) : fromText;
+  }
+
+  bool? _chainMet(AiReceiptAnalysisResult r) {
+    final allowed = (_activeEvent?.retailChainName ?? '').trim();
+    final got = r.storeChainDetected.trim();
+    if (allowed.isEmpty || got.isEmpty) return null;
+    String n(String x) => x.replaceAll(RegExp(r'[\sـ]'), '').replaceAll('أ', 'ا').replaceAll('إ', 'ا').replaceAll('ة', 'ه').replaceAll('ى', 'ي');
+    final g = n(got);
+    return allowed.split('•').map((c) => n(c)).where((c) => c.isNotEmpty).any((c) => g.contains(c) || c.contains(g));
+  }
+
+  bool? _dateMet(AiReceiptAnalysisResult r) {
+    final m = RegExp(r'(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})').firstMatch(r.receiptDate);
+    final ev = _activeEvent;
+    if (m == null || ev == null || (ev.startDate == null && ev.endDate == null)) return null;
+    var y = int.parse(m.group(3)!);
+    if (y < 100) y += 2000;
+    final d = DateTime(y, int.parse(m.group(2)!), int.parse(m.group(1)!));
+    final start = ev.startDate == null ? null : DateTime(ev.startDate!.year, ev.startDate!.month, ev.startDate!.day);
+    final end = ev.endDate == null ? null : DateTime(ev.endDate!.year, ev.endDate!.month, ev.endDate!.day);
+    if (start != null && d.isBefore(start)) return false;
+    if (end != null && d.isAfter(end)) return false;
+    return true;
+  }
+
+  List<ReceiptCheckChip> _receiptChips(AiReceiptAnalysisResult r, {required double minimumSpend, required String currency}) {
+    String num(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
+    final chain = _chainMet(r);
+    final date = _dateMet(r);
+    final hasProducts = r.extractedProducts.any((p) => p.isTargetCompany) || r.targetCompanyTotal > 0;
+    return [
+      if (chain != null) ReceiptCheckChip('السلسلة', 'Chain', chain),
+      ReceiptCheckChip('الفرع', 'Branch', r.isBranchMatched),
+      if (date != null) ReceiptCheckChip('التاريخ', 'Date', date, value: r.receiptDate.isNotEmpty ? r.receiptDate : null),
+      ReceiptCheckChip('المنتجات', 'Products', hasProducts),
+      if (minimumSpend > 0)
+        ReceiptCheckChip('الحد الأدنى', 'Min. spend', r.targetCompanyTotal >= minimumSpend,
+            value: '${num(r.targetCompanyTotal)}/${num(minimumSpend)} $currency'),
+    ];
   }
 
   @override

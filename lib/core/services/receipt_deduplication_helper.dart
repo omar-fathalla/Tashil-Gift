@@ -12,6 +12,7 @@ class ReceiptDuplicateCheckResult {
   final String? existingClaimedAt;
   final String? existingStoreChain;
   final String? existingBranch;
+  final String? existingReceiptDate;
   final String rejectionMessage;
   final Map<String, dynamic>? existingData;
 
@@ -24,6 +25,7 @@ class ReceiptDuplicateCheckResult {
     this.existingClaimedAt,
     this.existingStoreChain,
     this.existingBranch,
+    this.existingReceiptDate,
     this.rejectionMessage = '',
     this.existingData,
   });
@@ -127,10 +129,20 @@ class ReceiptDeduplicationHelper {
       final data = res.data;
       final isDup = data is Map && data['duplicate'] == true;
       if (!isDup) return ReceiptDuplicateCheckResult.notDuplicate;
+      final summary = (data['summary'] is Map) ? Map<String, dynamic>.from(data['summary'] as Map) : const <String, dynamic>{};
+      String? pick(String k) {
+        final v = summary[k]?.toString().trim();
+        return (v == null || v.isEmpty || v == 'null') ? null : v;
+      }
       return ReceiptDuplicateCheckResult(
         isDuplicate: true,
         receiptNumber: cleanNumber,
         existingCampaignId: campaignId,
+        existingCampaignName: pick('campaignName'),
+        existingPrizeWon: pick('giftValue'),
+        existingClaimedAt: pick('redeemedAt'),
+        existingBranch: pick('branch'),
+        existingReceiptDate: pick('receiptDate'),
         rejectionMessage: duplicateMessage(cleanNumber, isMultiScan: isMultiScan),
       );
     } catch (e) {

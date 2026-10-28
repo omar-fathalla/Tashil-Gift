@@ -32,6 +32,67 @@ function isTransactionClaimed(d) {
   return d.game_played === true || handed || hasPrize || hasClaimed || hasLinked;
 }
 
+/** Accepted/stored (or gift claimed) receipts may not be re-used; rejected ones may be re-uploaded. */
+function isRedeemed(d) {
+  if (!d) return false;
+  if (d.status === "rejected" || d.is_valid === false) return false;
+  return d.status === "accepted" || d.is_valid === true || isTransactionClaimed(d);
+}
+
+function toIso(v) {
+  if (!v) return null;
+  if (typeof v.toDate === "function") return v.toDate().toISOString();
+  if (v instanceof Date) return v.toISOString();
+  if (typeof v === "string") return v.slice(0, 40);
+  return null;
+}
+
+function str(v, max) {
+  if (v == null) return null;
+  const s = String(v).trim();
+  return s && s !== "null" ? s.slice(0, max) : null;
+}
+
+/** Gift/voucher label for a redeemed receipt (no personal data). */
+function giftLabel(d, ev) {
+  const direct = str(d.prize_won, 120) || str(d.matched_reward_value, 120);
+  if (direct) return direct;
+  const rules = Array.isArray(ev && ev.promotionalRules) ? ev.promotionalRules : [];
+  let rule = null;
+  if (d.matched_rule_id) rule = rules.find((r) => r && r.id === d.matched_rule_id) || null;
+  if (!rule) {
+    // Older docs: highest spend tier reached by the stored company total.
+    const total = Number(d.target_company_total != null ? d.target_company_total : d.total_value) || 0;
+    rules.filter((r) => r && r.conditionType !== "by_quantity" && Number(r.minSpend) > 0)
+      .forEach((r) => {
+        const need = Number(r.minSpend) - (Number(r.discountTolerance) || 0);
+        if (total >= need && (!rule || Number(r.minSpend) > Number(rule.minSpend))) rule = r;
+      });
+  }
+  if (!rule) return null;
+  const amount = Number(rule.rewardAmount) || 0;
+  return str(rule.rewardValue, 120) || str(rule.linkedGiftName, 120)
+    || (amount > 0 ? `${amount}` : null) || str(rule.ruleTitle, 120);
+}
+
+async function redeemedSummary(db, d, cache) {
+  let ev = null;
+  if (d.campaignId) {
+    if (!cache.has(d.campaignId)) {
+      const s = await db.collection("events").doc(String(d.campaignId)).get();
+      cache.set(d.campaignId, s.exists ? s.data() : null);
+    }
+    ev = cache.get(d.campaignId);
+  }
+  return {
+    redeemedAt: toIso(d.claimed_at) || toIso(d.timestamp),
+    campaignName: str(ev && ev.eventName, 120) || str(d.targetCompany, 120),
+    giftValue: giftLabel(d, ev),
+    branch: str(d.branch_detected, 120),
+    receiptDate: str(d.receipt_date, 40),
+  };
+}
+
 function statusOf(d) {
   if (!d) return null;
   if (isTransactionClaimed(d)) return "claimed";
@@ -82,27 +143,31 @@ async function checkReceiptDuplicateHandler(db, request) {
   }
 
   let existingStatus = null;
+  const evCache = new Map();
+  const hit = async (d) => ({
+    duplicate: true,
+    existingStatus: statusOf(d),
+    summary: await redeemedSummary(db, d, evCache),
+  });
   if (campaignId) {
     const direct = await db.collection("receipts_transactions")
       .doc(deterministicDocId(campaignId, receiptNumber)).get();
     if (direct.exists) {
       const d = direct.data();
       existingStatus = statusOf(d);
-      if (isTransactionClaimed(d)) return { duplicate: true, existingStatus: "claimed" };
+      if (isRedeemed(d)) return hit(d);
     }
   }
 
   const snap = await db.collection("receipts_transactions")
-    .where("receipt_number", "==", receiptNumber).limit(10).get();
+    .where("receipt_number", "==", receiptNumber).limit(20).get();
   for (const doc of snap.docs) {
     const d = doc.data() || {};
-    if (!isTransactionClaimed(d)) continue;
+    if (!isRedeemed(d)) continue;
     const isBundle = d.is_multi_campaign_bundle === true || d.bundle_group_id != null;
-    if (isMultiScan && (d.companySlug === companySlug || isBundle)) {
-      return { duplicate: true, existingStatus: "claimed" };
-    }
+    if (isMultiScan && (d.companySlug === companySlug || isBundle)) return hit(d);
     if (campaignId && (d.campaignId === campaignId || (isBundle && d.companySlug === companySlug))) {
-      return { duplicate: true, existingStatus: "claimed" };
+      return hit(d);
     }
   }
   return { duplicate: false, existingStatus };
@@ -112,5 +177,7 @@ module.exports = {
   checkReceiptDuplicateHandler,
   deterministicDocId,
   isTransactionClaimed,
+  isRedeemed,
+  giftLabel,
   normalizeReceiptNumber,
 };
