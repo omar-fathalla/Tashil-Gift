@@ -620,6 +620,9 @@ exports.geminiGenerate = createGeminiGenerate({
 });
 
 Object.assign(exports, require("./security_functions"));
+const partnerPortal = require("./partner_portal");
+exports.partnerPortalInfo = partnerPortal.partnerPortalInfo;
+exports.partnerPortalLogin = partnerPortal.partnerPortalLogin;
 
 /**
  * Cloud Function: wahaWebhook
