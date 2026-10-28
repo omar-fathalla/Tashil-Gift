@@ -431,6 +431,12 @@ const { checkReceiptDuplicateHandler } = require("./receipt_duplicate_check");
 exports.checkReceiptDuplicate = onCall(callableOptions, (request) =>
   checkReceiptDuplicateHandler(db, request));
 
+const { sendWinnerWhatsAppHandler } = require("./winner_whatsapp");
+exports.sendWinnerWhatsApp = onCall(
+  { ...callableOptions, secrets: [wahaApiKey] },
+  (request) => sendWinnerWhatsAppHandler(db, request, wahaApiKey.value()),
+);
+
 const WAHA_PROXY_ALLOWED_ORIGINS = new Set([
   "https://tashil-gift.web.app",
   "https://tashil-gift.firebaseapp.com",

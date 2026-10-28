@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
@@ -191,6 +192,14 @@ class WhatsAppWinnerNotificationService {
     bool? isEnabledForCampaign,
     http.Client? client,
   }) async {
+    // Real receipts: the server builds and sends the message from the stored receipt
+    // (works for anonymous reps; once per receipt; WAHA key stays server-side).
+    if (transactionId.trim().isNotEmpty && client == null) {
+      if (isEnabledForCampaign == false) return null;
+      final server = await sendViaServer(transactionId: transactionId.trim(), fallbackPhone: customerPhone);
+      if (server.handled) return server.result;
+      // Non-WAHA gateway (e.g. Green API / Whapi): keep the existing client path below.
+    }
     try {
       String phone = (customerPhone ?? '').trim();
       String name = (customerName ?? '').trim();
@@ -298,5 +307,29 @@ class WhatsAppWinnerNotificationService {
       return WhatsAppGatewayResult.failure(error: e.toString());
     }
   }
-}
 
+  /// Calls the `sendWinnerWhatsApp` callable (handled=false => use the legacy client gateway) for an accepted, handed-over receipt.
+  Future<({bool handled, WhatsAppGatewayResult? result})> sendViaServer({required String transactionId, String? fallbackPhone}) async {
+    final phone = (fallbackPhone ?? '').trim();
+    try {
+      final res = await FirebaseFunctions.instanceFor(region: 'us-central1')
+          .httpsCallable('sendWinnerWhatsApp', options: HttpsCallableOptions(timeout: const Duration(seconds: 40)))
+          .call<Map<String, dynamic>>({'receiptId': transactionId});
+      final data = Map<String, dynamic>.from(res.data as Map);
+      final recipient = (data['recipientPhone'] ?? phone).toString();
+      if (data['sent'] == true || data['alreadySent'] == true) {
+        return (handled: true, result: WhatsAppGatewayResult.success(messageId: data['messageId']?.toString(), recipientPhone: recipient));
+      }
+      final reason = (data['reason'] ?? '').toString();
+      // Nothing to send (disabled / no phone / provider handled elsewhere / in progress): no failure notice.
+      if (reason == 'provider-not-supported') return (handled: false, result: null);
+      if (reason.startsWith('disabled') || reason == 'no-phone' || reason == 'in-progress') {
+        return (handled: true, result: null);
+      }
+      return (handled: true, result: WhatsAppGatewayResult.failure(error: reason, statusCode: reason == 'not-on-whatsapp' ? 404 : 502, recipientPhone: recipient));
+    } catch (e) {
+      debugPrint('sendWinnerWhatsApp failed: $e');
+      return (handled: true, result: WhatsAppGatewayResult.failure(error: e.toString(), statusCode: 500, recipientPhone: phone));
+    }
+  }
+}
