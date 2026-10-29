@@ -8,6 +8,9 @@ import '../../../../core/services/firebase_service.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/constants/country_currency_config.dart';
 import '../../../admin/domain/event_model.dart';
+import '../../../admin/domain/retail_chain_model.dart';
+import '../../../../core/services/retail_chains_service.dart';
+import '../../../../core/utils/branch_chain_resolver.dart';
 import 'campaign_gift_balance_dialog.dart';
 import 'promoter_invoices_dialog.dart';
 
@@ -53,6 +56,22 @@ class CampaignBriefDialog extends ConsumerStatefulWidget {
 class _CampaignBriefDialogState extends ConsumerState<CampaignBriefDialog> {
   Stream<DocumentSnapshot<Map<String, dynamic>>>? _eventDocStream;
   String? _lastEventId;
+  List<BranchModel> _dbBranches = const [];
+  bool _branchesRequested = false;
+
+  /// Loads branch docs once (only for multi-chain campaigns) so chain
+  /// membership is resolved by branch ID instead of by name.
+  void _ensureDbBranches(EventModel event) {
+    if (_branchesRequested) return;
+    if (BranchChainResolver.splitChainNames(event.retailChainName).length < 2) return;
+    _branchesRequested = true;
+    Future(() async {
+      try {
+        final list = await ref.read(retailChainsServiceProvider).getAllBranches();
+        if (mounted) setState(() => _dbBranches = list);
+      } catch (_) {}
+    });
+  }
 
   Stream<DocumentSnapshot<Map<String, dynamic>>>? _ensureEventDocStream() {
     if (_eventDocStream == null || _lastEventId != widget.event.id) {
@@ -527,15 +546,11 @@ class _CampaignBriefDialogState extends ConsumerState<CampaignBriefDialog> {
   }
 
   /// Groups the campaign's participating branches by organization (retail chain).
-  /// The campaign model stores one organization (retailChainName) with its
-  /// branchNames; multiple organizations are supported if the name field
-  /// carries several chains separated by "،" / "," / "|".
+  /// Chain membership is resolved ID-first (branchIds[i] -> branch doc ->
+  /// retailChainId); name matching is only a fallback for legacy events.
   List<MapEntry<String, List<String>>> _organizationGroups(EventModel event, bool isAr) {
-    final orgs = event.retailChainName
-        .split(RegExp(r'[،,|]'))
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList();
+    _ensureDbBranches(event);
+    final orgs = BranchChainResolver.splitChainNames(event.retailChainName);
     final branches = <String>[];
     for (var i = 0; i < event.branchIds.length || i < event.branchNames.length; i++) {
       final n = i < event.branchNames.length ? event.branchNames[i].trim() : '';
@@ -548,15 +563,14 @@ class _CampaignBriefDialogState extends ConsumerState<CampaignBriefDialog> {
       return [MapEntry(isAr ? 'الفروع المشاركة' : 'Participating branches', branches)];
     }
     if (orgs.length == 1) return [MapEntry(orgs.first, branches)];
-    // Several organizations: attach each branch to the org whose name it mentions.
-    final map = {for (final o in orgs) o: <String>[]};
-    final unmatched = <String>[];
-    for (final b in branches) {
-      final o = orgs.firstWhere((o) => b.contains(o), orElse: () => '');
-      (o.isEmpty ? unmatched : map[o]!).add(b);
-    }
-    if (unmatched.isNotEmpty) map[orgs.first]!.addAll(unmatched);
-    return map.entries.toList();
+    return BranchChainResolver.groupBranchesByChain(
+      retailChainId: event.retailChainId,
+      retailChainName: event.retailChainName,
+      branchIds: event.branchIds,
+      branchNames: event.branchNames,
+      dbBranches: _dbBranches,
+      unknownToAllChains: false,
+    ).entries.toList();
   }
 
   Widget _buildOrganizationTile({

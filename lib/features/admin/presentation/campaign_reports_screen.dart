@@ -20,6 +20,7 @@ import '../domain/event_model.dart';
 import '../../../core/utils/file_download_helper.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
 import '../../../core/utils/slug_utils.dart';
+import '../../../core/utils/branch_chain_resolver.dart';
 import '../../../core/widgets/portal_screen_header_card.dart';
 import 'widgets/branch_chain_analytics_charts.dart';
 import '../../../core/utils/responsive.dart';
@@ -3215,63 +3216,6 @@ class _CampaignEventDetailsCardState extends ConsumerState<_CampaignEventDetails
     return parts.isNotEmpty ? parts : [rawChainName.trim()];
   }
 
-  bool _isBranchBelongingToChain({
-    required String branchStr,
-    required String targetChain,
-    required List<BranchModel> dbBranches,
-    required List<String> allChainNames,
-  }) {
-    if (allChainNames.length <= 1) return true;
-
-    final normTargetChain = targetChain.trim().toLowerCase();
-    final normTargetCanonical =
-        ChainProductsIntelligenceService.normalizeRetailChain(targetChain).toLowerCase();
-
-    // 1. Check in Firestore dbBranches
-    final matchedDbBranch = dbBranches.where((dbB) {
-      return _CampaignReportsScreenState._isBranchMatch(branchStr, dbB.branchName);
-    }).firstOrNull;
-
-    if (matchedDbBranch != null) {
-      final dbChain = matchedDbBranch.retailChainName.trim().toLowerCase();
-      final dbCanonical =
-          ChainProductsIntelligenceService.normalizeRetailChain(dbChain).toLowerCase();
-      if (dbChain.contains(normTargetChain) ||
-          normTargetChain.contains(dbChain) ||
-          dbCanonical == normTargetCanonical) {
-        return true;
-      }
-    }
-
-    // 2. String containment heuristic
-    final normBranch = branchStr.trim().toLowerCase();
-    if (normBranch.contains(normTargetChain) || normBranch.contains(normTargetCanonical)) {
-      return true;
-    }
-
-    // 3. Check if it matches any OTHER chain explicitly
-    bool matchesOther = false;
-    for (final other in allChainNames) {
-      if (other == targetChain) continue;
-      final otherNorm = other.trim().toLowerCase();
-      final otherCanonical =
-          ChainProductsIntelligenceService.normalizeRetailChain(other).toLowerCase();
-      if (matchedDbBranch != null) {
-        final dbChain = matchedDbBranch.retailChainName.trim().toLowerCase();
-        if (dbChain.contains(otherNorm) || otherNorm.contains(dbChain) || dbChain == otherNorm) {
-          matchesOther = true;
-          break;
-        }
-      }
-      if (normBranch.contains(otherNorm) || normBranch.contains(otherCanonical)) {
-        matchesOther = true;
-        break;
-      }
-    }
-
-    return !matchesOther;
-  }
-
   String? _getChainNameForBranch(
     String branch,
     Map<String, List<String>> chainToBranchesMap,
@@ -3307,18 +3251,15 @@ class _CampaignEventDetailsCardState extends ConsumerState<_CampaignEventDetails
       builder: (context, snapshot) {
         final dbBranches = snapshot.data ?? [];
 
-        // Group branches by chain
-        final Map<String, List<String>> chainToBranchesMap = {};
-        for (final chain in chainNames) {
-          chainToBranchesMap[chain] = rawBranches.where((b) {
-            return _isBranchBelongingToChain(
-              branchStr: b,
-              targetChain: chain,
-              dbBranches: dbBranches,
-              allChainNames: chainNames,
-            );
-          }).toList();
-        }
+        // Group branches by chain (ID-first; name matching only for legacy events)
+        final Map<String, List<String>> chainToBranchesMap =
+            BranchChainResolver.groupBranchesByChain(
+          retailChainId: event.retailChainId,
+          retailChainName: event.retailChainName,
+          branchIds: event.branchIds,
+          branchNames: rawBranches,
+          dbBranches: dbBranches,
+        );
 
         // Active filtered branches
         final List<String> activeBranches;
