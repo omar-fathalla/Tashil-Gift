@@ -16,6 +16,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/services/firebase_service.dart';
 import '../../../core/services/ai_receipt_service.dart';
 import '../../../core/services/receipt_save_failure.dart';
+import '../../../core/services/rep_session_guard.dart';
+import 'package:firebase_auth/firebase_auth.dart' show User;
 import '../../../core/services/ai_product_discovery_service.dart';
 import '../../../core/services/chain_products_intelligence_service.dart';
 import '../../../core/services/company_products_service.dart';
@@ -101,10 +103,45 @@ class _ClientReceiptUploadScreenState
       _isLoadingEvent = false;
     }
     _subscribeToLiveEvent();
+    _watchRepSession();
+  }
+
+  StreamSubscription<User?>? _authSubscription;
+  bool _restoringSession = false;
+
+  /// 2.0.148: if another tab (e.g. partner portal) swaps or clears the shared
+  /// Firebase identity, silently return this rep screen to anonymous.
+  void _watchRepSession() {
+    try {
+      final auth = ref.read(firebaseAuthProvider);
+      _authSubscription = auth.authStateChanges().listen((user) {
+        if (user != null && user.isAnonymous) return;
+        _restoreRepSession();
+      }, onError: (Object e) => debugPrint('Rep session watch error: $e'));
+    } catch (e) {
+      debugPrint('Rep session watch unavailable: $e');
+    }
+  }
+
+  Future<bool> _restoreRepSession({bool forceRefresh = false}) async {
+    if (_restoringSession) return false;
+    _restoringSession = true;
+    try {
+      return await ensureRepAnonymousSession(
+        ref.read(firebaseAuthProvider),
+        forceRefresh: forceRefresh,
+      );
+    } catch (e) {
+      debugPrint('Rep session restore failed: $e');
+      return false;
+    } finally {
+      _restoringSession = false;
+    }
   }
 
   @override
   void dispose() {
+    _authSubscription?.cancel();
     _eventSubscription?.cancel();
     _customerPhoneController.dispose();
     _customerNameController.dispose();
@@ -711,7 +748,8 @@ class _ClientReceiptUploadScreenState
     );
   }
 
-  Future<void> _submitAndValidateReceipt() async {
+  Future<void> _submitAndValidateReceipt({bool isSessionRetry = false}) async {
+    var retryAfterSessionRestore = false;
     if (_receiptImages.isEmpty) {
       _showIssue(ReceiptIssueKind.noImage);
       return;
@@ -737,6 +775,8 @@ class _ClientReceiptUploadScreenState
     });
 
     try {
+      // 2.0.148: make sure this tab still holds an anonymous rep session.
+      await _restoreRepSession();
       // 1. Check event active dates if single focused campaign mode
       if (!isMultiScan && _activeEvent != null) {
         if (_activeEvent!.isExpired) {
@@ -1031,7 +1071,17 @@ class _ClientReceiptUploadScreenState
       }
 
       final candidateReceiptNumber = result.receiptNumber.trim();
-      if (candidateReceiptNumber.isNotEmpty) {
+      // 2.0.148: never save a receipt without a readable number (it would
+      // collide on rcpt_{campaignId}_UNKNOWN). Ask for a clearer photo.
+      if (isUnusableReceiptNumber(candidateReceiptNumber)) {
+        _showIssue(
+          ReceiptIssueKind.unreadable,
+          subtitle: _isAr ? kUnreadableReceiptNumberAr : 'The receipt number could not be read. Retake a clear photo showing the full receipt number.',
+          onPrimary: _clearPhotosForRetake,
+        );
+        return;
+      }
+      {
         final duplicateCheck =
             await ReceiptDeduplicationHelper.checkReceiptDuplicate(
               firestore: firestore,
@@ -1867,6 +1917,12 @@ class _ClientReceiptUploadScreenState
     } catch (e, stack) {
       debugPrint('Receipt processing error: $e\n$stack');
       if (mounted) {
+        // 2.0.148: one silent retry after restoring the anonymous session.
+        if (!isSessionRetry && isRepSessionError(e) && _receiptImages.isNotEmpty) {
+          await _restoreRepSession(forceRefresh: true);
+          retryAfterSessionRestore = true;
+          return;
+        }
         final kind = classifyReceiptException(e);
         if (kind == ReceiptIssueKind.permission) {
           final f = diagnoseReceiptSaveFailure(
@@ -1878,6 +1934,7 @@ class _ClientReceiptUploadScreenState
         }
         _showIssue(
           kind,
+          errorCode: repErrorCode(e),
           onPrimary: _receiptImages.isNotEmpty
               ? _submitAndValidateReceipt
               : null,
@@ -1890,6 +1947,9 @@ class _ClientReceiptUploadScreenState
           _aiPhase = 0;
           _aiPhaseText = '';
         });
+      }
+      if (retryAfterSessionRestore && mounted) {
+        unawaited(_submitAndValidateReceipt(isSessionRetry: true));
       }
     }
   }
@@ -1911,6 +1971,7 @@ class _ClientReceiptUploadScreenState
     List<ReceiptIssueDetail> details = const [],
     List<String> extraReasons = const [],
     String? subtitle,
+    String? errorCode,
     VoidCallback? onPrimary,
   }) {
     if (!mounted) return;
@@ -1923,6 +1984,7 @@ class _ClientReceiptUploadScreenState
       details: details,
       extraReasons: extraReasons.where((r) => r.trim().isNotEmpty).toList(),
       subtitleOverride: subtitle,
+      errorCode: errorCode,
       onPrimary:
           onPrimary ??
           (spec.action == ReceiptIssueAction.retake
@@ -1993,6 +2055,7 @@ class _ClientReceiptUploadScreenState
     _showIssue(
       kind,
       subtitle: receiptSaveFailureMessage(f, branch: branch),
+      errorCode: f.code,
       onPrimary: onPrimary,
     );
   }

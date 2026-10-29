@@ -156,6 +156,7 @@ Future<void> showReceiptIssueDialog({
   List<ReceiptIssueDetail> details = const [],
   List<String> extraReasons = const [],
   String? subtitleOverride,
+  String? errorCode,
   VoidCallback? onPrimary,
 }) {
   return showDialog<void>(
@@ -167,6 +168,7 @@ Future<void> showReceiptIssueDialog({
       details: details,
       extraReasons: extraReasons,
       subtitleOverride: subtitleOverride,
+      errorCode: errorCode,
       onPrimary: onPrimary,
     ),
   );
@@ -179,6 +181,8 @@ class ReceiptIssueDialog extends StatelessWidget {
   final List<ReceiptIssueDetail> details;
   final List<String> extraReasons;
   final String? subtitleOverride;
+  /// 2.0.148: raw error code shown small under the hint (for support).
+  final String? errorCode;
   final VoidCallback? onPrimary;
 
   const ReceiptIssueDialog({
@@ -189,6 +193,7 @@ class ReceiptIssueDialog extends StatelessWidget {
     this.details = const [],
     this.extraReasons = const [],
     this.subtitleOverride,
+    this.errorCode,
     this.onPrimary,
   });
 
@@ -257,6 +262,15 @@ class ReceiptIssueDialog extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (errorCode != null && errorCode!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    '${ar ? 'رمز الخطأ' : 'Error code'}: ${errorCode!.trim()}',
+                    key: const Key('receipt_issue_error_code'),
+                    textAlign: TextAlign.center,
+                    style: font(fontSize: 11, color: cs.outline),
+                  ),
+                ],
                 if (details.isNotEmpty) ...[
                   const SizedBox(height: 14),
                   Container(
