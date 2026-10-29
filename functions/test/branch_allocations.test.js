@@ -26,3 +26,31 @@ test("bulk edit cannot erase handed-out gifts", () => {
   assert.doesNotThrow(() => assertConsumedKept(old, [{ giftId: "g", name: "n", branchName: "B", allocatedQuantity: 60, remainingQuantity: 34 }]));
   assert.throws(() => assertConsumedKept(old, [{ giftId: "g", name: "n", branchName: "B", allocatedQuantity: 60, remainingQuantity: 60 }]));
 });
+
+test("only changed rows are validated, against real handed-out (screen) count", () => {
+  const { buildHandedOut } = _test;
+  const B = "فرع عجمي ستار (الإسكندرية)";
+  const old = [
+    { giftId: "lb", name: "lunch box", branchName: B, allocatedQuantity: 10, remainingQuantity: 0 },
+    { giftId: "kn", name: "سكينة", branchName: B, allocatedQuantity: 23, remainingQuantity: 5 },
+  ];
+  const handed = buildHandedOut([
+    { branch_detected: B, claimed_gifts: [{ giftId: "lb", giftName: "lunch box", quantity: 1 }] },
+    ...Array.from({ length: 29 }, () => ({ branch_detected: B, claimed_gifts: [{ giftId: "kn", giftName: "سكينة", quantity: 1 }] })),
+  ], 0);
+  // lunch box 10 -> 6 (stored consumed 10 is stale; real handed out = 1): allowed.
+  const w = assertConsumedKept(old, [
+    { giftId: "lb", name: "lunch box", branchName: B, allocatedQuantity: 6, remainingQuantity: 0 },
+    { giftId: "kn", name: "سكينة", branchName: B, allocatedQuantity: 23, remainingQuantity: 5 },
+  ], handed);
+  // untouched سكينة (23 < 29 handed out) reported, not blocking
+  assert.equal(w.length, 1);
+  assert.equal(w[0].name, "سكينة");
+  // changed row below real handed out is rejected
+  assert.throws(() => assertConsumedKept(old, [
+    { giftId: "kn", name: "سكينة", branchName: B, allocatedQuantity: 25, remainingQuantity: 0 },
+  ], handed));
+  assert.doesNotThrow(() => assertConsumedKept(old, [
+    { giftId: "kn", name: "سكينة", branchName: B, allocatedQuantity: 29, remainingQuantity: 0 },
+  ], handed));
+});

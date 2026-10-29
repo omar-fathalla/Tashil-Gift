@@ -638,10 +638,6 @@ class CompanyGiftsService {
 
           final claimed = claimedCache[cellKey] ?? claimedCache['${event.id}_${branchName}_${gift.giftName}'] ?? 0;
 
-          if (newAllocatedQuantity < claimed) {
-            throw Exception('لا يمكن تعيين رصيد فرع ($branchName) لصنف (${gift.giftName}) أقل من المنصرف ($claimed قطعة)');
-          }
-
           final targetBranchNorm = branchName.trim().toLowerCase();
 
           // Find existing prize in event
@@ -689,6 +685,12 @@ class CompanyGiftsService {
           if (oldAllocated == newAllocatedQuantity && matchedIndex != -1) {
             // No change needed
             continue;
+          }
+
+          // Only rows the user changed are checked; untouched rows with old
+          // inconsistent data must not block saving the others.
+          if (newAllocatedQuantity < claimed) {
+            throw Exception('لا يمكن تعيين رصيد فرع ($branchName) لصنف (${gift.giftName}) أقل من المنصرف ($claimed قطعة)');
           }
 
           final delta = newAllocatedQuantity - oldAllocated;

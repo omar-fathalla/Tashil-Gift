@@ -71,25 +71,124 @@ function cleanPrizes(list) {
 
 const prizeKey = (p) => `${s(p.branchName).toLowerCase()}|${s(p.giftId || p.name).toLowerCase()}`;
 
+const normBranch = (v) => s(v).toLowerCase()
+  .replace(/[\u064B-\u065F\u0670\u0640]/g, "").replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي")
+  .replace(/\s*\([^)]*\)|\s*\[[^\]]*\]/g, " ").replace(/^\s*فرع\s+/, "").replace(/\s+/g, " ").trim();
+
+function branchMatches(a, b) {
+  const x = normBranch(a), y = normBranch(b);
+  if (!x || !y) return false;
+  return x === y || (x.length >= 3 && y.includes(x)) || (y.length >= 3 && x.includes(y));
+}
+
 /**
- * Bulk edits keep the handed-out amount (allocated - remaining) of every
- * branch prize: a balance edit cannot erase gifts already given out.
+ * Handed-out counts per receipt branch, built like the balances screen's
+ * "صرف" column: claimed_gifts, else linkedGifts + prizes_won + prize_won.
+ * Returns [{branch, gifts: Map<lowerKey, qty>}].
  */
-function assertConsumedKept(oldPrizes, newPrizes) {
-  const consumed = new Map();
-  for (const p of oldPrizes || []) {
-    if (!p || !s(p.branchName)) continue;
-    const used = (Number(p.allocatedQuantity) || 0) - (Number(p.remainingQuantity) || 0);
-    consumed.set(prizeKey(p), Math.max(used, consumed.get(prizeKey(p)) || 0));
-  }
-  for (const p of newPrizes) {
-    if (!s(p.branchName)) continue;
-    const before = consumed.get(prizeKey(p)) || 0;
-    if (p.allocatedQuantity - p.remainingQuantity < before) {
-      throw new HttpsError("failed-precondition",
-        `لا يمكن تعيين رصيد فرع (${p.branchName}) لصنف (${p.name}) أقل من المنصرف (${before} قطعة)`);
+function buildHandedOut(txDocs, cutoffMs) {
+  const byBranch = new Map();
+  for (const d of txDocs) {
+    if (cutoffMs) {
+      const t = d.timestamp && typeof d.timestamp.toMillis === "function" ? d.timestamp.toMillis()
+        : (typeof d.timestamp === "string" ? Date.parse(d.timestamp) : NaN);
+      if (Number.isFinite(t) && t <= cutoffMs) continue;
+    }
+    const br = s(d.canonical_branch || d.branch_detected || d.branchName || d.branch);
+    if (!br) continue;
+    const key = normBranch(br);
+    if (!byBranch.has(key)) byBranch.set(key, { branch: br, gifts: new Map() });
+    const m = byBranch.get(key).gifts;
+    const add = (k, q) => { k = s(k).toLowerCase(); if (k) m.set(k, (m.get(k) || 0) + q); };
+    const cg = Array.isArray(d.claimed_gifts) ? d.claimed_gifts : [];
+    if (cg.length) {
+      for (const g of cg) {
+        if (!g || typeof g !== "object") continue;
+        const q = Math.trunc(Number(g.quantity ?? g.count ?? 1)) || 0;
+        add(g.giftId || g.gift_id, q); add(g.giftName || g.name, q);
+      }
+    } else {
+      const lg = Array.isArray(d.linkedGifts) ? d.linkedGifts : (Array.isArray(d.linked_gifts) ? d.linked_gifts : []);
+      for (const g of lg) {
+        if (!g || typeof g !== "object") continue;
+        const q = Math.trunc(Number(g.quantity ?? 1)) || 0;
+        add(g.giftId || g.gift_id, q); add(g.giftName || g.name, q);
+      }
+      for (const pw of Array.isArray(d.prizes_won) ? d.prizes_won : []) add(pw, 1);
+      const one = s(d.prize_won || d.prizeName);
+      if (one && one !== "null" && one !== "لم يفز") add(one, 1);
     }
   }
+  return [...byBranch.values()];
+}
+
+/** Handed-out quantity of one branch prize, same lookup as the screen. */
+function handedOutFor(handed, p) {
+  const id = s(p.giftId).toLowerCase(), name = s(p.name).toLowerCase();
+  let total = 0;
+  for (const b of handed) {
+    if (!branchMatches(b.branch, p.branchName)) continue;
+    const g = b.gifts;
+    if (id && g.has(id)) total += g.get(id);
+    else if (name && g.has(name)) total += g.get(name);
+    else if (name) for (const [k, v] of g) if (k.includes(name) || name.includes(k)) total += v;
+  }
+  return total;
+}
+
+/**
+ * Only rows the caller actually changed are validated. A changed row is
+ * rejected only when its new allocation is below the quantity really handed
+ * out (receipts, as on the screen), or when it would erase handed-out stock
+ * (allocated - remaining below what is provably handed out). Untouched rows
+ * with old inconsistent data are returned as warnings instead of blocking.
+ * `handed` null = no receipt data: fall back to the stored consumed amount.
+ */
+function assertConsumedKept(oldPrizes, newPrizes, handed = null) {
+  const old = new Map();
+  for (const p of oldPrizes || []) {
+    if (!p || !s(p.branchName)) continue;
+    if (!old.has(prizeKey(p))) old.set(prizeKey(p), p);
+  }
+  const warnings = [];
+  for (const p of newPrizes) {
+    if (!s(p.branchName)) continue;
+    const o = old.get(prizeKey(p));
+    const oAlloc = o ? Number(o.allocatedQuantity) || 0 : 0;
+    const oRem = o ? Number(o.remainingQuantity) || 0 : 0;
+    const stored = Math.max(oAlloc - oRem, 0);
+    const real = handed ? handedOutFor(handed, p) : stored;
+    const unchanged = o && oAlloc === p.allocatedQuantity && oRem === p.remainingQuantity;
+    if (unchanged) {
+      if (p.allocatedQuantity < real) warnings.push({ branchName: p.branchName, name: p.name, allocated: p.allocatedQuantity, handedOut: real });
+      continue;
+    }
+    if (p.allocatedQuantity < real) {
+      throw new HttpsError("failed-precondition",
+        `لا يمكن تعيين رصيد فرع (${p.branchName}) لصنف (${p.name}) أقل من المنصرف (${real} قطعة)`);
+    }
+    if (p.allocatedQuantity - p.remainingQuantity < Math.min(stored, real)) {
+      throw new HttpsError("failed-precondition",
+        `لا يمكن زيادة المتبقي لفرع (${p.branchName}) لصنف (${p.name}) بما يمحو المنصرف (${Math.min(stored, real)} قطعة)`);
+    }
+  }
+  return warnings;
+}
+
+async function loadHandedOut(db, eventId) {
+  const [a, b, st] = await Promise.all([
+    db.collection("receipts_transactions").where("campaignId", "==", eventId).get(),
+    db.collection("receipts_transactions").where("event_id", "==", eventId).get(),
+    db.collection("campaign_stock_settlements").where("eventId", "==", eventId).get(),
+  ]);
+  const seen = new Set(); const docs = [];
+  for (const d of [...a.docs, ...b.docs]) if (!seen.has(d.id)) { seen.add(d.id); docs.push(d.data()); }
+  let cutoff = 0;
+  for (const d of st.docs) {
+    const t = d.get("settledAt"); const ms = t && typeof t.toMillis === "function" ? t.toMillis() : 0;
+    if (ms > cutoff) cutoff = ms;
+  }
+  return buildHandedOut(docs, cutoff);
 }
 
 function cleanMovement(m, slug, types, performedBy) {
@@ -170,6 +269,8 @@ async function bulk(db, data, slug, performedBy) {
     return { eventId, prizes, branchNames };
   });
 
+  const handedList = await Promise.all(items.map((it) => loadHandedOut(db, it.eventId)));
+  const warnings = [];
   await db.runTransaction(async (tx) => {
     const refs = items.map((it) => db.collection("events").doc(it.eventId));
     const snaps = await Promise.all(refs.map((r) => tx.get(r)));
@@ -178,7 +279,7 @@ async function bulk(db, data, slug, performedBy) {
       if (s(snap.get("companySlug")).toLowerCase() !== slug) {
         throw new HttpsError("permission-denied", "الحملة لا تتبع هذه الشركة.");
       }
-      assertConsumedKept(snap.get("allocatedPrizes"), items[i].prizes);
+      warnings.push(...assertConsumedKept(snap.get("allocatedPrizes"), items[i].prizes, handedList[i]));
     });
     items.forEach((it, i) => {
       const patch = { allocatedPrizes: it.prizes };
@@ -188,7 +289,7 @@ async function bulk(db, data, slug, performedBy) {
     for (const m of cleanMoves) tx.set(db.collection("gift_stock_movements").doc(), m);
   });
   await syncAvailable(db, slug).catch(() => {});
-  return { ok: true, updatedEvents: items.length, movements: cleanMoves.length };
+  return { ok: true, updatedEvents: items.length, movements: cleanMoves.length, warnings: warnings.slice(0, 100) };
 }
 
 async function settlement(db, data, slug, performedBy) {
@@ -251,4 +352,4 @@ async function updateBranchAllocationsHandler(db, request) {
   throw bad("action is invalid.");
 }
 
-module.exports = { updateBranchAllocationsHandler, _test: { cleanPrize, assertConsumedKept, authorize } };
+module.exports = { updateBranchAllocationsHandler, _test: { cleanPrize, assertConsumedKept, authorize, buildHandedOut } };
