@@ -244,11 +244,14 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
       _isConfirming = true;
     });
 
+    bool claimApplied = false;
+    bool claimSaved = false;
     try {
       audioService.playWinFanfare();
 
       _remainingChances = (_remainingChances - 1).clamp(0, 999);
       _wonPrizes.add(selectedPrize);
+      claimApplied = true;
       Future<WhatsAppGatewayResult?>? whatsappFuture;
 
       if (!widget.isDemo && widget.transactionId.isNotEmpty) {
@@ -275,6 +278,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
             }).toList(),
           },
         );
+        claimSaved = true;
 
         if (_remainingChances == 0 && !_whatsappSent) {
           _whatsappSent = true;
@@ -323,6 +327,12 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
         });
       }
     } catch (e) {
+      // The claim was not saved: undo the local pick so the counters stay in
+      // step with the server (otherwise "remaining" drops on every failed try).
+      if (claimApplied && !claimSaved) {
+        if (_wonPrizes.isNotEmpty) _wonPrizes.removeLast();
+        _remainingChances = (_remainingChances + 1).clamp(0, 999);
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

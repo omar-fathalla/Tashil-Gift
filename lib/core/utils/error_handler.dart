@@ -1,3 +1,4 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 /// AppErrorHandler provides centralized, user-friendly Arabic error messaging
@@ -28,6 +29,12 @@ class AppErrorHandler {
         default:
           return error.message ?? 'فشل تسجيل الدخول (${error.code}).';
       }
+    }
+
+    // Cloud Functions: the server already sends a specific Arabic message.
+    if (error is FirebaseFunctionsException) {
+      final msg = (error.message ?? '').trim();
+      if (RegExp(r'[\u0600-\u06FF]').hasMatch(msg)) return msg;
     }
 
     // Firestore exceptions

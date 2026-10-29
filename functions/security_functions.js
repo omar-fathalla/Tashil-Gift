@@ -373,9 +373,12 @@ async function applyCampaignPrizeClaim(db, input) {
     for (const decrement of decrements) {
       const index = findBestPrizeMatchIndex(prizes, decrement.prizeIdentifier, decrement);
       if (index === -1) {
+        // failed-precondition (not not-found): the campaign exists but has no
+        // stock row for this gift, so the client must not treat it as a
+        // missing function / missing document.
         throw new HttpsError(
-          "not-found",
-          `No allocated prize matches ${decrement.prizeIdentifier}.`,
+          "failed-precondition",
+          `لا يوجد رصيد مخصص لهدية (${decrement.prizeIdentifier}) في هذه الحملة/الفرع. يرجى تغذية أرصدة الفروع من شاشة الأرصدة ثم إعادة المحاولة.`,
         );
       }
       const remaining = Number(prizes[index].remainingQuantity || 0);
