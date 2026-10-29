@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../../core/utils/receipt_branch_resolver.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -742,6 +743,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
         'store_chain_detected': result.storeChainDetected,
         'branch_detected': result.branchDetected,
+        'branch_id': ReceiptBranchResolver.resolve(activeEvent, result.branchDetected).id ?? '',
         'is_branch_matched': result.isBranchMatched,
         'is_handwritten': result.isHandwritten,
         'is_thermal_pos_receipt': result.isThermalPosReceipt,
@@ -2093,6 +2095,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
         'store_chain_detected': result.storeChainDetected,
         'branch_detected': result.branchDetected,
+        'branch_id': ReceiptBranchResolver.resolve(activeEvent, result.branchDetected).id ?? '',
         'is_branch_matched': result.isBranchMatched,
         'is_handwritten': result.isHandwritten,
         'is_thermal_pos_receipt': result.isThermalPosReceipt,

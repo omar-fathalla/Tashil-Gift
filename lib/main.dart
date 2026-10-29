@@ -46,6 +46,16 @@ void main() async {
   // Field reps never see a login form. Anonymous Auth is their only session,
   // so it is created only on public link routes, not on admin visits (M4).
   try {
+    if (routeNeedsAnonymousSession(Uri.base)) {
+      // On web the persisted session is restored asynchronously; wait for it so
+      // a returning rep keeps the same anonymous uid (and their receipts).
+      await FirebaseAuth.instance
+          .authStateChanges()
+          .first
+          .timeout(const Duration(seconds: 5));
+    }
+  } catch (_) {}
+  try {
     if (FirebaseAuth.instance.currentUser == null &&
         routeNeedsAnonymousSession(Uri.base)) {
       await FirebaseAuth.instance

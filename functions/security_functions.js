@@ -140,6 +140,48 @@ function findBestPrizeMatchIndex(prizes, prizeIdentifier, options) {
   return bestIndex;
 }
 
+/**
+ * Picks the stock row for one decrement. When the client sent no branch, the
+ * receipt's branch_id / branch_detected is used. If the gift is still held by
+ * several branch-specific rows and no general row exists, refuse instead of
+ * silently taking the first branch's stock.
+ */
+function resolvePrizeIndexForDecrement(prizes, decrement, receipt) {
+  const rec = receipt || {};
+  let branchId = String(decrement.branchId || "").trim();
+  if (!branchId) branchId = String(rec.branch_id || "").trim();
+  if (!branchId) branchId = String(rec.branch_detected || rec.branch || "").trim();
+  const options = Object.assign({}, decrement, { branchId });
+  const index = findBestPrizeMatchIndex(prizes, decrement.prizeIdentifier, options);
+  if (index === -1) return { index, branchId };
+  const picked = prizes[index] || {};
+  const pickedBranchKey = String(picked.branchId || picked.branchName || "").trim();
+  const sameGift = (p) => {
+    const gid = String(p.giftId || "").trim();
+    if (gid && gid === String(picked.giftId || "").trim()) return true;
+    return !gid && normalizePrizeText(p.name) === normalizePrizeText(picked.name);
+  };
+  const giftRows = prizes.filter(sameGift);
+  const hasGeneral = giftRows.some((p) => !String(p.branchId || p.branchName || "").trim());
+  const branchKeys = new Set(giftRows
+    .map((p) => String(p.branchId || p.branchName || "").trim())
+    .filter(Boolean));
+  if (pickedBranchKey && !hasGeneral && branchKeys.size > 1) {
+    const branchNorm = normalizePrizeText(branchId);
+    const pickedIsBranch = branchId && (
+      String(picked.branchId || "").trim() === branchId ||
+      String(picked.branchName || "").trim() === branchId ||
+      (branchNorm && normalizePrizeText(picked.branchName) === branchNorm));
+    if (!pickedIsBranch) {
+      throw new HttpsError(
+        "failed-precondition",
+        "تعذر تحديد فرع الفاتورة لخصم الهدية (أكثر من فرع يحمل نفس الهدية). يرجى اختيار الفرع ثم إعادة المحاولة.",
+      );
+    }
+  }
+  return { index, branchId };
+}
+
 function sanitizePatch(patch) {
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) return {};
   const out = {};
@@ -373,7 +415,13 @@ async function applyCampaignPrizeClaim(db, input) {
       : [];
     const applied = [];
     for (const decrement of decrements) {
-      const index = findBestPrizeMatchIndex(prizes, decrement.prizeIdentifier, decrement);
+      const hint = Object.assign({}, receipt || {});
+      for (const k of ["branch_id", "branch_detected"]) {
+        if (typeof patch[k] === "string" && patch[k].trim()) hint[k] = patch[k];
+      }
+      const resolved = resolvePrizeIndexForDecrement(prizes, decrement, hint);
+      const index = resolved.index;
+      if (!decrement.branchId && resolved.branchId) decrement.branchId = resolved.branchId;
       if (index === -1) {
         // failed-precondition (not not-found): the campaign exists but has no
         // stock row for this gift, so the client must not treat it as a
@@ -438,4 +486,10 @@ exports.decrementCampaignPrize = onCall(callableOptions, async (request) => {
       token,
     },
   });
+});
+
+// Non-enumerable so index.js Object.assign does not expose it as a function group.
+Object.defineProperty(exports, "_testing", {
+  value: { findBestPrizeMatchIndex, resolvePrizeIndexForDecrement },
+  enumerable: false,
 });

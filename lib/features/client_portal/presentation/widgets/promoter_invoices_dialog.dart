@@ -116,6 +116,12 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     } else if (widget.event.companySlug.isNotEmpty) {
       query = query.where('companySlug', isEqualTo: widget.event.companySlug.trim());
     }
+    // Anonymous field reps may only read receipts they submitted
+    // (firestore.rules: submittedByUid == request.auth.uid).
+    final user = ref.read(firebaseAuthProvider).currentUser;
+    if (user != null && user.isAnonymous) {
+      query = query.where('submittedByUid', isEqualTo: user.uid);
+    }
     _invoicesStream = query.snapshots();
   }
 
@@ -782,6 +788,16 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                     ],
                   ],
                 ),
+                if (ref.read(firebaseAuthProvider).currentUser?.isAnonymous ?? false)
+                  Text(
+                    Directionality.of(context) == TextDirection.rtl
+                        ? 'تظهر فواتيرك المرفوعة من هذا الجهاز فقط (السجل محفوظ على هذا الجهاز)'
+                        : 'Showing receipts uploaded from this device (history saved on this device)',
+                    key: const Key('promoter_invoices_device_note'),
+                    style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 Text(
                   '${widget.event.eventName} — ${widget.event.targetCompany}',
                   style: GoogleFonts.cairo(

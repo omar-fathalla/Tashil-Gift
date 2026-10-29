@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../../core/utils/receipt_branch_resolver.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -15,7 +16,6 @@ import '../../../core/services/ai_receipt_service.dart';
 import '../../../core/services/ai_product_discovery_service.dart';
 import '../../../core/services/chain_products_intelligence_service.dart';
 import '../../../core/services/company_products_service.dart';
-import '../../../core/services/company_gifts_service.dart';
 import '../../../core/services/retail_chains_service.dart';
 import '../../../core/utils/error_handler.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
@@ -1159,6 +1159,7 @@ class _ClientReceiptUploadScreenState
                 initialAiMetadata: {
                   'store_chain_detected': result.storeChainDetected,
                   'branch_detected': result.branchDetected,
+                  'branch_id': ReceiptBranchResolver.resolve(_activeEvent ?? widget.event, result.branchDetected).id ?? '',
                   'receipt_date': result.receiptDate,
                   'analysis_duration_seconds': result.durationSeconds,
                   'analysis_duration_ms': result.durationMs,
@@ -1452,6 +1453,7 @@ class _ClientReceiptUploadScreenState
             .toList(),
         'store_chain_detected': result.storeChainDetected,
         'branch_detected': result.branchDetected,
+        'branch_id': ReceiptBranchResolver.resolve(_activeEvent ?? widget.event, result.branchDetected).id ?? '',
         'is_branch_matched': result.isBranchMatched,
         'is_handwritten': result.isHandwritten,
         'is_thermal_pos_receipt': result.isThermalPosReceipt,
@@ -1537,55 +1539,11 @@ class _ClientReceiptUploadScreenState
       // Route customer to prize game based on event settings or total purchase value
       final currentEvent = _activeEvent ?? widget.event;
       final currentEventId = currentEvent?.id ?? '';
-      // Smart branch ID resolution matching AI-detected branch name with campaign branches (AIR-80 & Rule 8)
-      String? resolvedBranchId;
-      String resolvedCanonicalBranchName = result.branchDetected.trim();
-      if (currentEvent != null && currentEvent.branchIds.isNotEmpty) {
-        final detectedBranchClean = CompanyGiftsService.normalizeBranchToken(
-          result.branchDetected,
-        );
-        if (detectedBranchClean.isNotEmpty) {
-          for (int i = 0; i < currentEvent.branchNames.length; i++) {
-            final bName = CompanyGiftsService.normalizeBranchToken(
-              currentEvent.branchNames[i],
-            );
-            if (bName.isNotEmpty &&
-                (bName == detectedBranchClean ||
-                    bName.contains(detectedBranchClean) ||
-                    detectedBranchClean.contains(bName))) {
-              if (i < currentEvent.branchIds.length) {
-                resolvedBranchId = currentEvent.branchIds[i];
-                resolvedCanonicalBranchName = currentEvent.branchNames[i];
-                break;
-              }
-            }
-          }
-          if (resolvedBranchId == null) {
-            for (final p in currentEvent.allocatedPrizes) {
-              final pBranchName = CompanyGiftsService.normalizeBranchToken(
-                p.branchName,
-              );
-              if (pBranchName.isNotEmpty &&
-                  (pBranchName == detectedBranchClean ||
-                      pBranchName.contains(detectedBranchClean) ||
-                      detectedBranchClean.contains(pBranchName))) {
-                resolvedBranchId = p.branchId.isNotEmpty
-                    ? p.branchId
-                    : p.branchName;
-                if (p.branchName.trim().isNotEmpty) {
-                  resolvedCanonicalBranchName = p.branchName.trim();
-                }
-                break;
-              }
-            }
-          }
-        }
-        if (resolvedBranchId == null &&
-            (detectedBranchClean.isEmpty ||
-                currentEvent.branchIds.length == 1)) {
-          resolvedBranchId = currentEvent.branchIds.first;
-        }
-      }
+      // Smart branch ID resolution (AIR-80 & Rule 8). No first-branch guess.
+      final branchResolution =
+          ReceiptBranchResolver.resolve(currentEvent, result.branchDetected);
+      final String? resolvedBranchId = branchResolution.id;
+      final String resolvedCanonicalBranchName = branchResolution.name;
 
       final branchIdentifier =
           (resolvedCanonicalBranchName.isNotEmpty
@@ -3476,6 +3434,7 @@ class _ClientReceiptUploadScreenState
             .toList(),
         'store_chain_detected': result.storeChainDetected,
         'branch_detected': result.branchDetected,
+        'branch_id': ReceiptBranchResolver.resolve(_activeEvent ?? widget.event, result.branchDetected).id ?? '',
         'is_branch_matched': result.isBranchMatched,
         'is_handwritten': result.isHandwritten,
         'is_thermal_pos_receipt': result.isThermalPosReceipt,
