@@ -25,6 +25,10 @@ const LIMITS = {
     { name: "day", windowMs: DAY, max: 300 },
   ],
   // Winner WhatsApp sends (sendWinnerWhatsApp) per uid/IP and per company.
+  branchAlloc: [
+    { name: "min", windowMs: MINUTE, max: 20 },
+    { name: "day", windowMs: DAY, max: 500 },
+  ],
   winnerWa: [
     { name: "min", windowMs: MINUTE, max: 10 },
     { name: "day", windowMs: DAY, max: 200 },

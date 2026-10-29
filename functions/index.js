@@ -437,6 +437,11 @@ exports.sendWinnerWhatsApp = onCall(
   (request) => sendWinnerWhatsAppHandler(db, request, wahaApiKey.value()),
 );
 
+const { updateBranchAllocationsHandler } = require("./branch_allocations");
+/** Branch balances save + weekend settlement (company portal ops users and staff). */
+exports.updateBranchAllocations = onCall(callableOptions, (request) =>
+  updateBranchAllocationsHandler(db, request));
+
 const WAHA_PROXY_ALLOWED_ORIGINS = new Set([
   "https://tashil-gift.web.app",
   "https://tashil-gift.firebaseapp.com",

@@ -577,7 +577,10 @@ class CompanyGiftsService {
     if (slug.isEmpty || events.isEmpty) return 0;
 
     int totalUpdated = 0;
-    final batch = _firestore.batch();
+    // Writes go through the updateBranchAllocations callable (Admin SDK):
+    // company users cannot write events / gift_stock_movements directly.
+    final eventPayloads = <Map<String, dynamic>>[];
+    final movementPayloads = <Map<String, dynamic>>[];
 
     for (final event in events) {
       final eventRef = _firestore.collection('events').doc(event.id);
@@ -724,10 +727,9 @@ class CompanyGiftsService {
           totalUpdated++;
 
           if (delta != 0) {
-            final movementRef = _firestore.collection('gift_stock_movements').doc();
             final isIncrease = delta > 0;
             final movement = GiftStockMovement(
-              id: movementRef.id,
+              id: '',
               companySlug: slug,
               giftId: finalGiftId,
               giftName: finalGiftName,
@@ -746,7 +748,7 @@ class CompanyGiftsService {
               performedBy: performedBy.trim().isNotEmpty ? performedBy.trim() : 'مدير الشركة',
               timestamp: DateTime.now(),
             );
-            batch.set(movementRef, movement.toFirestore());
+            movementPayloads.add(Map<String, dynamic>.from(movement.toFirestore())..remove('timestamp'));
           }
         }
 
@@ -808,16 +810,21 @@ class CompanyGiftsService {
             updatedBranches.add(b);
           }
         }
-        batch.update(eventRef, {
+        eventPayloads.add({
+          'eventId': event.id,
           'allocatedPrizes': prizes.map((p) => p.toMap()).toList(),
           if (updatedBranches.isNotEmpty) 'branchNames': updatedBranches.toList(),
         });
       }
     }
 
-    if (totalUpdated > 0) {
-      await batch.commit();
-      await syncCompanyGiftsAvailableQuantities(slug);
+    if (totalUpdated > 0 && eventPayloads.isNotEmpty) {
+      await _callUpdateBranchAllocations({
+        'action': 'bulk',
+        'companySlug': slug,
+        'events': eventPayloads,
+        'movements': movementPayloads,
+      });
     }
 
     return totalUpdated;
@@ -1781,14 +1788,10 @@ class CompanyGiftsService {
       };
     }
 
-    // 1. Create settlement snapshot document in Firestore
-    final settlementRef = _firestore.collection('campaign_stock_settlements').doc();
+    // 1. Settlement snapshot (written server-side by updateBranchAllocations)
     final settlementData = {
-      'campaignId': event.id,
       'campaignName': event.eventName,
-      'companySlug': slug,
       'cycleTitle': cycleTitle.trim().isNotEmpty ? cycleTitle.trim() : 'تسوية دورة الويك إند',
-      'settledAt': FieldValue.serverTimestamp(),
       'settledBy': performedBy,
       'totalAllocatedBefore': totalAllocatedBefore,
       'totalClaimed': totalClaimed,
@@ -1796,7 +1799,6 @@ class CompanyGiftsService {
       'newAllocatedStock': newAllocatedQuota,
       'branchSnapshots': branchSnapshots,
     };
-    await settlementRef.set(settlementData);
 
     // 2. Update the event with the new wave quotas
     final List<AllocatedPrize> newPrizes = [];
@@ -1807,16 +1809,9 @@ class CompanyGiftsService {
       ));
     }
 
-    await eventRef.update({
-      'allocatedPrizes': newPrizes.map((p) => p.toMap()).toList(),
-      'lastSettlementId': settlementRef.id,
-      'lastSettledAt': FieldValue.serverTimestamp(),
-    });
-
-    // 3. Log audit entry in gift_stock_movements
-    final movementRef = _firestore.collection('gift_stock_movements').doc();
+    // 3. Audit entry in gift_stock_movements (reference = settlement id, set by server)
     final movement = GiftStockMovement(
-      id: movementRef.id,
+      id: '',
       companySlug: slug,
       giftId: event.id,
       giftName: cycleTitle,
@@ -1826,13 +1821,32 @@ class CompanyGiftsService {
       newTotal: newAllocatedQuota * branches.length * masterGifts.length,
       previousAvailable: totalReturned,
       newAvailable: newAllocatedQuota * branches.length * masterGifts.length,
-      reference: settlementRef.id,
+      reference: '',
       notes: 'تم اعتماد وإغلاق $cycleTitle (منصرف: $totalClaimed, مرتجع: $totalReturned, جديد: $newAllocatedQuota)',
       performedBy: performedBy,
       timestamp: DateTime.now(),
     );
-    await movementRef.set(movement.toFirestore());
+    final result = await _callUpdateBranchAllocations({
+      'action': 'settlement',
+      'companySlug': slug,
+      'eventId': event.id,
+      'allocatedPrizes': newPrizes.map((p) => p.toMap()).toList(),
+      'settlement': settlementData,
+      'movement': Map<String, dynamic>.from(movement.toFirestore())..remove('timestamp'),
+    });
+    return (result['settlementId'] ?? '').toString();
+  }
 
-    return settlementRef.id;
+  Future<Map<String, dynamic>> _callUpdateBranchAllocations(Map<String, dynamic> payload) async {
+    try {
+      final res = await FirebaseFunctions.instance
+          .httpsCallable('updateBranchAllocations')
+          .call(payload);
+      final data = res.data;
+      return data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+    } on FirebaseFunctionsException catch (e) {
+      final msg = (e.message ?? '').trim();
+      throw Exception(msg.isNotEmpty ? msg : e.code);
+    }
   }
 }
