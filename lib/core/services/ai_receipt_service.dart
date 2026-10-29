@@ -1450,8 +1450,8 @@ $rulesListFormatted
 $categoryPackagingGuard
 2. افحص بدقة أسماء الأصناف في الفاتورة مع مراعاة كافة الاختلافات الإملائية والطباعية في بونات الكاشير.
 3. [تجميع العروض المتزامنة (Multi-Offer Bundling)]: إذا اشترى العميل أصنافاً تحقق أكثر من عرض ترويجي مختلف في نفس الفاتورة، قم بتضمين كافة معرفات القواعد المطابقة في حقل (matchedRuleIds) كقائمة (مثل: ["rule_3", "rule_5"])، وجمع إجمالي قيمة المكافآت المستحقة في (matchedRewardAmount)، وكتابة ملخص الجوائز في (matchedRewardValue).
-4. في حال وجود أكثر من قاعدة لنفس المنتج بمستويات كميات أو إنفاق مختلفة، اختر دائماً القاعدة ذات المستوى المشروط الأعلى التي حققها العميل.
-5. [مضاعفة الجوائز والفرص]: إذا كانت القاعدة تتيح المضاعفة، وكان العميل قد اشترى مضاعفات الكمية أو الإنفاق المشروط، احسب عدد مرات تكرار العرض واضرب قيمة المكافأة بعدد المرات.
+4. [الهدية الأعلى قيمة أولاً]: إذا انطبقت أكثر من قاعدة على نفس المنتجات أو نفس مبلغ الإنفاق، ابدأ بالقاعدة ذات الهدية الأعلى قيمة (الفواتشر بقيمته النقدية، والهدية العينية بقيمتها في الكتالوج، والهدية بدون قيمة تأتي بعدها مرتبة بالمستوى الأعلى). امنحها ثم اخصم المبلغ الذي استخدمته، ولا تُمنح القاعدة الأقل إلا من المبلغ المتبقي فقط. لا تجمع أبداً هدية أقل على نفس المبلغ (مثال: 627 ج.م مع قواعد 450 و350 و150 = فواتشر قاعدة 450 مرة واحدة + هدية قاعدة 150 مرة واحدة من الباقي 177، وليس 4 × هدية قاعدة 150).
+5. [مضاعفة الجوائز والفرص]: إذا كانت القاعدة تتيح المضاعفة، احسب عدد مرات تكرار العرض من المبلغ أو الكمية المتاحة لها فقط (بعد خصم ما استخدمته القواعد الأعلى قيمة) واضرب المكافأة بعدد المرات.
 6. قم بتعبئة حقل (matchedRuleId) بمعرف القاعدة المطابقة الأولى، و(matchedRuleTitle) بعنوان القاعدة، و(matchedRewardType) بنوع المكافأة.
 7. [العزل الصارم للأصناف واستهلاك الكميات]: كل صنف يطابق قاعدة علامته التجارية والشركة الراعية فقط، وتُخصم الكمية المستهلكة فوراً من السلة لمنع احتساب نفس القطعة في أكثر من عرض.
 8. إذا لم تنطبق أي من هذه القواعد، اترك حقل (matchedRuleId) فارغاً "" وحقل (matchedRuleIds) كقائمة فارغة [].
@@ -3239,7 +3239,12 @@ class PromotionalRuleMatcher {
     // 1. Group rules by canonical product family tokens (to resolve and bundle tiers of the same product family)
     final Map<String, List<PromotionalRuleItem>> rulesByProductGroup = {};
     for (final rule in promotionalRules) {
-      final key = _getProductGroupKey(rule);
+      final familyKey = _getProductGroupKey(rule);
+      // Known product families keep their grouping; otherwise spend rules on
+      // the same barcodes share one pool whatever their wording.
+      final key = familyKey.contains('_family')
+          ? familyKey
+          : (_spendPoolKey(rule) ?? familyKey);
       rulesByProductGroup.putIfAbsent(key, () => []).add(rule);
     }
 
@@ -3259,9 +3264,16 @@ class PromotionalRuleMatcher {
       final isSpendGroup = group.any((r) => r.isSpendBased);
 
       if (isSpendGroup) {
-        // Sort descending by effectiveMinSpend (highest spend tier first: e.g. 200 EGP before 150 EGP before 100 EGP)
+        // Highest-value gift wins: rules on the same products are ranked by
+        // gift value (known values first), then by spend tier. The spend is
+        // handed out greedily: the best rule takes its share and only the
+        // remainder can qualify lower tiers (never stacked on the same spend).
         final sortedGroup = List<PromotionalRuleItem>.from(group)
+          ..sort(compareRulesByGiftValue);
+        final spendTierOrder = List<PromotionalRuleItem>.from(group)
           ..sort((a, b) => b.effectiveMinSpend.compareTo(a.effectiveMinSpend));
+        double? remainingPoolSpend;
+        final Set<int> poolConsumedIndices = {};
 
         for (final rule in sortedGroup) {
           // Check combo brand requirement (e.g. Signal AND Closeup together)
@@ -3341,7 +3353,12 @@ class PromotionalRuleMatcher {
             totalEligibleSpend = result.targetCompanyTotal;
           }
 
-          final isTopTierInGroup = sortedGroup.first.id == rule.id;
+          // Spend already used by a higher-value rule of this pool is not available again.
+          if (remainingPoolSpend != null && totalEligibleSpend > remainingPoolSpend) {
+            totalEligibleSpend = remainingPoolSpend;
+          }
+
+          final isTopTierInGroup = spendTierOrder.first.id == rule.id;
           final bool isBoundedBracket = !isTopTierInGroup &&
               rule.hasSpendRange &&
               (rule.maxSpend != null && rule.maxSpend! > rule.minSpend);
@@ -3367,10 +3384,12 @@ class PromotionalRuleMatcher {
               if (count < 1) count = 1;
             }
 
-            // Consume products for this spend tier
-            for (final idx in matchingProductIndices) {
-              remainingItemQuantities[idx] = 0;
-            }
+            // Spend used by this rule; the remainder stays available to lower tiers.
+            final double usedSpend = isBoundedBracket
+                ? totalEligibleSpend
+                : (rule.minSpend > 0 ? rule.minSpend : effectiveMin) * count;
+            remainingPoolSpend = (totalEligibleSpend - usedSpend).clamp(0.0, double.infinity);
+            poolConsumedIndices.addAll(matchingProductIndices);
 
             final double baseAmount = rule.totalVoucherValue > 0
                 ? rule.totalVoucherValue
@@ -3414,9 +3433,12 @@ class PromotionalRuleMatcher {
               ),
             );
 
-            // Winner tier resolved for this spend group
-            break;
+            if (remainingPoolSpend <= 0) break;
           }
+        }
+        // Consume the pool's products once its rules are resolved (no reuse by other groups)
+        for (final idx in poolConsumedIndices) {
+          remainingItemQuantities[idx] = 0;
         }
       } else {
         // Quantity-based rules within the family (highest tier first: e.g. 2 pcs before 1 pc)
@@ -4775,6 +4797,32 @@ class PromotionalRuleMatcher {
       tokens.addAll(words);
     }
     return tokens.toSet().toList();
+  }
+
+  /// Gift value used to rank rules on the same products: voucher value, else
+  /// catalog unitValue x quantity of linked gifts. 0 means unknown.
+  static double ruleGiftValue(PromotionalRuleItem rule) {
+    if (rule.totalVoucherValue > 0) return rule.totalVoucherValue;
+    if (rule.rewardAmount > 0) return rule.rewardAmount;
+    return rule.linkedGifts.fold<double>(0.0, (acc, g) => acc + g.unitValue * g.quantity);
+  }
+
+  /// Known gift value first (high to low); gifts without a value come after,
+  /// ranked by spend tier (high to low).
+  static int compareRulesByGiftValue(PromotionalRuleItem a, PromotionalRuleItem b) {
+    final va = ruleGiftValue(a);
+    final vb = ruleGiftValue(b);
+    if ((va > 0) != (vb > 0)) return va > 0 ? -1 : 1;
+    if (va != vb) return vb.compareTo(va);
+    return b.effectiveMinSpend.compareTo(a.effectiveMinSpend);
+  }
+
+  /// Spend rules on the same product set share one pool, whatever their wording.
+  static String? _spendPoolKey(PromotionalRuleItem rule) {
+    if (!rule.isSpendBased || rule.isCombo || rule.selectedBarcodes.isEmpty) return null;
+    final codes = rule.selectedBarcodes.map((b) => b.trim()).where((b) => b.isNotEmpty).toSet().toList()..sort();
+    if (codes.isEmpty) return null;
+    return 'spend_pool_${codes.join(',')}';
   }
 
   static String _getProductGroupKey(PromotionalRuleItem rule) {
