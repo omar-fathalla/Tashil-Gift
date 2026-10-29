@@ -107,6 +107,7 @@ class ReceiptDeduplicationHelper {
     required String companySlug,
     String? campaignId,
     bool isMultiScan = false,
+    bool exactDocId = false,
   }) async {
     final cleanNumber = normalizeReceiptNumber(receiptNumber);
     if (cleanNumber.isEmpty) {
@@ -129,6 +130,7 @@ class ReceiptDeduplicationHelper {
         'companySlug': companySlug,
         'campaignId': (campaignId != null && campaignId.isNotEmpty) ? campaignId : null,
         'isMultiScan': isMultiScan,
+        if (exactDocId) 'exactDocId': true,
       });
       final data = res.data;
       final isDup = data is Map && data['duplicate'] == true;

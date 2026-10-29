@@ -157,7 +157,9 @@ async function checkReceiptDuplicateHandler(db, request) {
     if (direct.exists) {
       const d = direct.data();
       existingStatus = statusOf(d);
-      if (isRedeemed(d)) return hit(d);
+      // 2.0.147: any doc at the exact id blocks the rep's create under the
+      // rules (create-only), so report it as already uploaded whatever its status.
+      if (isRedeemed(d) || data.exactDocId === true) return { ...(await hit(d)), exactDocExists: true };
     }
   }
 

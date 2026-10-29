@@ -15,6 +15,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/services/firebase_service.dart';
 import '../../../core/services/ai_receipt_service.dart';
+import '../../../core/services/receipt_save_failure.dart';
 import '../../../core/services/ai_product_discovery_service.dart';
 import '../../../core/services/chain_products_intelligence_service.dart';
 import '../../../core/services/company_products_service.dart';
@@ -1361,6 +1362,25 @@ class _ClientReceiptUploadScreenState
       // receipt is always created at its deterministic ID; if it already exists
       // the create is denied by the rules and handled as a duplicate below.
 
+      // 2.0.147: exact doc-id pre-save check (rcpt_{campaignId}_{receiptNo}).
+      // Any existing doc at this id would make the create fail under the rules,
+      // so stop here with the existing receipt's time/branch/status.
+      if (receiptNumber.isNotEmpty) {
+        final exact = await ReceiptDeduplicationHelper.checkReceiptDuplicate(
+          firestore: firestore,
+          receiptNumber: receiptNumber,
+          companySlug: _activeEvent!.companySlug,
+          campaignId: _activeEvent!.id,
+          exactDocId: true,
+        );
+        if (exact.isDuplicate) {
+          if (!mounted) return;
+          _showAlreadyUploaded(exact);
+          _resetFormForNextCustomer();
+          return;
+        }
+      }
+
       // 2. Upload image to Firebase Storage named by Receipt Number and Campaign ID
       setState(() {
         _aiPhaseText = '2/3 جاري حفظ صورة الفاتورة في التخزين السحابي...';
@@ -1496,17 +1516,13 @@ class _ClientReceiptUploadScreenState
       try {
         await transactionRef.set(transactionData);
       } on FirebaseException catch (e) {
-        if (!ReceiptDeduplicationHelper.isDuplicateWriteDenied(e)) rethrow;
-        debugPrint('Receipt create denied (already exists for campaign): $e');
+        if (!ReceiptDeduplicationHelper.isDuplicateWriteDenied(e) &&
+            receiptErrorCode(e) != 'unauthenticated') {
+          rethrow;
+        }
+        debugPrint('Receipt create denied: ${e.code}');
         if (!mounted) return;
-        final dup = await ReceiptDeduplicationHelper.checkReceiptDuplicate(
-          firestore: firestore,
-          receiptNumber: receiptNumber,
-          companySlug: _activeEvent!.companySlug,
-          campaignId: _activeEvent!.id,
-        );
-        if (!mounted) return;
-        _showAlreadyRedeemed(dup);
+        await _handleSaveDenied(e, transactionData, receiptNumber);
         return;
       }
 
@@ -1852,6 +1868,14 @@ class _ClientReceiptUploadScreenState
       debugPrint('Receipt processing error: $e\n$stack');
       if (mounted) {
         final kind = classifyReceiptException(e);
+        if (kind == ReceiptIssueKind.permission) {
+          final f = diagnoseReceiptSaveFailure(
+            error: e,
+            currentUid: ref.read(firebaseAuthProvider).currentUser?.uid,
+          );
+          _showSaveFailure(f, onPrimary: _receiptImages.isNotEmpty ? _submitAndValidateReceipt : null);
+          return;
+        }
         _showIssue(
           kind,
           onPrimary: _receiptImages.isNotEmpty
@@ -1907,8 +1931,88 @@ class _ClientReceiptUploadScreenState
     );
   }
 
+  String _fmtIso(String? iso) {
+    final d = iso == null ? null : DateTime.tryParse(iso)?.toLocal();
+    if (d == null) return iso ?? '';
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(d.day)}/${two(d.month)}/${d.year}  ${two(d.hour)}:${two(d.minute)}';
+  }
+
+  /// 2.0.147: classify a denied receipt create into an exact reason.
+  Future<void> _handleSaveDenied(
+    Object error,
+    Map<String, dynamic> data,
+    String receiptNumber,
+  ) async {
+    final firestore = ref.read(firestoreProvider);
+    final ev = _activeEvent!;
+    final dup = await ReceiptDeduplicationHelper.checkReceiptDuplicate(
+      firestore: firestore,
+      receiptNumber: receiptNumber,
+      companySlug: ev.companySlug,
+      campaignId: ev.id,
+      exactDocId: true,
+    );
+    if (!mounted) return;
+    if (dup.isDuplicate) {
+      _showAlreadyUploaded(dup);
+      return;
+    }
+    bool? campaignActive;
+    try {
+      final snap = await firestore.collection('events').doc(ev.id).get();
+      final d = snap.data();
+      campaignActive = snap.exists && d != null && d['isActive'] == true && d['isPromoterActive'] != false;
+    } catch (_) {}
+    final branch = (data['branch_detected'] ?? '').toString().trim();
+    bool? branchInCampaign;
+    if (branch.isNotEmpty && !ev.isAllBranches && ev.branchNames.isNotEmpty) {
+      branchInCampaign = (data['branch_id'] ?? '').toString().isNotEmpty ||
+          ev.branchNames.any((b) => b.trim() == branch);
+    }
+    if (!mounted) return;
+    _showSaveFailure(
+      diagnoseReceiptSaveFailure(
+        error: error,
+        data: data,
+        currentUid: ref.read(firebaseAuthProvider).currentUser?.uid,
+        campaignActive: campaignActive,
+        branchInCampaign: branchInCampaign,
+      ),
+      branch: branch,
+    );
+  }
+
+  void _showSaveFailure(ReceiptSaveFailure f, {String? branch, VoidCallback? onPrimary}) {
+    final kind = switch (f.kind) {
+      ReceiptSaveFailureKind.alreadyUploaded => ReceiptIssueKind.alreadyRedeemed,
+      ReceiptSaveFailureKind.campaignStopped => ReceiptIssueKind.campaignUnavailable,
+      ReceiptSaveFailureKind.branchNotInCampaign => ReceiptIssueKind.wrongBranch,
+      _ => ReceiptIssueKind.permission,
+    };
+    _showIssue(
+      kind,
+      subtitle: receiptSaveFailureMessage(f, branch: branch),
+      onPrimary: onPrimary,
+    );
+  }
+
+  /// Already uploaded (any status): approved message 1 + details.
+  void _showAlreadyUploaded(ReceiptDuplicateCheckResult dup) {
+    final status = (dup.existingStatus ?? '').isEmpty
+        ? null
+        : receiptStatusLabel(dup.existingStatus!, isAr: true);
+    final msg = receiptSaveFailureMessage(
+      const ReceiptSaveFailure(ReceiptSaveFailureKind.alreadyUploaded),
+      uploadedAt: _fmtIso(dup.existingUploadedAt ?? dup.existingClaimedAt),
+      branch: dup.existingBranch,
+      status: status,
+    );
+    _showAlreadyRedeemed(dup, subtitle: _isAr ? msg : null);
+  }
+
   /// Already-redeemed receipt: show when/where/what it was redeemed for (no personal data).
-  void _showAlreadyRedeemed(ReceiptDuplicateCheckResult dup) {
+  void _showAlreadyRedeemed(ReceiptDuplicateCheckResult dup, {String? subtitle}) {
     String fmtDate(String? iso) {
       final d = iso == null ? null : DateTime.tryParse(iso)?.toLocal();
       if (d == null) return iso ?? '';
@@ -1921,6 +2025,7 @@ class _ClientReceiptUploadScreenState
         RegExp(r'^\d+(\.\d+)?$').hasMatch(v) ? '$v $currency' : v;
     _showIssue(
       ReceiptIssueKind.alreadyRedeemed,
+      subtitle: subtitle,
       details: [
         if (dup.receiptNumber.isNotEmpty)
           ReceiptIssueDetail(
