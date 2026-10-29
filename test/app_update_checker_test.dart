@@ -35,4 +35,28 @@ void main() {
       expect(isUpdatePromptAllowedForPath(p), isTrue, reason: p);
     }
   });
+
+  group('shouldPromptForUpdate', () {
+    const run = BuildId(2, 0, 137, 192);
+    test('same or older remote never prompts', () {
+      expect(shouldPromptForUpdate(remote: run, running: run), isFalse);
+      expect(shouldPromptForUpdate(remote: const BuildId(2, 0, 136, 191), running: run), isFalse);
+      expect(shouldPromptForUpdate(remote: null, running: run), isFalse);
+    });
+    test('numeric, not string, comparison', () {
+      expect(const BuildId(2, 0, 100, 200) > const BuildId(2, 0, 99, 199), isTrue);
+      expect(const BuildId(2, 0, 9, 9) > const BuildId(2, 0, 10, 10), isFalse);
+    });
+    test('newer remote prompts once; dismissed version not re-shown', () {
+      const r = BuildId(2, 0, 138, 193);
+      expect(shouldPromptForUpdate(remote: r, running: run), isTrue);
+      expect(shouldPromptForUpdate(remote: r, running: run, lastHandled: r), isFalse);
+      expect(shouldPromptForUpdate(remote: const BuildId(2, 0, 139, 194), running: run, lastHandled: r), isTrue);
+    });
+    test('parsing', () {
+      expect(BuildId.fromVersionJson('{"version":"2.0.137","build_number":"192"}'), run);
+      expect(BuildId.tryParse('2.0.137+192'), run);
+      expect(BuildId.fromVersionJson('garbage'), isNull);
+    });
+  });
 }

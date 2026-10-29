@@ -188,6 +188,23 @@
     });
     observer.observe(document.body, { childList: true, subtree: true });
   </script>
+  <script>
+    // Used by the "يوجد إصدار جديد" banner: drop the service worker and its
+    // caches, then reload so the new build is fetched from the network.
+    window.tashilHardReload = async function () {
+      try {
+        if ('serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map(function (r) { return r.unregister(); }));
+        }
+        if (window.caches) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map(function (k) { return caches.delete(k); }));
+        }
+      } catch (e) {}
+      window.location.reload();
+    };
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
