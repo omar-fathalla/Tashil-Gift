@@ -757,7 +757,8 @@ class AiReceiptService {
         '🛑 معيار الحظر الصارم لاحتساب أصناف الشوكولاتة والمالتي باك العامة دون علامة تجارية صريحة (AIR-71):\n'
         '- يُمنع منعاً باتاً افتراض أو تخمين تبعية أي صنف عام مطبوع على بون الكاشير تحت مسمى مبهم أو عام مثل: "مالتي باك شوكولات" أو "مالتي باك شوكولاتة" أو "شوكولاتة مشكلة" أو "بسكويت ويفر" لشركة كادبوري (Cadbury) أو مونديليز (Mondelez) ما لم يُذكر في سطر البون صراحة اسم العلامة المعتمدة التابعة للشركة (مثل: كادبوري، ديري ميلك، مورو، بابلي، أوريو، ماندولين، فليك، سي دي ام، CDM).\n'
         '- يُحظر كلياً الاستناد إلى وجود أصناف كادبوري أخرى بالفاتورة لاعتبار الصنف العام تابعاً لكادبري.\n'
-        '- أي صنف عام يخلو من اسم العلامة الصريح يجب فوراً تعيينه: isTargetCompany = false واستبعاده كلياً من targetCompanyTotal ومن أي احتساب للجوائز أو مضاعفات الفواتشر.',
+        '- أي صنف عام يخلو من اسم العلامة الصريح يجب فوراً تعيينه: isTargetCompany = false واستبعاده كلياً من targetCompanyTotal ومن أي احتساب للجوائز أو مضاعفات الفواتشر.\n'
+        '- نطاق AIR-71: هذا المعيار خاص بحملات كادبوري/مونديليز فقط ولا ينطبق على أي شركة راعية أخرى. وفي كل الحالات، أي سطر يكون باركوده ضمن قائمة منتجات الشركة الراعية المسجلة يُعد تابعاً لها، ويجب دائماً إدراج كل سطر منتج مطبوع (بما فيها المالتي باك والباندل) في extractedProducts.',
       ),
       generationConfig: GenerationConfig(
         responseMimeType: 'application/json',
@@ -1350,6 +1351,13 @@ class AiReceiptService {
         targetCompany,
         productNames: resolvedRequiredProducts,
       );
+      // AIR-71 is a Cadbury/Mondelez-only rule. For every other company a
+      // multipack/bundle line is a regular product; a line whose barcode is in
+      // the company's registered product list always belongs to the company.
+      final bool isMondelezPromptTenant = isMondelezTargetCompany(targetCompany);
+      final String multipackRuleCondition = isMondelezPromptTenant
+          ? '- 🛑 قاعدة أصناف المالتي باك والشوكولاتة العامة (AIR-71 - خاصة بكادبوري/مونديليز): إذا كان الصنف يحمل اسماً عاماً مثل "مالتي باك شوكولات" أو "مالتي باك شوكولاتة" دون ذكر صريح لماركة معتمدة تابعة لـ "$targetCompany" ولم يكن باركوده ضمن قائمة منتجات الشركة المسجلة، يُحظر اعتباره تابعاً للشركة الراعية ويجب تعيين isTargetCompany = false. أي سطر باركوده ضمن قائمة منتجات الشركة المسجلة يُعد تابعاً لها (isTargetCompany = true).'
+          : '- 🛑 أصناف المالتي باك / الباندل / العروض المجمعة: هي منتجات عادية. يجب إدراج كل سطر منتج مطبوع في الفاتورة في extractedProducts دون حذف أو دمج. أي سطر يكون باركوده أو اسمه ضمن قائمة منتجات "$targetCompany" المسجلة يُعد تابعاً للشركة (isTargetCompany = true) ويُحتسب سعره × الكمية ضمن targetCompanyTotal، حتى لو كان اسمه عاماً مثل "مالتي باك شوكولات". قاعدة AIR-71 خاصة بحملات كادبوري/مونديليز فقط ولا تنطبق هنا.';
       String subBrandsCondition = '';
       if (resolvedSubBrands.isNotEmpty) {
         subBrandsCondition = '''
@@ -1600,7 +1608,7 @@ $subBrandsCondition
 - 🛑 استبعاد الحبوب الزراعية والعطارة والفشار وأرز الشركات المستقلة (AIR-87):
   * شركة "الدرة" (Al-Durra / Dorra) هي شركة منتجات غذائية معبأة (صلصة، كاتشب، مايونيز، صصوصات، خل، مخلل، مربى، طحينة). يُحظر تماماً وبصرامة احتساب أي حبوب زراعية أو بهارات أو عطارة تحمل كلمة "ذرة" أو "درة" (مثل: "درة أم شوشة"، "ذرة أم شوشة"، "ذرة فشار"، "درة فشار"، "ذرة حب"، "فشار"، "بهارات"، "عطارة") كمنتج للدرة، ويجب تعيين isTargetCompany = false واستبعادها كلياً.
   * يُحظر تماماً على الذكاء الاصطناعي تخمين أو استبدال ماركات الأرز المطبوعة على الفاتورة (Zero-Hallucination)؛ فإذا كان الصنف المطبوع هو "الفراعنة ارز" أو "أرز الفراعنة" أو "أرز الساعة" أو "أرز ريحانة"، يجب نقله كما هو باسمه الحقيقي مع تعيين isTargetCompany = false لعدم تبعيته للدرة، ويُمنع منعاً باتاً تسميته "الدرة ارز".
-- 🛑 قاعدة أصناف المالتي باك والشوكولاتة العامة (AIR-71): إذا كان الصنف يحمل اسماً عاماً مثل "مالتي باك شوكولات" أو "مالتي باك شوكولاتة" دون ذكر صريح لماركة معتمدة تابعة لـ "$targetCompany"، يُحظر كلياً اعتباره تابعاً للشركة الراعية ويجب تعيين isTargetCompany = false.
+$multipackRuleCondition
 - الأصناف المشروعة في (extractedProducts) مع (isTargetCompany = true) هي فقط الأصناف التابعة لشركة "$targetCompany".
 
 🛑 استراتيجية الفلترة الموجهة والمسح السريع الفائق (Targeted Fast-Scan Strategy):
@@ -1820,11 +1828,11 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         // AIR-71: Generic Multipack Brand Isolation Guard
         // If target company is Cadbury / Mondelez, generic multipacks (like "مالتي باك شوكولات")
         // without an explicit brand token must be disqualified (isTargetCompany = false).
-        final isMondelezTenant = targetCompany.contains('كادبري') ||
-            targetCompany.contains('كدبري') ||
-            targetCompany.toLowerCase().contains('cadbury') ||
-            targetCompany.contains('مونديليز') ||
-            targetCompany.toLowerCase().contains('mondelez');
+        final isMondelezTenant = isMondelezTargetCompany(targetCompany);
+        final Set<String> catalogBarcodeSet = catalogBarcodeMap.values
+            .map((b) => b.trim())
+            .where((b) => b.isNotEmpty)
+            .toSet();
 
         if (isMondelezTenant && result.extractedProducts.isNotEmpty) {
           const mondelezTokens = [
@@ -1849,7 +1857,8 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
             final isGenericMultipack = (nameLower.contains('مالتي باك') || nameLower.contains('مالتى باك')) &&
                 (nameLower.contains('شوكول') || nameLower.contains('شكول') || nameLower.contains('choc'));
 
-            if (isGenericMultipack && p.isTargetCompany) {
+            if (isGenericMultipack && p.isTargetCompany &&
+                !catalogBarcodeSet.contains(p.barcode.trim())) {
               final hasExplicitBrand = mondelezTokens.any((token) => nameLower.contains(token));
               if (!hasExplicitBrand) {
                 return p.copyWith(isTargetCompany: false);
@@ -2116,6 +2125,15 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
             return item;
           }).toList();
           result = result.copyWith(extractedProducts: enrichedProducts);
+          // Catalog enrichment can flag registered-barcode lines as company
+          // products after the AIR-58 auto-heal ran; raise the total again so
+          // those lines count (only raises).
+          final double enrichedTargetSum = result.extractedProducts
+              .where((p) => p.isTargetCompany)
+              .fold<double>(0.0, (sum, p) => sum + (p.price * p.quantity));
+          if (enrichedTargetSum > result.targetCompanyTotal) {
+            result = result.copyWith(targetCompanyTotal: enrichedTargetSum);
+          }
         }
 
         // Deterministic POS & Store Code Reconciler in Dart
@@ -2363,10 +2381,14 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
 
         // Promotional rules deterministic reconciliation in Dart
         if (promotionalRules.isNotEmpty && result.extractedProducts.isNotEmpty) {
+          // Spend comes from the item totals, not capped by the AI's own
+          // targetCompanyTotal (AIR-37 cap), so an AI under-count can't hide a
+          // qualifying tier. The total below is only ever raised.
           final dartMatches = PromotionalRuleMatcher.matchAllWithMultipliers(
             result: result,
             promotionalRules: promotionalRules,
             allowCampaignMultipliers: allowMultipleChances,
+            capSpendToAiTotal: false,
           );
           if (dartMatches.isNotEmpty) {
             // Trust the deterministic matcher over the AI's own total: when a
@@ -3217,6 +3239,7 @@ class PromotionalRuleMatcher {
     List<ExtractedProductItem> extractedProducts = const [],
     required List<PromotionalRuleItem> promotionalRules,
     bool allowCampaignMultipliers = true,
+    bool capSpendToAiTotal = true,
   }) {
     if (promotionalRules.isEmpty) return [];
 
@@ -3383,7 +3406,8 @@ class PromotionalRuleMatcher {
 
           // Strict financial guard: total eligible spend on trigger products can never exceed
           // target company total spend on the receipt (AIR-37).
-          if (result != null &&
+          if (capSpendToAiTotal &&
+              result != null &&
               result.targetCompanyTotal > 0 &&
               totalEligibleSpend > result.targetCompanyTotal) {
             totalEligibleSpend = result.targetCompanyTotal;
@@ -5084,6 +5108,13 @@ class RewardChoiceGroup {
 /// Merges allocations that refer to the same gift (by id, or by name when no id).
 /// Highest qualifying spend among matched spend-based rules (0 if none).
 /// Matched spend rules already passed their own min-spend (with tolerance).
+/// True for Cadbury / Mondelez campaigns (AIR-71 generic multipack rule scope).
+bool isMondelezTargetCompany(String targetCompany) {
+  final t = targetCompany.toLowerCase();
+  return t.contains('كادبري') || t.contains('كدبري') || t.contains('كادبوري') ||
+      t.contains('cadbury') || t.contains('مونديليز') || t.contains('mondelez');
+}
+
 double qualifyingSpendFromMatches(List<MatchedPromotionalRuleResult> matches) {
   double best = 0.0;
   for (final m in matches) {

@@ -431,6 +431,11 @@ const { checkReceiptDuplicateHandler } = require("./receipt_duplicate_check");
 exports.checkReceiptDuplicate = onCall(callableOptions, (request) =>
   checkReceiptDuplicateHandler(db, request));
 
+const { listBranchReceiptsHandler } = require("./list_branch_receipts");
+/** Rep branch history for one campaign, independent of the anonymous uid. */
+exports.listBranchReceipts = onCall(callableOptions, (request) =>
+  listBranchReceiptsHandler(db, request));
+
 const { sendWinnerWhatsAppHandler } = require("./winner_whatsapp");
 exports.sendWinnerWhatsApp = onCall(
   { ...callableOptions, secrets: [wahaApiKey] },

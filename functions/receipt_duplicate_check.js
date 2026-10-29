@@ -90,6 +90,8 @@ async function redeemedSummary(db, d, cache) {
     giftValue: giftLabel(d, ev),
     branch: str(d.branch_detected, 120),
     receiptDate: str(d.receipt_date, 40),
+    uploadedAt: toIso(d.timestamp),
+    status: statusOf(d),
   };
 }
 

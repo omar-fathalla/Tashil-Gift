@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -90,12 +92,74 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
   static final Map<String, List<Map<String, dynamic>>> _cachedCampaignInvoices = {};
   Stream<QuerySnapshot<Map<String, dynamic>>>? _invoicesStream;
 
+  // Branch history from the listBranchReceipts callable (anonymous reps only).
+  // The rep's anonymous uid changes with a new device / private tab / cleared
+  // storage, so the uid-scoped stream alone can show 0 for a branch that has
+  // receipts; these rows fill that gap (read-only projection).
+  List<Map<String, dynamic>> _branchRemoteInvoices = const [];
+  String? _branchRemoteKey;
+  String? _branchRemoteLoadingKey;
+  int _otherSessionCount = 0;
+  Timer? _branchRefreshTimer;
+
+  bool get _isAnonymousRep {
+    final user = ref.read(firebaseAuthProvider).currentUser;
+    return user != null && user.isAnonymous;
+  }
+
+  Future<void> _fetchBranchReceipts(String branchName, {bool force = false}) async {
+    if (!_isAnonymousRep || widget.event.id.isEmpty || branchName.isEmpty) return;
+    if (!force && (_branchRemoteKey == branchName || _branchRemoteLoadingKey == branchName)) return;
+    _branchRemoteLoadingKey = branchName;
+    try {
+      final res = await FirebaseFunctions.instanceFor(region: 'us-central1')
+          .httpsCallable('listBranchReceipts',
+              options: HttpsCallableOptions(timeout: const Duration(seconds: 20)))
+          .call<dynamic>({'campaignId': widget.event.id, 'branchName': branchName});
+      final data = res.data;
+      final list = <Map<String, dynamic>>[];
+      if (data is Map && data['receipts'] is List) {
+        for (final r in data['receipts'] as List) {
+          if (r is! Map) continue;
+          final m = Map<String, dynamic>.from(r.map((k, v) => MapEntry(k.toString(), v)));
+          final ts = DateTime.tryParse((m['timestamp'] ?? '').toString());
+          m['timestamp'] = ts?.toLocal();
+          m['from_branch_history'] = true;
+          list.add(m);
+        }
+      }
+      if (!mounted || _selectedBranch != branchName) return;
+      setState(() {
+        _branchRemoteInvoices = list;
+        _branchRemoteKey = branchName;
+        _otherSessionCount = list.where((m) => m['same_session'] != true).length;
+      });
+    } catch (e) {
+      debugPrint('listBranchReceipts unavailable: $e');
+    } finally {
+      if (_branchRemoteLoadingKey == branchName) _branchRemoteLoadingKey = null;
+    }
+  }
+
+  void _ensureBranchHistory() {
+    final b = _selectedBranch;
+    if (b == null || b.isEmpty || !_isAnonymousRep) return;
+    if (_branchRemoteKey == b || _branchRemoteLoadingKey == b) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _fetchBranchReceipts(b);
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     _loadPinnedBranch();
     _scrollController.addListener(_onScroll);
     _initStream();
+    _branchRefreshTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      final b = _selectedBranch;
+      if (mounted && b != null && b.isNotEmpty) _fetchBranchReceipts(b, force: true);
+    });
   }
 
   @override
@@ -127,6 +191,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
 
   @override
   void dispose() {
+    _branchRefreshTimer?.cancel();
     _searchController.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
@@ -463,6 +528,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     final isMobile = screenWidth < 650;
 
     _initStream();
+    _ensureBranchHistory();
 
     return Directionality(
       textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
@@ -506,8 +572,16 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
               if (snapshot.hasData && snapshot.data != null) {
                 final allDocs = snapshot.data!.docs;
                 final List<Map<String, dynamic>> parsedInvoices = [];
-                for (final doc in allDocs) {
-                  final data = doc.data();
+                final ownIds = allDocs.map((d) => d.id).toSet();
+                final rows = <MapEntry<String, Map<String, dynamic>>>[
+                  for (final doc in allDocs) MapEntry(doc.id, doc.data()),
+                  for (final r in _branchRemoteInvoices)
+                    if (!ownIds.contains((r['id'] ?? '').toString()))
+                      MapEntry((r['id'] ?? '').toString(), r),
+                ];
+                for (final row in rows) {
+                  final doc = (id: row.key);
+                  final data = row.value;
                   final cId = (data['campaignId'] ?? data['event_id'] ?? data['eventId'] ?? '').toString().trim();
                   final cSlug = (data['companySlug'] ?? data['company_slug'] ?? '').toString().trim().toLowerCase();
                   final targetComp = (data['targetCompany'] ?? data['target_company'] ?? '').toString().trim().toLowerCase();
@@ -666,6 +740,11 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   ),
 
                   const Divider(height: 1, thickness: 1),
+
+                  if (_otherSessionCount > 0 &&
+                      _branchRemoteKey != null &&
+                      _branchRemoteKey == _selectedBranch)
+                    _buildOtherSessionsNote(colorScheme, isAr),
 
                   // 3. Invoices List View
                   Expanded(
@@ -3645,6 +3724,32 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
       imageUrl: imageUrl,
       imageUrls: imageUrls,
       receiptNumber: receiptNumber,
+    );
+  }
+
+  Widget _buildOtherSessionsNote(ColorScheme colorScheme, bool isAr) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: colorScheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.devices_other_rounded, size: 18, color: colorScheme.onTertiaryContainer),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              isAr
+                  ? 'يتضمن السجل $_otherSessionCount فاتورة لهذا الفرع مسجلة من جلسة/جهاز آخر.'
+                  : 'Includes $_otherSessionCount receipt(s) for this branch from another session/device.',
+              style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600, color: colorScheme.onTertiaryContainer),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

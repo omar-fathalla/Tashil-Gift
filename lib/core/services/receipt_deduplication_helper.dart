@@ -13,6 +13,8 @@ class ReceiptDuplicateCheckResult {
   final String? existingStoreChain;
   final String? existingBranch;
   final String? existingReceiptDate;
+  final String? existingUploadedAt;
+  final String? existingStatus;
   final String rejectionMessage;
   final Map<String, dynamic>? existingData;
 
@@ -26,6 +28,8 @@ class ReceiptDuplicateCheckResult {
     this.existingStoreChain,
     this.existingBranch,
     this.existingReceiptDate,
+    this.existingUploadedAt,
+    this.existingStatus,
     this.rejectionMessage = '',
     this.existingData,
   });
@@ -143,6 +147,8 @@ class ReceiptDeduplicationHelper {
         existingClaimedAt: pick('redeemedAt'),
         existingBranch: pick('branch'),
         existingReceiptDate: pick('receiptDate'),
+        existingUploadedAt: pick('uploadedAt'),
+        existingStatus: pick('status') ?? data['existingStatus']?.toString(),
         rejectionMessage: duplicateMessage(cleanNumber, isMultiScan: isMultiScan),
       );
     } catch (e) {
@@ -165,5 +171,21 @@ class ReceiptDeduplicationHelper {
     final s = e.toString().toLowerCase();
     return s.contains('permission-denied') || s.contains('permission_denied') ||
         s.contains('missing or insufficient permissions');
+  }
+}
+
+/// Human label for a receipt status from the server ("accepted", "claimed", ...).
+String receiptStatusLabel(String status, {bool isAr = true}) {
+  switch (status.trim().toLowerCase()) {
+    case 'claimed':
+      return isAr ? 'تم صرف الهدية' : 'Gift handed over';
+    case 'accepted':
+      return isAr ? 'مقبولة' : 'Accepted';
+    case 'rejected':
+      return isAr ? 'مرفوضة' : 'Rejected';
+    case 'pending':
+      return isAr ? 'قيد المراجعة' : 'Pending';
+    default:
+      return status;
   }
 }

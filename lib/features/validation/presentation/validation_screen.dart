@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/services/rep_device_id.dart';
 import 'package:al_mraay/core/constants/app_version_config.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -734,6 +735,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
 
       final Map<String, dynamic> transactionData = {
         'app_version': AppVersionConfig.appVersion,
+        if (RepDeviceId.value.isNotEmpty) 'rep_device_id': RepDeviceId.value,
         'receipt_number': receiptNumber,
         'is_valid': true,
         'status': 'accepted',
@@ -2087,6 +2089,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       final docRef = existingDoc != null ? existingDoc.reference : firestore.collection('receipts_transactions').doc();
       final Map<String, dynamic> transactionData = {
         'app_version': AppVersionConfig.appVersion,
+        if (RepDeviceId.value.isNotEmpty) 'rep_device_id': RepDeviceId.value,
         'receipt_number': receiptNumber.isNotEmpty ? receiptNumber : cleanReceiptNumber,
         'is_valid': false,
         'status': 'rejected',

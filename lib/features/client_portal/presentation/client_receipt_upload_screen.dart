@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/services/rep_device_id.dart';
 import 'package:al_mraay/core/constants/app_version_config.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -1442,6 +1443,7 @@ class _ClientReceiptUploadScreenState
 
       final Map<String, dynamic> transactionData = {
         'app_version': AppVersionConfig.appVersion,
+        if (RepDeviceId.value.isNotEmpty) 'rep_device_id': RepDeviceId.value,
         'receipt_number': receiptNumber,
         'is_valid': true,
         'status': 'accepted',
@@ -1954,6 +1956,20 @@ class _ClientReceiptUploadScreenState
             'الفرع',
             'Branch',
             dup.existingBranch!,
+          ),
+        if ((dup.existingUploadedAt ?? '').isNotEmpty)
+          ReceiptIssueDetail(
+            Icons.schedule_rounded,
+            'وقت الرفع السابق',
+            'Uploaded at',
+            fmtDate(dup.existingUploadedAt),
+          ),
+        if ((dup.existingStatus ?? '').isNotEmpty)
+          ReceiptIssueDetail(
+            Icons.verified_rounded,
+            'حالة الفاتورة',
+            'Status',
+            receiptStatusLabel(dup.existingStatus!, isAr: AppStrings.of(ref).isAr),
           ),
       ],
     );
@@ -3422,6 +3438,7 @@ class _ClientReceiptUploadScreenState
       final docRef = firestore.collection('receipts_transactions').doc();
       final Map<String, dynamic> transactionData = {
         'app_version': AppVersionConfig.appVersion,
+        if (RepDeviceId.value.isNotEmpty) 'rep_device_id': RepDeviceId.value,
         'receipt_number': receiptNumber.isNotEmpty
             ? receiptNumber
             : cleanReceiptNumber,

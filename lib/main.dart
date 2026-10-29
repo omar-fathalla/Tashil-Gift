@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/services/rep_device_id.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'core/services/anonymous_session_policy.dart';
@@ -64,6 +65,7 @@ void main() async {
     }
   } catch (_) {}
 
+  await RepDeviceId.init();
   runApp(
     const ProviderScope(
       child: MyApp(),

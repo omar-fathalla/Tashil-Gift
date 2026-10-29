@@ -66,4 +66,30 @@ void main() {
     expect(r.award, isEmpty);
     expect(r.spend, 0);
   });
+
+  test('Tanta 90/2/243 full AI result (total 79): post-AI matcher not capped by AI total -> rule_3 / 454', () {
+    final items = [
+      item('باونتى توين ويفر', '6221134013610', 79, 1, original: 126, discount: 47),
+      item('مالتى باك شوكولات', '6221134032789', 125, 3),
+    ];
+    final aiResult = AiReceiptAnalysisResult(
+      isValid: false, receiptNumber: '90/2/243/291026', targetCompanyTotal: 79, receiptDate: '29/10/2026',
+      extractedProducts: items, storeChainDetected: 'فتح الله', branchDetected: 'فرع طنطا (الغربية)',
+      isBranchMatched: true, message: '', unfulfilledConditions: const [], durationMs: 0, durationSeconds: 0,
+      kpiRating: '', kpiColorHex: '');
+    final uncapped = PromotionalRuleMatcher.matchAllWithMultipliers(
+        result: aiResult, promotionalRules: rules, allowCampaignMultipliers: true, capSpendToAiTotal: false);
+    expect({for (final m in uncapped) m.rule.id: m.multiplier}, {'rule_3': 1});
+    expect(qualifyingSpendFromMatches(uncapped), closeTo(454, 0.01));
+    // The legacy AIR-37 cap (still the default elsewhere) is what hid the tier.
+    final capped = PromotionalRuleMatcher.matchAllWithMultipliers(result: aiResult, promotionalRules: rules);
+    expect(capped, isEmpty);
+  });
+
+  test('AIR-71 multipack rule is scoped to Cadbury/Mondelez only', () {
+    expect(isMondelezTargetCompany('كادبري'), isTrue);
+    expect(isMondelezTargetCompany('Mondelez Egypt'), isTrue);
+    expect(isMondelezTargetCompany('جلاكسي'), isFalse);
+    expect(isMondelezTargetCompany('Mars'), isFalse);
+  });
 }

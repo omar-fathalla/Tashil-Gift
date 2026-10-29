@@ -24,6 +24,11 @@ const LIMITS = {
     { name: "min", windowMs: MINUTE, max: 30 },
     { name: "day", windowMs: DAY, max: 300 },
   ],
+  // Rep branch history (listBranchReceipts callable).
+  branchReceipts: [
+    { name: "min", windowMs: MINUTE, max: 30 },
+    { name: "day", windowMs: DAY, max: 1500 },
+  ],
   // Winner WhatsApp sends (sendWinnerWhatsApp) per uid/IP and per company.
   branchAlloc: [
     { name: "min", windowMs: MINUTE, max: 20 },
