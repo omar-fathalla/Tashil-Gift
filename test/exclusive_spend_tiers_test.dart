@@ -102,4 +102,23 @@ void main() {
     expect(r.containsKey('s1'), isFalse);
     expect(r['q1'], 2);
   });
+
+  test('chosen 2x chocolate reports 0 voucher value; chosen voucher reports 50', () {
+    final r2 = galaxy[1];
+    final choc = chosenRewardReceiptFields([r2.rewardOptions[1].toAllocation()]);
+    expect(choc['unit_value'], 0.0);
+    expect(choc['is_voucher'], isFalse);
+    expect((choc['linked_gifts'] as List).single['quantity'], 2);
+    expect((choc['linked_gifts'] as List).single['giftId'], 'M36PULG3IFS4E2BwKRFe');
+    final v = chosenRewardReceiptFields([r2.rewardOptions[0].toAllocation()]);
+    expect(v['unit_value'], 50.0);
+    expect(v['is_voucher'], isTrue);
+  });
+
+  test('admin quantity: withQuantity clamps to >= 1 and survives toMap/fromMap', () {
+    const o = RewardOption(id: 'a', kind: 'gift', giftId: 'g', giftName: 'x');
+    expect(o.withQuantity(0).quantity, 1);
+    expect(RewardOption.fromMap(o.withQuantity(3).toMap()).quantity, 3);
+    expect(o.toMap().containsKey('quantity'), isFalse);
+  });
 }

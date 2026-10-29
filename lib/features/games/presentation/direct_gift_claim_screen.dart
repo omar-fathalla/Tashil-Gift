@@ -16,7 +16,7 @@ import '../../../core/localization/app_strings.dart';
 import '../../../core/widgets/switch_point_branding.dart';
 import '../../../core/widgets/m3_list_tile.dart';
 import '../../admin/domain/event_model.dart';
-import '../../../core/services/ai_receipt_service.dart' show RewardChoiceGroup, consolidateLinkedGifts;
+import '../../../core/services/ai_receipt_service.dart' show RewardChoiceGroup, consolidateLinkedGifts, chosenRewardReceiptFields;
 import 'winner_celebration_dialog.dart';
 import 'game_demo_banner.dart';
 import '../../company_portal/domain/whatsapp_gateway_service.dart';
@@ -755,6 +755,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
             'claimed_gifts': claimedGiftsList,
             if (_hasRewardChoice && _chosenRecords.isNotEmpty) 'chosen_reward_option': _chosenRecords.first,
             if (_hasRewardChoice && _chosenRecords.isNotEmpty) 'chosen_reward_options': _chosenRecords,
+            if (_hasRewardChoice && _allChoicesMade) ...chosenRewardReceiptFields(finalLinkedGifts),
             if (allVoucherSerials.isNotEmpty) 'voucher_serials': allVoucherSerials,
             'event_id': widget.eventId,
             'branch_id': widget.branchId ?? '',

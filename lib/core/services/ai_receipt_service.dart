@@ -5074,6 +5074,19 @@ class RewardChoiceGroup {
 }
 
 /// Merges allocations that refer to the same gift (by id, or by name when no id).
+/// Receipt fields describing what the customer actually received after picking
+/// a reward option. Voucher value counts only voucher gifts, so choosing a
+/// product option (e.g. 2x chocolate) reports 0 voucher value, not the rule's
+/// default voucher amount.
+Map<String, dynamic> chosenRewardReceiptFields(List<LinkedGiftAllocation> chosenGifts) {
+  final voucherTotal = chosenGifts.fold<double>(0.0, (a, g) => a + g.totalMonetaryValue);
+  return {
+    'linked_gifts': chosenGifts.map((g) => g.toMap()).toList(),
+    'unit_value': voucherTotal,
+    'is_voucher': chosenGifts.any((g) => g.isVoucher),
+  };
+}
+
 List<LinkedGiftAllocation> consolidateLinkedGifts(Iterable<LinkedGiftAllocation> gifts) {
   final Map<String, LinkedGiftAllocation> out = {};
   for (final g in gifts) {
@@ -5146,7 +5159,11 @@ class CompositePromotionalBundle {
     String? ruleLevelGameType;
 
     for (final r in rules) {
-      totalVoucher += r.totalRewardAmount;
+      final ruleChoice = RewardChoiceGroup.fromRule(r.rule, multiplier: r.multiplier);
+      // Choice rules: value comes from the (default) option, not the rule's own reward amount.
+      totalVoucher += ruleChoice != null
+          ? ruleChoice.options.first.toAllocation(multiplier: ruleChoice.multiplier).totalMonetaryValue
+          : r.totalRewardAmount;
       chances += r.multiplier;
       if (r.rule.gameType != null && r.rule.gameType!.trim().isNotEmpty) {
         ruleLevelGameType = r.rule.gameType!.trim();

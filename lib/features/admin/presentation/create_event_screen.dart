@@ -3787,7 +3787,10 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                               final opt = entry.value;
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 6),
-                                child: InputChip(
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: InputChip(
                                   key: ValueKey('rule_reward_option_${entry.key}'),
                                   avatar: Icon(
                                     opt.isVoucher ? Icons.local_activity_rounded : Icons.card_giftcard_rounded,
@@ -3799,6 +3802,34 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                   onDeleted: () => setDialogState(() => dialogRewardOptions.removeAt(entry.key)),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text('الكمية', style: GoogleFonts.cairo(fontSize: 11)),
+                                    IconButton(
+                                      key: ValueKey('rule_reward_option_qty_minus_${entry.key}'),
+                                      visualDensity: VisualDensity.compact,
+                                      tooltip: 'تقليل الكمية',
+                                      icon: const Icon(Icons.remove_circle_outline_rounded, size: 18),
+                                      onPressed: opt.unitsPerChoice <= 1
+                                          ? null
+                                          : () => setDialogState(() => dialogRewardOptions[entry.key] =
+                                              opt.withQuantity(opt.unitsPerChoice - 1)),
+                                    ),
+                                    Text('${opt.unitsPerChoice}',
+                                        key: ValueKey('rule_reward_option_qty_${entry.key}'),
+                                        style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w700)),
+                                    IconButton(
+                                      key: ValueKey('rule_reward_option_qty_plus_${entry.key}'),
+                                      visualDensity: VisualDensity.compact,
+                                      tooltip: 'زيادة الكمية',
+                                      icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
+                                      onPressed: opt.unitsPerChoice >= 100
+                                          ? null
+                                          : () => setDialogState(() => dialogRewardOptions[entry.key] =
+                                              opt.withQuantity(opt.unitsPerChoice + 1)),
+                                    ),
+                                  ],
                                 ),
                               );
                             }),

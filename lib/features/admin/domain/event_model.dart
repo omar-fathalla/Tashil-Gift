@@ -106,6 +106,20 @@ class RewardOption {
 
   int get unitsPerChoice => quantity < 1 ? 1 : quantity;
 
+  /// Same option with a different unit count (clamped to >= 1).
+  RewardOption withQuantity(int q) => RewardOption(
+        id: id,
+        kind: kind,
+        label: label,
+        voucherAmount: voucherAmount,
+        giftId: giftId,
+        giftName: giftName,
+        giftType: giftType,
+        unitValue: unitValue,
+        imageUrl: imageUrl,
+        quantity: q < 1 ? 1 : q,
+      );
+
   bool get isVoucher => kind == 'voucher' || giftType == 'voucher';
 
   /// Monetary value of one unit of this option (voucher amount, or voucher gift value).
