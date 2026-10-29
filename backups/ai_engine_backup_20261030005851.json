@@ -1,0 +1,28 @@
+{
+  "name": "projects/tashil-gift/databases/(default)/documents/system_settings/ai_engine",
+  "fields": {
+    "custom_model_identifier": {
+      "nullValue": null
+    },
+    "primary_model": {
+      "stringValue": "gemini-3.8-flash"
+    },
+    "fallback_model": {
+      "stringValue": "gemini-3.6-flash"
+    },
+    "thinking_budget": {
+      "integerValue": "0"
+    },
+    "updated_at": {
+      "timestampValue": "2026-10-01T14:09:28.113Z"
+    },
+    "agent_mode": {
+      "stringValue": "standard_vision"
+    },
+    "updated_by": {
+      "stringValue": "admin"
+    }
+  },
+  "createTime": "2026-10-01T14:09:28.123670Z",
+  "updateTime": "2026-10-01T14:09:28.123670Z"
+}
