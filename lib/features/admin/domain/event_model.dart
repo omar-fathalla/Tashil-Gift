@@ -88,6 +88,8 @@ class RewardOption {
   final String giftType; // inventory gift type: 'voucher' | 'product'
   final double unitValue;
   final String? imageUrl;
+  /// Units handed out when this option is chosen (e.g. 2 chocolates). Default 1.
+  final int quantity;
 
   const RewardOption({
     required this.id,
@@ -99,7 +101,10 @@ class RewardOption {
     this.giftType = 'product',
     this.unitValue = 0.0,
     this.imageUrl,
+    this.quantity = 1,
   });
+
+  int get unitsPerChoice => quantity < 1 ? 1 : quantity;
 
   bool get isVoucher => kind == 'voucher' || giftType == 'voucher';
 
@@ -111,7 +116,9 @@ class RewardOption {
 
   String get displayLabel {
     if (label.trim().isNotEmpty) return label.trim();
-    if (kind == 'gift' && giftName.trim().isNotEmpty) return giftName.trim();
+    if (kind == 'gift' && giftName.trim().isNotEmpty) {
+      return unitsPerChoice > 1 ? '$unitsPerChoice × ${giftName.trim()}' : giftName.trim();
+    }
     final v = monetaryValue;
     final vText = v == v.roundToDouble() ? v.toInt().toString() : v.toString();
     return 'قسيمة شراء $vText جنيه';
@@ -119,7 +126,7 @@ class RewardOption {
 
   /// Converts the chosen option into the allocation used by the claim/stock path.
   LinkedGiftAllocation toAllocation({int multiplier = 1}) {
-    final q = multiplier < 1 ? 1 : multiplier;
+    final q = (multiplier < 1 ? 1 : multiplier) * unitsPerChoice;
     return LinkedGiftAllocation(
       giftId: giftId,
       giftName: kind == 'gift' && giftName.trim().isNotEmpty ? giftName.trim() : displayLabel,
@@ -143,6 +150,7 @@ class RewardOption {
       giftType: data['giftType']?.toString() ?? (kind == 'voucher' ? 'voucher' : 'product'),
       unitValue: (data['unitValue'] as num?)?.toDouble() ?? 0.0,
       imageUrl: (img != null && img.isNotEmpty) ? img : null,
+      quantity: (data['quantity'] as num?)?.toInt() ?? 1,
     );
   }
 
@@ -157,6 +165,7 @@ class RewardOption {
       'giftType': giftType,
       if (unitValue > 0) 'unitValue': unitValue,
       if (imageUrl != null && imageUrl!.isNotEmpty) 'imageUrl': imageUrl,
+      if (unitsPerChoice > 1) 'quantity': unitsPerChoice,
     };
   }
 
@@ -170,7 +179,8 @@ class RewardOption {
       if (giftId.isNotEmpty) 'giftId': giftId,
       if (ruleId.isNotEmpty) 'ruleId': ruleId,
       if (ruleTitle.isNotEmpty) 'ruleTitle': ruleTitle,
-      'quantity': quantity,
+      'quantity': (quantity < 1 ? 1 : quantity) * unitsPerChoice,
+      if (unitsPerChoice > 1) 'unitsPerChoice': unitsPerChoice,
     };
   }
 }

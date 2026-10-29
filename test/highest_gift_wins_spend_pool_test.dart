@@ -70,12 +70,12 @@ void main() {
     return {for (final m in matched) m.rule.id: m.multiplier};
   }
 
-  test('627 EGP -> one 100 voucher + one Snickers (not 4 Snickers)', () {
-    expect(award(627), {'rule_3': 1, 'rule_1': 1});
+  test('627 EGP -> one 100 voucher only (exclusive top tier, not 4 Snickers)', () {
+    expect(award(627), {'rule_3': 1});
   });
 
-  test('600 EGP -> one 100 voucher + one Snickers', () {
-    expect(award(600), {'rule_3': 1, 'rule_1': 1});
+  test('600 EGP -> one 100 voucher only', () {
+    expect(award(600), {'rule_3': 1});
   });
 
   test('900 EGP -> two 100 vouchers', () {
@@ -86,8 +86,8 @@ void main() {
     expect(award(400), {'rule_2': 1});
   });
 
-  test('300 EGP -> two Snickers', () {
-    expect(award(300), {'rule_1': 2});
+  test('300 EGP -> one Snickers (150 tier implicitly capped at next tier 350)', () {
+    expect(award(300), {'rule_1': 1});
   });
 
   test('gift value ranking: known values first, then spend tier', () {

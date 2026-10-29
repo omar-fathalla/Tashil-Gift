@@ -3282,10 +3282,24 @@ class PromotionalRuleMatcher {
         // gift value (known values first), then by spend tier. The spend is
         // handed out greedily: the best rule takes its share and only the
         // remainder can qualify lower tiers (never stacked on the same spend).
-        final sortedGroup = List<PromotionalRuleItem>.from(group)
-          ..sort(compareRulesByGiftValue);
         final spendTierOrder = List<PromotionalRuleItem>.from(group)
           ..sort((a, b) => b.effectiveMinSpend.compareTo(a.effectiveMinSpend));
+        // Exclusive spend tiers (general, all campaigns): when 2+ spend rules
+        // share one pool they form a ladder. The receipt gets ONLY the highest
+        // tier it reaches; a tier without maxSpend is implicitly capped by the
+        // next tier's minSpend. Multipliers apply to the top tier only
+        // (e.g. 900 on a 450 top tier = 2x top gift); lower tiers are single
+        // brackets and never receive the remainder of a higher tier's spend.
+        final bool isSpendLadder =
+            group.where((r) => r.isSpendBased).length > 1;
+        final sortedGroup = isSpendLadder
+            ? (List<PromotionalRuleItem>.from(group)
+              ..sort((a, b) {
+                final c = b.effectiveMinSpend.compareTo(a.effectiveMinSpend);
+                return c != 0 ? c : compareRulesByGiftValue(a, b);
+              }))
+            : (List<PromotionalRuleItem>.from(group)
+              ..sort(compareRulesByGiftValue));
         double? remainingPoolSpend;
         final Set<int> poolConsumedIndices = {};
 
@@ -3374,8 +3388,9 @@ class PromotionalRuleMatcher {
 
           final isTopTierInGroup = spendTierOrder.first.id == rule.id;
           final bool isBoundedBracket = !isTopTierInGroup &&
-              rule.hasSpendRange &&
-              (rule.maxSpend != null && rule.maxSpend! > rule.minSpend);
+              (isSpendLadder ||
+                  (rule.hasSpendRange &&
+                      (rule.maxSpend != null && rule.maxSpend! > rule.minSpend)));
           final effectiveMin = rule.effectiveMinSpend;
           final bool qualifiesMin =
               effectiveMin > 0 && totalEligibleSpend >= effectiveMin;
@@ -3447,6 +3462,7 @@ class PromotionalRuleMatcher {
               ),
             );
 
+            if (isSpendLadder) break; // exclusive: only the highest reached tier
             if (remainingPoolSpend <= 0) break;
           }
         }
