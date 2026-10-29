@@ -32,6 +32,8 @@ const CLAIM_PATCH_KEYS = new Set([
   "linked_gifts",
   "unit_value",
   "is_voucher",
+  "chosen_reward_option",
+  "chosen_reward_options",
 ]);
 
 function assertAppCheck(request) {

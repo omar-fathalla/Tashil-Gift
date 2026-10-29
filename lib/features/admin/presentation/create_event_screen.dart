@@ -2831,6 +2831,10 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         ? _companyGifts.where((g) => g.id == existingRule!.linkedGiftId).firstOrNull
         : null;
     List<LinkedGiftAllocation> dialogLinkedGifts = List<LinkedGiftAllocation>.from(existingRule?.linkedGifts ?? []);
+    // "خيارات المكافأة": optional list; customer picks exactly one at handover.
+    final List<RewardOption> dialogRewardOptions = List<RewardOption>.from(existingRule?.rewardOptions ?? const []);
+    final optionVoucherCtrl = TextEditingController();
+    final optionLabelCtrl = TextEditingController();
     if (dialogLinkedGifts.isEmpty && selectedGift != null) {
       dialogLinkedGifts.add(LinkedGiftAllocation(
         giftId: selectedGift.id,
@@ -3748,6 +3752,156 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         const SizedBox(height: 12),
                       ],
 
+                      // ── خيارات المكافأة (customer picks one) ──
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: colorScheme.outlineVariant),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.alt_route_rounded, size: 18, color: colorScheme.primary),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    'خيارات المكافأة (العميل يختار واحدة)',
+                                    style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              dialogRewardOptions.length > 1
+                                  ? 'العميل هيختار خيار واحد من ${dialogRewardOptions.length} وقت التسليم، وهيتخصم من المخزون الخيار اللي اختاره بس.'
+                                  : 'اختياري: ضيف خيارين أو أكتر (مثلاً قسيمة 50 جنيه أو إزازة). لو أقل من خيارين، القاعدة بتشتغل بالمكافأة العادية.',
+                              style: GoogleFonts.cairo(fontSize: 11.5, color: colorScheme.onSurfaceVariant),
+                            ),
+                            const SizedBox(height: 8),
+                            ...dialogRewardOptions.asMap().entries.map((entry) {
+                              final opt = entry.value;
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 6),
+                                child: InputChip(
+                                  key: ValueKey('rule_reward_option_${entry.key}'),
+                                  avatar: Icon(
+                                    opt.isVoucher ? Icons.local_activity_rounded : Icons.card_giftcard_rounded,
+                                    size: 18,
+                                  ),
+                                  label: Text(
+                                    '${entry.key + 1}. ${opt.displayLabel}',
+                                    style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  onDeleted: () => setDialogState(() => dialogRewardOptions.removeAt(entry.key)),
+                                ),
+                              );
+                            }),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: optionVoucherCtrl,
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    decoration: InputDecoration(
+                                      labelText: 'قيمة القسيمة (ج.م)',
+                                      labelStyle: GoogleFonts.cairo(fontSize: 12),
+                                      isDense: true,
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextField(
+                                    controller: optionLabelCtrl,
+                                    decoration: InputDecoration(
+                                      labelText: 'اسم الخيار (اختياري)',
+                                      labelStyle: GoogleFonts.cairo(fontSize: 12),
+                                      isDense: true,
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                IconButton.filledTonal(
+                                  tooltip: 'إضافة قسيمة كخيار',
+                                  icon: const Icon(Icons.add_rounded),
+                                  onPressed: () {
+                                    final amt = double.tryParse(optionVoucherCtrl.text.toEnglishDigits().trim()) ?? 0.0;
+                                    if (amt <= 0) return;
+                                    // Link to a matching voucher card in inventory when one exists (for stock tracking).
+                                    final match = _companyGifts
+                                        .where((g) => g.isVoucher && (g.unitValue - amt).abs() < 0.01)
+                                        .firstOrNull;
+                                    setDialogState(() {
+                                      dialogRewardOptions.add(RewardOption(
+                                        id: 'opt_${DateTime.now().microsecondsSinceEpoch}',
+                                        kind: 'voucher',
+                                        label: optionLabelCtrl.text.trim(),
+                                        voucherAmount: amt,
+                                        giftId: match?.id ?? '',
+                                        giftName: match?.giftName ?? '',
+                                        giftType: 'voucher',
+                                        unitValue: amt,
+                                        imageUrl: match?.imageUrl,
+                                      ));
+                                      optionVoucherCtrl.clear();
+                                      optionLabelCtrl.clear();
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                            if (_companyGifts.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              DropdownButtonFormField<CompanyGiftModel>(
+                                key: ValueKey('reward_option_gift_picker_${dialogRewardOptions.length}'),
+                                isExpanded: true,
+                                decoration: InputDecoration(
+                                  hintText: '+ إضافة هدية من المخزون كخيار',
+                                  hintStyle: GoogleFonts.cairo(fontSize: 12),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  isDense: true,
+                                ),
+                                items: _companyGifts.map((g) {
+                                  final typeDesc = g.isVoucher ? 'فواتشر (${g.formattedUnitValue})' : 'هدية عينية';
+                                  return DropdownMenuItem(
+                                    value: g,
+                                    child: Text('${g.giftName} - $typeDesc',
+                                        overflow: TextOverflow.ellipsis, style: GoogleFonts.cairo(fontSize: 12)),
+                                  );
+                                }).toList(),
+                                onChanged: (gift) {
+                                  if (gift == null) return;
+                                  if (dialogRewardOptions.any((o) => o.giftId.isNotEmpty && o.giftId == gift.id)) return;
+                                  setDialogState(() {
+                                    dialogRewardOptions.add(RewardOption(
+                                      id: 'opt_${DateTime.now().microsecondsSinceEpoch}',
+                                      kind: 'gift',
+                                      label: gift.giftName,
+                                      giftId: gift.id,
+                                      giftName: gift.giftName,
+                                      giftType: gift.giftType,
+                                      unitValue: gift.unitValue,
+                                      imageUrl: gift.imageUrl,
+                                    ));
+                                  });
+                                },
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
                       SwitchListTile(
                         title: Text(
                           strings.multipliersAllowedLabel,
@@ -3819,6 +3973,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                           : selectedGift?.giftName,
                       linkedGifts: finalLinkedGifts,
                       gameType: selectedRuleGameType,
+                      rewardOptions: List<RewardOption>.from(dialogRewardOptions),
                     );
 
                     setState(() {

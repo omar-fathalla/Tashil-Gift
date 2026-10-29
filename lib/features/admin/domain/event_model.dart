@@ -76,6 +76,105 @@ class LinkedGiftAllocation {
   }
 }
 
+/// One selectable reward the customer may pick for a rule ("خيارات المكافأة").
+/// Either a voucher with a value, or a gift linked from company inventory.
+class RewardOption {
+  final String id;
+  final String kind; // 'voucher' | 'gift'
+  final String label;
+  final double voucherAmount;
+  final String giftId;
+  final String giftName;
+  final String giftType; // inventory gift type: 'voucher' | 'product'
+  final double unitValue;
+  final String? imageUrl;
+
+  const RewardOption({
+    required this.id,
+    this.kind = 'voucher',
+    this.label = '',
+    this.voucherAmount = 0.0,
+    this.giftId = '',
+    this.giftName = '',
+    this.giftType = 'product',
+    this.unitValue = 0.0,
+    this.imageUrl,
+  });
+
+  bool get isVoucher => kind == 'voucher' || giftType == 'voucher';
+
+  /// Monetary value of one unit of this option (voucher amount, or voucher gift value).
+  double get monetaryValue {
+    if (kind == 'voucher') return voucherAmount > 0 ? voucherAmount : unitValue;
+    return giftType == 'voucher' ? unitValue : 0.0;
+  }
+
+  String get displayLabel {
+    if (label.trim().isNotEmpty) return label.trim();
+    if (kind == 'gift' && giftName.trim().isNotEmpty) return giftName.trim();
+    final v = monetaryValue;
+    final vText = v == v.roundToDouble() ? v.toInt().toString() : v.toString();
+    return 'قسيمة شراء $vText جنيه';
+  }
+
+  /// Converts the chosen option into the allocation used by the claim/stock path.
+  LinkedGiftAllocation toAllocation({int multiplier = 1}) {
+    final q = multiplier < 1 ? 1 : multiplier;
+    return LinkedGiftAllocation(
+      giftId: giftId,
+      giftName: kind == 'gift' && giftName.trim().isNotEmpty ? giftName.trim() : displayLabel,
+      quantity: q,
+      unitValue: kind == 'voucher' ? monetaryValue : unitValue,
+      giftType: isVoucher ? 'voucher' : 'product',
+      imageUrl: imageUrl,
+    );
+  }
+
+  factory RewardOption.fromMap(Map<String, dynamic> data) {
+    final kind = data['kind']?.toString() == 'gift' ? 'gift' : 'voucher';
+    final img = data['imageUrl']?.toString();
+    return RewardOption(
+      id: data['id']?.toString() ?? '',
+      kind: kind,
+      label: data['label']?.toString() ?? '',
+      voucherAmount: (data['voucherAmount'] as num?)?.toDouble() ?? 0.0,
+      giftId: data['giftId']?.toString() ?? '',
+      giftName: data['giftName']?.toString() ?? '',
+      giftType: data['giftType']?.toString() ?? (kind == 'voucher' ? 'voucher' : 'product'),
+      unitValue: (data['unitValue'] as num?)?.toDouble() ?? 0.0,
+      imageUrl: (img != null && img.isNotEmpty) ? img : null,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'kind': kind,
+      if (label.trim().isNotEmpty) 'label': label.trim(),
+      if (kind == 'voucher') 'voucherAmount': voucherAmount,
+      if (giftId.isNotEmpty) 'giftId': giftId,
+      if (giftName.isNotEmpty) 'giftName': giftName,
+      'giftType': giftType,
+      if (unitValue > 0) 'unitValue': unitValue,
+      if (imageUrl != null && imageUrl!.isNotEmpty) 'imageUrl': imageUrl,
+    };
+  }
+
+  /// Compact record stored on the receipt when the customer picks this option.
+  Map<String, dynamic> toChosenRecord({String ruleId = '', String ruleTitle = '', int quantity = 1}) {
+    return {
+      'optionId': id,
+      'kind': kind,
+      'label': displayLabel,
+      'value': monetaryValue,
+      if (giftId.isNotEmpty) 'giftId': giftId,
+      if (ruleId.isNotEmpty) 'ruleId': ruleId,
+      if (ruleTitle.isNotEmpty) 'ruleTitle': ruleTitle,
+      'quantity': quantity,
+    };
+  }
+}
+
 /// Represents a structured promotional rule/offer condition (e.g. "Buy 1 Axe/Rexona spray -> Get 50 EGP voucher" or "Buy >= 100 EGP of Signal + Closeup -> Get 25 EGP voucher")
 class PromotionalRuleItem {
   final String id;
@@ -99,6 +198,7 @@ class PromotionalRuleItem {
   final String? linkedGiftName; // Friendly display name of the linked gift (legacy/fallback)
   final List<LinkedGiftAllocation> linkedGifts; // Multiple allocated gifts/vouchers for this rule
   final String? gameType; // Specific delivery game: 'directGift' | 'scratch' | 'wheel' | 'chooseGift' | null (inherit from event)
+  final List<RewardOption> rewardOptions; // Optional: customer picks exactly one (empty = legacy single reward)
 
   PromotionalRuleItem({
     required this.id,
@@ -122,7 +222,11 @@ class PromotionalRuleItem {
     this.linkedGiftName,
     this.linkedGifts = const [],
     this.gameType,
+    this.rewardOptions = const [],
   });
+
+  /// True when the customer must choose one of several rewards for this rule.
+  bool get hasRewardChoice => rewardOptions.length > 1;
 
   bool get hasLinkedGifts => linkedGifts.isNotEmpty || (linkedGiftId != null && linkedGiftId!.isNotEmpty);
 
@@ -234,6 +338,14 @@ class PromotionalRuleItem {
     final effectiveMaxSpend = condType == 'by_quantity' ? null : (data['maxSpend'] as num?)?.toDouble();
     final effectiveDiscountTolerance = condType == 'by_quantity' ? 0.0 : ((data['discountTolerance'] as num?)?.toDouble() ?? 0.0);
 
+    final parsedRewardOptions = (data['rewardOptions'] is List)
+        ? (data['rewardOptions'] as List)
+            .whereType<Map>()
+            .map((e) => RewardOption.fromMap(Map<String, dynamic>.from(e)))
+            .where((o) => o.kind == 'gift' ? (o.giftId.isNotEmpty || o.giftName.isNotEmpty) : o.monetaryValue > 0 || o.label.isNotEmpty)
+            .toList()
+        : <RewardOption>[];
+
     return PromotionalRuleItem(
       id: data['id']?.toString() ?? '',
       ruleTitle: data['ruleTitle']?.toString() ?? '',
@@ -256,6 +368,7 @@ class PromotionalRuleItem {
       linkedGiftName: rawGiftName,
       linkedGifts: parsedLinkedGifts,
       gameType: data['gameType']?.toString(),
+      rewardOptions: parsedRewardOptions,
     );
   }
 
@@ -285,6 +398,7 @@ class PromotionalRuleItem {
       if (effectiveGiftName.isNotEmpty) 'linkedGiftName': effectiveGiftName,
       if (linkedGifts.isNotEmpty) 'linkedGifts': linkedGifts.map((g) => g.toMap()).toList(),
       if (gameType != null && gameType!.isNotEmpty) 'gameType': gameType,
+      if (rewardOptions.isNotEmpty) 'rewardOptions': rewardOptions.map((o) => o.toMap()).toList(),
     };
   }
 
@@ -310,6 +424,7 @@ class PromotionalRuleItem {
     String? linkedGiftName,
     List<LinkedGiftAllocation>? linkedGifts,
     String? gameType,
+    List<RewardOption>? rewardOptions,
   }) {
     return PromotionalRuleItem(
       id: id ?? this.id,
@@ -333,6 +448,7 @@ class PromotionalRuleItem {
       linkedGiftName: linkedGiftName ?? this.linkedGiftName,
       linkedGifts: linkedGifts ?? this.linkedGifts,
       gameType: gameType ?? this.gameType,
+      rewardOptions: rewardOptions ?? this.rewardOptions,
     );
   }
 }

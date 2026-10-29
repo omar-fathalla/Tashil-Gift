@@ -1726,6 +1726,8 @@ class _ClientReceiptUploadScreenState
               unitValue: resolvedUnitValue,
               isVoucher: resolvedIsVoucher,
               linkedGifts: resolvedLinkedGifts,
+              rewardChoiceGroups: compositeBundle.rewardChoiceGroups,
+              baseLinkedGifts: compositeBundle.baseLinkedGifts,
               requireVoucherSerials:
                   currentEvent?.requireVoucherSerials ?? false,
               voucherSerialMode: currentEvent?.voucherSerialMode,
@@ -1751,12 +1753,8 @@ class _ClientReceiptUploadScreenState
         final enteredName = _customerNameController.text.trim();
         final isWaEnabled =
             currentEvent?.enableWhatsAppWinnerNotification ?? true;
-        final candidateGifts = compositeBundle.combinedLinkedGifts.isNotEmpty
-            ? compositeBundle.combinedLinkedGifts
-                  .map((g) => g.giftName.trim())
-                  .where((n) => n.isNotEmpty)
-                  .toSet()
-                  .toList()
+        final candidateGifts = compositeBundle.candidateGiftNames.isNotEmpty
+            ? compositeBundle.candidateGiftNames
             : prizeNames;
         await Navigator.of(context).push(
           MaterialPageRoute(
@@ -1783,12 +1781,8 @@ class _ClientReceiptUploadScreenState
         final enteredName = _customerNameController.text.trim();
         final isWaEnabled =
             currentEvent?.enableWhatsAppWinnerNotification ?? true;
-        final candidateGifts = compositeBundle.combinedLinkedGifts.isNotEmpty
-            ? compositeBundle.combinedLinkedGifts
-                  .map((g) => g.giftName.trim())
-                  .where((n) => n.isNotEmpty)
-                  .toSet()
-                  .toList()
+        final candidateGifts = compositeBundle.candidateGiftNames.isNotEmpty
+            ? compositeBundle.candidateGiftNames
             : prizeNames;
         await Navigator.of(context).push(
           MaterialPageRoute(
@@ -1812,12 +1806,8 @@ class _ClientReceiptUploadScreenState
         final enteredName = _customerNameController.text.trim();
         final isWaEnabled =
             currentEvent?.enableWhatsAppWinnerNotification ?? true;
-        final candidateGifts = compositeBundle.combinedLinkedGifts.isNotEmpty
-            ? compositeBundle.combinedLinkedGifts
-                  .map((g) => g.giftName.trim())
-                  .where((n) => n.isNotEmpty)
-                  .toSet()
-                  .toList()
+        final candidateGifts = compositeBundle.candidateGiftNames.isNotEmpty
+            ? compositeBundle.candidateGiftNames
             : prizeNames;
         final branchFilteredPrizes =
             (currentEvent != null && currentEvent.allocatedPrizes.isNotEmpty)

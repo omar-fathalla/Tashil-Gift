@@ -16,6 +16,7 @@ import '../../../core/localization/app_strings.dart';
 import '../../../core/widgets/switch_point_branding.dart';
 import '../../../core/widgets/m3_list_tile.dart';
 import '../../admin/domain/event_model.dart';
+import '../../../core/services/ai_receipt_service.dart' show RewardChoiceGroup, consolidateLinkedGifts;
 import 'winner_celebration_dialog.dart';
 import 'game_demo_banner.dart';
 import '../../company_portal/domain/whatsapp_gateway_service.dart';
@@ -63,6 +64,10 @@ class DirectGiftClaimScreen extends ConsumerStatefulWidget {
   final String? receiptNumber;
   final String? companySlug;
   final bool? enableWhatsAppWinnerNotification;
+  /// Rules where the customer picks one reward option ("خيارات المكافأة").
+  final List<RewardChoiceGroup> rewardChoiceGroups;
+  /// Gifts from matched rules without a choice (handed over regardless of the pick).
+  final List<LinkedGiftAllocation> baseLinkedGifts;
 
   const DirectGiftClaimScreen({
     super.key,
@@ -85,6 +90,8 @@ class DirectGiftClaimScreen extends ConsumerStatefulWidget {
     this.receiptNumber,
     this.companySlug,
     this.enableWhatsAppWinnerNotification,
+    this.rewardChoiceGroups = const [],
+    this.baseLinkedGifts = const [],
   });
 
   @override
@@ -123,12 +130,54 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
 
   final List<VoucherSerialSlot> _voucherSlots = [];
 
-  List<LinkedGiftAllocation> get _effectiveLinkedGifts =>
-      (_resolvedLinkedGifts != null && _resolvedLinkedGifts!.isNotEmpty)
-          ? _resolvedLinkedGifts!
-          : widget.linkedGifts;
+  // ── Reward options ("خيارات المكافأة") ──
+  List<RewardChoiceGroup>? _discoveredChoiceGroups;
+  final Map<int, int> _chosenOptionIdx = {};
+
+  List<RewardChoiceGroup> get _choiceGroups =>
+      widget.rewardChoiceGroups.isNotEmpty ? widget.rewardChoiceGroups : (_discoveredChoiceGroups ?? const []);
+  bool get _hasRewardChoice => _choiceGroups.isNotEmpty;
+  bool get _allChoicesMade =>
+      _hasRewardChoice && List.generate(_choiceGroups.length, (i) => _chosenOptionIdx.containsKey(i)).every((b) => b);
+
+  List<LinkedGiftAllocation> get _chosenAllocations => [
+        for (int i = 0; i < _choiceGroups.length; i++)
+          if (_chosenOptionIdx[i] != null)
+            _choiceGroups[i].options[_chosenOptionIdx[i]!].toAllocation(multiplier: _choiceGroups[i].multiplier),
+      ];
+
+  List<LinkedGiftAllocation> get _choiceLinkedGifts => consolidateLinkedGifts([
+        ...(widget.rewardChoiceGroups.isNotEmpty ? widget.baseLinkedGifts : const <LinkedGiftAllocation>[]),
+        ..._chosenAllocations,
+      ]);
+
+  List<Map<String, dynamic>> get _chosenRecords => [
+        for (int i = 0; i < _choiceGroups.length; i++)
+          if (_chosenOptionIdx[i] != null)
+            _choiceGroups[i].options[_chosenOptionIdx[i]!].toChosenRecord(
+              ruleId: _choiceGroups[i].ruleId,
+              ruleTitle: _choiceGroups[i].ruleTitle,
+              quantity: _choiceGroups[i].multiplier,
+            ),
+      ];
+
+  void _selectRewardOption(int groupIdx, int optionIdx) {
+    if (_isClaiming || _isClaimed) return;
+    setState(() {
+      _chosenOptionIdx[groupIdx] = optionIdx;
+      _syncVoucherSlots();
+    });
+  }
+
+  List<LinkedGiftAllocation> get _effectiveLinkedGifts {
+    if (_hasRewardChoice && _allChoicesMade) return _choiceLinkedGifts;
+    return (_resolvedLinkedGifts != null && _resolvedLinkedGifts!.isNotEmpty)
+        ? _resolvedLinkedGifts!
+        : widget.linkedGifts;
+  }
 
   bool get _effectiveIsVoucher {
+    if (_hasRewardChoice && _allChoicesMade) return _choiceLinkedGifts.any((g) => g.isVoucher);
     if (_resolvedIsVoucher != null) return _resolvedIsVoucher!;
     if (widget.isVoucher != null) return widget.isVoucher!;
     if (_effectiveLinkedGifts.isNotEmpty) {
@@ -153,6 +202,10 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
 
   double? get _effectiveUnitValue {
     if (!_effectiveIsVoucher) return null;
+    if (_hasRewardChoice && _allChoicesMade) {
+      final total = _choiceLinkedGifts.fold<double>(0.0, (acc, g) => acc + g.totalMonetaryValue);
+      return total > 0 ? total : null;
+    }
     if (_resolvedUnitValue != null && _resolvedUnitValue! > 0) {
       return _resolvedUnitValue;
     }
@@ -171,6 +224,9 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
   }
 
   String get _effectivePrizeName {
+    if (_hasRewardChoice && _allChoicesMade) {
+      return _choiceLinkedGifts.map((g) => g.quantity > 1 ? '${g.quantity} × ${g.giftName}' : g.giftName).join(' + ');
+    }
     if (_resolvedPrizeName != null &&
         _resolvedPrizeName!.isNotEmpty &&
         _resolvedPrizeName != 'هدية ترويجية مميزة' &&
@@ -334,6 +390,13 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
           }
         }
 
+        if (matchedRuleItem != null && widget.rewardChoiceGroups.isEmpty) {
+          final g = RewardChoiceGroup.fromRule(matchedRuleItem, multiplier: widget.quantity > 0 ? widget.quantity : 1);
+          if (g != null && mounted) {
+            setState(() => _discoveredChoiceGroups = [g]);
+          }
+        }
+
         if (matchedRuleItem != null) {
           discoveredName = matchedRuleItem.rewardValue.isNotEmpty
               ? matchedRuleItem.rewardValue
@@ -478,7 +541,19 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
   Future<void> _claimAndHandoverGift() async {
     if (_isClaiming || _isClaimed) return;
 
-    if (_remainingStock != null && _remainingStock! <= 0 && !widget.isDemo) {
+    if (_hasRewardChoice && !_allChoicesMade) {
+      final isAr = ref.isArabic;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(isAr ? 'اختار المكافأة اللي العميل عايزها الأول' : 'Please choose the customer\'s reward first'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    if (!_hasRewardChoice && _remainingStock != null && _remainingStock! <= 0 && !widget.isDemo) {
       final strings = AppStrings.of(ref);
       final branch = _resolvedBranchName ?? widget.branchId ?? '';
       final msg = branch.isNotEmpty
@@ -678,6 +753,8 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
             'prize_won': displayPrize,
             'prizes_won': List.filled(effectiveQuantity, finalPrizeName),
             'claimed_gifts': claimedGiftsList,
+            if (_hasRewardChoice && _chosenRecords.isNotEmpty) 'chosen_reward_option': _chosenRecords.first,
+            if (_hasRewardChoice && _chosenRecords.isNotEmpty) 'chosen_reward_options': _chosenRecords,
             if (allVoucherSerials.isNotEmpty) 'voucher_serials': allVoucherSerials,
             'event_id': widget.eventId,
             'branch_id': widget.branchId ?? '',
@@ -775,7 +852,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
     final isAr = ref.isArabic;
     final strings = AppStrings.of(ref);
     final effectiveQuantity = widget.quantity > 0 ? widget.quantity : 1;
-    final isOutOfStock = _remainingStock != null && _remainingStock! <= 0 && !widget.isDemo;
+    final isOutOfStock = !_hasRewardChoice && _remainingStock != null && _remainingStock! <= 0 && !widget.isDemo;
 
     _syncVoucherSlots();
 
@@ -1348,6 +1425,9 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                               ),
                             ),
 
+                            // Reward options picker (customer chooses exactly one per rule)
+                            if (_hasRewardChoice) _buildRewardChoiceCard(context, colorScheme, isAr),
+
                             // Mandatory Physical Voucher Serial Numbers Input Card
                             _buildVoucherSerialsCard(context, colorScheme, strings, isAr),
 
@@ -1423,7 +1503,9 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
 
                             // Action Button (Handover & Claim)
                             M3ActionButton(
-                              onPressed: (_isClaiming || _isClaimed || isOutOfStock) ? null : _claimAndHandoverGift,
+                              onPressed: (_isClaiming || _isClaimed || isOutOfStock || (_hasRewardChoice && !_allChoicesMade))
+                                  ? null
+                                  : _claimAndHandoverGift,
                               label: _isClaimed
                                   ? (isAr ? 'تم تسليم الهدية بنجاح' : 'Gift Handed Over')
                                   : (isOutOfStock ? (isAr ? 'المخزون نافد' : 'Out of Stock') : strings.claimDirectGift),
@@ -1439,6 +1521,83 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                   ),
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Builds the M3 reward options card ("اختار مكافأتك").
+  Widget _buildRewardChoiceCard(BuildContext context, ColorScheme colorScheme, bool isAr) {
+    final groups = _choiceGroups;
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Card(
+        elevation: 0,
+        color: colorScheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: colorScheme.outlineVariant),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.touch_app_rounded, color: colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      isAr ? 'اختار مكافأتك (اختيار واحد)' : 'Choose your reward (pick one)',
+                      style: GoogleFonts.cairo(fontSize: 15, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+                    ),
+                  ),
+                ],
+              ),
+              for (int gi = 0; gi < groups.length; gi++) ...[
+                const SizedBox(height: 12),
+                if (groups.length > 1 || groups[gi].ruleTitle.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      groups[gi].multiplier > 1
+                          ? '${groups[gi].ruleTitle} (× ${groups[gi].multiplier})'
+                          : groups[gi].ruleTitle,
+                      style: GoogleFonts.cairo(fontSize: 12.5, color: colorScheme.onSurfaceVariant),
+                    ),
+                  ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (int oi = 0; oi < groups[gi].options.length; oi++)
+                      ChoiceChip(
+                        key: ValueKey('reward_option_${gi}_$oi'),
+                        avatar: Icon(
+                          groups[gi].options[oi].isVoucher ? Icons.local_activity_rounded : Icons.card_giftcard_rounded,
+                          size: 18,
+                        ),
+                        label: Text(
+                          groups[gi].options[oi].displayLabel,
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+                        ),
+                        selected: _chosenOptionIdx[gi] == oi,
+                        onSelected: (_isClaiming || _isClaimed) ? null : (_) => _selectRewardOption(gi, oi),
+                      ),
+                  ],
+                ),
+              ],
+              if (!_allChoicesMade)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(
+                    isAr ? 'لازم العميل يختار مكافأة قبل التسليم' : 'The customer must pick a reward before handover',
+                    style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.error),
+                  ),
+                ),
             ],
           ),
         ),

@@ -4989,10 +4989,50 @@ class MatchedPromotionalRuleResult {
   }
 }
 
+/// A matched rule whose reward the customer must pick from several options.
+class RewardChoiceGroup {
+  final String ruleId;
+  final String ruleTitle;
+  final int multiplier;
+  final List<RewardOption> options;
+
+  const RewardChoiceGroup({
+    required this.ruleId,
+    required this.ruleTitle,
+    this.multiplier = 1,
+    required this.options,
+  });
+
+  static RewardChoiceGroup? fromRule(PromotionalRuleItem rule, {int multiplier = 1}) {
+    if (!rule.hasRewardChoice) return null;
+    return RewardChoiceGroup(
+      ruleId: rule.id,
+      ruleTitle: rule.ruleTitle,
+      multiplier: multiplier < 1 ? 1 : multiplier,
+      options: rule.rewardOptions,
+    );
+  }
+}
+
+/// Merges allocations that refer to the same gift (by id, or by name when no id).
+List<LinkedGiftAllocation> consolidateLinkedGifts(Iterable<LinkedGiftAllocation> gifts) {
+  final Map<String, LinkedGiftAllocation> out = {};
+  for (final g in gifts) {
+    final key = g.giftId.isNotEmpty ? g.giftId : 'name:${g.giftName}';
+    final existing = out[key];
+    out[key] = existing == null ? g : existing.copyWith(quantity: existing.quantity + g.quantity);
+  }
+  return out.values.toList();
+}
+
 /// Represents a composite multi-offer prize bundle synthesized from all matched rules in a single receipt
 class CompositePromotionalBundle {
   final List<MatchedPromotionalRuleResult> matchedRules;
   final List<LinkedGiftAllocation> combinedLinkedGifts;
+  /// Gifts from rules WITHOUT a reward choice (always handed over).
+  final List<LinkedGiftAllocation> baseLinkedGifts;
+  /// Rules where the customer must choose one reward option.
+  final List<RewardChoiceGroup> rewardChoiceGroups;
   final String compositePrizeTitle;
   final double totalVoucherValue;
   final int totalChances;
@@ -5005,7 +5045,23 @@ class CompositePromotionalBundle {
     this.totalVoucherValue = 0.0,
     this.totalChances = 1,
     this.resolvedGameType,
+    this.baseLinkedGifts = const [],
+    this.rewardChoiceGroups = const [],
   });
+
+  bool get requiresRewardChoice => rewardChoiceGroups.isNotEmpty;
+
+  /// Gift names for "choose your gift" games: base gifts plus every reward option.
+  List<String> get candidateGiftNames {
+    if (!requiresRewardChoice) {
+      return combinedLinkedGifts.map((g) => g.giftName.trim()).where((n) => n.isNotEmpty).toSet().toList();
+    }
+    return <String>{
+      ...baseLinkedGifts.map((g) => g.giftName.trim()),
+      for (final grp in rewardChoiceGroups)
+        for (final o in grp.options) o.toAllocation().giftName.trim(),
+    }.where((n) => n.isNotEmpty).toList();
+  }
 
   static CompositePromotionalBundle fromMatchedRules(
     List<MatchedPromotionalRuleResult> rules, {
@@ -5023,6 +5079,9 @@ class CompositePromotionalBundle {
     }
 
     final Map<String, LinkedGiftAllocation> consolidatedGifts = {};
+    final List<RewardChoiceGroup> choiceGroups = [];
+    final List<LinkedGiftAllocation> defaultChoiceGifts = [];
+    final List<LinkedGiftAllocation> baseGifts = [];
     double totalVoucher = 0.0;
     int chances = 0;
     String? ruleLevelGameType;
@@ -5032,6 +5091,17 @@ class CompositePromotionalBundle {
       chances += r.multiplier;
       if (r.rule.gameType != null && r.rule.gameType!.trim().isNotEmpty) {
         ruleLevelGameType = r.rule.gameType!.trim();
+      }
+      final choice = RewardChoiceGroup.fromRule(r.rule, multiplier: r.multiplier);
+      if (choice != null) {
+        choiceGroups.add(choice);
+        // Default (first) option keeps legacy consumers working until the customer picks.
+        final def = choice.options.first.toAllocation(multiplier: choice.multiplier);
+        final key = def.giftId.isNotEmpty ? def.giftId : 'name:${def.giftName}';
+        defaultChoiceGifts.add(def);
+        final existing = consolidatedGifts[key];
+        consolidatedGifts[key] = existing == null ? def : existing.copyWith(quantity: existing.quantity + def.quantity);
+        continue;
       }
       final ruleGifts = r.multipliedLinkedGifts.isNotEmpty
           ? r.multipliedLinkedGifts
@@ -5052,6 +5122,7 @@ class CompositePromotionalBundle {
               ),
             ];
 
+      baseGifts.addAll(ruleGifts);
       for (final g in ruleGifts) {
         if (consolidatedGifts.containsKey(g.giftId)) {
           final existing = consolidatedGifts[g.giftId]!;
@@ -5073,6 +5144,8 @@ class CompositePromotionalBundle {
       totalVoucherValue: totalVoucher,
       totalChances: chances > 0 ? chances : 1,
       resolvedGameType: ruleLevelGameType,
+      baseLinkedGifts: consolidateLinkedGifts(baseGifts),
+      rewardChoiceGroups: choiceGroups,
     );
   }
 }

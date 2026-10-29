@@ -979,6 +979,8 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
               unitValue: resolvedUnitValue,
               isVoucher: resolvedIsVoucher,
               linkedGifts: resolvedLinkedGifts,
+              rewardChoiceGroups: compositeBundle.rewardChoiceGroups,
+              baseLinkedGifts: compositeBundle.baseLinkedGifts,
               requireVoucherSerials: activeEvent.requireVoucherSerials, voucherSerialMode: activeEvent.voucherSerialMode,
             ),
           ),
@@ -990,12 +992,8 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           });
         }
       } else if (gameType == 'chooseGift') {
-        final candidateGifts = compositeBundle.combinedLinkedGifts.isNotEmpty
-            ? compositeBundle.combinedLinkedGifts
-                .map((g) => g.giftName.trim())
-                .where((n) => n.isNotEmpty)
-                .toSet()
-                .toList()
+        final candidateGifts = compositeBundle.candidateGiftNames.isNotEmpty
+            ? compositeBundle.candidateGiftNames
             : prizeNames;
         await Navigator.of(context).push(
           MaterialPageRoute(
@@ -1016,12 +1014,8 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           });
         }
       } else if (gameType == 'scratch') {
-        final candidateGifts = compositeBundle.combinedLinkedGifts.isNotEmpty
-            ? compositeBundle.combinedLinkedGifts
-                .map((g) => g.giftName.trim())
-                .where((n) => n.isNotEmpty)
-                .toSet()
-                .toList()
+        final candidateGifts = compositeBundle.candidateGiftNames.isNotEmpty
+            ? compositeBundle.candidateGiftNames
             : prizeNames;
         await Navigator.of(context).push(
           MaterialPageRoute(
@@ -1041,12 +1035,8 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         }
       } else {
         // Default: wheel (AIR-85: filter prizes strictly by detected branch stock)
-        final candidateGifts = compositeBundle.combinedLinkedGifts.isNotEmpty
-            ? compositeBundle.combinedLinkedGifts
-                .map((g) => g.giftName.trim())
-                .where((n) => n.isNotEmpty)
-                .toSet()
-                .toList()
+        final candidateGifts = compositeBundle.candidateGiftNames.isNotEmpty
+            ? compositeBundle.candidateGiftNames
             : prizeNames;
         final branchFilteredPrizes = (activeEvent.allocatedPrizes.isNotEmpty)
             ? activeEvent.filterGiftsByBranchStock(
