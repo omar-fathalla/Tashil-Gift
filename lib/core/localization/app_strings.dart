@@ -624,8 +624,8 @@ class AppStrings {
   );
   String get fullAiRecheckTitle => _t(
     ar: 'إعادة المسح الشامل بالذكاء الاصطناعي',
-    en: 'Full AI Re-Scan (Gemini 3.7)',
-    hi: 'पूर्ण एआई पुनः स्कैन (Gemini 3.7)',
+    en: 'Full AI Re-Scan (gemini-3.8-flash)',
+    hi: 'पूर्ण एआई पुनः स्कैन (gemini-3.8-flash)',
   );
   String get fullAiRecheckSubtitle => _t(
     ar: 'إعادة قراءة صورة الفاتورة الأصلية بأحدث كتالوج وتوجيهات للذكاء الاصطناعي',

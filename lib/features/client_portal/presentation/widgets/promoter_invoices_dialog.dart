@@ -2580,7 +2580,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Text(
-                                    'Gemini 3.7',
+                                    'gemini-3.8-flash',
                                     style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: colorScheme.primary),
                                   ),
                                 ),
