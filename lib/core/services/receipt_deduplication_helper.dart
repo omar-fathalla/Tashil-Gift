@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
+import 'firebase_scope.dart';
 
 /// Result of checking a receipt for duplication in Firestore.
 class ReceiptDuplicateCheckResult {
@@ -120,7 +121,7 @@ class ReceiptDeduplicationHelper {
     // is "unknown" (not duplicate): the deterministic-ID create is still blocked
     // by the rules if the receipt already exists for the campaign.
     try {
-      final res = await FirebaseFunctions.instanceFor(region: 'us-central1')
+      final res = await scopedFunctions()
           .httpsCallable(
             'checkReceiptDuplicate',
             options: HttpsCallableOptions(timeout: const Duration(seconds: 20)),

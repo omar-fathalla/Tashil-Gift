@@ -8,6 +8,7 @@ import 'gemini_cloud_model.dart';
 import '../utils/arabic_numbers_utils.dart';
 import 'ai_receipt_service.dart';
 import 'company_products_service.dart';
+import 'firebase_scope.dart';
 
 /// Represents a discovered product in the active discovery inbox
 class DiscoveredProductDocument {
@@ -278,7 +279,7 @@ class AiProductDiscoveryService {
           ),
         );
 
-  FirebaseFirestore get _effectiveFirestore => _firestore ?? FirebaseFirestore.instance;
+  FirebaseFirestore get _effectiveFirestore => _firestore ?? scopedFirestore();
   CompanyProductsService get _effectiveProductsService =>
       _productsService ?? CompanyProductsService(_effectiveFirestore);
 

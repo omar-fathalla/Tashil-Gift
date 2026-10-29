@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/ai_config.dart';
+import 'firebase_scope.dart';
 
 /// Available Specialized AI Agent Modes
 enum AiAgentMode {
@@ -302,7 +303,7 @@ class AiModelConfigService {
 
 /// Riverpod Providers
 final aiModelConfigServiceProvider = Provider<AiModelConfigService>((ref) {
-  return AiModelConfigService(FirebaseFirestore.instance);
+  return AiModelConfigService(scopedFirestore());
 });
 
 final aiModelConfigStreamProvider = StreamProvider<AiModelConfig>((ref) {

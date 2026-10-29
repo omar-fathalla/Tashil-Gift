@@ -1,4 +1,5 @@
 import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
 /// Public reCAPTCHA Enterprise site key registered for the Tashil Gift web app
@@ -22,7 +23,7 @@ const String kAppCheckRecaptchaSiteKey = String.fromEnvironment(
 ///
 /// Web activation is skipped only if [kAppCheckRecaptchaSiteKey] is empty.
 /// Callable functions still reject requests that arrive without an App Check token.
-Future<void> activateFirebaseAppCheck() async {
+Future<void> activateFirebaseAppCheck({FirebaseApp? app}) async {
   if (kIsWeb && kAppCheckRecaptchaSiteKey.isEmpty) {
     debugPrint(
       'App Check web provider skipped: set APP_CHECK_RECAPTCHA_SITE_KEY via --dart-define.',
@@ -31,7 +32,7 @@ Future<void> activateFirebaseAppCheck() async {
   }
 
   try {
-    await FirebaseAppCheck.instance.activate(
+    await (app == null ? FirebaseAppCheck.instance : FirebaseAppCheck.instanceFor(app: app)).activate(
       providerAndroid: kDebugMode
           ? const AndroidDebugProvider()
           : const AndroidPlayIntegrityProvider(),

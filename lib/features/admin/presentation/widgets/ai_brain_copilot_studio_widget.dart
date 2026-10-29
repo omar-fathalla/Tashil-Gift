@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/localization/locale_provider.dart';
@@ -17,6 +16,7 @@ import '../../../../core/utils/clipboard_image_helper.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../domain/ai_directive_model.dart';
 import 'ai_model_switcher_dialog.dart';
+import '../../../../core/services/firebase_scope.dart';
 
 class AiBrainCoPilotStudioWidget extends ConsumerStatefulWidget {
   final String? initialInvoiceContext;
@@ -732,7 +732,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
 
     try {
       // Query recent rejected receipts from Firestore
-      final snap = await FirebaseFirestore.instance
+      final snap = await scopedFirestore()
           .collection('receipts_transactions')
           .where('isValid', isEqualTo: false)
           .limit(20)
@@ -742,7 +742,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
 
       // If empty or index not ready, fallback to general limit query
       if (rejectedList.isEmpty) {
-        final fallbackSnap = await FirebaseFirestore.instance
+        final fallbackSnap = await scopedFirestore()
             .collection('receipts_transactions')
             .limit(25)
             .get();

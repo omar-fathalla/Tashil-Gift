@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'firebase_scope.dart';
 
 /// Historical inboxes. These addresses are not an authorization allow-list.
 /// Admin access comes only from the ID token `role` claim.
@@ -45,8 +47,11 @@ class StaffAuthClaims {
   bool get isPartner => role == 'partner';
 }
 
+/// Cloud Functions for this tab's Firebase app (see FirebaseScope).
+final firebaseFunctionsProvider = Provider<FirebaseFunctions>((ref) => scopedFunctions());
+
 final firebaseAuthProvider = Provider<FirebaseAuth>((ref) {
-  return FirebaseAuth.instance;
+  return scopedAuth();
 });
 
 final authStateStreamProvider = StreamProvider<User?>((ref) {
@@ -93,7 +98,7 @@ final isSuperAdminProvider = Provider<bool>((ref) {
 });
 
 final firestoreProvider = Provider<FirebaseFirestore>((ref) {
-  final instance = FirebaseFirestore.instance;
+  final instance = scopedFirestore();
   try {
     instance.settings = const Settings(
       persistenceEnabled: true,
@@ -104,7 +109,7 @@ final firestoreProvider = Provider<FirebaseFirestore>((ref) {
 });
 
 final firebaseStorageProvider = Provider<FirebaseStorage>((ref) {
-  return FirebaseStorage.instance;
+  return scopedStorage();
 });
 
 class FirebaseService {

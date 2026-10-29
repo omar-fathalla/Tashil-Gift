@@ -159,7 +159,7 @@ final partnerPortalAuthServiceProvider = Provider<PartnerPortalAuthService>((ref
     final firestore = ref.watch(firestoreProvider);
     return PartnerPortalAuthService(
       firestore: firestore,
-      functions: FirebaseFunctions.instanceFor(region: 'us-central1'),
+      functions: ref.watch(firebaseFunctionsProvider),
       auth: ref.watch(firebaseAuthProvider),
     );
   } catch (_) {

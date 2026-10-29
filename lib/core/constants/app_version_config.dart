@@ -13,7 +13,7 @@ class AppVersionConfig {
   static const int patch = 148;
 
   /// Global sequential build counter (Increments on every deployment)
-  static const int buildNumber = 203;
+  static const int buildNumber = 204;
 
   /// Release date of the current build
   static const String releaseDate = '2026-10-29';

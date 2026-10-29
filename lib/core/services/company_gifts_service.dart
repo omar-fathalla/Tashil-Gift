@@ -1,12 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_service.dart';
 import 'distributed_counter_service.dart';
 import '../../features/admin/domain/company_gift_model.dart';
 import '../../features/admin/domain/event_model.dart';
+import 'firebase_scope.dart';
 
 final companyGiftsServiceProvider = Provider<CompanyGiftsService>((ref) {
   final firestore = ref.watch(firestoreProvider);
@@ -1491,7 +1491,7 @@ class CompanyGiftsService {
 
   bool _isAnonymousCaller() {
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = scopedAuth().currentUser;
       return user == null || user.isAnonymous;
     } catch (_) {
       return false;
@@ -1508,7 +1508,7 @@ class CompanyGiftsService {
     required List<Map<String, dynamic>> decrements,
   }) async {
     try {
-      final callable = FirebaseFunctions.instance.httpsCallable('decrementCampaignPrize');
+      final callable = scopedFunctions().httpsCallable('decrementCampaignPrize');
       await callable.call({
         'eventId': eventId,
         if (receiptId != null && receiptId.isNotEmpty) 'receiptId': receiptId,
@@ -1841,7 +1841,7 @@ class CompanyGiftsService {
 
   Future<Map<String, dynamic>> _callUpdateBranchAllocations(Map<String, dynamic> payload) async {
     try {
-      final res = await FirebaseFunctions.instance
+      final res = await scopedFunctions()
           .httpsCallable('updateBranchAllocations')
           .call(payload);
       final data = res.data;

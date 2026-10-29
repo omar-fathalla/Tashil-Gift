@@ -9,6 +9,7 @@ import 'package:intl/intl.dart' as intl;
 import '../../../core/services/firebase_service.dart';
 import 'whatsapp_gateway_config_model.dart';
 import 'whatsapp_gateway_service.dart';
+import '../../../core/services/firebase_scope.dart';
 
 /// Riverpod provider for WhatsAppWinnerNotificationService
 final whatsappWinnerNotificationServiceProvider =
@@ -316,7 +317,7 @@ class WhatsAppWinnerNotificationService {
   Future<({bool handled, WhatsAppGatewayResult? result})> sendViaServer({required String transactionId, String? fallbackPhone}) async {
     final phone = (fallbackPhone ?? '').trim();
     try {
-      final res = await FirebaseFunctions.instanceFor(region: 'us-central1')
+      final res = await scopedFunctions()
           .httpsCallable('sendWinnerWhatsApp', options: HttpsCallableOptions(timeout: const Duration(seconds: 40)))
           .call<Map<String, dynamic>>({'receiptId': transactionId});
       final data = Map<String, dynamic>.from(res.data as Map);

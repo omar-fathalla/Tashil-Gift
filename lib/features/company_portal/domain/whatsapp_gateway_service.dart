@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
@@ -12,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
 import '../presentation/widgets/whatsapp_campaign_dispatcher_dialog.dart';
 import 'whatsapp_gateway_config_model.dart';
+import '../../../core/services/firebase_scope.dart';
 
 /// Global Riverpod Provider for WhatsAppGatewayService
 final whatsappGatewayServiceProvider = Provider<WhatsAppGatewayService>((ref) => WhatsAppGatewayService());
@@ -135,7 +135,7 @@ class WhatsAppGatewayService {
     }
 
     final headers = <String, String>{...?extra};
-    final user = FirebaseAuth.instance.currentUser;
+    final user = scopedAuth().currentUser;
     if (user == null || user.isAnonymous) {
       throw StateError(
         'WhatsApp proxy requires a signed-in super_admin, admin, or partner account.',
@@ -148,7 +148,7 @@ class WhatsAppGatewayService {
     headers['Authorization'] = 'Bearer $idToken';
 
     try {
-      final appCheckToken = await FirebaseAppCheck.instance.getToken();
+      final appCheckToken = await FirebaseAppCheck.instanceFor(app: FirebaseScope.app).getToken();
       if (appCheckToken != null && appCheckToken.isNotEmpty) {
         headers['X-Firebase-AppCheck'] = appCheckToken;
       }
@@ -218,7 +218,7 @@ class WhatsAppGatewayService {
 
       // Fallback: Check Firestore company document
       if (companySlug != null && companySlug.isNotEmpty) {
-        final doc = await FirebaseFirestore.instance.collection('companies').doc(companySlug).get();
+        final doc = await scopedFirestore().collection('companies').doc(companySlug).get();
         if (doc.exists && doc.data() != null && doc.data()!.containsKey('whatsappGatewayConfig')) {
           final configMap = doc.data()!['whatsappGatewayConfig'] as Map<String, dynamic>?;
           if (configMap != null) {
@@ -252,7 +252,7 @@ class WhatsAppGatewayService {
 
       // Save to Firestore company document for persistence across team members
       if (companySlug != null && companySlug.isNotEmpty) {
-        await FirebaseFirestore.instance.collection('companies').doc(companySlug).set({
+        await scopedFirestore().collection('companies').doc(companySlug).set({
           'whatsappGatewayConfig': config.toMap(),
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));

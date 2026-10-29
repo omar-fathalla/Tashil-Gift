@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'firebase_options.dart';
 import 'core/services/app_check_bootstrap.dart';
+import 'core/services/firebase_scope.dart';
 import 'core/theme/app_theme.dart';
 import 'core/update/app_update_checker.dart';
 import 'core/localization/locale_provider.dart';
@@ -56,10 +57,25 @@ void main() async {
           .timeout(const Duration(seconds: 5));
     }
   } catch (_) {}
+  // 2.0.148+204: portal routes run on an isolated named Firebase app so
+  // partner sign-in/out never touches the rep's anonymous session.
   try {
-    if (FirebaseAuth.instance.currentUser == null &&
+    await FirebaseScope.init(
+      entryUri: Uri.base,
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    if (FirebaseScope.isPartnerPortal) {
+      await activateFirebaseAppCheck(app: FirebaseScope.app);
+      await scopedAuth()
+          .authStateChanges()
+          .first
+          .timeout(const Duration(seconds: 5));
+    }
+  } catch (_) {}
+  try {
+    if (scopedAuth().currentUser == null &&
         routeNeedsAnonymousSession(Uri.base)) {
-      await FirebaseAuth.instance
+      await scopedAuth()
           .signInAnonymously()
           .timeout(const Duration(seconds: 8));
     }

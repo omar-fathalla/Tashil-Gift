@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/firebase_service.dart';
 import 'whatsapp_webhook_admin_models.dart';
+import '../../../core/services/firebase_scope.dart';
 
 abstract class WhatsappWebhookAdminRepository {
   Stream<WhatsappWebhookConfig> watchConfig();
@@ -93,7 +94,7 @@ class FirestoreWhatsappWebhookAdminRepository implements WhatsappWebhookAdminRep
 final whatsappWebhookRepositoryProvider = Provider<WhatsappWebhookAdminRepository>((ref) {
   return FirestoreWhatsappWebhookAdminRepository(
     ref.watch(firestoreProvider),
-    FirebaseFunctions.instanceFor(region: 'us-central1'),
+    scopedFunctions(),
   );
 });
 

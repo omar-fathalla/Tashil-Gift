@@ -26,6 +26,7 @@ import '../../../games/presentation/choose_gift_screen.dart';
 import '../../../games/presentation/spin_the_wheel_screen.dart';
 import '../../../games/presentation/scratch_card_screen.dart';
 import '../../../games/presentation/direct_gift_claim_screen.dart';
+import '../../../../core/services/firebase_scope.dart';
 
 enum PromoterDateFilter { today, custom, all }
 enum PromoterStatusFilter { all, accepted, rejected }
@@ -112,7 +113,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     if (!force && (_branchRemoteKey == branchName || _branchRemoteLoadingKey == branchName)) return;
     _branchRemoteLoadingKey = branchName;
     try {
-      final res = await FirebaseFunctions.instanceFor(region: 'us-central1')
+      final res = await scopedFunctions()
           .httpsCallable('listBranchReceipts',
               options: HttpsCallableOptions(timeout: const Duration(seconds: 20)))
           .call<dynamic>({'campaignId': widget.event.id, 'branchName': branchName});

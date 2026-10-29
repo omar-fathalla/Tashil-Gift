@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
+import 'firebase_scope.dart';
 
 /// Result of a server-proxied Gemini generateContent call.
 ///
@@ -57,7 +58,7 @@ class CloudGenerativeModel {
     this.generationConfig,
     this.safetySettings = const [],
     FirebaseFunctions? functions,
-  }) : _functions = functions ?? FirebaseFunctions.instance;
+  }) : _functions = functions ?? scopedFunctions();
 
   Future<CloudGenerateContentResponse> generateContent(
     Iterable<Content> contents, {
