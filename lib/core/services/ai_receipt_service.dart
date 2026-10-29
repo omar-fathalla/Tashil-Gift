@@ -3238,13 +3238,26 @@ class PromotionalRuleMatcher {
 
     // 1. Group rules by canonical product family tokens (to resolve and bundle tiers of the same product family)
     final Map<String, List<PromotionalRuleItem>> rulesByProductGroup = {};
+    // Spend rules that share the exact same barcode set compete for the same
+    // money, whatever their wording or detected brand family, so they must
+    // always share one pool (highest-value gift first, remainder to lower).
+    final Map<String, int> spendPoolCounts = {};
+    for (final rule in promotionalRules) {
+      final pk = _spendPoolKey(rule);
+      if (pk != null) spendPoolCounts[pk] = (spendPoolCounts[pk] ?? 0) + 1;
+    }
     for (final rule in promotionalRules) {
       final familyKey = _getProductGroupKey(rule);
-      // Known product families keep their grouping; otherwise spend rules on
-      // the same barcodes share one pool whatever their wording.
-      final key = familyKey.contains('_family')
-          ? familyKey
-          : (_spendPoolKey(rule) ?? familyKey);
+      final poolKey = _spendPoolKey(rule);
+      final bool sharedPool =
+          poolKey != null && (spendPoolCounts[poolKey] ?? 0) > 1;
+      // Known product families keep their grouping unless the rule shares an
+      // identical barcode pool with other spend rules.
+      final key = sharedPool
+          ? poolKey
+          : familyKey.contains('_family')
+              ? familyKey
+              : (poolKey ?? familyKey);
       rulesByProductGroup.putIfAbsent(key, () => []).add(rule);
     }
 
