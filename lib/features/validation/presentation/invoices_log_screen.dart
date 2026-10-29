@@ -99,7 +99,8 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
 
   void _ensureStreams(FirebaseFirestore? firestore, {bool force = false}) {
     if (firestore == null) return;
-    final isLocked = widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty;
+    final lockedSlug = (widget.lockedCompanySlug ?? '').trim().toLowerCase();
+    final isLocked = lockedSlug.isNotEmpty;
     final isCampaignLocked = widget.lockedEventId != null && widget.lockedEventId!.isNotEmpty;
     final effectiveCampaignId = isCampaignLocked ? widget.lockedEventId! : _selectedCampaignId;
     final effectiveKey = '${widget.lockedCompanySlug ?? 'all'}_$effectiveCampaignId';
@@ -110,16 +111,20 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       if (_eventsStream == null || force) {
         Query eventsQuery = firestore.collection('events');
         if (isLocked) {
-          eventsQuery = eventsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug);
+          eventsQuery = eventsQuery.where('companySlug', isEqualTo: lockedSlug);
         }
         _eventsStream = eventsQuery.snapshots();
       }
 
+      // Company users may only list receipts of their own company, so the
+      // query must always carry the companySlug filter when locked; the
+      // campaign filter is added on top of it.
       Query transactionsQuery = firestore.collection('receipts_transactions');
+      if (isLocked) {
+        transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: lockedSlug);
+      }
       if (effectiveCampaignId != 'ALL' && effectiveCampaignId != 'all' && effectiveCampaignId.isNotEmpty) {
         transactionsQuery = transactionsQuery.where('campaignId', isEqualTo: effectiveCampaignId);
-      } else if (isLocked) {
-        transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug);
       }
       _transactionsStream = transactionsQuery.snapshots();
     }
