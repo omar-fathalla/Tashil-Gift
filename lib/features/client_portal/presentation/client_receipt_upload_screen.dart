@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/constants/app_version_config.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -1440,6 +1441,7 @@ class _ClientReceiptUploadScreenState
           .doc(deterministicDocId);
 
       final Map<String, dynamic> transactionData = {
+        'app_version': AppVersionConfig.appVersion,
         'receipt_number': receiptNumber,
         'is_valid': true,
         'status': 'accepted',
@@ -3419,6 +3421,7 @@ class _ClientReceiptUploadScreenState
       // existing receipts (firestore.rules), so there is no client-side lookup.
       final docRef = firestore.collection('receipts_transactions').doc();
       final Map<String, dynamic> transactionData = {
+        'app_version': AppVersionConfig.appVersion,
         'receipt_number': receiptNumber.isNotEmpty
             ? receiptNumber
             : cleanReceiptNumber,

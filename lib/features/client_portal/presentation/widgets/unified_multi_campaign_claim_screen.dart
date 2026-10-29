@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/constants/app_version_config.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -269,6 +270,7 @@ class _UnifiedMultiCampaignClaimScreenState
 
         await txRef.set({
           'bundle_group_id': widget.bundleGroupId,
+          'app_version': AppVersionConfig.appVersion,
           'receipt_number': widget.receiptNumber,
           'campaignId': campaign.id,
           'submittedByUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',

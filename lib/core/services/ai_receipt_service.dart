@@ -2369,6 +2369,14 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
             allowCampaignMultipliers: allowMultipleChances,
           );
           if (dartMatches.isNotEmpty) {
+            // Trust the deterministic matcher over the AI's own total: when a
+            // spend rule matched, its qualifying pool spend (barcode/scope
+            // filtered, after discounts) is the company total. Only raises it;
+            // scope, competitor filtering and exclusive tiers are unchanged.
+            final matcherSpend = qualifyingSpendFromMatches(dartMatches);
+            if (matcherSpend > result.targetCompanyTotal) {
+              result = result.copyWith(targetCompanyTotal: matcherSpend);
+            }
             final double promoMinSpendThreshold = promotionalRules
                 .where((r) => r.isSpendBased)
                 .map((r) => r.effectiveMinSpend)
@@ -5074,6 +5082,16 @@ class RewardChoiceGroup {
 }
 
 /// Merges allocations that refer to the same gift (by id, or by name when no id).
+/// Highest qualifying spend among matched spend-based rules (0 if none).
+/// Matched spend rules already passed their own min-spend (with tolerance).
+double qualifyingSpendFromMatches(List<MatchedPromotionalRuleResult> matches) {
+  double best = 0.0;
+  for (final m in matches) {
+    if (m.rule.isSpendBased && m.qualifyingSpend > best) best = m.qualifyingSpend;
+  }
+  return best;
+}
+
 /// Receipt fields describing what the customer actually received after picking
 /// a reward option. Voucher value counts only voucher gifts, so choosing a
 /// product option (e.g. 2x chocolate) reports 0 voucher value, not the rule's
