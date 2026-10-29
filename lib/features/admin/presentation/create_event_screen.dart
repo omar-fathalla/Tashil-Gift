@@ -3361,59 +3361,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                 '💡 تتيح السماحية قبول الفواتير حتى لو انخفض الصافي بعد الخصومات (مثال: 95 ج.م بدلاً من 100 ج.م)',
                                 style: GoogleFonts.cairo(fontSize: 10.5, color: colorScheme.onSecondaryFixedVariant),
                               ),
-                              const SizedBox(height: 8),
-                              // Quick range suggestion chips
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 4,
-                                children: [
-                                  ActionChip(
-                                    backgroundColor: Colors.white,
-                                    label: Text('🏷️ نطاق 95 - 139 ج.م (فواتشر 25)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorScheme.onTertiaryFixedVariant)),
-                                    onPressed: () {
-                                      setDialogState(() {
-                                        minSpendController.text = '95';
-                                        maxSpendController.text = '139';
-                                        discountToleranceController.text = '5';
-                                        rewardAmtController.text = '25';
-                                        rewardValController.text = 'قسيمة مشتريات بقيمة 25 ج.م';
-                                        rewardType = 'voucher';
-                                        dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(25.0, _companyGifts);
-                                      });
-                                    },
-                                  ),
-                                  ActionChip(
-                                    backgroundColor: Colors.white,
-                                    label: Text('🏷️ نطاق 140 - 189 ج.م (فواتشر 50)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorScheme.onSecondaryFixedVariant)),
-                                    onPressed: () {
-                                      setDialogState(() {
-                                        minSpendController.text = '140';
-                                        maxSpendController.text = '189';
-                                        discountToleranceController.text = '5';
-                                        rewardAmtController.text = '50';
-                                        rewardValController.text = 'قسيمة مشتريات بقيمة 50 ج.م';
-                                        rewardType = 'voucher';
-                                        dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(50.0, _companyGifts);
-                                      });
-                                    },
-                                  ),
-                                  ActionChip(
-                                    backgroundColor: Colors.white,
-                                    label: Text('🏷️ نطاق 190+ ج.م (فواتشر 75)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorScheme.onPrimaryFixedVariant)),
-                                    onPressed: () {
-                                      setDialogState(() {
-                                        minSpendController.text = '190';
-                                        maxSpendController.text = '';
-                                        discountToleranceController.text = '10';
-                                        rewardAmtController.text = '75';
-                                        rewardValController.text = 'قسيمة مشتريات بقيمة 75 ج.م';
-                                        rewardType = 'voucher';
-                                        dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(75.0, _companyGifts);
-                                      });
-                                    },
-                                  ),
-                                ],
-                              ),
                             ],
                           ),
                         ),
