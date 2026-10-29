@@ -3034,7 +3034,7 @@ class PromotionalRuleMatcher {
           double totalSpend = 0.0;
           int matchedItemCount = 0;
           for (final p in effectiveProducts) {
-            if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands)) {
+            if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands, promotionalRules)) {
               totalSpend += p.actualLineSpend;
               matchedItemCount++;
             }
@@ -3052,7 +3052,7 @@ class PromotionalRuleMatcher {
           int matchedItemCount = 0;
 
           for (final p in effectiveProducts) {
-            if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands)) {
+            if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands, promotionalRules)) {
               totalMatchedQty += getEffectiveProductQuantity(p);
               matchedItemCount++;
             }
@@ -3125,6 +3125,7 @@ class PromotionalRuleMatcher {
           matchedRule.triggerProduct,
           matchedRule,
           campaignBrands,
+          promotionalRules,
         )) {
           final qty = getEffectiveProductQuantity(p);
           totalTriggerQty += qty;
@@ -3345,7 +3346,7 @@ class PromotionalRuleMatcher {
             final p = effectiveProducts[i];
             final remaining = remainingItemQuantities[i] ?? 0;
             if (remaining > 0 &&
-                _matchesProduct(p, rule.triggerProduct, rule, campaignBrands)) {
+                _matchesProduct(p, rule.triggerProduct, rule, campaignBrands, promotionalRules)) {
               final totalEffectiveQty = getEffectiveProductQuantity(p);
               final double actualFullItemSpend = p.actualLineSpend;
               final double itemSpend = totalEffectiveQty > 0
@@ -3466,7 +3467,7 @@ class PromotionalRuleMatcher {
             final p = effectiveProducts[i];
             final remaining = remainingItemQuantities[i] ?? 0;
             if (remaining > 0 &&
-                _matchesProduct(p, rule.triggerProduct, rule, campaignBrands)) {
+                _matchesProduct(p, rule.triggerProduct, rule, campaignBrands, promotionalRules)) {
               availableQtyForRule += remaining;
               matchingProductIndices.add(i);
             }
@@ -3595,7 +3596,7 @@ class PromotionalRuleMatcher {
                 foundBrands.add(rb);
               }
             }
-            if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands)) {
+            if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands, promotionalRules)) {
               currentSpend += p.actualLineSpend;
             }
           }
@@ -3619,7 +3620,7 @@ class PromotionalRuleMatcher {
         } else {
           double currentSpend = 0.0;
           for (final p in products) {
-            if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands)) {
+            if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands, promotionalRules)) {
               currentSpend += p.actualLineSpend;
             }
           }
@@ -3639,7 +3640,7 @@ class PromotionalRuleMatcher {
         // Quantity-based rule check
         int count = 0;
         for (final p in products) {
-          if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands)) {
+          if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands, promotionalRules)) {
             count += getEffectiveProductQuantity(p);
           }
         }
@@ -4024,14 +4025,46 @@ class PromotionalRuleMatcher {
     return brands;
   }
 
+  static bool _ruleHasItemScope(PromotionalRuleItem? rule) =>
+      rule != null &&
+      (rule.selectedBarcodes.any((b) => b.trim().isNotEmpty) ||
+          rule.selectedProductNames.any((n) => n.trim().isNotEmpty) ||
+          rule.requiredBrands.any((b) => b.trim().isNotEmpty));
+
   static bool _matchesProduct(
     ExtractedProductItem product,
     String triggerProduct, [
     PromotionalRuleItem? rule,
     Iterable<String>? dynamicBrands,
+    List<PromotionalRuleItem>? siblingRules,
+    bool allowCompanySpendBypass = true,
   ]) {
-    final bool isCompanySpendRule =
-        (rule != null && (rule.isSpendBased || rule.conditionType == 'by_spend') && product.isTargetCompany);
+    // Company spend bypass: a target-company product counts toward a spend rule
+    // even when its (often OCR-misspelled) name doesn't match the rule's brands.
+    // Exception: if the rule has its own item scope (barcodes / names / brands)
+    // and the product strictly belongs to ANOTHER scoped spend rule of the same
+    // campaign, it must not leak into this rule (e.g. Dairy Milk products being
+    // counted on the Oreo rules). Strict = matched without the bypass.
+    bool isCompanySpendRule = allowCompanySpendBypass &&
+        rule != null &&
+        (rule.isSpendBased || rule.conditionType == 'by_spend') &&
+        product.isTargetCompany;
+    if (isCompanySpendRule &&
+        _ruleHasItemScope(rule) &&
+        siblingRules != null &&
+        siblingRules.length > 1) {
+      final belongsToOtherScopedRule = siblingRules.any((other) =>
+          other.id != rule.id &&
+          (other.isSpendBased || other.conditionType == 'by_spend') &&
+          _ruleHasItemScope(other) &&
+          _matchesProduct(product, other.triggerProduct, other, dynamicBrands,
+              null, false));
+      if (belongsToOtherScopedRule &&
+          !_matchesProduct(
+              product, triggerProduct, rule, dynamicBrands, null, false)) {
+        isCompanySpendRule = false;
+      }
+    }
 
     if (!isCompanySpendRule &&
         triggerProduct.trim().isEmpty &&
@@ -4071,6 +4104,16 @@ class PromotionalRuleMatcher {
       ...?dynamicBrands,
       if (rule != null) ...rule.requiredBrands,
     };
+
+    // 0. Exact catalog-name match: a product whose name equals one of the
+    // rule's selected product names belongs to the rule's item scope.
+    if (rule != null && rule.selectedProductNames.isNotEmpty) {
+      final nameNorm = _normalize(product.name);
+      if (nameNorm.isNotEmpty &&
+          rule.selectedProductNames.any((sel) => _normalize(sel) == nameNorm)) {
+        return true;
+      }
+    }
 
     // 0. Golden Barcode Priority Match:
     // If the rule has selected barcodes from catalog, or trigger contains barcode, match immediately!
@@ -4138,8 +4181,8 @@ class PromotionalRuleMatcher {
         (tb) => productBrands.contains(tb) || pNorm.contains(tb),
       );
       // In spend rules for a company, if AI confirmed product belongs to target company, do not reject solely on brand name root
-      final bool isCompanySpendAnchor = (rule?.conditionType == 'by_spend') &&
-          product.isTargetCompany;
+      final bool isCompanySpendAnchor =
+          isCompanySpendRule && rule?.conditionType == 'by_spend';
       if (!hasMatchingBrand && !isCompanySpendAnchor) {
         return false;
       }
@@ -4431,7 +4474,7 @@ class PromotionalRuleMatcher {
     final effectiveRuleBrands = _isolateSubBrands(rawEffectiveRuleBrands);
 
     final bool isCompanyProductSpendRule =
-        (rule?.conditionType == 'by_spend') && product.isTargetCompany;
+        isCompanySpendRule && rule?.conditionType == 'by_spend';
 
     if (effectiveRuleBrands.isNotEmpty || isCompanyProductSpendRule) {
       final Set<String> productBrands =
