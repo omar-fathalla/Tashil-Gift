@@ -182,6 +182,49 @@ function resolvePrizeIndexForDecrement(prizes, decrement, receipt) {
   return { index, branchId };
 }
 
+/**
+ * Company-shared stock pool (2.0.148+206).
+ * When a campaign has no stock row for a gift, the claim draws from a row of
+ * the SAME gift in a sibling active campaign of the SAME company (same
+ * events.allocatedPrizes rows the balances screen feeds), so a new campaign
+ * shares the company+branch balance. Strict matching only: same giftId (or
+ * exact normalized name when the row has no giftId), and the row's branch is
+ * the receipt branch or a general (no-branch) row. One row is decremented,
+ * so nothing is counted twice. events.balanceMode === "campaign_only" opts
+ * a campaign out of the pool.
+ */
+function sharedPoolEnabled(event) {
+  return String((event && event.balanceMode) || "").trim() !== "campaign_only";
+}
+
+function findSharedPoolRow(siblings, decrement, branchId) {
+  const target = String(decrement.prizeIdentifier || "").trim();
+  const targetNorm = normalizePrizeText(target);
+  const branch = String(branchId || "").trim();
+  const branchNorm = normalizePrizeText(branch);
+  let best = null;
+  for (const sib of siblings || []) {
+    const prizes = Array.isArray(sib.prizes) ? sib.prizes : [];
+    prizes.forEach((p, index) => {
+      const gid = String(p.giftId || "").trim();
+      const sameGift = gid ? gid === target : (targetNorm && normalizePrizeText(p.name) === targetNorm);
+      if (!sameGift) return;
+      const pBranchId = String(p.branchId || "").trim();
+      const pBranchName = String(p.branchName || "").trim();
+      const general = !pBranchId && !pBranchName;
+      const exact = !!branch && (pBranchId === branch || pBranchName === branch ||
+        (!!branchNorm && normalizePrizeText(pBranchName) === branchNorm));
+      if (!exact && !general) return;
+      const remaining = Number(p.remainingQuantity || 0);
+      const score = (exact ? 1000 : 0) + (remaining >= decrement.count ? 500 : 0) + Math.min(remaining, 499);
+      if (!best || score > best.score || (score === best.score && sib.eventId < best.eventId)) {
+        best = { eventId: sib.eventId, index, score };
+      }
+    });
+  }
+  return best ? { eventId: best.eventId, index: best.index } : null;
+}
+
 function sanitizePatch(patch) {
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) return {};
   const out = {};
@@ -413,6 +456,31 @@ async function applyCampaignPrizeClaim(db, input) {
     const prizes = Array.isArray(event.allocatedPrizes)
       ? event.allocatedPrizes.map((p) => Object.assign({}, p))
       : [];
+    // Other campaigns whose rows were drawn from (shared company pool).
+    const pooled = new Map();
+    let siblings = null;
+    const loadSiblings = async () => {
+      if (siblings) return siblings;
+      siblings = [];
+      const slug = String(event.companySlug || "").trim();
+      if (!slug) return siblings;
+      const snap = await tx.get(db.collection("events")
+        .where("companySlug", "==", event.companySlug)
+        .where("isActive", "==", true));
+      snap.docs.forEach((doc) => {
+        if (doc.id === eventId) return;
+        const data = doc.data() || {};
+        if (!sharedPoolEnabled(data)) return;
+        siblings.push({
+          eventId: doc.id,
+          ref: doc.ref,
+          prizes: Array.isArray(data.allocatedPrizes)
+            ? data.allocatedPrizes.map((p) => Object.assign({}, p))
+            : [],
+        });
+      });
+      return siblings;
+    };
     const applied = [];
     for (const decrement of decrements) {
       const hint = Object.assign({}, receipt || {});
@@ -420,8 +488,21 @@ async function applyCampaignPrizeClaim(db, input) {
         if (typeof patch[k] === "string" && patch[k].trim()) hint[k] = patch[k];
       }
       const resolved = resolvePrizeIndexForDecrement(prizes, decrement, hint);
-      const index = resolved.index;
+      let index = resolved.index;
+      let rows = prizes;
+      let sourceEventId = eventId;
       if (!decrement.branchId && resolved.branchId) decrement.branchId = resolved.branchId;
+      if (index === -1 && sharedPoolEnabled(event)) {
+        const sibs = await loadSiblings();
+        const hit = findSharedPoolRow(sibs, decrement, resolved.branchId);
+        if (hit) {
+          const sib = sibs.find((x) => x.eventId === hit.eventId);
+          rows = sib.prizes;
+          index = hit.index;
+          sourceEventId = sib.eventId;
+          pooled.set(sib.eventId, sib);
+        }
+      }
       if (index === -1) {
         // failed-precondition (not not-found): the campaign exists but has no
         // stock row for this gift, so the client must not treat it as a
@@ -431,26 +512,34 @@ async function applyCampaignPrizeClaim(db, input) {
           `لا يوجد رصيد مخصص لهدية (${decrement.prizeIdentifier}) في هذه الحملة/الفرع. يرجى تغذية أرصدة الفروع من شاشة الأرصدة ثم إعادة المحاولة.`,
         );
       }
-      const remaining = Number(prizes[index].remainingQuantity || 0);
+      const remaining = Number(rows[index].remainingQuantity || 0);
       if (remaining < decrement.count) {
         throw new HttpsError("failed-precondition", "Not enough prize stock remaining.");
       }
-      prizes[index].remainingQuantity = remaining - decrement.count;
+      rows[index].remainingQuantity = remaining - decrement.count;
       applied.push({
         prizeIdentifier: decrement.prizeIdentifier,
         count: decrement.count,
-        remainingQuantity: prizes[index].remainingQuantity,
+        remainingQuantity: rows[index].remainingQuantity,
+        stockEventId: sourceEventId,
       });
     }
 
-    if (decrements.length > 0) {
+    if (decrements.length > 0 && applied.some((a) => a.stockEventId === eventId)) {
       tx.update(eventRef, { allocatedPrizes: prizes });
     }
+    for (const sib of pooled.values()) {
+      tx.update(sib.ref, { allocatedPrizes: sib.prizes });
+    }
+    const pooledSources = applied.filter((a) => a.stockEventId !== eventId)
+      .map((a) => ({ prizeIdentifier: a.prizeIdentifier, count: a.count, stockEventId: a.stockEventId }));
     if (receiptRef && (createdReceipt || Object.keys(patch).length > 0)) {
       const payload = createdReceipt
         ? Object.assign({}, receipt, patch)
         : Object.assign({}, patch);
       payload.claim_processed_at = admin.firestore.FieldValue.serverTimestamp();
+      // Lets a later restock/refund return stock to the campaign it came from.
+      if (pooledSources.length > 0) payload.claim_stock_sources = pooledSources;
       tx.set(receiptRef, payload, { merge: true });
     }
     return { applied, hadReceipt: !!receipt };
@@ -490,6 +579,6 @@ exports.decrementCampaignPrize = onCall(callableOptions, async (request) => {
 
 // Non-enumerable so index.js Object.assign does not expose it as a function group.
 Object.defineProperty(exports, "_testing", {
-  value: { findBestPrizeMatchIndex, resolvePrizeIndexForDecrement },
+  value: { findBestPrizeMatchIndex, resolvePrizeIndexForDecrement, findSharedPoolRow, sharedPoolEnabled, applyCampaignPrizeClaim },
   enumerable: false,
 });
