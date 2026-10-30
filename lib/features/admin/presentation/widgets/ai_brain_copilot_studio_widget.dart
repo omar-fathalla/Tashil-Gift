@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/constants/ai_models.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -934,7 +935,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
 
   Widget _buildStudioHeaderBar(ColorScheme colorScheme, bool isAr, int directivesCount) {
     final modelConfig = ref.watch(aiModelConfigStreamProvider).value;
-    final activeModelName = modelConfig?.effectivePrimaryModel ?? 'gemini-3.7-flash';
+    final activeModelName = modelConfig?.effectivePrimaryModel ?? AiModels.defaultPrimary;
     final activeMode = modelConfig?.mode ?? AiAgentMode.standardVision;
 
     return Container(

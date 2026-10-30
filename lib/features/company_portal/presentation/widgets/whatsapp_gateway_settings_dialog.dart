@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/constants/ai_models.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -286,7 +287,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                 Icon(Icons.smart_toy_rounded, color: cs.tertiary),
                 const SizedBox(width: 8),
                 Text(
-                  widget.isAr ? 'محاكاة الرد الآلي الذكي (Gemini 3.7 Flash)' : 'AI Auto-Reply Simulator',
+                  widget.isAr ? 'محاكاة الرد الآلي الذكي (${AiModels.helperServicesLabel})' : 'AI Auto-Reply Simulator',
                   style: GoogleFonts.cairo(fontSize: 15, fontWeight: FontWeight.bold),
                 ),
               ],
@@ -909,7 +910,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: Text(
-                                      'Gemini 3.7 Flash',
+                                      AiModels.helperServicesConstLabel,
                                       style: GoogleFonts.robotoMono(fontSize: 9, fontWeight: FontWeight.bold, color: cs.onTertiaryContainer),
                                     ),
                                   ),

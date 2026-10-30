@@ -495,12 +495,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
                 const SizedBox(height: 18),
 
-                // 6. Badges Row: Gemini 3.8 Flash & 100% Anti-Fraud Single-Resolution
+                // 6. Badges Row: AI model & 100% Anti-Fraud Single-Resolution
                 Wrap(
                   spacing: 10,
                   runSpacing: 10,
                   children: [
-                    // Gemini 3.8 Flash AI Badge
+                    // AI model badge (AppStrings.heroGeminiModelBadge)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                       decoration: BoxDecoration(

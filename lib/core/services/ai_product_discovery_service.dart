@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/constants/ai_models.dart';
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
@@ -271,7 +272,7 @@ class AiProductDiscoveryService {
   })  : _productsService = productsService,
         _firestore = firestore,
         _model = CloudGenerativeModel(
-          model: 'gemini-3.7-flash',
+          model: AiModels.helperServices,
       generationConfig: GenerationConfig(
             responseMimeType: 'application/json',
             temperature: 0.1,

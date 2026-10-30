@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/constants/ai_models.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -95,39 +96,39 @@ class GeminiModelPreset {
 
   static const List<GeminiModelPreset> presets = [
     GeminiModelPreset(
-      id: 'gemini-3.7-flash',
+      id: AiModels.gemini37Flash,
       titleAr: 'جيميناي 3.7 فلاش (النموذج القياسي الحالي)',
-      titleEn: 'Gemini 3.7 Flash (Standard Default)',
+      titleEn: '${AiModels.gemini37FlashLabel} (Standard Default)',
       descriptionAr: 'النموذج المعتمد حالياً في كافة أرجاء النظام، يحقق توازناً استثنائياً بين دقة الرؤية والسرعة الفائقة.',
       badge: 'القياسي الحالي ⚡',
     ),
     GeminiModelPreset(
-      id: 'gemini-3.8-flash',
+      id: AiModels.gemini38Flash,
       titleAr: 'جيميناي 3.8 فلاش (High السرعة والدقة)',
-      titleEn: 'Gemini 3.8 Flash (High Speed & Precision)',
+      titleEn: '${AiModels.gemini38FlashLabel} (High Speed & Precision)',
       descriptionAr: 'الجيل المتقدم الجديد، سرعة قراءة أعلى لبونات الكاشير الطويلة وأداء استثنائي تحت الضغط.',
       badge: 'الجيل الجديد 🚀',
       isLatest: true,
     ),
     GeminiModelPreset(
-      id: 'gemini-3.8-pro',
+      id: AiModels.gemini38Pro,
       titleAr: 'جيميناي 3.8 برو (High الاستدلال والتدقيق العميق)',
-      titleEn: 'Gemini 3.8 Pro (High Reasoning & Deep Audit)',
+      titleEn: '${AiModels.gemini38ProLabel} (High Reasoning & Deep Audit)',
       descriptionAr: 'قدرات استدلال وتفكير متقدمة لحساب العروض المركبة وحزم الكومبو والخصومات متعددة الشروط.',
       badge: 'استدلال عميق 🧠',
       isLatest: true,
     ),
     GeminiModelPreset(
-      id: 'gemini-3.6-flash',
+      id: AiModels.gemini36Flash,
       titleAr: 'جيميناي 3.6 فلاش (الاحتياطي الأول)',
-      titleEn: 'Gemini 3.6 Flash (Primary Fallback)',
+      titleEn: '${AiModels.gemini36FlashLabel} (Primary Fallback)',
       descriptionAr: 'نموذج مستقر وسريع، يعمل كمسار احتياطي أول في حال انقطاع الشبكة.',
       badge: 'احتياطي مستقر 🛡️',
     ),
     GeminiModelPreset(
-      id: 'gemini-2.5-flash',
+      id: AiModels.gemini25Flash,
       titleAr: 'جيميناي 2.5 فلاش (الجيل السابق)',
-      titleEn: 'Gemini 2.5 Flash (Legacy)',
+      titleEn: '${AiModels.gemini25FlashLabel} (Legacy)',
       descriptionAr: 'النموذج الكلاسيكي خفيف الوزن.',
       badge: 'كلاسيكي ⏳',
     ),
@@ -147,10 +148,10 @@ class AiModelConfig {
   final String? updatedBy;
 
   const AiModelConfig({
-    this.primaryModel = 'gemini-3.7-flash',
-    this.fallbackModel = 'gemini-3.6-flash',
-    this.fastTierModel = 'gemini-3.7-flash',
-    this.deepAuditModel = 'gemini-3.8-pro',
+    this.primaryModel = AiModels.defaultPrimary,
+    this.fallbackModel = AiModels.defaultFallback,
+    this.fastTierModel = AiModels.defaultFastTier,
+    this.deepAuditModel = AiModels.defaultDeepAudit,
     this.agentMode = AiAgentMode.standardVision,
     this.thinkingBudget = 0,
     this.customModelIdentifier,
@@ -201,10 +202,10 @@ class AiModelConfig {
     }
 
     return AiModelConfig(
-      primaryModel: primary != null && primary.isNotEmpty ? primary : 'gemini-3.7-flash',
-      fallbackModel: fallback != null && fallback.isNotEmpty ? fallback : 'gemini-3.6-flash',
-      fastTierModel: fastTier != null && fastTier.isNotEmpty ? fastTier : 'gemini-3.7-flash',
-      deepAuditModel: deepAudit != null && deepAudit.isNotEmpty ? deepAudit : 'gemini-3.8-pro',
+      primaryModel: primary != null && primary.isNotEmpty ? primary : AiModels.defaultPrimary,
+      fallbackModel: fallback != null && fallback.isNotEmpty ? fallback : AiModels.defaultFallback,
+      fastTierModel: fastTier != null && fastTier.isNotEmpty ? fastTier : AiModels.defaultFastTier,
+      deepAuditModel: deepAudit != null && deepAudit.isNotEmpty ? deepAudit : AiModels.defaultDeepAudit,
       agentMode: AiAgentMode.fromCode(modeCode),
       thinkingBudget: budget,
       customModelIdentifier: custom != null && custom.isNotEmpty ? custom : null,
@@ -278,8 +279,8 @@ class AiModelConfigService {
     final config = AiModelConfig(
       primaryModel: primaryModel,
       fallbackModel: fallbackModel,
-      fastTierModel: fastTierModel ?? 'gemini-3.7-flash',
-      deepAuditModel: deepAuditModel ?? 'gemini-3.8-pro',
+      fastTierModel: fastTierModel ?? AiModels.defaultFastTier,
+      deepAuditModel: deepAuditModel ?? AiModels.defaultDeepAudit,
       agentMode: agentMode,
       thinkingBudget: thinkingBudget,
       customModelIdentifier: customModelIdentifier,

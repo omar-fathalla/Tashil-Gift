@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/constants/ai_models.dart';
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 
@@ -106,7 +107,7 @@ class AiDirectiveModel {
   final String exampleOutput; // مثال المخرجات بعد الفحص
   final bool isGloballyActive; // هل مطبق عالمياً على كل الحملات
   final int orderIndex;
-  final String primaryModel; // e.g. "Gemini 3.7 Flash"
+  final String primaryModel; // e.g. AiModels.defaultPrimaryLabel
   final List<String> tags;
   final String lastUpdated;
 
@@ -124,7 +125,7 @@ class AiDirectiveModel {
     required this.exampleOutput,
     this.isGloballyActive = true,
     this.orderIndex = 1,
-    this.primaryModel = 'Gemini 3.7 Flash',
+    this.primaryModel = AiModels.defaultPrimaryLabel,
     this.tags = const [],
     this.lastUpdated = '2026-08-27',
   });
@@ -169,7 +170,7 @@ class AiDirectiveModel {
       exampleOutput: map['example_output'] ?? map['exampleOutput'] ?? '',
       isGloballyActive: map['is_globally_active'] ?? map['isGloballyActive'] ?? true,
       orderIndex: (map['order_index'] ?? map['orderIndex'] ?? 0) as int,
-      primaryModel: map['primary_model'] ?? map['primaryModel'] ?? 'Gemini 3.7 Flash',
+      primaryModel: map['primary_model'] ?? map['primaryModel'] ?? AiModels.defaultPrimaryLabel,
       tags: List<String>.from(map['tags'] ?? []),
       lastUpdated: map['last_updated'] ?? map['lastUpdated'] ?? '2026-08-27',
     );

@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/constants/ai_models.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -150,8 +151,8 @@ class BranchSignatureAiService {
   late final CloudGenerativeModel _fallbackModel;
 
   BranchSignatureAiService() {
-    _model = _createModel('gemini-3.7-flash');
-    _fallbackModel = _createModel('gemini-3.6-flash');
+    _model = _createModel(AiModels.helperServices);
+    _fallbackModel = _createModel(AiModels.helperServicesFallback);
   }
 
   static CloudGenerativeModel _createModel(String modelName) {

@@ -59,7 +59,7 @@ class AiBrainChatMessage {
 }
 
 /// Autonomous AI Brain Co-Pilot & Directives Teaching Engine
-/// Dynamically powered by Gemini 3.7 / Gemini 3.8 / Custom Model
+/// Dynamically powered by the model in AiConfig / AiModels (or a custom model)
 class AiBrainCoPilotService {
   final AiDirectivesService _directivesService;
   final String modelName;
@@ -109,7 +109,7 @@ class AiBrainCoPilotService {
     );
   }
 
-  /// Fast speech-to-text transcription powered by Gemini 3.7 Flash
+  /// Fast speech-to-text transcription powered by [AiModels.helperServices]
   Future<String> transcribeAudioOnly({
     required Uint8List audioBytes,
     String? audioMimeType,

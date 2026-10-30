@@ -1,3 +1,5 @@
+import 'package:al_mraay/core/constants/ai_models.dart';
+
 /// Centralized AI Configuration & Dynamic Model Selection
 ///
 /// The Gemini API key must NEVER ship in the client binary.
@@ -5,10 +7,10 @@
 /// which reads `GEMINI_API_KEY` from Firebase Secrets.
 class AiConfig {
   // --- Dynamic Model & Agent In-Memory State ---
-  static String _primaryModel = 'gemini-3.7-flash';
-  static String _fallbackModel = 'gemini-3.6-flash';
-  static String _fastTierModel = 'gemini-3.7-flash';
-  static String _deepAuditModel = 'gemini-3.8-pro';
+  static String _primaryModel = AiModels.defaultPrimary;
+  static String _fallbackModel = AiModels.defaultFallback;
+  static String _fastTierModel = AiModels.defaultFastTier;
+  static String _deepAuditModel = AiModels.defaultDeepAudit;
   static dynamic _activeAgentMode;
   static int _thinkingBudget = 0;
 

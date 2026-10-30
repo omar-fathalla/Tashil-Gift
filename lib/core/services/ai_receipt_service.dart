@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/constants/ai_models.dart';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
@@ -707,7 +708,7 @@ class AiReceiptService {
     _fastModel = _createFastTierModel(this.fastTierModelName);
     _deepAuditModel = _createDeepAuditModel(this.deepAuditModelName);
     _fallbackModel1 = _createFastTierModel(AiConfig.fallbackModel);
-    _fallbackModel2 = _createFastTierModel('gemini-3.6-flash');
+    _fallbackModel2 = _createFastTierModel(AiModels.defaultFallback);
   }
 
   static CloudGenerativeModel _createModel(String name) {

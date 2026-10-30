@@ -1,4 +1,5 @@
 const { analyzeReceiptWithGateway } = require("./gemini_gateway");
+const { RECEIPT_VERIFICATION_MODEL } = require("./ai_models");
 
 /**
  * Gemini callback shared by the analyzeReceipt callable and the WhatsApp webhook.
@@ -26,7 +27,9 @@ async function callGeminiForReceipt({ apiKey, imagePayload, branches, products, 
     "branchDetected, isBranchMatched (bool), message.";
 
   const url =
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" +
+    "https://generativelanguage.googleapis.com/v1beta/models/" +
+    RECEIPT_VERIFICATION_MODEL +
+    ":generateContent?key=" +
     encodeURIComponent(apiKey);
 
   const response = await fetch(url, {

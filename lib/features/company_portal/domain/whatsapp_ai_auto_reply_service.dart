@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/constants/ai_models.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:al_mraay/core/services/gemini_cloud_model.dart';
@@ -6,7 +7,7 @@ import 'whatsapp_gateway_config_model.dart';
 import 'whatsapp_gateway_service.dart';
 
 /// Service for Intelligent WhatsApp Customer Service & AI Auto-Reply
-/// Powered strictly by Google Gemini 3.7 Flash at temperature 0.0 (Rule 5 & Rule 10)
+/// Powered strictly by [AiModels.helperServices] at temperature 0.0 (Rule 5 & Rule 10)
 class WhatsAppAiAutoReplyService {
   late final CloudGenerativeModel _primaryModel;
   late final CloudGenerativeModel _fallbackModel;
@@ -17,8 +18,8 @@ class WhatsAppAiAutoReplyService {
     CloudGenerativeModel? primaryModel,
     CloudGenerativeModel? fallbackModel,
   })  : _gatewayService = gatewayService ?? WhatsAppGatewayService() {
-    _primaryModel = primaryModel ?? _buildModel('gemini-3.7-flash');
-    _fallbackModel = fallbackModel ?? _buildModel('gemini-3.6-flash');
+    _primaryModel = primaryModel ?? _buildModel(AiModels.helperServices);
+    _fallbackModel = fallbackModel ?? _buildModel(AiModels.helperServicesFallback);
   }
 
   static CloudGenerativeModel _buildModel(String modelName) {
@@ -40,7 +41,7 @@ class WhatsAppAiAutoReplyService {
     );
   }
 
-  /// Generates an AI reply for an incoming customer inquiry using Gemini 3.7 Flash
+  /// Generates an AI reply for an incoming customer inquiry using [AiModels.helperServices]
   Future<String> generateReply({
     required String customerMessage,
     String? customerName,
@@ -81,7 +82,7 @@ class WhatsAppAiAutoReplyService {
 
     final promptText = promptBuilder.toString();
 
-    // Try primary Gemini 3.7 Flash model
+    // Try primary helper model
     try {
       final response = await _primaryModel.generateContent([Content.text(promptText)]);
       final reply = response.text?.trim();
@@ -89,10 +90,10 @@ class WhatsAppAiAutoReplyService {
         return reply;
       }
     } catch (e) {
-      debugPrint('Gemini 3.7 Flash Auto-Reply error: $e. Falling back to Gemini 3.6 Flash...');
+      debugPrint('${AiModels.helperServicesLabel} Auto-Reply error: $e. Falling back to ${AiModels.helperServicesFallbackLabel}...');
     }
 
-    // Try fallback Gemini 3.6 Flash model
+    // Try fallback helper model
     try {
       final fallbackResponse = await _fallbackModel.generateContent([Content.text(promptText)]);
       final fallbackReply = fallbackResponse.text?.trim();
@@ -100,7 +101,7 @@ class WhatsAppAiAutoReplyService {
         return fallbackReply;
       }
     } catch (e) {
-      debugPrint('Gemini 3.6 Flash Auto-Reply error: $e');
+      debugPrint('${AiModels.helperServicesFallbackLabel} Auto-Reply error: $e');
     }
 
     // Polite deterministic fallback if AI network fails

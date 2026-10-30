@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/constants/ai_models.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:csv/csv.dart';
@@ -67,7 +68,7 @@ class AiProductCatalogService {
 
   AiProductCatalogService()
       : _model = CloudGenerativeModel(
-          model: 'gemini-3.7-flash',
+          model: AiModels.helperServices,
       generationConfig: GenerationConfig(
             responseMimeType: 'application/json',
             temperature: 0.1,

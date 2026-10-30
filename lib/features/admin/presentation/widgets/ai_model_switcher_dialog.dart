@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/constants/ai_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -452,8 +453,8 @@ class _AiModelSwitcherDialogState extends ConsumerState<AiModelSwitcherDialog> {
                   style: GoogleFonts.cairo(fontSize: 13),
                   decoration: InputDecoration(
                     hintText: isAr
-                        ? 'اكتب اسم الموديل كما في Google AI Studio (مثلاً: gemini-3.8-flash, gemini-3.8-ultra, إلخ)'
-                        : 'e.g. gemini-3.8-flash, gemini-3.8-ultra, gemini-4.0',
+                        ? 'اكتب اسم الموديل كما في Google AI Studio (مثلاً: ${AiModels.customExamples.take(2).join(', ')}, إلخ)'
+                        : 'e.g. ${AiModels.customExamples.join(', ')}',
                     hintStyle: GoogleFonts.cairo(fontSize: 11.5, color: colorScheme.onSurfaceVariant),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -532,15 +533,15 @@ class _AiModelSwitcherDialogState extends ConsumerState<AiModelSwitcherDialog> {
           icon: const Icon(Icons.arrow_drop_down_rounded),
           items: const [
             DropdownMenuItem(
-              value: 'gemini-3.6-flash',
+              value: AiModels.gemini36Flash,
               child: Text('جيميناي 3.6 فلاش (موصى به للاحتياطي - عالي الاعتمادية)'),
             ),
             DropdownMenuItem(
-              value: 'gemini-2.5-flash',
+              value: AiModels.gemini25Flash,
               child: Text('جيميناي 2.5 فلاش (احتياطي ثانوي خفيف)'),
             ),
             DropdownMenuItem(
-              value: 'gemini-3.7-flash',
+              value: AiModels.gemini37Flash,
               child: Text('جيميناي 3.7 فلاش (عند تشغيل 3.8 كنموذج أساسي)'),
             ),
           ],

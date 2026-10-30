@@ -4,27 +4,9 @@
  */
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { consumeRateLimit, clientKey, RateLimitError } = require("./rate_limit");
+const { ALLOWED_MODEL_IDS } = require("./ai_models");
 
-const ALLOWED_MODELS = new Set([
-  "gemini-2.0-flash",
-  "gemini-2.0-flash-001",
-  "gemini-2.0-flash-lite",
-  "gemini-2.5-flash",
-  "gemini-2.5-pro",
-  "gemini-3.6-flash",
-  "gemini-3.7-flash",
-  "gemini-3.8-flash",
-  "gemini-3.8-pro",
-  "gemini-3.8-ultra",
-  "gemini-4.0",
-  "gemini-flash-tier",
-  "gemini-multimodal",
-  "gemini-multimodal-audio",
-  "gemini-1.5-flash",
-  "gemini-1.5-pro",
-  "gemini-pro",
-  "gemini-pro-vision",
-]);
+const ALLOWED_MODELS = new Set(ALLOWED_MODEL_IDS);
 
 const MODEL_PATTERN = /^gemini-[\w.\-]+$/;
 const MAX_PAYLOAD_CHARS = 12 * 1024 * 1024; // ~12 MiB serialized request

@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/constants/ai_models.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:csv/csv.dart';
@@ -459,13 +460,13 @@ class SmartBranchMatcherService {
     return results;
   }
 
-  /// Multimodal OCR extraction using Gemini 3.7 Flash
+  /// Multimodal OCR extraction using [AiModels.helperServices]
   static Future<List<RawBranchImportItem>> parseImageOrPdfWithGemini({
     required Uint8List fileBytes,
     required String mimeType,
   }) async {
     final model = CloudGenerativeModel(
-      model: 'gemini-3.7-flash',
+      model: AiModels.helperServices,
       generationConfig: GenerationConfig(
         temperature: 0.0,
         responseMimeType: 'application/json',

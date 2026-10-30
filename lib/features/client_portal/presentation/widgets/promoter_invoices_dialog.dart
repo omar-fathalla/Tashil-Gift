@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/config/ai_config.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -2519,7 +2520,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
 
             const SizedBox(height: 10),
 
-            // Option 2: Full AI Re-Scan (Gemini 3.7 Flash)
+            // Option 2: Full AI Re-Scan (AiConfig.fastTierModel)
             InkWell(
               onTap: hasImage
                   ? () {
@@ -2580,7 +2581,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Text(
-                                    'gemini-3.8-flash',
+                                    AiConfig.fastTierModel,
                                     style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: colorScheme.primary),
                                   ),
                                 ),

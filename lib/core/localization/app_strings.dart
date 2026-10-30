@@ -1,3 +1,5 @@
+import 'package:al_mraay/core/config/ai_config.dart';
+import 'package:al_mraay/core/constants/ai_models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'locale_provider.dart';
 
@@ -624,8 +626,8 @@ class AppStrings {
   );
   String get fullAiRecheckTitle => _t(
     ar: 'إعادة المسح الشامل بالذكاء الاصطناعي',
-    en: 'Full AI Re-Scan (gemini-3.8-flash)',
-    hi: 'पूर्ण एआई पुनः स्कैन (gemini-3.8-flash)',
+    en: 'Full AI Re-Scan (${AiConfig.fastTierModel})',
+    hi: 'पूर्ण एआई पुनः स्कैन (${AiConfig.fastTierModel})',
   );
   String get fullAiRecheckSubtitle => _t(
     ar: 'إعادة قراءة صورة الفاتورة الأصلية بأحدث كتالوج وتوجيهات للذكاء الاصطناعي',
@@ -1129,9 +1131,9 @@ class AppStrings {
     hi: 'प्रचार अभियानों और स्मार्ट रसीद सत्यापन के लिए अग्रणी एआई-संचालित मंच',
   );
   String get heroGeminiModelBadge => _t(
-    ar: 'مدعوم بمحرك Gemini 3.7 Flash',
-    en: 'Powered by Gemini 3.7 Flash',
-    hi: 'Gemini 3.7 Flash द्वारा संचालित',
+    ar: 'مدعوم بمحرك ${AiModels.defaultPrimaryLabel}',
+    en: 'Powered by ${AiModels.defaultPrimaryLabel}',
+    hi: '${AiModels.defaultPrimaryLabel} द्वारा संचालित',
   );
   String get heroAntiFraudBadge => _t(
     ar: 'حوكمة وحماية من الاحتيال 100%',
@@ -3021,8 +3023,8 @@ class AppStrings {
   String get sendVoiceNote => _t(ar: 'إرسال التسجيل الصوتي', en: 'Send Voice Note', hi: 'वॉयस नोट भेजें');
   String get dictateToText => _t(ar: 'تحويل الصوت إلى نص', en: 'Transcribe to Text', hi: 'टेक्स्ट में बदलें');
   String get transcribingAudio => _t(
-    ar: 'جاري الاستماع وتفريغ الصوت عبر Gemini 3.7 Flash...',
-    en: 'Transcribing and analyzing voice with Gemini 3.7 Flash...',
+    ar: 'جاري الاستماع وتفريغ الصوت عبر ${AiModels.helperServicesLabel}...',
+    en: 'Transcribing and analyzing voice with ${AiModels.helperServicesLabel}...',
     hi: 'मिथुन के साथ ऑडियो का विश्लेषण हो रहा है...',
   );
   String get voiceTranscriptionHeader => _t(
@@ -3649,7 +3651,7 @@ class AppStrings {
   String get typingSimulatorLabel => _t(ar: 'محاكاة الكتابة الحقيقية (Typing Simulator)', en: 'Typing Simulator', hi: 'टाइपिंग सिम्युलेटर');
   String get typingSimulatorDesc => _t(ar: 'تشغيل إشارة "يكتب الآن..." قبل الإرسال لمحاكاة السلوك البشري الطبيعي وحماية الرقم من الحظر.', en: 'Display "Typing..." indicator before sending to mimic natural human messaging and protect number.', hi: 'मानव व्यवहार की नकल करने के लिए टाइपिंग दिखाएं।');
   String get aiAutoReplyLabel => _t(ar: 'المجيب الآلي الذكي (AI Auto-Reply Bot)', en: 'AI Auto-Reply Bot', hi: 'एआई ऑटो-रिप्लाई बॉट');
-  String get aiAutoReplyDesc => _t(ar: 'الرد الفوري والذكي على ردود واستفسارات العملاء على الواتساب بذكاء Gemini 3.7 Flash.', en: 'Instant intelligent replies to incoming customer queries using Gemini 3.7 Flash.', hi: 'जेमिनी 3.7 फ्लैश के साथ स्वचालित उत्तर।');
+  String get aiAutoReplyDesc => _t(ar: 'الرد الفوري والذكي على ردود واستفسارات العملاء على الواتساب بذكاء ${AiModels.helperServicesLabel}.', en: 'Instant intelligent replies to incoming customer queries using ${AiModels.helperServicesLabel}.', hi: '${AiModels.helperServicesLabel} के साथ स्वचालित उत्तर।');
   String get qrPairingTitle => _t(ar: 'ربط الواتساب بالهاتف (QR Code)', en: 'Link WhatsApp via QR Code', hi: 'व्हाट्सएप क्यूआर लिंक');
   String get qrPairingSubtitle => _t(ar: 'امسح رمز الاستجابة السريعة بكاميرا الواتساب لربط رقم الهاتف فوراً بالسيرفر', en: 'Scan QR code with your WhatsApp camera to link your phone number to the server', hi: 'अपने फोन को जोड़ने के लिए क्यूआर कोड स्कैन करें');
   String get scanQrTab => _t(ar: 'مسح كود QR', en: 'Scan QR Code', hi: 'क्यूआर स्कैन');

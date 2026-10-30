@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/config/ai_config.dart';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
@@ -1092,7 +1093,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Text(
-                                    'gemini-3.8-flash',
+                                    AiConfig.fastTierModel,
                                     style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: colorScheme.primary),
                                   ),
                                 ),
@@ -1102,7 +1103,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                             Text(
                               hasImage
                                   ? (isAr
-                                      ? 'إعادة قراءة صورة الفاتورة بالكامل بذكاء gemini-3.8-flash والتحقق الشامل من كافة عروض الشركة'
+                                      ? 'إعادة قراءة صورة الفاتورة بالكامل بذكاء ${AiConfig.fastTierModel} والتحقق الشامل من كافة عروض الشركة'
                                       : strings.fullAiRecheckSubtitle)
                                   : (isAr ? 'غير متاح: لا توجد صورة مرفقة لهذه الفاتورة' : 'Not available: No image attached'),
                               style: TextStyle(
@@ -1187,8 +1188,8 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                             const SizedBox(height: 3),
                             Text(
                               isAr
-                                  ? 'فتح شات تفاعلي مباشر مع gemini-3.8-flash لتشخيص سبب الرفض وتدريب الذكاء فوراً واعتماد المعيار'
-                                  : 'Interactive chat with gemini-3.8-flash to diagnose rejections and deploy new directives',
+                                  ? 'فتح شات تفاعلي مباشر مع ${AiConfig.fastTierModel} لتشخيص سبب الرفض وتدريب الذكاء فوراً واعتماد المعيار'
+                                  : 'Interactive chat with ${AiConfig.fastTierModel} to diagnose rejections and deploy new directives',
                               style: TextStyle(fontSize: 11, color: colorScheme.onPrimaryFixedVariant, height: 1.3),
                             ),
                           ],
