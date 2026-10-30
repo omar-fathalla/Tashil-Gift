@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -24,6 +25,7 @@ enum ReceiptIssueKind {
   multiNoMatch,
   alreadyRedeemed,
   permission,
+  timeout,
   network,
   aiUnavailable,
   aiBilling,
@@ -83,6 +85,8 @@ const Map<ReceiptIssueKind, ReceiptIssueSpec> receiptIssueSpecs = {
       'لا يمكن استخدام نفس الفاتورة مرتين. استخدم فاتورة جديدة.', 'A receipt can be used only once. Use a new receipt.', ReceiptIssueAction.close),
   ReceiptIssueKind.permission: ReceiptIssueSpec(Icons.lock_outline_rounded, 'تعذّر حفظ الفاتورة', 'Could not save the receipt',
       'أعد فتح رابط الحملة ثم حاول مرة أخرى.', 'Reopen the campaign link and try again.', ReceiptIssueAction.tryAgain),
+  ReceiptIssueKind.timeout: ReceiptIssueSpec(Icons.hourglass_bottom_rounded, 'الفحص اتأخر، دوس حاول مرة أخرى', 'The scan took too long',
+      'دوس "حاول مرة أخرى" لإعادة الفحص.', 'Tap "Try again" to scan again.', ReceiptIssueAction.tryAgain),
   ReceiptIssueKind.network: ReceiptIssueSpec(Icons.wifi_off_rounded, 'لا يوجد اتصال بالإنترنت', 'No internet connection',
       'تأكد من الإنترنت ثم حاول مرة أخرى.', 'Check your connection and try again.', ReceiptIssueAction.tryAgain),
   ReceiptIssueKind.aiUnavailable: ReceiptIssueSpec(Icons.cloud_off_rounded, 'خدمة الفحص غير متاحة الآن', 'Scanning service is unavailable',
@@ -104,7 +108,11 @@ ReceiptIssueKind classifyReceiptException(Object error) {
   if (has(['app-check', 'app check', 'appcheck', 'app_check'])) return ReceiptIssueKind.appCheck;
   if (has(['resource-exhausted', 'resource_exhausted', 'rate limit', '429', 'too many'])) return ReceiptIssueKind.rateLimit;
   if (has(['billing', 'prepayment', 'credits are depleted', 'quota'])) return ReceiptIssueKind.aiBilling;
-  if (has(['network', 'failed to fetch', 'xmlhttprequest', 'socket', 'connection', 'offline', 'unavailable', 'deadline-exceeded', 'timeout', 'timed out'])) {
+  // 2.0.151+212: a timeout is not a network failure; it gets its own message.
+  if (error is TimeoutException || has(['timeoutexception', 'deadline-exceeded', 'deadline_exceeded', 'timeout', 'timed out'])) {
+    return ReceiptIssueKind.timeout;
+  }
+  if (has(['network', 'failed to fetch', 'xmlhttprequest', 'socket', 'connection', 'offline', 'unavailable'])) {
     return s.contains('unavailable') && !has(['network', 'fetch', 'offline', 'connection']) ? ReceiptIssueKind.aiUnavailable : ReceiptIssueKind.network;
   }
   if (has(['permission-denied', 'permission_denied', 'insufficient permissions', 'unauthenticated'])) return ReceiptIssueKind.permission;

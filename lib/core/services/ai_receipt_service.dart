@@ -1290,15 +1290,34 @@ class AiReceiptService {
     // 2.0.150+211: hard cap so a stuck call can never pin the in-flight entry
     // (a re-tap would otherwise join it forever). Entry is removed on success,
     // failure, timeout or cancel (whenComplete); failures are never cached.
-    final f = run().timeout(firstCheckBudget + const Duration(seconds: 5)).then((r) {
+    late final Future<CloudGenerateContentResponse> f;
+    f = run().timeout(firstCheckBudget + const Duration(seconds: 5)).then((r) {
       if (r.text != null && r.text!.trim().isNotEmpty) {
         if (_recentScans.length >= 8) _recentScans.remove(_recentScans.keys.first);
         _recentScans[key] = (DateTime.now(), r);
       }
       return r;
-    }).whenComplete(() => _inflightScans.remove(key));
+    // 2.0.151+212: block body on purpose. The arrow form returned the removed
+    // map value (this very future) to whenComplete, which then awaited itself:
+    // f could never complete, so every rep scan hung after the AI answered
+    // until the stage-2 ceiling fired (forever on 2.0.149).
+    }).whenComplete(() {
+      if (identical(_inflightScans[key], f)) _inflightScans.remove(key);
+    });
     _inflightScans[key] = f;
     return f;
+  }
+
+  @visibleForTesting
+  static Future<CloudGenerateContentResponse> dedupedGenerateForTest(
+    String? key,
+    Future<CloudGenerateContentResponse> Function() run,
+  ) => _dedupedGenerate(key, run);
+
+  @visibleForTesting
+  static void clearScanDedupeForTest() {
+    _inflightScans.clear();
+    _recentScans.clear();
   }
 
   /// Executes Gemini generateContent with automatic exponential backoff retry on HTTP 429 quota errors.

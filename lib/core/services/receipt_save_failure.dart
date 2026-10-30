@@ -3,6 +3,8 @@
 /// "تعذّر حفظ الفاتورة". Pure logic so it is unit-testable.
 library;
 
+import 'dart:async';
+
 enum ReceiptSaveFailureKind {
   alreadyUploaded,
   sessionExpired,
@@ -21,16 +23,21 @@ class ReceiptSaveFailure {
 
 /// Extracts a short error code (e.g. permission-denied) from any exception.
 String receiptErrorCode(Object error) {
+  // 2.0.151+212: timeouts report "timeout", never "unknown".
+  if (error is TimeoutException) return 'timeout';
   try {
     final dynamic e = error;
     final c = e.code;
-    if (c is String && c.isNotEmpty) return c;
+    if (c is String && c.isNotEmpty) {
+      return (c == 'deadline-exceeded' || c == 'deadline_exceeded') ? 'timeout' : c;
+    }
   } catch (_) {}
   final s = error.toString().toLowerCase();
   for (final c in ['permission-denied', 'unauthenticated', 'failed-precondition', 'not-found', 'unauthorized']) {
     if (s.contains(c)) return c;
   }
   if (s.contains('insufficient permissions')) return 'permission-denied';
+  if (s.contains('timeoutexception') || s.contains('timed out') || s.contains('deadline-exceeded')) return 'timeout';
   return 'unknown';
 }
 
