@@ -81,7 +81,7 @@ const Map<ReceiptIssueKind, ReceiptIssueSpec> receiptIssueSpecs = {
       'راجع الأصناف والكميات المطلوبة للعرض.', 'Check the required items and quantities.', ReceiptIssueAction.close),
   ReceiptIssueKind.multiNoMatch: ReceiptIssueSpec(Icons.layers_clear_rounded, 'الفاتورة لا تطابق أي عرض', 'Receipt matches no offer',
       'راجع شروط عروض الشركة.', 'Review the company\'s offer conditions.', ReceiptIssueAction.close),
-  ReceiptIssueKind.alreadyRedeemed: ReceiptIssueSpec(Icons.verified_rounded, 'تم صرف هذه الفاتورة من قبل', 'Receipt already redeemed',
+  ReceiptIssueKind.alreadyRedeemed: ReceiptIssueSpec(Icons.verified_rounded, 'الفاتورة دي اترفعت واتقبلت قبل كده', 'Receipt already uploaded and accepted',
       'لا يمكن استخدام نفس الفاتورة مرتين. استخدم فاتورة جديدة.', 'A receipt can be used only once. Use a new receipt.', ReceiptIssueAction.close),
   ReceiptIssueKind.permission: ReceiptIssueSpec(Icons.lock_outline_rounded, 'تعذّر حفظ الفاتورة', 'Could not save the receipt',
       'أعد فتح رابط الحملة ثم حاول مرة أخرى.', 'Reopen the campaign link and try again.', ReceiptIssueAction.tryAgain),

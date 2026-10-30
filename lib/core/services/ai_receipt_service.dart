@@ -10,6 +10,7 @@ import 'package:al_mraay/features/admin/domain/retail_chain_model.dart';
 import '../config/ai_config.dart';
 import 'gemini_cloud_model.dart';
 import '../utils/arabic_numbers_utils.dart';
+import '../utils/store_code_branch_resolver.dart';
 import 'campaign_ai_assistant_service.dart';
 import 'company_gifts_service.dart';
 import 'ai_model_config_service.dart';
@@ -689,6 +690,10 @@ class AiReceiptAnalysisResult {
 }
 
 class AiReceiptService {
+  /// 2.0.153+214: one-line branch source rule appended to every prompt.
+  static const String branchSourceRule =
+      '- مصدر الفرع (branchDetected): خذ الفرع من كود المتجر المطبوع (ضمن رقم الفاتورة أو Store/POS) أو من رأس الفاتورة فقط، ولا تأخذه أبداً من الإعلانات أو السطور الدعائية في تذييل الفاتورة (مثل "تم افتتاح فرع ...").';
+
   late final CloudGenerativeModel _model;
   late final CloudGenerativeModel _fastModel;
   late final CloudGenerativeModel _deepAuditModel;
@@ -1649,6 +1654,8 @@ $branchSignaturesText
       } else if (branchSignaturesText.isNotEmpty) {
         branchCondition = branchSignaturesText;
       }
+      // 2.0.153: branch source rule (store code / header only, never footer ads).
+      branchCondition = '$branchCondition\n${AiReceiptService.branchSourceRule}\n';
 
       String chancesCondition = '';
       if (allowMultipleChances) {
@@ -2276,15 +2283,36 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           }
         }
 
+        // 2.0.153: branch from the store code printed in the receipt number.
+        // Overrides the AI branch (e.g. footer ads "تم افتتاح فرع ..."); no
+        // match keeps the AI's branch.
+        BranchModel? storeCodeBranch;
+        if (registeredBranches.isNotEmpty) {
+          final byCode = storeCodeBranch = StoreCodeBranchResolver.resolve(
+            result.receiptNumber,
+            registeredBranches,
+          );
+          if (byCode != null && byCode.branchName.trim().isNotEmpty) {
+            final prev = result.branchDetected;
+            result = result.copyWith(
+              branchDetected: byCode.branchName,
+              message: prev.trim().isNotEmpty && prev != byCode.branchName
+                  ? result.message.replaceAll(prev, byCode.branchName)
+                  : result.message,
+            );
+          }
+        }
+
         // Deterministic POS & Store Code Reconciler in Dart
         if (registeredBranches.isNotEmpty) {
           final combinedReceiptText =
               '${result.receiptNumber} ${result.branchDetected} ${result.message} ${result.storeChainDetected}'
                   .toEnglishDigits();
 
-          BranchModel? matchedBranchByCode;
+          BranchModel? matchedBranchByCode = storeCodeBranch;
 
           for (final branch in registeredBranches) {
+            if (matchedBranchByCode != null) break;
             final storeId = (branch.receiptSignature?.storeId ?? '')
                 .trim()
                 .toEnglishDigits();

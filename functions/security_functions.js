@@ -146,14 +146,44 @@ function findBestPrizeMatchIndex(prizes, prizeIdentifier, options) {
  * several branch-specific rows and no general row exists, refuse instead of
  * silently taking the first branch's stock.
  */
+/**
+ * 2.0.153+214: store code printed in the receipt number (segment before a
+ * trailing 6-8 digit date, e.g. Fathalla 145/10/224/301026 -> 224).
+ */
+function storeCodeFromReceiptNumber(raw) {
+  const ar = "٠١٢٣٤٥٦٧٨٩";
+  const s = String(raw || "").replace(/[٠-٩]/g, (d) => String(ar.indexOf(d))).trim();
+  const segs = s.split(/[\/\-\\\s]+/).filter(Boolean);
+  if (segs.length < 3 || !/^\d{6,8}$/.test(segs[segs.length - 1])) return "";
+  const code = segs[segs.length - 2];
+  return /^\d{1,6}$/.test(code) ? code : "";
+}
+
+/** Unique stock-row branch id owning the store code (`<chain>_<code>`), or "". */
+function branchIdFromStoreCode(prizes, receipt, extraIds) {
+  const rec = receipt || {};
+  const code = storeCodeFromReceiptNumber(rec.receipt_number || rec.receiptNumber);
+  if (!code) return "";
+  const ids = new Set();
+  const all = (prizes || []).map((p) => (p && p.branchId)).concat(extraIds || []);
+  for (const raw of all) {
+    const id = String(raw || "").trim();
+    if (id && (id === code || id.endsWith("_" + code))) ids.add(id);
+  }
+  return ids.size === 1 ? [...ids][0] : "";
+}
+
 function resolvePrizeIndexForDecrement(prizes, decrement, receipt) {
   const rec = receipt || {};
-  let branchId = String(decrement.branchId || "").trim();
+  // Store code in the receipt number wins over client / AI branch hints.
+  const codeBranch = branchIdFromStoreCode(prizes, rec);
+  let branchId = codeBranch;
+  if (!branchId) branchId = String(decrement.branchId || "").trim();
   if (!branchId) branchId = String(rec.branch_id || "").trim();
   if (!branchId) branchId = String(rec.branch_detected || rec.branch || "").trim();
   const options = Object.assign({}, decrement, { branchId });
   const index = findBestPrizeMatchIndex(prizes, decrement.prizeIdentifier, options);
-  if (index === -1) return { index, branchId };
+  if (index === -1) return { index, branchId, fromStoreCode: !!codeBranch };
   const picked = prizes[index] || {};
   const pickedBranchKey = String(picked.branchId || picked.branchName || "").trim();
   const sameGift = (p) => {
@@ -179,7 +209,7 @@ function resolvePrizeIndexForDecrement(prizes, decrement, receipt) {
       );
     }
   }
-  return { index, branchId };
+  return { index, branchId, fromStoreCode: !!codeBranch };
 }
 
 /**
@@ -481,6 +511,13 @@ async function applyCampaignPrizeClaim(db, input) {
       });
       return siblings;
     };
+    // 2.0.153: the store code in the receipt number decides the branch id the
+    // client writes (only when the client already writes branch_id).
+    if (typeof patch.branch_id === "string") {
+      const codeBranch = branchIdFromStoreCode(prizes, Object.assign({}, receipt || {}, patch),
+        Array.isArray(event.branchIds) ? event.branchIds : []);
+      if (codeBranch) patch.branch_id = codeBranch;
+    }
     const applied = [];
     for (const decrement of decrements) {
       const hint = Object.assign({}, receipt || {});
@@ -491,7 +528,7 @@ async function applyCampaignPrizeClaim(db, input) {
       let index = resolved.index;
       let rows = prizes;
       let sourceEventId = eventId;
-      if (!decrement.branchId && resolved.branchId) decrement.branchId = resolved.branchId;
+      if ((!decrement.branchId || resolved.fromStoreCode) && resolved.branchId) decrement.branchId = resolved.branchId;
       if (index === -1 && sharedPoolEnabled(event)) {
         const sibs = await loadSiblings();
         const hit = findSharedPoolRow(sibs, decrement, resolved.branchId);
@@ -579,6 +616,6 @@ exports.decrementCampaignPrize = onCall(callableOptions, async (request) => {
 
 // Non-enumerable so index.js Object.assign does not expose it as a function group.
 Object.defineProperty(exports, "_testing", {
-  value: { findBestPrizeMatchIndex, resolvePrizeIndexForDecrement, findSharedPoolRow, sharedPoolEnabled, applyCampaignPrizeClaim },
+  value: { findBestPrizeMatchIndex, resolvePrizeIndexForDecrement, storeCodeFromReceiptNumber, branchIdFromStoreCode, findSharedPoolRow, sharedPoolEnabled, applyCampaignPrizeClaim },
   enumerable: false,
 });

@@ -1,5 +1,6 @@
 import '../../features/admin/domain/event_model.dart';
 import '../services/company_gifts_service.dart';
+import 'store_code_branch_resolver.dart';
 
 /// Resolves the campaign branch a receipt belongs to from the AI-detected
 /// branch name. Returns `id == null` when the branch is unknown or ambiguous;
@@ -14,10 +15,19 @@ class ReceiptBranchResolution {
 class ReceiptBranchResolver {
   ReceiptBranchResolver._();
 
-  static ReceiptBranchResolution resolve(EventModel? event, String branchDetected) {
+  static ReceiptBranchResolution resolve(EventModel? event, String branchDetected,
+      {String receiptNumber = ''}) {
     final detectedRaw = branchDetected.trim();
     if (event == null || event.branchIds.isEmpty) {
       return ReceiptBranchResolution(null, detectedRaw);
+    }
+    // 2.0.153: the store code inside the receipt number wins over the AI name.
+    if (receiptNumber.trim().isNotEmpty) {
+      final i = StoreCodeBranchResolver.campaignBranchIndex(receiptNumber, event.branchIds);
+      if (i != null) {
+        final name = i < event.branchNames.length ? event.branchNames[i] : detectedRaw;
+        return ReceiptBranchResolution(event.branchIds[i], name);
+      }
     }
     final detected = CompanyGiftsService.normalizeBranchToken(detectedRaw);
     if (detected.isNotEmpty) {

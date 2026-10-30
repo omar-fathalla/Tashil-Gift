@@ -1247,7 +1247,7 @@ class _ClientReceiptUploadScreenState
                 initialAiMetadata: {
                   'store_chain_detected': result.storeChainDetected,
                   'branch_detected': result.branchDetected,
-                  'branch_id': ReceiptBranchResolver.resolve(_activeEvent ?? widget.event, result.branchDetected).id ?? '',
+                  'branch_id': ReceiptBranchResolver.resolve(_activeEvent ?? widget.event, result.branchDetected, receiptNumber: result.receiptNumber).id ?? '',
                   'receipt_date': result.receiptDate,
                   'analysis_duration_seconds': result.durationSeconds,
                   'analysis_duration_ms': result.durationMs,
@@ -1569,7 +1569,7 @@ class _ClientReceiptUploadScreenState
             .toList(),
         'store_chain_detected': result.storeChainDetected,
         'branch_detected': result.branchDetected,
-        'branch_id': ReceiptBranchResolver.resolve(_activeEvent ?? widget.event, result.branchDetected).id ?? '',
+        'branch_id': ReceiptBranchResolver.resolve(_activeEvent ?? widget.event, result.branchDetected, receiptNumber: result.receiptNumber).id ?? '',
         'is_branch_matched': result.isBranchMatched,
         'is_handwritten': result.isHandwritten,
         'is_thermal_pos_receipt': result.isThermalPosReceipt,
@@ -1683,7 +1683,7 @@ class _ClientReceiptUploadScreenState
       final currentEventId = currentEvent?.id ?? '';
       // Smart branch ID resolution (AIR-80 & Rule 8). No first-branch guess.
       final branchResolution =
-          ReceiptBranchResolver.resolve(currentEvent, result.branchDetected);
+          ReceiptBranchResolver.resolve(currentEvent, result.branchDetected, receiptNumber: result.receiptNumber);
       final String? resolvedBranchId = branchResolution.id;
       final String resolvedCanonicalBranchName = branchResolution.name;
 
@@ -3711,7 +3711,7 @@ class _ClientReceiptUploadScreenState
             .toList(),
         'store_chain_detected': result.storeChainDetected,
         'branch_detected': result.branchDetected,
-        'branch_id': ReceiptBranchResolver.resolve(_activeEvent ?? widget.event, result.branchDetected).id ?? '',
+        'branch_id': ReceiptBranchResolver.resolve(_activeEvent ?? widget.event, result.branchDetected, receiptNumber: result.receiptNumber).id ?? '',
         'is_branch_matched': result.isBranchMatched,
         'is_handwritten': result.isHandwritten,
         'is_thermal_pos_receipt': result.isThermalPosReceipt,

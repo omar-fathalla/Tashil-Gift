@@ -30,3 +30,21 @@ test("single branch row or general row stays allowed", () => {
   const general = [...rows, { giftId: "g50", name: "فواتشر 50 جنيه", unitValue: 50, giftType: "voucher", remainingQuantity: 9 }];
   assert.strictEqual(resolvePrizeIndexForDecrement(general, dec(), {}).index, 2);
 });
+
+const { storeCodeFromReceiptNumber, branchIdFromStoreCode } = require("../security_functions")._testing;
+test("store code parsed from receipt number (Fathalla 224)", () => {
+  assert.strictEqual(storeCodeFromReceiptNumber("145/10/224/301026"), "224");
+  assert.strictEqual(storeCodeFromReceiptNumber("١٤٥/١٠/٢٢٤/٣٠١٠٢٦"), "224");
+  assert.strictEqual(storeCodeFromReceiptNumber("INV-55"), "");
+});
+test("store code overrides wrong AI branch_id (Badr ad -> 224)", () => {
+  const r = resolvePrizeIndexForDecrement(rows, dec("fathalla_250"), { receipt_number: "145/10/224/301026", branch_id: "fathalla_272" });
+  assert.strictEqual(r.index, 0);
+  assert.strictEqual(r.branchId, "fathalla_224");
+  assert.strictEqual(r.fromStoreCode, true);
+});
+test("no store-code match keeps the existing branch hint", () => {
+  assert.strictEqual(branchIdFromStoreCode(rows, { receipt_number: "145/10/999/301026" }), "");
+  const r = resolvePrizeIndexForDecrement(rows, dec(), { receipt_number: "145/10/999/301026", branch_id: "fathalla_250" });
+  assert.strictEqual(r.index, 1);
+});
