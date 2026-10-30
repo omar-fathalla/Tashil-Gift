@@ -18,6 +18,9 @@ class ReceiptDuplicateCheckResult {
   final String? existingStatus;
   final String rejectionMessage;
   final Map<String, dynamic>? existingData;
+  /// 2.0.149: the duplicate is the same-campaign doc at the deterministic id,
+  /// so a re-upload can go through replaceReceipt instead of being blocked.
+  final bool exactDocExists;
 
   const ReceiptDuplicateCheckResult({
     required this.isDuplicate,
@@ -33,6 +36,7 @@ class ReceiptDuplicateCheckResult {
     this.existingStatus,
     this.rejectionMessage = '',
     this.existingData,
+    this.exactDocExists = false,
   });
 
   static const ReceiptDuplicateCheckResult notDuplicate = ReceiptDuplicateCheckResult(
@@ -153,10 +157,40 @@ class ReceiptDeduplicationHelper {
         existingUploadedAt: pick('uploadedAt'),
         existingStatus: pick('status') ?? data['existingStatus']?.toString(),
         rejectionMessage: duplicateMessage(cleanNumber, isMultiScan: isMultiScan),
+        exactDocExists: data['exactDocExists'] == true,
       );
     } catch (e) {
       debugPrint('Receipt duplicate check unavailable (treated as unknown): $e');
       return ReceiptDuplicateCheckResult.notDuplicate;
+    }
+  }
+
+  /// 2.0.149: re-upload an existing same-campaign receipt server-side.
+  /// Returns 'reupload' (was rejected: continue to the normal claim),
+  /// 'replace' (was approved: scan replaced, claim kept, stop here),
+  /// 'create' (no doc: create normally) or null on failure.
+  static Future<String?> replaceReceipt({
+    required String campaignId,
+    required String receiptNumber,
+    required Map<String, dynamic> receipt,
+  }) async {
+    final payload = Map<String, dynamic>.from(receipt)
+      ..removeWhere((k, v) => v is FieldValue);
+    try {
+      final res = await scopedFunctions()
+          .httpsCallable('replaceReceipt',
+              options: HttpsCallableOptions(timeout: const Duration(seconds: 30)))
+          .call<dynamic>({
+        'campaignId': campaignId,
+        'receiptNumber': normalizeReceiptNumber(receiptNumber),
+        'receipt': payload,
+      });
+      final data = res.data;
+      final mode = data is Map ? data['mode']?.toString() : null;
+      return (mode == 'reupload' || mode == 'replace' || mode == 'create') ? mode : null;
+    } catch (e) {
+      debugPrint('replaceReceipt failed: $e');
+      return null;
     }
   }
 

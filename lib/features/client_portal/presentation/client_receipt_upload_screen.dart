@@ -1107,7 +1107,10 @@ class _ClientReceiptUploadScreenState
               isMultiScan: isMultiScan,
             );
 
-        if (duplicateCheck.isDuplicate) {
+        // 2.0.149: the same-campaign receipt is re-uploaded through
+        // replaceReceipt below (rejected -> re-upload, approved -> replace).
+        if (duplicateCheck.isDuplicate &&
+            !(duplicateCheck.exactDocExists && !isMultiScan)) {
           if (!mounted) return;
 
           _showAlreadyRedeemed(duplicateCheck);
@@ -1431,6 +1434,7 @@ class _ClientReceiptUploadScreenState
       // 2.0.147: exact doc-id pre-save check (rcpt_{campaignId}_{receiptNo}).
       // Any existing doc at this id would make the create fail under the rules,
       // so stop here with the existing receipt's time/branch/status.
+      ReceiptDuplicateCheckResult? existingExact;
       if (receiptNumber.isNotEmpty) {
         final exact = await ReceiptDeduplicationHelper.checkReceiptDuplicate(
           firestore: firestore,
@@ -1439,12 +1443,9 @@ class _ClientReceiptUploadScreenState
           campaignId: _activeEvent!.id,
           exactDocId: true,
         );
-        if (exact.isDuplicate) {
-          if (!mounted) return;
-          _showAlreadyUploaded(exact);
-          _resetFormForNextCustomer();
-          return;
-        }
+        // 2.0.149: an existing doc no longer blocks; it is re-uploaded or
+        // replaced server-side (replaceReceipt) and its old version archived.
+        existingExact = exact.isDuplicate ? exact : null;
       }
 
       // 2. Upload image to Firebase Storage named by Receipt Number and Campaign ID
@@ -1456,7 +1457,10 @@ class _ClientReceiptUploadScreenState
           (receiptNumber.isNotEmpty
                   ? receiptNumber
                   : "INV_${DateTime.now().millisecondsSinceEpoch}")
-              .replaceAll(RegExp(r'[/\\?%*:|"<>]'), '_');
+              .replaceAll(RegExp(r'[/\\?%*:|"<>]'), '_') +
+          // Storage is create-only: a re-upload gets its own image file so the
+          // previous version's image stays intact for the audit history.
+          (existingExact != null ? '_r${DateTime.now().millisecondsSinceEpoch}' : '');
 
       final List<String> uploadedImageUrls = [];
       final List<String> uploadedStoragePaths = [];
@@ -1579,8 +1583,33 @@ class _ClientReceiptUploadScreenState
       transactionData['timestamp'] = FieldValue.serverTimestamp();
       transactionData['game_played'] = false;
       transactionData['prize_won'] = null;
+      String? replaceMode;
+      if (existingExact != null) {
+        replaceMode = await ReceiptDeduplicationHelper.replaceReceipt(
+          campaignId: _activeEvent!.id,
+          receiptNumber: receiptNumber,
+          receipt: transactionData,
+        );
+        if (!mounted) return;
+        if (replaceMode == null) {
+          _showAlreadyUploaded(existingExact);
+          _resetFormForNextCustomer();
+          return;
+        }
+        if (replaceMode == 'replace') {
+          // Approved receipt: scan replaced, prize/claim/WhatsApp untouched.
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(_isAr
+                ? 'تم استبدال الفاتورة رقم ($receiptNumber) المعتمدة بالنسخة الجديدة. الهدية المصروفة لم تتغير.'
+                : 'Approved receipt $receiptNumber was replaced with the new copy. The prize is unchanged.'),
+            duration: const Duration(seconds: 6),
+          ));
+          _resetFormForNextCustomer();
+          return;
+        }
+      }
       try {
-        await transactionRef.set(transactionData);
+        if (replaceMode != 'reupload') await transactionRef.set(transactionData);
       } on FirebaseException catch (e) {
         if (!ReceiptDeduplicationHelper.isDuplicateWriteDenied(e) &&
             receiptErrorCode(e) != 'unauthenticated') {

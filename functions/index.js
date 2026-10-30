@@ -431,6 +431,14 @@ const { checkReceiptDuplicateHandler } = require("./receipt_duplicate_check");
 exports.checkReceiptDuplicate = onCall(callableOptions, (request) =>
   checkReceiptDuplicateHandler(db, request));
 
+const { replaceReceiptHandler } = require("./receipt_replace");
+/**
+ * Rep re-upload of an existing receipt (2.0.149): rejected -> re-upload,
+ * approved -> replace keeping claim fields; old version kept in history.
+ */
+exports.replaceReceipt = onCall(callableOptions, (request) =>
+  replaceReceiptHandler(db, request));
+
 const { listBranchReceiptsHandler } = require("./list_branch_receipts");
 /** Rep branch history for one campaign, independent of the anonymous uid. */
 exports.listBranchReceipts = onCall(callableOptions, (request) =>

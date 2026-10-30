@@ -1,0 +1,71 @@
+const test = require("node:test");
+const assert = require("node:assert");
+const { replaceReceiptHandler, buildNewDoc, modeFor } = require("../receipt_replace");
+const { deterministicDocId } = require("../receipt_duplicate_check");
+
+const ID = deterministicDocId("E", "134/5/218");
+function mkDb(existing, ev = { companySlug: "583", isActive: true }) {
+  const writes = [];
+  const docRef = (id, path) => ({
+    id, path,
+    collection: (c) => ({ doc: () => docRef("H1", `${path}/${c}/H1`) }),
+    get: async () => ({ exists: !!existing, data: () => existing }),
+  });
+  return {
+    writes,
+    collection: (n) => n === "events"
+      ? { doc: () => ({ get: async () => ({ exists: !!ev, data: () => ev }) }) }
+      : n === "rateLimits" ? { doc: () => ({}) }
+      : { doc: (id) => docRef(id, `receipts_transactions/${id}`) },
+    runTransaction: async (fn) => fn({
+      get: async (r) => (r.get ? r.get() : { exists: false }),
+      getAll: async (...r) => r.map(() => ({ exists: false, data: () => ({}) })),
+      set: (r, d) => { if (r.path) writes.push({ path: r.path, d }); },
+      update: () => {},
+    }),
+  };
+}
+const payload = (x = {}) => ({ receipt_number: "134/5/218", campaignId: "E", companySlug: "583", status: "accepted", is_valid: true, total_value: 832.95, customerPhone: "0100", game_played: false, prize_won: null, ...x });
+const req = (x = {}, tok = { firebase: { sign_in_provider: "anonymous" } }) => ({ app: {}, auth: { uid: "u2", token: tok }, rawRequest: { headers: {} }, data: { campaignId: "E", receiptNumber: "134/5/218", receipt: payload(x) } });
+
+test("no existing doc: tells client to create normally (case 134)", async () => {
+  const db = mkDb(null);
+  const r = await replaceReceiptHandler(db, req());
+  assert.strictEqual(r.mode, "create"); assert.strictEqual(r.replaced, false); assert.strictEqual(db.writes.length, 0);
+});
+test("rejected doc: re-upload, history kept, becomes accepted with fresh game", async () => {
+  const old = { campaignId: "E", companySlug: "583", status: "rejected", is_valid: false, rejection_reason: "x", total_value: 10, submittedByUid: "u1" };
+  const db = mkDb(old);
+  const r = await replaceReceiptHandler(db, req());
+  assert.strictEqual(r.mode, "reupload");
+  assert.strictEqual(db.writes.length, 2);
+  assert.match(db.writes[0].path, /history/); assert.strictEqual(db.writes[0].d.status, "rejected");
+  const n = db.writes[1].d;
+  assert.strictEqual(n.status, "accepted"); assert.strictEqual(n.total_value, 832.95); assert.strictEqual(n.game_played, false); assert.strictEqual(n.replace_count, 1);
+});
+test("approved claimed doc: replace keeps claim, prize, whatsapp, customer, status", async () => {
+  const old = { campaignId: "E", companySlug: "583", status: "accepted", is_valid: true, total_value: 10, customerPhone: "0111", game_played: true, prize_won: "50", claimed_gifts: ["g"], claim_stock_sources: [{ c: "Y" }], whatsapp_winner: { status: "sent" }, submittedByUid: "u1", timestamp: "T0" };
+  const db = mkDb(old);
+  const r = await replaceReceiptHandler(db, req({ customerPhone: "0999", game_played: false, prize_won: null, status: "accepted" }));
+  assert.strictEqual(r.mode, "replace");
+  const n = db.writes[1].d;
+  assert.strictEqual(n.total_value, 832.95);
+  for (const k of ["customerPhone", "game_played", "prize_won", "claimed_gifts", "claim_stock_sources", "whatsapp_winner", "submittedByUid", "timestamp", "status"]) assert.deepStrictEqual(n[k], old[k], k);
+  assert.deepStrictEqual(db.writes[0].d.total_value, 10);
+});
+test("rejected but previously claimed is treated as replace (no second claim)", () => {
+  assert.strictEqual(modeFor({ status: "rejected", is_valid: false, game_played: true }), "replace");
+  assert.strictEqual(modeFor({ status: "rejected", is_valid: false }), "reupload");
+});
+test("replace cannot smuggle server-only fields", () => {
+  const n = buildNewDoc({ status: "accepted", prize_won: "A" }, { prize_won: "B", status: "accepted", history: [1] }, "replace", "u");
+  assert.strictEqual(n.prize_won, "A"); assert.strictEqual(n.history, undefined);
+});
+test("company mismatch and inactive campaign are refused", async () => {
+  await assert.rejects(replaceReceiptHandler(mkDb({}), req({ companySlug: "999" })), /mismatch/);
+  await assert.rejects(replaceReceiptHandler(mkDb({}, { companySlug: "583", isActive: false }), req()), /not active/);
+});
+test("non-anonymous non-staff caller refused; App Check required", async () => {
+  await assert.rejects(replaceReceiptHandler(mkDb({}), req({}, { firebase: { sign_in_provider: "password" }, role: "viewer" })), /Not allowed/);
+  await assert.rejects(replaceReceiptHandler(mkDb({}), { ...req(), app: undefined }), /App Check/);
+});
