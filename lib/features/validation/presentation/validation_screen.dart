@@ -334,7 +334,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
             branchIds: activeEvent.branchIds,
             branchNames: activeEvent.branchNames,
           ).catchError((_) => <BranchModel>[]),
-        ]);
+        ]).timeout(AiReceiptService.preScanLookupTimeout); // 2.0.150+211
 
         final catalogItems = results[0] as List<CompanyProductItem>;
         chainBranches = results[1] as List<BranchModel>;
@@ -382,7 +382,10 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         multiplierBasis: activeEvent.multiplierBasis,
         maxChancesPerReceipt: activeEvent.maxChancesPerReceipt,
         promotionalRules: activeEvent.promotionalRules,
-      );
+      ).timeout(AiReceiptService.stage2Ceiling,
+          onTimeout: () => throw TimeoutException(
+              AiReceiptService.stage2TimeoutMessage,
+              AiReceiptService.stage2Ceiling));
 
       if (mounted) {
         setState(() {

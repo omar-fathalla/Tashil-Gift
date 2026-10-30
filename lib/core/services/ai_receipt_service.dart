@@ -1149,6 +1149,12 @@ class AiReceiptService {
   /// fallback models. Worst case AI stage = 60s (no second check).
   static const Duration firstCheckBudget = Duration(seconds: 60);
 
+  /// 2.0.150+211: overall ceiling for stage 2 (lookups 8s + first check 60s
+  /// + parsing). On expiry the rep sees [stage2TimeoutMessage] and can retry.
+  static const Duration stage2Ceiling = Duration(seconds: 75);
+  static const String stage2TimeoutMessage =
+      'الفحص أخد وقت أطول من المعتاد (timeout). اضغط "حاول تاني" لإعادة الفحص.';
+
   /// Catalog/branch lookups before the AI call (were unbounded).
   static const Duration preScanLookupTimeout = Duration(seconds: 8);
 
@@ -1281,7 +1287,10 @@ class AiReceiptService {
     if (recent != null) return Future.value(recent.$2);
     final pending = _inflightScans[key];
     if (pending != null) return pending;
-    final f = run().then((r) {
+    // 2.0.150+211: hard cap so a stuck call can never pin the in-flight entry
+    // (a re-tap would otherwise join it forever). Entry is removed on success,
+    // failure, timeout or cancel (whenComplete); failures are never cached.
+    final f = run().timeout(firstCheckBudget + const Duration(seconds: 5)).then((r) {
       if (r.text != null && r.text!.trim().isNotEmpty) {
         if (_recentScans.length >= 8) _recentScans.remove(_recentScans.keys.first);
         _recentScans[key] = (DateTime.now(), r);

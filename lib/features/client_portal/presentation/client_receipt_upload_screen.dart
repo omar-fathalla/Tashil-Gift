@@ -993,7 +993,10 @@ class _ClientReceiptUploadScreenState
         promotionalRules: combinedPromotionalRules,
         allowComplementaryReceipts:
             _activeEvent?.allowComplementaryReceipts ?? false,
-      );
+      ).timeout(AiReceiptService.stage2Ceiling,
+          onTimeout: () => throw TimeoutException(
+              AiReceiptService.stage2TimeoutMessage,
+              AiReceiptService.stage2Ceiling));
 
       final previewImgUrl = 'data:$mimeType;base64,${base64Encode(bytes)}';
       // 2.0.148+208: built lazily, only when the multi-bundle upload failed.

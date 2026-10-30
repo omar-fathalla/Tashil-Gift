@@ -18,6 +18,10 @@ void main() {
     expect(CloudGenerativeModel.callableTimeout.inSeconds, 45);
     expect(AiReceiptService.geminiCallTimeout < CloudGenerativeModel.callableTimeout, isTrue);
     expect(AiReceiptService.firstCheckBudget.inSeconds, 60);
+    expect(AiReceiptService.preScanLookupTimeout.inSeconds, 8);
+    expect(AiReceiptService.stage2Ceiling.inSeconds, 75);
+    expect(AiReceiptService.preScanLookupTimeout + AiReceiptService.firstCheckBudget <=
+        AiReceiptService.stage2Ceiling, isTrue);
   });
   test('attemptTimeout clamps to remaining budget and never stacks', () {
     final now = DateTime(2026, 10, 30, 15);
