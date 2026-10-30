@@ -33,9 +33,9 @@ test("2.0.152: approved doc is locked for anonymous rep with details, no PII", a
   assert.strictEqual(r.summary.total, 772); assert.strictEqual(r.summary.approvedAt, "2026-10-30T14:12:00.000Z");
   assert.ok(!JSON.stringify(r).includes("0100")); assert.ok(!JSON.stringify(r).includes("customerName"));
 });
-test("2.0.152: approved doc not locked for admin (replace allowed)", async () => {
+test("2.0.152: approved doc locked for admin too", async () => {
   const r = await checkReceiptDuplicateHandler(db({ status: "accepted", is_valid: true }), { ...req({}), auth: { uid: "u", token: { role: "admin", firebase: { sign_in_provider: "password" } } } });
-  assert.strictEqual(r.duplicate, true); assert.strictEqual(r.locked, false); assert.strictEqual(r.exactDocExists, true);
+  assert.strictEqual(r.duplicate, true); assert.strictEqual(r.locked, true); assert.strictEqual(r.exactDocExists, true);
 });
 test("2.0.152: rejected doc not locked (re-upload allowed)", async () => {
   const r = await checkReceiptDuplicateHandler(db({ status: "rejected", is_valid: false }), req({ exactDocId: true }));

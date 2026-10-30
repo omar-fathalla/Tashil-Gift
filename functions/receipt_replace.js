@@ -13,7 +13,7 @@ const { deterministicDocId, normalizeReceiptNumber, isTransactionClaimed, isAdmi
  *   fields overwrite the doc but every claim/prize/WhatsApp/customer field is
  *   kept from the old version; no new game, no stock movement, no WhatsApp.
  * In both cases the previous version is copied to .../history/{autoId} first.
- * 2.0.152: "replace" is admin/super_admin only; anyone else gets
+ * 2.0.152: "replace" is disabled for every role; any caller gets
  * failed-precondition {locked:true, summary} and nothing is written.
  * Nothing is deleted. Firestore rules are unchanged (Admin SDK).
  */
@@ -141,8 +141,8 @@ async function replaceReceiptHandler(db, request) {
       throw new HttpsError("permission-denied", "Receipt belongs to another campaign.");
     }
     const mode = modeFor(old);
-    // 2.0.152: approved receipts are locked; only admin/super_admin may replace.
-    if (mode === "replace" && !isAdmin) {
+    // 2.0.152: approved receipts are locked for everyone (admins included).
+    if (mode === "replace") {
       const summary = await redeemedSummary(db, old, new Map([[campaignId, ev]]));
       throw new HttpsError("failed-precondition", LOCKED_MESSAGE_AR, { locked: true, receiptNumber, summary });
     }

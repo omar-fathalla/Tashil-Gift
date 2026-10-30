@@ -174,11 +174,11 @@ async function checkReceiptDuplicateHandler(db, request) {
 
   let existingStatus = null;
   const evCache = new Map();
-  const admin = isAdminCaller(request.auth);
+  // 2.0.152: approved receipts are locked for everyone, admins included.
   const hit = async (d) => ({
     duplicate: true,
-    locked: !admin && isLockedForUpload(d),
-    ...(!admin && isLockedForUpload(d) ? { message: LOCKED_MESSAGE_AR } : {}),
+    locked: isLockedForUpload(d),
+    ...(isLockedForUpload(d) ? { message: LOCKED_MESSAGE_AR } : {}),
     existingStatus: statusOf(d),
     summary: await redeemedSummary(db, d, evCache),
   });
