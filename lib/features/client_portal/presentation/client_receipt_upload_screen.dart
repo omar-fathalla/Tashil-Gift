@@ -490,6 +490,8 @@ class _ClientReceiptUploadScreenState
     try {
       final pickedFile = await _picker.pickImage(
         source: source,
+        // 2.0.148+209: rear camera; on web this sets capture="environment".
+        preferredCameraDevice: CameraDevice.rear,
         // 2.0.148+208: 2048/88 (was 2560/92). The calibrator re-encodes to
         // 1400px/q78 before Gemini anyway; this only cuts pick/decode cost
         // and memory. Shared with web.
@@ -811,7 +813,10 @@ class _ClientReceiptUploadScreenState
       final productsService = ref.read(companyProductsServiceProvider);
 
       final primaryImage = _receiptImages.first;
-      final rawPrimaryBytes = await primaryImage.readAsBytes();
+      // 2.0.148+209: reuse the bytes already read at pick time instead of a
+      // second full read (one in-memory copy; matters on iOS Safari).
+      final rawPrimaryBytes = _receiptImageBytes[primaryImage.path] ??
+          await primaryImage.readAsBytes();
 
       if (mounted) {
         setState(() {
@@ -830,7 +835,10 @@ class _ClientReceiptUploadScreenState
       // 2.0.148+208: calibrate extra parts in parallel (order preserved).
       final addCalibs = await Future.wait([
         for (int i = 1; i < _receiptImages.length; i++)
-          _receiptImages[i].readAsBytes().then(
+          (_receiptImageBytes[_receiptImages[i].path] != null
+                  ? Future.value(_receiptImageBytes[_receiptImages[i].path]!)
+                  : _receiptImages[i].readAsBytes())
+              .then(
                 (addRaw) =>
                     ReceiptImageCalibrator.calibrateReceiptBytes(addRaw),
               ),

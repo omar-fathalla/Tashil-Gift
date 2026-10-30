@@ -1222,6 +1222,58 @@ class AiReceiptService {
     _lastAiCallTimestamp = DateTime.now();
   }
 
+  // 2.0.148+209: in-flight / recent scan dedupe (see analyzeReceiptImage).
+  static final Map<String, Future<CloudGenerateContentResponse>> _inflightScans = {};
+  static final Map<String, (DateTime, CloudGenerateContentResponse)> _recentScans = {};
+  static const Duration _recentScanTtl = Duration(minutes: 10);
+
+  @visibleForTesting
+  static String scanCacheKeyForTest(String model, String prompt, List<Uint8List> images) =>
+      _scanCacheKey(model, prompt, [for (final b in images) DataPart('image/jpeg', b)]);
+
+  static String _scanCacheKey(String model, String prompt, List<Part> parts) {
+    int h = 0x811c9dc5;
+    void add(List<int> data) {
+      for (final v in data) {
+        h ^= v & 0xff;
+        h = (h * 0x01000193) & 0xffffffff;
+      }
+    }
+    add(utf8.encode(model));
+    add(utf8.encode(prompt));
+    int total = 0;
+    for (final p in parts) {
+      if (p is DataPart) {
+        add(utf8.encode(p.mimeType));
+        add(p.bytes);
+        total += p.bytes.length;
+      }
+    }
+    return '${h.toRadixString(16)}_$total';
+  }
+
+  static Future<CloudGenerateContentResponse> _dedupedGenerate(
+    String? key,
+    Future<CloudGenerateContentResponse> Function() run,
+  ) {
+    if (key == null) return run();
+    final now = DateTime.now();
+    _recentScans.removeWhere((_, v) => now.difference(v.$1) > _recentScanTtl);
+    final recent = _recentScans[key];
+    if (recent != null) return Future.value(recent.$2);
+    final pending = _inflightScans[key];
+    if (pending != null) return pending;
+    final f = run().then((r) {
+      if (r.text != null && r.text!.trim().isNotEmpty) {
+        if (_recentScans.length >= 8) _recentScans.remove(_recentScans.keys.first);
+        _recentScans[key] = (DateTime.now(), r);
+      }
+      return r;
+    }).whenComplete(() => _inflightScans.remove(key));
+    _inflightScans[key] = f;
+    return f;
+  }
+
   /// Executes Gemini generateContent with automatic exponential backoff retry on HTTP 429 quota errors.
   Future<CloudGenerateContentResponse> _executeWithExponentialBackoff(
     CloudGenerativeModel model,
@@ -1725,21 +1777,34 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         Content.multi([prompt, ...allImageParts]),
       ];
 
-      try {
-        response = await _executeWithExponentialBackoff(targetModel, contentParts);
-      } catch (e1) {
-        // 2.0.148+208: a timeout after 90s is not a model fault; re-running the
-        // same images on a fallback model only doubles the wait.
-        if (e1 is TimeoutException) rethrow;
-        debugPrint('⚠️ [AiReceiptService] Primary model failed: $e1. Escalating to primary fallback...');
+      // 2.0.148+209: same images + same prompt within 10 min reuse one Gemini
+      // call: a re-tap while the first call is still running (e.g. the rep
+      // switched apps and came back) joins it instead of re-scanning, and a
+      // re-tap after it finished reuses its response. temperature 0, so the
+      // answer would be the same anyway. Fast tier only; forensic unchanged.
+      // Admin forced deep re-scan always runs fresh.
+      final scanKey = forceDeepAudit
+          ? null
+          : _scanCacheKey(targetModel.model, finalPromptText, allImageParts);
+      response = await _dedupedGenerate(scanKey, () async {
+        CloudGenerateContentResponse r;
         try {
-          response = await _executeWithExponentialBackoff(primaryFallback, contentParts);
-        } catch (e2) {
-          if (e2 is TimeoutException) rethrow;
-          debugPrint('⚠️ [AiReceiptService] Primary fallback failed: $e2. Escalating to secondary fallback...');
-          response = await _executeWithExponentialBackoff(_fallbackModel2, contentParts);
+          r = await _executeWithExponentialBackoff(targetModel, contentParts);
+        } catch (e1) {
+          // 2.0.148+208: a timeout after 90s is not a model fault; re-running the
+          // same images on a fallback model only doubles the wait.
+          if (e1 is TimeoutException) rethrow;
+          debugPrint('⚠️ [AiReceiptService] Primary model failed: $e1. Escalating to primary fallback...');
+          try {
+            r = await _executeWithExponentialBackoff(primaryFallback, contentParts);
+          } catch (e2) {
+            if (e2 is TimeoutException) rethrow;
+            debugPrint('⚠️ [AiReceiptService] Primary fallback failed: $e2. Escalating to secondary fallback...');
+            r = await _executeWithExponentialBackoff(_fallbackModel2, contentParts);
+          }
         }
-      }
+        return r;
+      });
       aiStopwatch.stop();
       int aiDurationMs = aiStopwatch.elapsedMilliseconds;
       String pipelineTier = forceDeepAudit ? 'deep_reasoning_tier' : 'fast_tier';
