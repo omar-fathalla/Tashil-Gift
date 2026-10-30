@@ -27,13 +27,23 @@ void main() {
     expect(isNewerBuild('{}', 178), isFalse);
   });
 
-  test('never prompts on upload routes', () {
-    for (final p in ['/c', '/c/', '/C', '/submit', '/client', '/promoter']) {
-      expect(isUpdatePromptAllowedForPath(p), isFalse, reason: p);
-    }
-    for (final p in ['/', '/login', '/ops', '/campaign']) {
+  test('2.0.150: rep routes now allow the update banner', () {
+    for (final p in ['/c', '/c/372', '/submit', '/client', '/promoter',
+        '/', '/login', '/ops', '/campaign']) {
       expect(isUpdatePromptAllowedForPath(p), isTrue, reason: p);
     }
+  });
+
+  test('UpdatePromptGuard counts nested scan/save work', () {
+    UpdatePromptGuard.resetForTest();
+    expect(UpdatePromptGuard.isBusy, isFalse);
+    UpdatePromptGuard.begin();
+    UpdatePromptGuard.begin();
+    UpdatePromptGuard.end();
+    expect(UpdatePromptGuard.isBusy, isTrue);
+    UpdatePromptGuard.end();
+    UpdatePromptGuard.end();
+    expect(UpdatePromptGuard.isBusy, isFalse);
   });
 
   group('shouldPromptForUpdate', () {

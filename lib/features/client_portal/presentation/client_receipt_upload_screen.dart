@@ -15,6 +15,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/services/firebase_service.dart';
 import '../../../core/services/ai_receipt_service.dart';
+import '../../../core/update/app_update_checker.dart';
 import '../../../core/services/receipt_save_failure.dart';
 import '../../../core/services/rep_session_guard.dart';
 import 'package:firebase_auth/firebase_auth.dart' show User;
@@ -753,7 +754,17 @@ class _ClientReceiptUploadScreenState
     );
   }
 
+  /// 2.0.150+211: holds back the update banner / reload while scanning+saving.
   Future<void> _submitAndValidateReceipt({bool isSessionRetry = false}) async {
+    UpdatePromptGuard.begin();
+    try {
+      await _submitAndValidateReceiptImpl(isSessionRetry: isSessionRetry);
+    } finally {
+      UpdatePromptGuard.end();
+    }
+  }
+
+  Future<void> _submitAndValidateReceiptImpl({bool isSessionRetry = false}) async {
     var retryAfterSessionRestore = false;
     if (_receiptImages.isEmpty) {
       _showIssue(ReceiptIssueKind.noImage);

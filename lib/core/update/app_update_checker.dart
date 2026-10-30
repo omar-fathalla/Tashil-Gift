@@ -9,14 +9,25 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_version_config.dart';
 import 'page_reload.dart';
 
-/// Public, form-heavy routes (invoice upload etc.) where an update prompt must
-/// never interrupt the user.
-const Set<String> kUpdatePromptExcludedPaths = {
-  '/c',
-  '/submit',
-  '/client',
-  '/promoter',
-};
+/// 2.0.150+211: rep pages (/c, /submit, /client, /promoter) now get the banner
+/// too. Routes listed here never show it (none for now). Work in progress is
+/// protected by [UpdatePromptGuard] instead.
+const Set<String> kUpdatePromptExcludedPaths = {};
+
+/// 2.0.150+211: marks a scan/save in progress. While busy the update banner is
+/// not shown, and tapping 'تحديث' on an already-visible banner does not reload.
+class UpdatePromptGuard {
+  UpdatePromptGuard._();
+  static int _active = 0;
+  static bool get isBusy => _active > 0;
+  static void begin() => _active++;
+  static void end() {
+    if (_active > 0) _active--;
+  }
+
+  @visibleForTesting
+  static void resetForTest() => _active = 0;
+}
 
 /// A release identity: semantic version + build number, compared numerically.
 @immutable
@@ -144,6 +155,8 @@ class AppUpdateChecker {
   Future<void> check() async {
     if (_prompted) return;
     if (!isUpdatePromptAllowedForPath(Uri.base.path)) return;
+    // Scan/save in progress: try again on the next tick.
+    if (UpdatePromptGuard.isBusy) return;
     try {
       final uri = Uri.base.replace(
         path: '/version.json',
@@ -182,6 +195,14 @@ class AppUpdateChecker {
         action: SnackBarAction(
           label: 'تحديث',
           onPressed: () async {
+            if (UpdatePromptGuard.isBusy) {
+              // Never lose a scan/save: keep the banner for the next tick.
+              _prompted = false;
+              messenger.showSnackBar(const SnackBar(
+                content: Text('استنى لحد ما الفاتورة تتحفظ، وبعدين حدّث'),
+              ));
+              return;
+            }
             await markHandled();
             reloadPage();
           },
