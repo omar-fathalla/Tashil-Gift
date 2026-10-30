@@ -880,7 +880,7 @@ class _ClientReceiptUploadScreenState
                 branchNames: primaryTargetEvent.branchNames,
               )
               .catchError((_) => <BranchModel>[]),
-        ]);
+        ]).timeout(AiReceiptService.preScanLookupTimeout);
 
         final catalogItems = results[0] as List<CompanyProductItem>;
         chainBranches = results[1] as List<BranchModel>;

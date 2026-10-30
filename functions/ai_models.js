@@ -21,6 +21,12 @@ const MODELS = Object.freeze({
 /** Model used by the legacy server-side receipt_verification endpoint. */
 const RECEIPT_VERIFICATION_MODEL = MODELS.GEMINI_20_FLASH;
 
+/**
+ * 2.0.150+211: hard cap for one upstream Gemini call made by a Cloud Function
+ * (geminiGenerate, analyzeReceipt / WhatsApp verifier). Client waits 40s per call.
+ */
+const GEMINI_UPSTREAM_TIMEOUT_MS = 38000;
+
 /** Aliases / legacy names still accepted by the geminiGenerate proxy. */
 const LEGACY_ALIASES = Object.freeze([
   "gemini-flash-tier",
@@ -35,4 +41,4 @@ const ALLOWED_MODEL_IDS = Object.freeze([
   ...LEGACY_ALIASES,
 ]);
 
-module.exports = { MODELS, RECEIPT_VERIFICATION_MODEL, LEGACY_ALIASES, ALLOWED_MODEL_IDS };
+module.exports = { MODELS, RECEIPT_VERIFICATION_MODEL, GEMINI_UPSTREAM_TIMEOUT_MS, LEGACY_ALIASES, ALLOWED_MODEL_IDS };

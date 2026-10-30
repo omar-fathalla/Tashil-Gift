@@ -381,7 +381,8 @@ exports.sharePreview = onRequest(httpsOptions, async (req, res) => {
  * wahaWebhook calls the same verifyReceiptImage helper.
  */
 exports.analyzeReceipt = onCall(
-  { ...callableOptions, secrets: [geminiApiKey] },
+  // 2.0.150+211: not in the web scan path (WhatsApp / legacy only), so no minInstances.
+  { ...callableOptions, secrets: [geminiApiKey], timeoutSeconds: 60 },
   async (request) => {
     if (!request.app) {
       throw new HttpsError("failed-precondition", "App Check token is required.");

@@ -38,6 +38,7 @@ class AiModels {
   static const String defaultFastTier = gemini37Flash;
   static const String defaultDeepAudit = gemini38Pro;
 
+
   /// Fixed model for the non-scan helper services (product catalog, product
   /// discovery, smart branch matcher, branch signature, campaign assistant,
   /// WhatsApp auto-reply). Kept on 3.7 for now.

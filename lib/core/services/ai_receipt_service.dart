@@ -1141,10 +1141,28 @@ class AiReceiptService {
     return {'thinkingLevel': 'low'};
   }
 
-  /// 2.0.148+208: client wait for one Gemini call. Aligned under the callable
-  /// timeout (120s, gemini_cloud_model.dart) and the server's 120s, so a slow
-  /// but healthy scan is not discarded at 30s and re-run on a fallback model.
-  static const Duration geminiCallTimeout = Duration(seconds: 90);
+  /// 2.0.150+211: strict client wait for one Gemini call (was 90s). Server
+  /// aborts upstream at 38s, callable cap 45s.
+  static const Duration geminiCallTimeout = Duration(seconds: 40);
+
+  /// 2.0.150+211: total cap for the first check incl. 429 back-offs and
+  /// fallback models. Worst case AI stage = 60s (no second check).
+  static const Duration firstCheckBudget = Duration(seconds: 60);
+
+  /// Catalog/branch lookups before the AI call (were unbounded).
+  static const Duration preScanLookupTimeout = Duration(seconds: 8);
+
+  /// Per-attempt wait given a deadline: min(perCall, remaining). Throws
+  /// [TimeoutException] when under 3s remain so timeouts never stack.
+  @visibleForTesting
+  static Duration attemptTimeout(DateTime? deadline, Duration perCall, {DateTime? now}) {
+    if (deadline == null) return perCall;
+    final remaining = deadline.difference(now ?? DateTime.now());
+    if (remaining < const Duration(seconds: 3)) {
+      throw TimeoutException('Gemini scan budget exhausted', remaining);
+    }
+    return remaining < perCall ? remaining : perCall;
+  }
 
   static CloudGenerativeModel _createDeepAuditModel(String name) {
     return CloudGenerativeModel(
@@ -1280,13 +1298,15 @@ class AiReceiptService {
     List<Content> contents, {
     int maxRetries = 3,
     int initialBackoffMs = 1500,
+    DateTime? deadline,
   }) async {
     int attempt = 0;
     while (true) {
       attempt++;
+      final wait = attemptTimeout(deadline, geminiCallTimeout);
       try {
         await _throttleClientRequest();
-        return await model.generateContent(contents).timeout(geminiCallTimeout);
+        return await model.generateContent(contents).timeout(wait);
       } catch (e) {
         final errStr = e.toString().toLowerCase();
         final isQuotaExhausted = errStr.contains('429') ||
@@ -1786,21 +1806,25 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
       final scanKey = forceDeepAudit
           ? null
           : _scanCacheKey(targetModel.model, finalPromptText, allImageParts);
+      final firstDeadline = DateTime.now().add(firstCheckBudget);
       response = await _dedupedGenerate(scanKey, () async {
         CloudGenerateContentResponse r;
         try {
-          r = await _executeWithExponentialBackoff(targetModel, contentParts);
+          r = await _executeWithExponentialBackoff(targetModel, contentParts,
+              deadline: firstDeadline);
         } catch (e1) {
           // 2.0.148+208: a timeout after 90s is not a model fault; re-running the
           // same images on a fallback model only doubles the wait.
           if (e1 is TimeoutException) rethrow;
           debugPrint('⚠️ [AiReceiptService] Primary model failed: $e1. Escalating to primary fallback...');
           try {
-            r = await _executeWithExponentialBackoff(primaryFallback, contentParts);
+            r = await _executeWithExponentialBackoff(primaryFallback, contentParts,
+                deadline: firstDeadline);
           } catch (e2) {
             if (e2 is TimeoutException) rethrow;
             debugPrint('⚠️ [AiReceiptService] Primary fallback failed: $e2. Escalating to secondary fallback...');
-            r = await _executeWithExponentialBackoff(_fallbackModel2, contentParts);
+            r = await _executeWithExponentialBackoff(_fallbackModel2, contentParts,
+                deadline: firstDeadline);
           }
         }
         return r;
@@ -2529,51 +2553,10 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         dartStopwatch.stop();
         int dartDurationMs = dartStopwatch.elapsedMilliseconds;
 
-        // 🛑 Conditional Escalation to Deep Reasoning Tier (AIR-72)
-        if (!forceDeepAudit &&
-            (result.isTampered ||
-                (result.fraudRiskScore >= 40 &&
-                    result.isThermalPosReceipt &&
-                    !result.isHandwritten &&
-                    !result.isScreenCapture))) {
-          try {
-            final deepAiStopwatch = Stopwatch()..start();
-            final deepPrompt = TextPart(
-              '⚠️ تنبيه تدقيق جنائي عميق واستدلال متقدم (Deep Forensic Audit - AIR-72):\n'
-              'هذه الفاتورة تحتوي على اشتباه تلاعب في الأرقام أو درجة خطورة تزوير مرتفعة.\n'
-              'يرجى إجراء فحص مجهري فائق الدقة لحواف الأرقام المطبوعة، وتطابق كود الفرع، وصحة البنود، واستخراج القرار النهائي الصارم.\n\n'
-              '$finalPromptText',
-            );
-            final deepResponse = await _deepAuditModel
-                .generateContent([
-                  Content.multi([deepPrompt, ...allImageParts]),
-                ])
-                .timeout(geminiCallTimeout);
-            deepAiStopwatch.stop();
-            aiDurationMs += deepAiStopwatch.elapsedMilliseconds;
-            pipelineTier = 'deep_reasoning_tier';
-
-            if (deepResponse.text != null && deepResponse.text!.trim().isNotEmpty) {
-              final deepJson = _cleanAndParseJson(deepResponse.text!);
-              final deepResult = AiReceiptAnalysisResult.fromJson(
-                deepJson,
-                durationMs: stopwatch.elapsedMilliseconds,
-                targetCompany: targetCompany,
-                targetBrands: resolvedRequiredProducts,
-              );
-              result = result.copyWith(
-                isTampered: deepResult.isTampered,
-                fraudRiskScore: deepResult.fraudRiskScore,
-                fraudReasons: deepResult.fraudReasons.isNotEmpty
-                    ? deepResult.fraudReasons
-                    : result.fraudReasons,
-                isValid: !deepResult.isTampered && result.isValid,
-              );
-            }
-          } catch (deepErr) {
-            debugPrint('Deep Reasoning Audit Fallback gracefully ignored: $deepErr');
-          }
-        }
+        // 2.0.150+211: the automatic second forensic check (AIR-72, risk >= 40
+        // / isTampered -> deep model) was removed on Mohamed's request; the
+        // first check's result is final. Admin forced deep re-scan
+        // (forceDeepAudit) is unchanged.
 
         stopwatch.stop();
         final int finalDurationMs = stopwatch.elapsedMilliseconds;

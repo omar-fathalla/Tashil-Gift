@@ -4,7 +4,7 @@
  */
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { consumeRateLimit, clientKey, RateLimitError } = require("./rate_limit");
-const { ALLOWED_MODEL_IDS } = require("./ai_models");
+const { ALLOWED_MODEL_IDS, GEMINI_UPSTREAM_TIMEOUT_MS } = require("./ai_models");
 
 const ALLOWED_MODELS = new Set(ALLOWED_MODEL_IDS);
 
@@ -60,8 +60,11 @@ function createGeminiGenerate({ geminiApiKey, callableOptions, getDb }) {
     {
       ...callableOptions,
       secrets: [geminiApiKey],
-      timeoutSeconds: 120,
+      // 2.0.150+211: upstream call aborts at 38s; function cap 60s; one warm
+      // instance so a rep's scan never waits for a cold start.
+      timeoutSeconds: 60,
       memory: "256MiB",
+      minInstances: 1,
     },
     async (request) => {
       if (!request.app) {
@@ -151,8 +154,13 @@ function createGeminiGenerate({ geminiApiKey, callableOptions, getDb }) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
+          signal: AbortSignal.timeout(GEMINI_UPSTREAM_TIMEOUT_MS),
         });
       } catch (err) {
+        if (err && (err.name === "TimeoutError" || err.name === "AbortError")) {
+          console.warn(`geminiGenerate upstream timeout after ${GEMINI_UPSTREAM_TIMEOUT_MS}ms (model ${model})`);
+          throw new HttpsError("deadline-exceeded", "Gemini did not answer in time.");
+        }
         console.error("geminiGenerate network error:", err);
         throw new HttpsError("unavailable", "Failed to reach Gemini API.");
       }

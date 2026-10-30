@@ -59,6 +59,9 @@ class CloudGenerativeModel {
   final Map<String, dynamic>? thinkingConfig;
   final FirebaseFunctions _functions;
 
+  /// 2.0.150+211: callable cap (server aborts upstream at 38s, function 60s).
+  static const Duration callableTimeout = Duration(seconds: 45);
+
   CloudGenerativeModel({
     required this.model,
     this.systemInstruction,
@@ -121,7 +124,7 @@ class CloudGenerativeModel {
     try {
       final callable = _functions.httpsCallable(
         'geminiGenerate',
-        options: HttpsCallableOptions(timeout: const Duration(seconds: 120)),
+        options: HttpsCallableOptions(timeout: callableTimeout),
       );
       // Normalize to plain JSON (Maps/Lists/primitives). google_generative_ai's
       // toJson() leaves nested objects (e.g. Schema under responseSchema) that

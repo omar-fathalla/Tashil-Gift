@@ -1,5 +1,5 @@
 const { analyzeReceiptWithGateway } = require("./gemini_gateway");
-const { RECEIPT_VERIFICATION_MODEL } = require("./ai_models");
+const { RECEIPT_VERIFICATION_MODEL, GEMINI_UPSTREAM_TIMEOUT_MS } = require("./ai_models");
 
 /**
  * Gemini callback shared by the analyzeReceipt callable and the WhatsApp webhook.
@@ -47,6 +47,8 @@ async function callGeminiForReceipt({ apiKey, imagePayload, branches, products, 
       ],
       generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
     }),
+    // 2.0.150+211: never hang on a slow upstream call.
+    signal: AbortSignal.timeout(GEMINI_UPSTREAM_TIMEOUT_MS),
   });
 
   if (!response.ok) {
