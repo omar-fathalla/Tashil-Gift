@@ -954,119 +954,119 @@ class AiReceiptService {
     properties: {
       'isValid': Schema.boolean(
         description:
-            'True if this is a genuine printed supermarket POS receipt containing target company products and meeting all rules. False if invalid, fraudulent, or handwritten.',
+            'True if a genuine printed POS receipt with target company products meeting all rules.',
       ),
       'receiptNumber': Schema.string(
         description:
-            'The unique receipt number or transaction ID (e.g., 295/8/211/220726). Return empty string if not found.',
+            'Receipt number / transaction ID (e.g. 295/8/211/220726), else empty.',
       ),
       'targetCompanyTotal': Schema.number(
         description:
-            'The total sum in EGP/AED of ONLY the target company products found on the receipt.',
+            'Sum of ONLY target company products.',
       ),
       'receiptDate': Schema.string(
         description:
-            'The date of purchase extracted from receipt (e.g. 22/07/2026 or 2026-07-22). Return empty string if not found.',
+            'Purchase date (e.g. 22/07/2026), else empty.',
       ),
       'storeChainDetected': Schema.string(
         description:
-            'The store or supermarket chain name extracted from the receipt header (e.g. أسواق فتح الله, كارفور, سبينس). Return empty string if not found.',
+            'Chain name from header, else empty.',
       ),
       'branchDetected': Schema.string(
         description:
-            'The branch name, branch location, or cashier/branch code extracted from the receipt header (e.g. فرع الهانوفيل, سموحة, المعادي, فرع 04). Return empty string if not found.',
+            'Branch name/location/code from header, else empty.',
       ),
       'isBranchMatched': Schema.boolean(
         description:
-            'True if the detected store chain and branch match the required chain and allowed branches for this campaign. False if from an unapproved store or branch.',
+            'True if chain and branch are approved for this campaign.',
       ),
       'storeId': Schema.string(
         description:
-            'Store number or branch ID code if printed (e.g. Store: 1 or فرع 224). Return empty string if not found.',
+            'Store/branch ID code if printed, else empty.',
       ),
       'posNumber': Schema.string(
         description:
-            'POS terminal or register number if printed (e.g. PoS: 9 or كاشير 3). Return empty string if not found.',
+            'POS/register number if printed, else empty.',
       ),
       'taxNumber': Schema.string(
         description:
-            'Tax registration number or commercial register if printed on receipt. Return empty string if not found.',
+            'Tax number if printed, else empty.',
       ),
       'commercialReg': Schema.string(
         description:
-            'Commercial registration number if printed on receipt. Return empty string if not found.',
+            'Commercial reg. number if printed, else empty.',
       ),
       'hotline': Schema.string(
         description:
-            'Customer service hotline phone number printed on receipt. Return empty string if not found.',
+            'Hotline if printed, else empty.',
       ),
       'branchAddress': Schema.string(
         description:
-            'Full branch address or location printed in receipt header or footer. Return empty string if not found.',
+            'Branch address if printed, else empty.',
       ),
       'isHandwritten': Schema.boolean(
         description:
-            'True ONLY if the receipt items/prices themselves are manually handwritten on a notebook/paper draft.',
+            'True ONLY if items/prices themselves are handwritten.',
       ),
       'isThermalPosReceipt': Schema.boolean(
         description:
-            'True ONLY if this is a genuine printed electronic POS / thermal cash register receipt.',
+            'True ONLY if a genuine printed POS/thermal receipt.',
       ),
       'isTampered': Schema.boolean(
         description:
-            'True ONLY if there is fraudulent alteration, forged/scratched-out printed numbers or prices to alter purchase values.',
+            'True ONLY if printed numbers/prices are altered or scratched out.',
       ),
       'isScreenCapture': Schema.boolean(
         description:
-            'True if this is a photo of a computer or phone display screen rather than a physical paper receipt.',
+            'True if a photo of a screen, not paper.',
       ),
       'fraudRiskScore': Schema.integer(
         description:
-            'Fraud probability score from 0 (genuine printed receipt) to 100 (blatantly forged/handwritten).',
+            'Fraud score 0 (genuine) to 100 (forged).',
       ),
       'fraudReasons': Schema.array(
         description:
-            'List of fraud or suspicious triggers detected. Empty if clean.',
+            'Fraud triggers; empty if clean.',
         items: Schema.string(),
       ),
       'extractedProducts': Schema.array(
         description:
-            'List of target company promoted products found on the receipt with strictly single unit prices, quantities, and matched barcodes. Skip unrelated general grocery items.',
+            'Target company products with unit price, quantity, barcode. Skip unrelated items.',
         items: Schema.object(
           properties: {
             'name': Schema.string(
-              description: 'Product name as printed on receipt.',
+              description: 'Name as printed.',
             ),
             'price': Schema.number(
               description:
-                  'Net actual selling unit price per single piece in EGP/AED AFTER any promotional discounts or offers.',
+                  'Net unit price per piece after discount.',
             ),
             'quantity': Schema.integer(
               description: 'Quantity purchased (e.g. 1, 2, 3).',
             ),
             'isTargetCompany': Schema.boolean(
               description:
-                  'True if this product belongs to the target company being promoted.',
+                  'True if target company product.',
             ),
             'barcode': Schema.string(
               description:
-                  'The product barcode or item code if detected. Return empty string if not found.',
+                  'Barcode/item code, else empty.',
             ),
             'originalPrice': Schema.number(
               description:
-                  'Original gross unit price per single piece before discount. Null or 0 if not discounted.',
+                  'Unit price before discount; 0 if none.',
             ),
             'discountAmount': Schema.number(
               description:
-                  'Monetary discount amount per single piece. 0 if no discount.',
+                  'Discount per piece; 0 if none.',
             ),
             'discountPercent': Schema.number(
               description:
-                  'Percentage discount if printed on line item. 0 if no discount.',
+                  'Printed discount %; 0 if none.',
             ),
             'totalLinePrice': Schema.number(
               description:
-                  'Total line amount paid for this item in receipt.',
+                  'Line total paid.',
             ),
           },
           requiredProperties: [
@@ -1079,11 +1079,11 @@ class AiReceiptService {
       ),
       'message': Schema.string(
         description:
-            'A concise report in Arabic explaining the validation result, or the exact errors if conditions fail.',
+            'Short Arabic result report or exact errors.',
       ),
       'unfulfilledConditions': Schema.array(
         description:
-            'List of specific unmet conditions or errors explaining why the receipt is invalid. Return empty array if all conditions are met.',
+            'Unmet conditions; empty if all met.',
         items: Schema.string(),
       ),
     },
@@ -1101,6 +1101,9 @@ class AiReceiptService {
       'message',
     ],
   );
+
+  @visibleForTesting
+  static Schema get fastTierSchemaForTest => _fastTierSchema;
 
   static CloudGenerativeModel _createFastTierModel(String name) {
     return CloudGenerativeModel(
@@ -1353,73 +1356,29 @@ class AiReceiptService {
     }
   }
 
-  Future<AiReceiptAnalysisResult> analyzeReceiptImage(
-    Uint8List imageBytes,
-    String mimeType, {
-    List<Uint8List> additionalImagesBytes = const [],
-    List<String> additionalMimeTypes = const [],
+  /// Builds the rep-scan prompt text sent with the receipt images.
+  /// Pure (no I/O) so prompt size and per-company scoping are unit-testable.
+  static String buildScanPrompt({
     required String targetCompany,
     required double minimumSpend,
     List<String> requiredProducts = const [],
+    required List<String> resolvedRequiredProducts,
     List<String> registeredBarcodes = const [],
-    Map<String, String> catalogBarcodeMap = const {},
     String retailChainName = '',
     List<String> allowedBranches = const [],
     bool isAllBranches = true,
     List<BranchModel> registeredBranches = const [],
-    DateTime? startDate,
-    DateTime? endDate,
     String customPrompt = '',
     bool allowMultipleChances = false,
     String multiplierBasis = 'both',
     int maxChancesPerReceipt = 0,
     List<PromotionalRuleItem> promotionalRules = const [],
     bool allowComplementaryReceipts = false,
-    bool forceDeepAudit = false,
-    bool forceRefresh = false,
-  }) async {
-    final stopwatch = Stopwatch()..start();
-    try {
-      final allImagesBytesList = [imageBytes, ...additionalImagesBytes];
-      final String fingerprint = computeBytesFingerprint(allImagesBytesList);
-
-      // Check LRU In-Memory Cache for identical receipt image submissions
-      if (!forceRefresh && fingerprint.isNotEmpty) {
-        final cached = getCachedReceiptAnalysis(fingerprint);
-        if (cached != null) {
-          debugPrint('⚡ [AiReceiptService] In-Memory Cache Hit for fingerprint $fingerprint (0ms)');
-          return cached.copyWith(
-            pipelineTierUsed: 'lru_cache',
-            aiDurationMs: 0,
-            dartDurationMs: 0,
-          );
-        }
-      }
-
-      final Set<String> effectiveRequiredProducts = Set<String>.from(requiredProducts);
-      for (final r in promotionalRules) {
-        for (final sp in r.selectedProductNames) {
-          if (sp.trim().isNotEmpty) effectiveRequiredProducts.add(sp.trim());
-        }
-        for (final rb in r.requiredBrands) {
-          if (rb.trim().isNotEmpty) effectiveRequiredProducts.add(rb.trim());
-        }
-      }
-      final resolvedRequiredProducts = effectiveRequiredProducts.toList();
-
-      final List<Part> allImageParts = [
-        DataPart(mimeType, imageBytes),
-      ];
-      for (int i = 0; i < additionalImagesBytes.length; i++) {
-        final mType = i < additionalMimeTypes.length
-            ? additionalMimeTypes[i]
-            : mimeType;
-        allImageParts.add(DataPart(mType, additionalImagesBytes[i]));
-      }
-
+    int imagePartCount = 1,
+  }) {
       String multiPartInstructions = '';
-      if (additionalImagesBytes.isNotEmpty) {
-        final totalParts = allImageParts.length;
+      if (imagePartCount > 1) {
+        final totalParts = imagePartCount;
         if (!allowComplementaryReceipts) {
           multiPartInstructions = '''
 
@@ -1475,16 +1434,12 @@ class AiReceiptService {
       // the company's registered product list always belongs to the company.
       final bool isMondelezPromptTenant = isMondelezTargetCompany(targetCompany);
       final String multipackRuleCondition = isMondelezPromptTenant
-          ? '- 🛑 قاعدة أصناف المالتي باك والشوكولاتة العامة (AIR-71 - خاصة بكادبوري/مونديليز): إذا كان الصنف يحمل اسماً عاماً مثل "مالتي باك شوكولات" أو "مالتي باك شوكولاتة" دون ذكر صريح لماركة معتمدة تابعة لـ "$targetCompany" ولم يكن باركوده ضمن قائمة منتجات الشركة المسجلة، يُحظر اعتباره تابعاً للشركة الراعية ويجب تعيين isTargetCompany = false. أي سطر باركوده ضمن قائمة منتجات الشركة المسجلة يُعد تابعاً لها (isTargetCompany = true).'
-          : '- 🛑 أصناف المالتي باك / الباندل / العروض المجمعة: هي منتجات عادية. يجب إدراج كل سطر منتج مطبوع في الفاتورة في extractedProducts دون حذف أو دمج. أي سطر يكون باركوده أو اسمه ضمن قائمة منتجات "$targetCompany" المسجلة يُعد تابعاً للشركة (isTargetCompany = true) ويُحتسب سعره × الكمية ضمن targetCompanyTotal، حتى لو كان اسمه عاماً مثل "مالتي باك شوكولات". قاعدة AIR-71 خاصة بحملات كادبوري/مونديليز فقط ولا تنطبق هنا.';
+          ? '- مالتي باك/شوكولاتة عامة (AIR-71، كادبوري/مونديليز فقط): سطر باسم عام مثل "مالتي باك شوكولات" بدون ماركة معتمدة لـ "$targetCompany" وباركوده ليس في قائمة الشركة: isTargetCompany = false. أي سطر باركوده في قائمة الشركة يتبعها (isTargetCompany = true).'
+          : '- المالتي باك/الباندل/العروض المجمعة منتجات عادية: أدرج كل سطر منها في extractedProducts دون حذف أو دمج، وأي سطر باركوده أو اسمه في قائمة "$targetCompany" يتبع الشركة (isTargetCompany = true) ويُحتسب سعره × الكمية في targetCompanyTotal حتى لو اسمه عام.';
       String subBrandsCondition = '';
       if (resolvedSubBrands.isNotEmpty) {
         subBrandsCondition = '''
-🏷️ حوكمة تفكيك وتوريث العلامات التجارية الفرعية للشركة الراعية (Umbrella Sub-Brands Inheritance - AIR-59):
-- نظراً لأن أنظمة الكاشير (POS) في السوبرماركت تطبع أسماء الماركات والعلامات الفرعية فقط دون اسم الشركة القابضة "$targetCompany":
-- العلامات والماركات التجارية المعتمدة التابعة لشركة "$targetCompany" في هذه الحملة تشمل صراحةً:
-  [${resolvedSubBrands.join("، ")}]
-- ⚠️ إلزام قطعي لنموذج الذكاء الاصطناعي: أي صنف بالفاتورة يتبع أياً من هذه العلامات المعتمدة (مثال: صابون أو سائل أو شامبو أو مسحوق أو مناديل يحمل اسماً من القائمة أعلاه مثل: ${resolvedSubBrands.take(3).join("، ")}) هو صنف شرعي وأصيل ومعتمد لشركة "$targetCompany" بنسبة 100% (عيّن: isTargetCompany = true)، ويجب إدراجه فوراً في (extractedProducts) وجمع قيمته في (targetCompanyTotal) وتطبيق قواعد العروض الترويجية والجوائز ومضاعفات الفرص عليه دون أي استبعاد.
+🏷️ ماركات "$targetCompany" الفرعية (AIR-59): الكاشير يطبع اسم الماركة فقط. أي صنف من هذه الماركات [${resolvedSubBrands.join("، ")}] يتبع "$targetCompany" (isTargetCompany = true): أدرجه في extractedProducts واجمعه في targetCompanyTotal وطبّق عليه العروض.
 ''';
       }
 
@@ -1562,60 +1517,89 @@ class AiReceiptService {
 ''';
         } else {
           categoryPackagingGuard = '''
-1. [حوكمة أصناف وسلات شركة "$targetCompany" والعزل التام]:
-   - كافة الأصناف المشتراة التابعة لشركة "$targetCompany" (سواء ألبان، زبادي، حليب، أجبان، عصائر، بقوليات، إلخ) والمشمولة بشروط العرض تُدرج في (extractedProducts) وتحسب في (targetCompanyTotal).
-   - في عروض الإنفاق الإجمالي (by_spend): يُحسب إجمالي صافي الإنفاق لمنتجات شركة "$targetCompany" لمقارنته بالحد الأدنى المطلوب.
+1. كل أصناف "$targetCompany" المشمولة بالعرض تُدرج في extractedProducts وتُجمع في targetCompanyTotal؛ وفي عروض الإنفاق يُقارن صافي إنفاق أصناف "$targetCompany" بالحد الأدنى.
 ''';
         }
 
         promotionalRulesCondition =
             '''
-- محرك القواعد والعروض الترويجية والجوائز المعتمدة (Promotional Rules Engine):
+- القواعد الترويجية المعتمدة:
 $rulesListFormatted
 
-⚠️ تعليمات مطابقة القواعد الترويجية والعزل الصارم للشركات والعلامات (Strict Dynamic Rules & Tenant Isolation):
+⚠️ مطابقة القواعد (عزل صارم للشركة والماركات):
 $categoryPackagingGuard
-2. افحص بدقة أسماء الأصناف في الفاتورة مع مراعاة كافة الاختلافات الإملائية والطباعية في بونات الكاشير.
-3. [تجميع العروض المتزامنة (Multi-Offer Bundling)]: إذا اشترى العميل أصنافاً تحقق أكثر من عرض ترويجي مختلف في نفس الفاتورة، قم بتضمين كافة معرفات القواعد المطابقة في حقل (matchedRuleIds) كقائمة (مثل: ["rule_3", "rule_5"])، وجمع إجمالي قيمة المكافآت المستحقة في (matchedRewardAmount)، وكتابة ملخص الجوائز في (matchedRewardValue).
-4. [الهدية الأعلى قيمة أولاً]: إذا انطبقت أكثر من قاعدة على نفس المنتجات أو نفس مبلغ الإنفاق، ابدأ بالقاعدة ذات الهدية الأعلى قيمة (الفواتشر بقيمته النقدية، والهدية العينية بقيمتها في الكتالوج، والهدية بدون قيمة تأتي بعدها مرتبة بالمستوى الأعلى). امنحها ثم اخصم المبلغ الذي استخدمته، ولا تُمنح القاعدة الأقل إلا من المبلغ المتبقي فقط. لا تجمع أبداً هدية أقل على نفس المبلغ (مثال: 627 ج.م مع قواعد 450 و350 و150 = فواتشر قاعدة 450 مرة واحدة + هدية قاعدة 150 مرة واحدة من الباقي 177، وليس 4 × هدية قاعدة 150).
-5. [مضاعفة الجوائز والفرص]: إذا كانت القاعدة تتيح المضاعفة، احسب عدد مرات تكرار العرض من المبلغ أو الكمية المتاحة لها فقط (بعد خصم ما استخدمته القواعد الأعلى قيمة) واضرب المكافأة بعدد المرات.
-6. قم بتعبئة حقل (matchedRuleId) بمعرف القاعدة المطابقة الأولى، و(matchedRuleTitle) بعنوان القاعدة، و(matchedRewardType) بنوع المكافأة.
-7. [العزل الصارم للأصناف واستهلاك الكميات]: كل صنف يطابق قاعدة علامته التجارية والشركة الراعية فقط، وتُخصم الكمية المستهلكة فوراً من السلة لمنع احتساب نفس القطعة في أكثر من عرض.
-8. إذا لم تنطبق أي من هذه القواعد، اترك حقل (matchedRuleId) فارغاً "" وحقل (matchedRuleIds) كقائمة فارغة [].
+2. راعِ الاختلافات الإملائية والطباعية في أسماء الأصناف.
+3. عدة عروض في نفس الفاتورة: كل المعرفات في matchedRuleIds، ومجموع المكافآت في matchedRewardAmount، وملخصها في matchedRewardValue.
+4. الهدية الأعلى قيمة أولاً: طبّقها ثم اخصم ما استخدمته، والقاعدة الأقل من الباقي فقط، ولا تكرر هدية أقل على نفس المبلغ (627 ج.م مع قواعد 450/350/150 = 450 مرة + 150 مرة من الباقي 177).
+5. المضاعفة (إن سمحت القاعدة): عدد المرات من المبلغ أو الكمية المتبقية لها فقط × المكافأة.
+6. matchedRuleId = أول قاعدة مطابقة، وmatchedRuleTitle عنوانها، وmatchedRewardType نوعها؛ وإن لم تنطبق قاعدة: matchedRuleId = "" وmatchedRuleIds = [].
+7. كل قطعة تُحتسب في عرض واحد فقط لماركتها وللشركة الراعية فقط.
 ''';
       }
 
       String branchSignaturesText = '';
       if (registeredBranches.isNotEmpty) {
-        final sigsList = registeredBranches
-            .map((b) {
-              final s = b.receiptSignature;
-              final codePart = b.branchCode.isNotEmpty
-                  ? 'كود: "${b.branchCode}", '
-                  : '';
-              final cityPart = b.city.isNotEmpty
-                  ? 'المدينة: "${b.city}", '
-                  : '';
-              final addrPart = b.address.isNotEmpty
-                  ? 'العنوان: "${b.address}", '
-                  : '';
-              String sigPart = '';
-              if (s != null && s.hasSignature) {
-                sigPart =
-                    'Store ID: "${s.storeId}", نسق الفاتورة/الباركود: "${s.receiptPattern}", نسق الـ POS: "${s.posNumberPattern}", الرقم الضريبي: "${s.taxNumber}", الهاتف: "${s.hotline}", كلمات الرأس: ${s.headerKeywords.join("/")}';
-              }
-              return '  * فرع "${b.branchName}" (${b.retailChainName}): [$codePart$cityPart$addrPart$sigPart]';
-            })
-            .join('\n');
+        // Chain-wide fields (tax no., hotline, receipt/POS pattern) are listed
+        // once per chain instead of on every branch line.
+        String sigOf(BranchModel b, String Function(BranchReceiptSignature) f) {
+          final s = b.receiptSignature;
+          if (s == null || !s.hasSignature) return '';
+          final v = f(s).trim();
+          final id = s.storeId.trim();
+          return id.isNotEmpty ? v.replaceAll(id, '{S}') : v;
+        }
+        final byChain = <String, List<BranchModel>>{};
+        for (final b in registeredBranches) {
+          byChain.putIfAbsent(b.retailChainName.trim(), () => []).add(b);
+        }
+        final out = <String>[];
+        byChain.forEach((chain, list) {
+          final fields = <String, String Function(BranchReceiptSignature)>{
+            'نسق الفاتورة': (s) => s.receiptPattern,
+            'POS': (s) => s.posNumberPattern,
+            'الرقم الضريبي': (s) => s.taxNumber,
+            'الهاتف': (s) => s.hotline,
+          };
+          final common = <String, String>{};
+          fields.forEach((label, f) {
+            final vals = list.map((b) => sigOf(b, f)).toSet();
+            if (vals.length == 1 && vals.first.isNotEmpty) common[label] = vals.first;
+          });
+          final head = common.entries.map((e) => '${e.key}: "${e.value}"').join('، ');
+          out.add('  [$chain]${head.isNotEmpty ? ' $head' : ''}:');
+          for (final b in list) {
+            final s = b.receiptSignature;
+            final parts = <String>[];
+            if (b.branchCode.isNotEmpty) parts.add('كود ${b.branchCode}');
+            final sid = (s != null && s.hasSignature) ? s.storeId.trim() : '';
+            if (sid.isNotEmpty && sid != b.branchCode.trim()) parts.add('Store $sid');
+            final addr = b.address.trim();
+            if (addr.isNotEmpty) {
+              parts.add(addr);
+            } else if (b.city.trim().isNotEmpty) {
+              parts.add(b.city.trim());
+            }
+            fields.forEach((label, f) {
+              if (common.containsKey(label)) return;
+              final v = sigOf(b, f);
+              if (v.isNotEmpty) parts.add('$label: "$v"');
+            });
+            if (s != null && s.hasSignature) {
+              final known = '$chain ${b.branchName} $addr'.toLowerCase();
+              final kw = s.headerKeywords
+                  .map((k) => k.trim())
+                  .where((k) => k.isNotEmpty && !known.contains(k.toLowerCase()))
+                  .toList();
+              if (kw.isNotEmpty) parts.add('رأس: ${kw.join("/")}');
+            }
+            out.add('  * ${b.branchName}: ${parts.join("، ")}');
+          }
+        });
         branchSignaturesText =
             '''
-- دليل الفروع والبصمات الهيكلية المعتمدة لنقاط البيع (Store Branches & POS Signatures):
-$sigsList
-
-⚠️ تعليمات وقواعد أولوية مطابقة الفرع المعتمد (Mandatory Branch Matching Rules):
-1. [أولوية مطلقة رقم 1]: طابق كود المتجر ورقم الـ POS المطبوع على الفاتورة (مثل "Store: 224" أو "Store: 243" أو "POS: 224" أو رقم المتجر ضمن كود المعاملة/الباركود مثل "93/3/224/...") مع دليل أكواد وبصمات الفروع المعتمدة أعلاه.
-2. [تجاهل نصوص الإعلانات والافتتاحات في التذييل]: لا تستخدم أبداً العبارات الدعائية أو الإعلانات المطبوعة في تذييل الفاتورة أو أسفلها (مثل: "تم افتتاح فرع مدينة بدر" أو "زوروا فرعنا الجديد") لتحديد الفرع؛ فهذه إعلانات تسويقية عامة لجميع الفروع وليست الفرع الذي أصدر الفاتورة. الفرع الحقيقي المصدر هو المكتوب في رأس الفاتورة والمطابق لرقم المتجر (Store Code / POS).
-3. [النتيجة]: إذا تطابق كود المتجر مع أي فرع من الفروع المعتمدة في القائمة (مثال: Store 224 يطابق فرع عجمي ستار المعتمد)، فيجب تعيين (isBranchMatched = true) وتعيين (branchDetected = اسم الفرع المعتمد المطابق للكود).
+- دليل الفروع ({S} = Store ID للفرع):
+${out.join('\n')}
+- مطابقة الفرع: الأولوية لكود المتجر/POS المطبوع (Store/POS أو داخل رقم المعاملة مثل 93/3/224/...) مقابل الدليل؛ ولو طابق فرعاً معتمداً: isBranchMatched = true وbranchDetected = اسمه. تجاهل إعلانات افتتاح الفروع في التذييل؛ الفرع هو المطبوع في الرأس.
 ''';
       }
 
@@ -1627,22 +1611,21 @@ $sigsList
             .where((s) => s.isNotEmpty)
             .toList();
         final chainClarification = chainList.length > 1
-            ? 'تشمل أياً من السلاسل الآتية: [${chainList.join(" أو ")}] (أي فاتورة صادرة من أي سلسلة من هذه السلاسل معتمدة ومشمولة بالكامل، ويُحظر اعتبارها سلسلة غير مشمولة)'
+            ? 'أي من [${chainList.join(" أو ")}] (كلها مشمولة)'
             : '"$retailChainName"';
 
         if (!isAllBranches && allowedBranches.isNotEmpty) {
           branchCondition =
               '''
-- السلسلة/السلاسل المعتمدة للحملة: $chainClarification.
-- الفروع المعتمدة حصراً لهذا العرض: [${allowedBranches.join("، ")}].
-- المطلوب للفرع والسلسلة: افحص رأس الفاتورة وكود المتجر (Store ID / POS) بدقة واستخرج اسم السلسلة في (storeChainDetected) واسم الفرع أو عنوانه أو رقمه في (branchDetected). إذا كانت الفاتورة صادرة من أحد الفروع المعتمدة المذكورة أعلاه أو تحمل كود المتجر لفرع معتمد، حدد (isBranchMatched = true). إذا كانت الفاتورة تابعة لأيٍّ من السلاسل المعتمدة المذكورة أعلاه (${chainList.join(" أو ")}), فلا تعتبرها أبداً سلسلة غير مشمولة بل حدد (isBranchMatched = true) طالما الفرع أو كود المتجر معتمد.
+- السلسلة المعتمدة: $chainClarification. الفروع المعتمدة حصراً: [${allowedBranches.join("، ")}].
+- استخرج السلسلة في storeChainDetected والفرع في branchDetected؛ isBranchMatched = true إذا كانت من سلسلة معتمدة وفرعها أو كود متجرها معتمد.
 $branchSignaturesText
 ''';
         } else {
           branchCondition =
               '''
-- السلسلة/السلاسل المعتمدة للحملة: $chainClarification (كافة الفروع مشمولة).
-- المطلوب للفرع: استخرج اسم السلسلة في (storeChainDetected) والفرع في (branchDetected)، وحدد (isBranchMatched = true) إذا كانت تابعة لأيٍّ من هذه السلاسل المعتمدة.
+- السلسلة المعتمدة: $chainClarification (كل الفروع مشمولة).
+- استخرج السلسلة في storeChainDetected والفرع في branchDetected؛ isBranchMatched = true إذا كانت من سلسلة معتمدة.
 $branchSignaturesText
 ''';
         }
@@ -1674,12 +1657,35 @@ $branchSignaturesText
       }
 
       final String antiFraudMultiReceiptRule = allowComplementaryReceipts
-          ? '- [بونات التكملة المتعددة في كادر واحد جنباً إلى جنب]: إذا احتوت الصورة على بونين كاشير مطبوعين إلكترونياً جنباً إلى جنب لنفس السوبرماركت واليوم لتكملة القيمة (أحدهما بون أساسي والآخر بون تكميلي مثل مدون عليه "تكملة الفاتورة"): استخرج رقمي البونين مدمجين بفاصل " + " في (receiptNumber) (مثال: "64/6/241/250926 + 109/8/241/250926")، واجمع كافة أصناف الشركة الراعية المؤهلة من كلا البونين في (extractedProducts)، واحسب إجمالي مجموع قيمتهما المشترك في (targetCompanyTotal) (مثال: 751.00 + 55.00 = 806.00 ج.م)، وطبّق العرض ومضاعفات الجوائز على الإجمالي التراكمي.'
-          : '''- [معيار نزاهة واستقلالية الفاتورة الواحدة وحظر دمج البونات المنفصلة - AIR-61]:
-  * يُحظر تماماً دمج أو جمع أكثر من بون كاشير منفصل (سواء تم تصويرهما جنباً إلى جنب في كادر واحد أو تم رفعهما كأجزاء منفصلة) لتجميع القيمة أو الوصول للحد الأدنى للإنفاق.
-  * كل مطالبة أو معاملة يجب أن تستند إلى [فاتورة كاشير واحدة مستقلة بذاتها] برأس واحدة ورقم فاتورة واحد وتاريخ وتوقيت واحد وإجمالي واحد.
-  * إذا ظهر في الصورة أو المرفقات أكثر من بون كاشير بأرقام مختلفة أو توقيتات مختلفة: عيّن فوراً isValid = false، ولا تجمع قيمهما، ولا تضع فاصل "+" في رقم الفاتورة، واكتب في (unfulfilledConditions): ["مخالفة معايير الأهلية: تم رصد محاولة دمج بونات شراء منفصلة ذات أرقام أو توقيتات مختلفة في معاملة واحدة. يشترط النظام استيفاء شروط العرض في فاتورة شراء واحدة مستقلة."]
-  * الاستثناء الوحيد للصور المتعددة هو: التقاط [أجزاء متتابعة لنفس الفاتورة الفيزيائية الواحدة الطويلة] التي لا يتسع لها كادر الكاميرا، مع التطابق التام لرقم الفاتورة والفرع والتوقيت ومنع تكرار السطور المتداخلة (Cross-Seam Deduplication).''';
+          ? '- بونان مطبوعان متجاوران لنفس السوبرماركت واليوم (أساسي + تكملة): رقماهما في receiptNumber بفاصل " + " (مثال: "64/6/241/250926 + 109/8/241/250926")، وأصناف الشركة من الاثنين في extractedProducts، ومجموعهما في targetCompanyTotal (751 + 55 = 806)، والعرض على الإجمالي.'
+          : '''- فاتورة واحدة فقط (AIR-61): ممنوع جمع بونات منفصلة. لو ظهر أكثر من بون بأرقام أو توقيتات مختلفة: isValid = false، لا تجمع ولا تستخدم "+"، وفي unfulfilledConditions: ["مخالفة معايير الأهلية: تم رصد محاولة دمج بونات شراء منفصلة ذات أرقام أو توقيتات مختلفة في معاملة واحدة. يشترط النظام استيفاء شروط العرض في فاتورة شراء واحدة مستقلة."]. المسموح فقط أجزاء متتابعة لنفس الفاتورة الطويلة (نفس الرقم والفرع والتوقيت) مع عدم تكرار السطور المتداخلة.''';
+
+      // Shared rules for both prompt paths. Company-specific blocks only go in
+      // for their own company (AIR-87 Dorra/rice; AIR-71 Mondelez multipack).
+      final String dorraRule = isDorraTargetCompany(targetCompany)
+          ? '''
+- الدرة (AIR-87): منتجات معبأة (صلصة، كاتشب، مايونيز، صوصات، خل، مخلل، مربى، طحينة). الحبوب والعطارة والفشار التي تحمل "ذرة/درة" (درة أم شوشة، ذرة فشار، ذرة حب، بهارات، عطارة) ليست للدرة: isTargetCompany = false.
+- لا تخمّن ماركة الأرز: "الفراعنة ارز" أو "أرز الساعة" أو "أرز ريحانة" تُنقل باسمها كما هي مع isTargetCompany = false، وممنوع تسميتها "الدرة ارز".'''
+          : '';
+      final String sharedRules = '''
+🛑 العزل للشركة الراعية فقط "$targetCompany":
+- أي منتج لماركة أو شركة أخرى أو منافسة: isTargetCompany = false ويُستبعد من targetCompanyTotal والعروض.$dorraRule
+$multipackRuleCondition
+- isTargetCompany = true فقط لأصناف "$targetCompany". ركّز على أسطرها وتجاهل الأصناف العامة (لحوم، خضار، فاكهة، مخبوزات، منظفات غير تابعة) ولا تدرجها.
+
+🛑 مكافحة التزوير:
+- المقبول فقط (isValid = true) بون كاشير حراري/إلكتروني مطبوع آلياً.
+- كتابة يدوية على هامش بون مطبوع (مثل "تم تسليم الهدية" أو "تكملة الفاتورة" أو "تم استلام 2 فوتشر" أو توقيع أو رقم تليفون أو علامة صح) لا تُبطله: isThermalPosReceipt = true وisHandwritten = false وisTampered = false.
+$antiFraudMultiReceiptRule
+- فاتورة محررة بالكامل باليد: isHandwritten = true وisThermalPosReceipt = false وisValid = false، والرسالة: "عذراً، تم رفض الفاتورة لأنها محررة بخط اليد. العرض يشترط بون كاشير مطبوع إلكترونياً من ماكينة السوبرماركت."
+- شطب أو تعديل يدوي في الأرقام أو الأسعار: isTampered = true وisValid = false.
+- صورة لشاشة هاتف أو حاسوب: isScreenCapture = true وisValid = false.
+
+⚠️ الأسعار والكميات:
+- price = سعر القطعة الواحدة الصافي، وليس إجمالي السطر.
+- الكمية والسعر والباركود على نفس سطر الصنف [القيمة] [السعر] [الكمية] [الصنف] (AIR-26). لا تأخذ الكمية من سطر فوقه أو تحته، وتحقق: الكمية = إجمالي السطر ÷ سعر الوحدة.
+- مثال كمية 2 بإجمالي 198 بعد خصم من 230: price = 99، originalPrice = 115، discountAmount = 16، totalLinePrice = 198.
+''';
 
       String finalPromptText;
       if (customPrompt.trim().isNotEmpty) {
@@ -1710,110 +1716,120 @@ $branchSignaturesText
         finalPromptText +=
             '''
 
-تنبيهات إضافية هامة جداً:
-1. ابحث عن تاريخ الشراء (Date / التاريخ) بالفاتورة واستخرجه بوضوح في حقل receiptDate (مثال: 22/07/2026).
-2. استخرج رقم الفاتورة أو Transaction ID أو كود العملية من رأس الفاتورة في حقل receiptNumber (مثال: TP0001000420897 أو 07611-019260005484 أو 120001000420897). إياك واستخراج رقم البطاقة الضريبية (ب.ض / Tax ID) أو السجل التجاري (س.ت / CR) كرقم للفاتورة.
-3. استخرج اسم السلسلة والفرع من رأس الفاتورة بدقة.
+تنبيهات إضافية:
+1. receiptDate = تاريخ الشراء (مثال: 22/07/2026).
+2. receiptNumber = رقم الفاتورة أو Transaction ID من الرأس (مثال: TP0001000420897 أو 07611-019260005484)، وليس الرقم الضريبي (ب.ض) ولا السجل التجاري (س.ت).
 $branchCondition
 $catalogCondition
 $productsCondition
 $promotionalRulesCondition
 $chancesCondition$multiPartInstructions
-
 $subBrandsCondition
-🛑 حوكمة العزل الحصري لعلامات الشركة الراعية والسلع الزراعية (AIR-71 & AIR-87):
-- الفاتورة يتم تدقيقها حصرياً لصالح شركة: "$targetCompany".
-- أي منتج بالفاتورة يتبع علامة تجارية أو شركة منافسة أو غير تابعة لـ "$targetCompany" (مثلاً: إذا كانت الشركة الراعية المراعي، فلا تحتسب منتجات جهينة أو لمار؛ وإذا كانت الراعية الدرة، فلا تحتسب هاينز أو قودي أو هارفست أو فاين فودز) يجب فوراً تعيينه: isTargetCompany = false واستبعاده كلياً من targetCompanyTotal ومن أي عرض ترويجي.
-- 🛑 استبعاد الحبوب الزراعية والعطارة والفشار وأرز الشركات المستقلة (AIR-87):
-  * شركة "الدرة" (Al-Durra / Dorra) هي شركة منتجات غذائية معبأة (صلصة، كاتشب، مايونيز، صصوصات، خل، مخلل، مربى، طحينة). يُحظر تماماً وبصرامة احتساب أي حبوب زراعية أو بهارات أو عطارة تحمل كلمة "ذرة" أو "درة" (مثل: "درة أم شوشة"، "ذرة أم شوشة"، "ذرة فشار"، "درة فشار"، "ذرة حب"، "فشار"، "بهارات"، "عطارة") كمنتج للدرة، ويجب تعيين isTargetCompany = false واستبعادها كلياً.
-  * يُحظر تماماً على الذكاء الاصطناعي تخمين أو استبدال ماركات الأرز المطبوعة على الفاتورة (Zero-Hallucination)؛ فإذا كان الصنف المطبوع هو "الفراعنة ارز" أو "أرز الفراعنة" أو "أرز الساعة" أو "أرز ريحانة"، يجب نقله كما هو باسمه الحقيقي مع تعيين isTargetCompany = false لعدم تبعيته للدرة، ويُمنع منعاً باتاً تسميته "الدرة ارز".
-$multipackRuleCondition
-- الأصناف المشروعة في (extractedProducts) مع (isTargetCompany = true) هي فقط الأصناف التابعة لشركة "$targetCompany".
-
-🛑 استراتيجية الفلترة الموجهة والمسح السريع الفائق (Targeted Fast-Scan Strategy):
-- ركز فورياً على رأس الفاتورة (Header) لاستخراج السلسلة والفرع وتاريخ الشراء ورقم الفاتورة.
-- عند قراءة أسطر المشتريات: ركز حصراً على أسطر منتجات وععلامات شركة "$targetCompany" المشروطة، وتجاهل أي أسطر عامة أخرى (كاللحوم والخضار والفاكهة والمخبوزات والمنظفات غير التابعة) ولا تدرجها في extractedProducts، وذلك لتسريع الاستجابة والتركيز على منتجات العرض فقط.
-
-🛑 تعليمات مكافحة التزوير والرفض الأمني (Anti-Fraud & Genuine Receipt Policy):
-- [بون الكاشير الإلكتروني]: الفواتير المقبولة فقط (isValid = true) هي بونات الكاشير الحرارية أو الإلكترونية المطبوعة آلياً من أنظمة ونقاط البيع المعتمدة (Thermal POS Receipts).
-- [ملاحظات وهوامش البروموتر/الكاشير]: إذا كان أصل الفاتورة بون كاشير مطبوع إلكترونياً، وتوجد عليه كتابة يدوية في الهوامش أو الرأس مثل "تم تسليم الهدية" أو "تكملة الفاتورة" أو "تم استلام 2 فوتشر" أو توقيع أو علامة استلام أو رقم تليفون أو علامات صح، فهذا بون كاشير أصلي معتمد وسليم (isThermalPosReceipt = true و isHandwritten = false و isTampered = false) ويجب قبوله.
-$antiFraudMultiReceiptRule
-- [كشف الفواتير المحررة يدوياً]: إذا كانت الفاتورة نفسها مسودة أو محررة بالكامل في دفتر يدوي وبنودها وأسعارها مكتوبة باليد، عيّن isHandwritten = true و isThermalPosReceipt = false و isValid = false واكتب رسالة رفض واضحة: "عذراً، تم رفض الفاتورة لأنها محررة بخط اليد. العرض يشترط بون كاشير مطبوع إلكترونياً من ماكينة السوبرماركت."
-- [كشف الشطب والتلاعب في الأرقام]: إذا وجد شطب أو تلاعب وتعديل يدوي في أرقام وأسعار الأصناف المطبوعة لتغيير قيمتها، عيّن isTampered = true و isValid = false.
-- [كشف تصوير الشاشات]: إذا كانت الصورة ملتقطة لشاشة هاتف أو حاسوب، عيّن isScreenCapture = true و isValid = false.
-
-⚠️ تعليمات استخراج أسعار الأصناف والكميات والخصومات بدقة (Strict Unit Price & Discount Rules):
-- يجب أن يحتوي حقل (price) دائماً على سعر بيع القطعة الواحدة فقط (Unit Price).
-- [محاذاة السطور والباركود والكمية الحسابية - POS Row Alignment & AIR-26]:
-  * في بونات السوبرماركت (خاصة جملة ماركت وفتح الله وكارفور)، تقع الكمية وسعر الوحدة والباركود على نفس السطر الأفقي للصنف تماماً: [القيمة] [السعر] [الكمية] [الصنف والباركود].
-  * احذر بشدة من قراءة كمية من السطر الذي يعلو أو يلي سطر الصنف! (مثلاً: إذا كان السطر السابق يحتوي على كمية 3 وسعر 3.33 وإجمالي 10.00، والسطر الحالي هو "(كلير شامبو رجالى 360مل (وفر JR)" بسعر 134.00 وإجمالي 134.00 وكمية 1 وباركود 6221155210517، فالكمية حتماً 1 قطعة فقط).
-  * تحقق دائماً من المعادلة: الكمية = إجمالي السطر ÷ سعر الوحدة. إذا كان الإجمالي 134.00 والسعر 134.00 فالكمية = 1 وتمنح 1 هدية كلير 90 مل.
-- إذا اشترى العميل كمية (quantity = 2 أو أكثر)، وكان المطبوع في الفاتورة هو إجمالي السطر (مثل 2 × 115 = 230 أو 198 بعد الخصم)، فيجب وضع سعر القطعة الصافي في (price) = 99.0 ج.م، وسعر القطعة الأصلي في (originalPrice) = 115.0 ج.م، وقيمة الخصم للقطعة الواحدة في (discountAmount) = 16.0 ج.م، وإجمالي السطر في (totalLinePrice) = 198.0 ج.م.
-- إياك أن تضع إجمالي السطر كسعر للقطعة في حقل price عند وجود كمية أكبر من 1!
-
-تأكد من إرجاع النتيجة بصيغة JSON المحتوي على الحقول المفروضة:
-isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptDate (string), storeChainDetected (string), branchDetected (string), isBranchMatched (boolean), isHandwritten (boolean), isThermalPosReceipt (boolean), isTampered (boolean), isScreenCapture (boolean), chancesEarned (integer), message (string).
-''';
+$sharedRules''';
       } else {
         finalPromptText =
             '''
-        أنت مساعد ذكي ومدقق مالي وأمني فائق الدقة متخصص في فحص وتدقيق فواتير السوبر ماركت وكشف التزوير لعروض "$targetCompany".
-        قم بتحليل صورة الفاتورة المرفقة فورياً وبأقصى سرعة واستخرج البيانات التالية:
-        
-        1. "رأس الفاتورة والفرع": استخرج اسم سلسلة السوبرماركت في (storeChainDetected)، واسم أو رقم أو عنوان الفرع في (branchDetected).
-        $branchCondition
-        2. "رقم الفاتورة" (Receipt Number أو Transaction ID). قد يكون رقم البون أو التركيبة المطبوعة في الأعلى أو الأسفل (مثال: 295/8/211/220726)، ابحث عنه بدقة واستخرجه.
-        3. "تاريخ الشراء" (Receipt Date). استخرج تاريخ اليوم والوقت المكتوب بالفاتورة في حقل receiptDate (مثال: 22/07/2026).
-        4. $catalogCondition
-        5. $productsCondition
-        6. $promotionalRulesCondition
-        7. احسب الإجمالي المؤهل للحملة في حقل (targetCompanyTotal).
-        8. $chancesCondition$multiPartInstructions
-        
-        $subBrandsCondition
-        🛑 حوكمة العزل الحصري لعلامات الشركة الراعية والسلع الزراعية (AIR-71 & AIR-87):
-        - الفاتورة يتم تدقيقها حصرياً لصالح شركة: "$targetCompany".
-        - أي منتج بالفاتورة يتبع علامة تجارية أو شركة منافسة أو غير تابعة لـ "$targetCompany" (مثلاً: إذا كانت الشركة الراعية المراعي، فلا تحتسب منتجات جهينة أو لمار؛ وإذا كانت الراعية الدرة، فلا تحتسب هاينز أو قودي أو هارفست أو فاين فودز) يجب فوراً تعيينه: isTargetCompany = false واستبعاده كلياً من targetCompanyTotal ومن أي عرض ترويجي.
-        - 🛑 استبعاد الحبوب الزراعية والعطارة والفشار وأرز الشركات المستقلة (AIR-87):
-          * شركة "الدرة" (Al-Durra / Dorra) هي شركة منتجات غذائية معبأة (صلصة، كاتشب، مايونيز، صوصات، خل، مخلل، مربى، طحينة). يُحظر تماماً وبصرامة احتساب أي حبوب زراعية أو بهارات أو عطارة تحمل كلمة "ذرة" أو "درة" (مثل: "درة أم شوشة"، "ذرة أم شوشة"، "ذرة فشار"، "درة فشار"، "ذرة حب"، "فشار"، "بهارات"، "عطارة") كمنتج للدرة، ويجب تعيين isTargetCompany = false واستبعادها كلياً.
-          * يُحظر تماماً على الذكاء الاصطناعي تخمين أو استبدال ماركات الأرز المطبوعة على الفاتورة (Zero-Hallucination)؛ فإذا كان الصنف المطبوع هو "الفراعنة ارز" أو "أرز الفراعنة" أو "أرز الساعة" أو "أرز ريحانة"، يجب نقله كما هو باسمه الحقيقي مع تعيين isTargetCompany = false لعدم تبعيته للدرة، ويُمنع منعاً باتاً تسميته "الدرة ارز".
-        - الأصناف المشروعة في (extractedProducts) مع (isTargetCompany = true) هي فقط الأصناف التابعة لشركة "$targetCompany".
-
-        🛑 استراتيجية الفلترة الموجهة والمسح السريع الفائق (Targeted Fast-Scan Strategy):
-        - ركز فورياً على رأس الفاتورة (Header) لاستخراج السلسلة والفرع وتاريخ الشراء ورقم الفاتورة.
-        - عند قراءة أسطر المشتريات: ركز حصراً على أسطر منتجات وعلامات شركة "$targetCompany" المشروطة، وتجاهل أي أسطر عامة أخرى (كاللحوم والخضار والفاكهة والمخبوزات والمنظفات غير التابعة) ولا تدرجها في extractedProducts، وذلك لتسريع الاستجابة والتركيز على منتجات العرض فقط.
-        
-        🛑 تعليمات مكافحة التزوير والرفض الأمني (Anti-Fraud & Genuine Receipt Policy):
-        - [بون الكاشير الإلكتروني]: الفواتير المقبولة فقط (isValid = true) هي بونات الكاشير الحرارية أو الإلكترونية المطبوعة آلياً من أنظمة ونقاط البيع المعتمدة (Thermal POS Receipts).
-        - [ملاحظات وهوامش البروموتر/الكاشير]: إذا كان أصل الفاتورة بون كاشير مطبوع إلكترونياً، وتوجد عليه كتابة يدوية في الهوامش أو الرأس مثل "تم تسليم الهدية" أو "تكملة الفاتورة" أو "تم استلام 2 فوتشر" أو توقيع أو علامة استلام أو رقم تليفون أو علامات صح، فهذا بون كاشير أصلي معتمد وسليم (isThermalPosReceipt = true و isHandwritten = false و isTampered = false) ويجب قبوله.
-        $antiFraudMultiReceiptRule
-        - [كشف الفواتير المحررة يدوياً]: إذا كانت الفاتورة نفسها مسودة أو محررة بالكامل في دفتر يدوي وبنودها وأسعارها مكتوبة باليد، عيّن isHandwritten = true و isThermalPosReceipt = false و isValid = false واكتب رسالة رفض واضحة: "عذراً، تم رفض الفاتورة لأنها محررة بخط اليد. العرض يشترط بون كاشير مطبوع إلكترونياً من ماكينة السوبرماركت."
-        - [كشف الشطب والتلاعب في الأرقام]: إذا وجد شطب أو تلاعب وتعديل يدوي في أرقام وأسعار الأصناف المطبوعة لتغيير قيمتها، عيّن isTampered = true و isValid = false.
-        - [كشف تصوير الشاشات]: إذا كانت الصورة ملتقطة لشاشة هاتف أو حاسوب، عيّن isScreenCapture = true و isValid = false.
-        
-        ⚠️ تعليمات استخراج أسعار الأصناف والكميات والخصومات بدقة (Strict Unit Price & Discount Rules):
-        - يجب أن يحتوي حقل (price) دائماً على سعر بيع القطعة الواحدة فقط (Unit Price).
-        - [محاذاة السطور والباركود والكمية الحسابية - POS Row Alignment & AIR-26]:
-          * في بونات السوبرماركت (خاصة جملة ماركت وفتح الله وكارفور)، تقع الكمية وسعر الوحدة والباركود على نفس السطر الأفقي للصنف تماماً: [القيمة] [السعر] [الكمية] [الصنف والباركود].
-          * احذر بشدة من قراءة كمية من السطر الذي يعلو أو يلي سطر الصنف! (مثلاً: إذا كان السطر السابق يحتوي على كمية 3 وسعر 3.33 وإجمالي 10.00، والسطر الحالي هو "(كلير شامبو رجالى 360مل (وفر JR)" بسعر 134.00 وإجمالي 134.00 وكمية 1 وباركود 6221155210517، فالكمية حتماً 1 قطعة فقط).
-          * تحقق دائماً من المعادلة: الكمية = إجمالي السطر ÷ سعر الوحدة. إذا كان الإجمالي 134.00 والسعر 134.00 فالكمية = 1 وتمنح 1 هدية كلير 90 مل.
-        - إذا اشترى العميل كمية (quantity = 2 أو أكثر)، وكان المطبوع في الفاتورة هو إجمالي السطر (مثل 2 × 115 = 230 أو 198 بعد الخصم)، فيجب:
-          * وضع سعر القطعة الواحدة الصافي في (price) = 99.0 ج.م (وليس 198).
-          * وضع سعر القطعة الأصلي قبل الخصم في (originalPrice) = 115.0 ج.م (وليس 230).
-          * وضع قيمة الخصم للقطعة الواحدة في (discountAmount) = 16.0 ج.م (وليس 32).
-          * وضع إجمالي السطر المدفوع في (totalLinePrice) = 198.0 ج.م.
-        - إياك أن تضع إجمالي السطر كسعر للقطعة في حقل price عند وجود كمية أكبر من 1!
-        
-        شروط الموافقة (isValid = true):
-        - يجب أن تكون الصورة لبون كاشير إلكتروني مطبوع أصلي وحقيقي ومقروء وغير مكتوب باليد (isThermalPosReceipt = true و isHandwritten = false).
-        - يجب أن يكون "رقم الفاتورة" واضحاً وموجوداً.
-        - يجب أن تكون الفاتورة سارية وتحتوي على تاريخ شراء واضح.
-        - يجب أن تشتمل الفاتورة على منتجات مؤهلة للعرض من "$targetCompany" وفق الشروط المحددة أعلاه.
-        - يجب أن تكون صادرة من السلسلة والفرع المعتمدين للعرض (isBranchMatched = true).
-        
-        في حقل الـ (message)، قم بكتابة تقرير باللغة العربية موجز ودقيق بنتيجة الفحص.
-      ''';
+أنت مدقق فواتير سوبرماركت وكاشف تزوير لعروض "$targetCompany". استخرج من صورة الفاتورة:
+1. السلسلة في storeChainDetected والفرع في branchDetected.
+$branchCondition
+2. receiptNumber: رقم البون أو Transaction ID (مثال: 295/8/211/220726).
+3. receiptDate: تاريخ الشراء (مثال: 22/07/2026).
+4. $catalogCondition
+5. $productsCondition
+6. $promotionalRulesCondition
+7. targetCompanyTotal: الإجمالي المؤهل للحملة.
+8. $chancesCondition$multiPartInstructions
+$subBrandsCondition
+$sharedRules
+شروط isValid = true: بون كاشير مطبوع أصلي ومقروء (isThermalPosReceipt = true وisHandwritten = false)، رقم فاتورة وتاريخ واضحان، أصناف مؤهلة من "$targetCompany" وفق الشروط، وisBranchMatched = true.
+message: تقرير عربي موجز بنتيجة الفحص.
+''';
       }
+      return finalPromptText;
+  }
+
+  Future<AiReceiptAnalysisResult> analyzeReceiptImage(
+    Uint8List imageBytes,
+    String mimeType, {
+    List<Uint8List> additionalImagesBytes = const [],
+    List<String> additionalMimeTypes = const [],
+    required String targetCompany,
+    required double minimumSpend,
+    List<String> requiredProducts = const [],
+    List<String> registeredBarcodes = const [],
+    Map<String, String> catalogBarcodeMap = const {},
+    String retailChainName = '',
+    List<String> allowedBranches = const [],
+    bool isAllBranches = true,
+    List<BranchModel> registeredBranches = const [],
+    DateTime? startDate,
+    DateTime? endDate,
+    String customPrompt = '',
+    bool allowMultipleChances = false,
+    String multiplierBasis = 'both',
+    int maxChancesPerReceipt = 0,
+    List<PromotionalRuleItem> promotionalRules = const [],
+    bool allowComplementaryReceipts = false,
+    bool forceDeepAudit = false,
+    bool forceRefresh = false,
+  }) async {
+    final stopwatch = Stopwatch()..start();
+    try {
+      final allImagesBytesList = [imageBytes, ...additionalImagesBytes];
+      final String fingerprint = computeBytesFingerprint(allImagesBytesList);
+
+      // Check LRU In-Memory Cache for identical receipt image submissions
+      if (!forceRefresh && fingerprint.isNotEmpty) {
+        final cached = getCachedReceiptAnalysis(fingerprint);
+        if (cached != null) {
+          debugPrint('⚡ [AiReceiptService] In-Memory Cache Hit for fingerprint $fingerprint (0ms)');
+          return cached.copyWith(
+            pipelineTierUsed: 'lru_cache',
+            aiDurationMs: 0,
+            dartDurationMs: 0,
+          );
+        }
+      }
+
+      final Set<String> effectiveRequiredProducts = Set<String>.from(requiredProducts);
+      for (final r in promotionalRules) {
+        for (final sp in r.selectedProductNames) {
+          if (sp.trim().isNotEmpty) effectiveRequiredProducts.add(sp.trim());
+        }
+        for (final rb in r.requiredBrands) {
+          if (rb.trim().isNotEmpty) effectiveRequiredProducts.add(rb.trim());
+        }
+      }
+      final resolvedRequiredProducts = effectiveRequiredProducts.toList();
+
+      final List<Part> allImageParts = [
+        DataPart(mimeType, imageBytes),
+      ];
+      for (int i = 0; i < additionalImagesBytes.length; i++) {
+        final mType = i < additionalMimeTypes.length
+            ? additionalMimeTypes[i]
+            : mimeType;
+        allImageParts.add(DataPart(mType, additionalImagesBytes[i]));
+      }
+
+      final String finalPromptText = buildScanPrompt(
+        targetCompany: targetCompany,
+        minimumSpend: minimumSpend,
+        requiredProducts: requiredProducts,
+        resolvedRequiredProducts: resolvedRequiredProducts,
+        registeredBarcodes: registeredBarcodes,
+        retailChainName: retailChainName,
+        allowedBranches: allowedBranches,
+        isAllBranches: isAllBranches,
+        registeredBranches: registeredBranches,
+        customPrompt: customPrompt,
+        allowMultipleChances: allowMultipleChances,
+        multiplierBasis: multiplierBasis,
+        maxChancesPerReceipt: maxChancesPerReceipt,
+        promotionalRules: promotionalRules,
+        allowComplementaryReceipts: allowComplementaryReceipts,
+        imagePartCount: allImageParts.length,
+      );
 
       final prompt = TextPart(finalPromptText);
 
@@ -5208,6 +5224,13 @@ class RewardChoiceGroup {
 /// Highest qualifying spend among matched spend-based rules (0 if none).
 /// Matched spend rules already passed their own min-spend (with tolerance).
 /// True for Cadbury / Mondelez campaigns (AIR-71 generic multipack rule scope).
+/// AIR-87 (Dorra/rice) prompt scoping: true for Shoman / Al-Dorra campaigns.
+bool isDorraTargetCompany(String targetCompany) {
+  final t = targetCompany.toLowerCase();
+  return t.contains('الدرة') || t.contains('درة') || t.contains('دره') ||
+      t.contains('dorra') || t.contains('durra') || t.contains('شومان') || t.contains('shoman');
+}
+
 bool isMondelezTargetCompany(String targetCompany) {
   final t = targetCompany.toLowerCase();
   return t.contains('كادبري') || t.contains('كدبري') || t.contains('كادبوري') ||
