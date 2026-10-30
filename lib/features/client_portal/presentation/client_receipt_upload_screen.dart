@@ -490,9 +490,12 @@ class _ClientReceiptUploadScreenState
     try {
       final pickedFile = await _picker.pickImage(
         source: source,
-        maxWidth: 2560,
-        maxHeight: 2560,
-        imageQuality: 92,
+        // 2.0.148+208: 2048/88 (was 2560/92). The calibrator re-encodes to
+        // 1400px/q78 before Gemini anyway; this only cuts pick/decode cost
+        // and memory. Shared with web.
+        maxWidth: 2048,
+        maxHeight: 2048,
+        imageQuality: 88,
       );
       if (pickedFile != null) {
         Uint8List? pickedBytes;
@@ -824,16 +827,20 @@ class _ClientReceiptUploadScreenState
       final mimeType = primaryCalib.mimeType;
 
       // Step 2: Calibrate additional parts if present
-      final List<Uint8List> additionalBytesList = [];
-      final List<String> additionalMimesList = [];
-      for (int i = 1; i < _receiptImages.length; i++) {
-        final addRaw = await _receiptImages[i].readAsBytes();
-        final addCalib = await ReceiptImageCalibrator.calibrateReceiptBytes(
-          addRaw,
-        );
-        additionalBytesList.add(addCalib.bytes);
-        additionalMimesList.add(addCalib.mimeType);
-      }
+      // 2.0.148+208: calibrate extra parts in parallel (order preserved).
+      final addCalibs = await Future.wait([
+        for (int i = 1; i < _receiptImages.length; i++)
+          _receiptImages[i].readAsBytes().then(
+                (addRaw) =>
+                    ReceiptImageCalibrator.calibrateReceiptBytes(addRaw),
+              ),
+      ]);
+      final List<Uint8List> additionalBytesList = [
+        for (final c in addCalibs) c.bytes,
+      ];
+      final List<String> additionalMimesList = [
+        for (final c in addCalibs) c.mimeType,
+      ];
 
       final allBytesList = [bytes, ...additionalBytesList];
       final allImagesList = List<XFile>.from(_receiptImages);
@@ -970,7 +977,8 @@ class _ClientReceiptUploadScreenState
       );
 
       final previewImgUrl = 'data:$mimeType;base64,${base64Encode(bytes)}';
-      final List<String> previewUrls = allBytesList
+      // 2.0.148+208: built lazily, only when the multi-bundle upload failed.
+      List<String> previewUrls() => allBytesList
           .map((b) => 'data:image/jpeg;base64,${base64Encode(b)}')
           .toList();
 
@@ -1208,7 +1216,7 @@ class _ClientReceiptUploadScreenState
                 qualifiedCampaigns: summary.qualifiedCampaigns,
                 imageUrls: uploadedImageUrls.isNotEmpty
                     ? uploadedImageUrls
-                    : previewUrls,
+                    : previewUrls(),
                 initialAiMetadata: {
                   'store_chain_detected': result.storeChainDetected,
                   'branch_detected': result.branchDetected,

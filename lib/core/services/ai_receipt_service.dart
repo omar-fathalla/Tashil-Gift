@@ -1,4 +1,5 @@
 import 'package:al_mraay/core/constants/ai_models.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
@@ -1125,8 +1126,25 @@ class AiReceiptService {
         maxOutputTokens: 8192,
         responseSchema: _fastTierSchema,
       ),
+      thinkingConfig: fastTierThinkingConfig(name),
     );
   }
+
+  /// 2.0.148+208: bounded reasoning for the fast OCR tier. Gemini 3.x models
+  /// take `thinkingLevel`; 2.x models take a token `thinkingBudget`. Output
+  /// schema and maxOutputTokens are unchanged. The deep-audit tier keeps the
+  /// model's default thinking.
+  @visibleForTesting
+  static Map<String, dynamic> fastTierThinkingConfig(String modelName) {
+    final n = modelName.toLowerCase();
+    if (n.contains('gemini-2')) return {'thinkingBudget': 1024};
+    return {'thinkingLevel': 'low'};
+  }
+
+  /// 2.0.148+208: client wait for one Gemini call. Aligned under the callable
+  /// timeout (120s, gemini_cloud_model.dart) and the server's 120s, so a slow
+  /// but healthy scan is not discarded at 30s and re-run on a fallback model.
+  static const Duration geminiCallTimeout = Duration(seconds: 90);
 
   static CloudGenerativeModel _createDeepAuditModel(String name) {
     return CloudGenerativeModel(
@@ -1216,7 +1234,7 @@ class AiReceiptService {
       attempt++;
       try {
         await _throttleClientRequest();
-        return await model.generateContent(contents).timeout(const Duration(seconds: 30));
+        return await model.generateContent(contents).timeout(geminiCallTimeout);
       } catch (e) {
         final errStr = e.toString().toLowerCase();
         final isQuotaExhausted = errStr.contains('429') ||
@@ -1710,10 +1728,14 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
       try {
         response = await _executeWithExponentialBackoff(targetModel, contentParts);
       } catch (e1) {
+        // 2.0.148+208: a timeout after 90s is not a model fault; re-running the
+        // same images on a fallback model only doubles the wait.
+        if (e1 is TimeoutException) rethrow;
         debugPrint('⚠️ [AiReceiptService] Primary model failed: $e1. Escalating to primary fallback...');
         try {
           response = await _executeWithExponentialBackoff(primaryFallback, contentParts);
         } catch (e2) {
+          if (e2 is TimeoutException) rethrow;
           debugPrint('⚠️ [AiReceiptService] Primary fallback failed: $e2. Escalating to secondary fallback...');
           response = await _executeWithExponentialBackoff(_fallbackModel2, contentParts);
         }
@@ -2461,7 +2483,7 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                 .generateContent([
                   Content.multi([deepPrompt, ...allImageParts]),
                 ])
-                .timeout(const Duration(seconds: 30));
+                .timeout(geminiCallTimeout);
             deepAiStopwatch.stop();
             aiDurationMs += deepAiStopwatch.elapsedMilliseconds;
             pipelineTier = 'deep_reasoning_tier';

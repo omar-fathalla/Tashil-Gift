@@ -50,6 +50,13 @@ class CloudGenerativeModel {
   final Content? systemInstruction;
   final GenerationConfig? generationConfig;
   final List<SafetySetting> safetySettings;
+
+  /// 2.0.148+208: optional Gemini `thinkingConfig` (e.g. `{'thinkingLevel': 'low'}`)
+  /// merged into `generationConfig`. google_generative_ai's GenerationConfig has
+  /// no thinking field, so it is injected into the JSON sent to geminiGenerate
+  /// (which passes generationConfig through unchanged). If Gemini rejects the
+  /// field (400 on an older model), the call is retried once without it.
+  final Map<String, dynamic>? thinkingConfig;
   final FirebaseFunctions _functions;
 
   CloudGenerativeModel({
@@ -57,6 +64,7 @@ class CloudGenerativeModel {
     this.systemInstruction,
     this.generationConfig,
     this.safetySettings = const [],
+    this.thinkingConfig,
     FirebaseFunctions? functions,
   }) : _functions = functions ?? scopedFunctions();
 
@@ -67,13 +75,45 @@ class CloudGenerativeModel {
   }) async {
     final effectiveConfig = generationConfig ?? this.generationConfig;
     final effectiveSafety = safetySettings ?? this.safetySettings;
+    final contentsJson = contents.map((c) => c.toJson()).toList();
+    if (thinkingConfig != null && thinkingConfig!.isNotEmpty) {
+      try {
+        return await _call(contentsJson, effectiveConfig, effectiveSafety,
+            withThinking: true);
+      } on FirebaseFunctionsException catch (e) {
+        final msg = '${e.code} ${e.message ?? ''}'.toLowerCase();
+        final rejectedThinking = msg.contains('thinking') &&
+            (msg.contains('invalid') || msg.contains('400') ||
+                msg.contains('unknown') || msg.contains('not supported'));
+        if (!rejectedThinking) rethrow;
+        debugPrint('geminiGenerate: thinkingConfig rejected for $model; retrying without it');
+      }
+    }
+    return _call(contentsJson, effectiveConfig, effectiveSafety,
+        withThinking: false);
+  }
+
+  Future<CloudGenerateContentResponse> _call(
+    List<Object?> contentsJson,
+    GenerationConfig? effectiveConfig,
+    List<SafetySetting> effectiveSafety, {
+    required bool withThinking,
+  }) async {
+    Map<String, dynamic>? configJson;
+    if (effectiveConfig != null) {
+      configJson = Map<String, dynamic>.from(
+          jsonDecode(jsonEncode(effectiveConfig.toJson())) as Map);
+    }
+    if (withThinking && thinkingConfig != null) {
+      configJson = {...?configJson, 'thinkingConfig': thinkingConfig};
+    }
 
     final payload = <String, dynamic>{
       'model': model,
-      'contents': contents.map((c) => c.toJson()).toList(),
+      'contents': contentsJson,
       if (systemInstruction != null)
         'systemInstruction': systemInstruction!.toJson(),
-      if (effectiveConfig != null) 'generationConfig': effectiveConfig.toJson(),
+      'generationConfig': ?configJson,
       if (effectiveSafety.isNotEmpty)
         'safetySettings': effectiveSafety.map((s) => s.toJson()).toList(),
     };
