@@ -1123,8 +1123,10 @@ class _ClientReceiptUploadScreenState
 
         // 2.0.149: the same-campaign receipt is re-uploaded through
         // replaceReceipt below (rejected -> re-upload, approved -> replace).
+        // 2.0.152: approved receipts are locked for non-admins (server decides).
         if (duplicateCheck.isDuplicate &&
-            !(duplicateCheck.exactDocExists && !isMultiScan)) {
+            (duplicateCheck.locked ||
+                !(duplicateCheck.exactDocExists && !isMultiScan))) {
           if (!mounted) return;
 
           _showAlreadyRedeemed(duplicateCheck);
@@ -1460,6 +1462,12 @@ class _ClientReceiptUploadScreenState
         // 2.0.149: an existing doc no longer blocks; it is re-uploaded or
         // replaced server-side (replaceReceipt) and its old version archived.
         existingExact = exact.isDuplicate ? exact : null;
+        if (exact.isDuplicate && exact.locked) {
+          if (!mounted) return;
+          _showAlreadyRedeemed(exact);
+          _resetFormForNextCustomer();
+          return;
+        }
       }
 
       // 2. Upload image to Firebase Storage named by Receipt Number and Campaign ID
@@ -1605,6 +1613,11 @@ class _ClientReceiptUploadScreenState
           receipt: transactionData,
         );
         if (!mounted) return;
+        if (replaceMode == 'locked') {
+          _showAlreadyRedeemed(existingExact);
+          _resetFormForNextCustomer();
+          return;
+        }
         if (replaceMode == null) {
           _showAlreadyUploaded(existingExact);
           _resetFormForNextCustomer();
@@ -2147,7 +2160,10 @@ class _ClientReceiptUploadScreenState
         RegExp(r'^\d+(\.\d+)?$').hasMatch(v) ? '$v $currency' : v;
     _showIssue(
       ReceiptIssueKind.alreadyRedeemed,
-      subtitle: subtitle,
+      subtitle: subtitle ??
+          (dup.locked && _isAr
+              ? ReceiptDeduplicationHelper.lockedMessage(dup.receiptNumber)
+              : null),
       details: [
         if (dup.receiptNumber.isNotEmpty)
           ReceiptIssueDetail(
@@ -2155,6 +2171,20 @@ class _ClientReceiptUploadScreenState
             'رقم الفاتورة',
             'Receipt no.',
             dup.receiptNumber,
+          ),
+        if ((dup.existingApprovedAt ?? '').isNotEmpty)
+          ReceiptIssueDetail(
+            Icons.verified_user_rounded,
+            'تاريخ الاعتماد',
+            'Approved on',
+            fmtDate(dup.existingApprovedAt),
+          ),
+        if (dup.existingTotal != null)
+          ReceiptIssueDetail(
+            Icons.payments_rounded,
+            'الإجمالي',
+            'Total',
+            '${dup.existingTotal} $currency',
           ),
         if ((dup.existingClaimedAt ?? '').isNotEmpty)
           ReceiptIssueDetail(

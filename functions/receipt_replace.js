@@ -1,7 +1,7 @@
 const { HttpsError } = require("firebase-functions/v2/https");
 const { FieldValue } = require("firebase-admin/firestore");
 const { consumeRateLimit, clientKey, RateLimitError } = require("./rate_limit");
-const { deterministicDocId, normalizeReceiptNumber, isTransactionClaimed } = require("./receipt_duplicate_check");
+const { deterministicDocId, normalizeReceiptNumber, isTransactionClaimed, isAdminCaller, redeemedSummary, LOCKED_MESSAGE_AR } = require("./receipt_duplicate_check");
 
 /**
  * replaceReceipt (callable, Admin SDK, 2.0.149): a rep re-uploads a receipt
@@ -13,6 +13,8 @@ const { deterministicDocId, normalizeReceiptNumber, isTransactionClaimed } = req
  *   fields overwrite the doc but every claim/prize/WhatsApp/customer field is
  *   kept from the old version; no new game, no stock movement, no WhatsApp.
  * In both cases the previous version is copied to .../history/{autoId} first.
+ * 2.0.152: "replace" is admin/super_admin only; anyone else gets
+ * failed-precondition {locked:true, summary} and nothing is written.
  * Nothing is deleted. Firestore rules are unchanged (Admin SDK).
  */
 const PRESERVE_ON_REPLACE = [
@@ -99,7 +101,7 @@ async function replaceReceiptHandler(db, request) {
   const provider = token.firebase && token.firebase.sign_in_provider;
   const isAnon = provider === "anonymous";
   const role = token.role;
-  const isAdmin = !isAnon && (role === "admin" || role === "super_admin");
+  const isAdmin = isAdminCaller(request.auth);
   const isPartnerOps = !isAnon && role === "partner" && token.partnerAccess === "ops";
   const data = request.data || {};
   const campaignId = data.campaignId;
@@ -139,6 +141,11 @@ async function replaceReceiptHandler(db, request) {
       throw new HttpsError("permission-denied", "Receipt belongs to another campaign.");
     }
     const mode = modeFor(old);
+    // 2.0.152: approved receipts are locked; only admin/super_admin may replace.
+    if (mode === "replace" && !isAdmin) {
+      const summary = await redeemedSummary(db, old, new Map([[campaignId, ev]]));
+      throw new HttpsError("failed-precondition", LOCKED_MESSAGE_AR, { locked: true, receiptNumber, summary });
+    }
     const histRef = ref.collection("history").doc();
     tx.set(histRef, { ...old, archived_at: FieldValue.serverTimestamp(), archived_by_uid: uid, archive_reason: mode, archived_version: (Number(old.replace_count) || 0) + 1 });
     const next = buildNewDoc(old, data.receipt, mode, uid);

@@ -21,6 +21,11 @@ class ReceiptDuplicateCheckResult {
   /// 2.0.149: the duplicate is the same-campaign doc at the deterministic id,
   /// so a re-upload can go through replaceReceipt instead of being blocked.
   final bool exactDocExists;
+  /// 2.0.152: the existing receipt is approved and the caller is not an
+  /// admin, so it can't be re-uploaded or replaced (server-decided).
+  final bool locked;
+  final String? existingApprovedAt;
+  final num? existingTotal;
 
   const ReceiptDuplicateCheckResult({
     required this.isDuplicate,
@@ -37,6 +42,9 @@ class ReceiptDuplicateCheckResult {
     this.rejectionMessage = '',
     this.existingData,
     this.exactDocExists = false,
+    this.locked = false,
+    this.existingApprovedAt,
+    this.existingTotal,
   });
 
   static const ReceiptDuplicateCheckResult notDuplicate = ReceiptDuplicateCheckResult(
@@ -156,8 +164,13 @@ class ReceiptDeduplicationHelper {
         existingReceiptDate: pick('receiptDate'),
         existingUploadedAt: pick('uploadedAt'),
         existingStatus: pick('status') ?? data['existingStatus']?.toString(),
-        rejectionMessage: duplicateMessage(cleanNumber, isMultiScan: isMultiScan),
+        rejectionMessage: data['locked'] == true
+            ? lockedMessage(cleanNumber)
+            : duplicateMessage(cleanNumber, isMultiScan: isMultiScan),
         exactDocExists: data['exactDocExists'] == true,
+        locked: data['locked'] == true,
+        existingApprovedAt: pick('approvedAt'),
+        existingTotal: summary['total'] is num ? summary['total'] as num : null,
       );
     } catch (e) {
       debugPrint('Receipt duplicate check unavailable (treated as unknown): $e');
@@ -188,11 +201,24 @@ class ReceiptDeduplicationHelper {
       final data = res.data;
       final mode = data is Map ? data['mode']?.toString() : null;
       return (mode == 'reupload' || mode == 'replace' || mode == 'create') ? mode : null;
+    } on FirebaseFunctionsException catch (e) {
+      // 2.0.152: approved receipt is locked for non-admins.
+      if (isLockedError(e.code, e.details)) return 'locked';
+      debugPrint('replaceReceipt failed: ${e.code}');
+      return null;
     } catch (e) {
       debugPrint('replaceReceipt failed: $e');
       return null;
     }
   }
+
+  /// 2.0.152: true for the server's "approved receipt is locked" error.
+  static bool isLockedError(String code, Object? details) =>
+      code == 'failed-precondition' && details is Map && details['locked'] == true;
+
+  /// 2.0.152: shown when a non-admin re-uploads an approved receipt.
+  static String lockedMessage(String receiptNumber) =>
+      'الفاتورة دي اتعمدت قبل كده (رقم ${normalizeReceiptNumber(receiptNumber)}). لا يمكن رفعها أو استبدالها مرة أخرى.';
 
   /// Friendly message for an already-used receipt (no other users' data shown).
   static String duplicateMessage(String receiptNumber, {bool isMultiScan = false}) {

@@ -92,8 +92,36 @@ async function redeemedSummary(db, d, cache) {
     receiptDate: str(d.receipt_date, 40),
     uploadedAt: toIso(d.timestamp),
     status: statusOf(d),
+    approvedAt: toIso(d.approved_at) || toIso(d.timestamp),
+    total: totalOf(d),
   };
 }
+
+function totalOf(d) {
+  const v = d.target_company_total != null ? d.target_company_total : d.total_value;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/** 2.0.152: only admin/super_admin (server-verified custom claim, non-anonymous) may replace an approved receipt. */
+function isAdminCaller(auth) {
+  const token = (auth && auth.token) || {};
+  const provider = token.firebase && token.firebase.sign_in_provider;
+  if (provider === "anonymous") return false;
+  return token.role === "admin" || token.role === "super_admin";
+}
+
+/** Approved (or ever claimed) receipts are locked for normal uploads. */
+function isLockedForUpload(d) {
+  if (!d) return false;
+  const rejected = d.status === "rejected" || d.is_valid === false;
+  if (!rejected) return isRedeemed(d);
+  return d.game_played === true || String(d.claim_status || "").trim() !== ""
+    || (d.prize_won != null && String(d.prize_won).trim() !== "" && String(d.prize_won).trim() !== "null")
+    || (Array.isArray(d.claimed_gifts) && d.claimed_gifts.length > 0);
+}
+
+const LOCKED_MESSAGE_AR = "الفاتورة دي اتعمدت قبل كده";
 
 function statusOf(d) {
   if (!d) return null;
@@ -146,8 +174,11 @@ async function checkReceiptDuplicateHandler(db, request) {
 
   let existingStatus = null;
   const evCache = new Map();
+  const admin = isAdminCaller(request.auth);
   const hit = async (d) => ({
     duplicate: true,
+    locked: !admin && isLockedForUpload(d),
+    ...(!admin && isLockedForUpload(d) ? { message: LOCKED_MESSAGE_AR } : {}),
     existingStatus: statusOf(d),
     summary: await redeemedSummary(db, d, evCache),
   });
@@ -159,7 +190,7 @@ async function checkReceiptDuplicateHandler(db, request) {
       existingStatus = statusOf(d);
       // 2.0.147: any doc at the exact id blocks the rep's create under the
       // rules (create-only), so report it as already uploaded whatever its status.
-      if (isRedeemed(d) || data.exactDocId === true) return { ...(await hit(d)), exactDocExists: true };
+      if (isRedeemed(d) || isLockedForUpload(d) || data.exactDocId === true) return { ...(await hit(d)), exactDocExists: true };
     }
   }
 
@@ -184,4 +215,8 @@ module.exports = {
   isRedeemed,
   giftLabel,
   normalizeReceiptNumber,
+  isAdminCaller,
+  isLockedForUpload,
+  redeemedSummary,
+  LOCKED_MESSAGE_AR,
 };

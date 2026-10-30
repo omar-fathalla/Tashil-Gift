@@ -28,6 +28,41 @@ function mkDb(existing, ev = { companySlug: "583", isActive: true }) {
 const payload = (x = {}) => ({ receipt_number: "134/5/218", campaignId: "E", companySlug: "583", status: "accepted", is_valid: true, total_value: 832.95, customerPhone: "0100", game_played: false, prize_won: null, ...x });
 const req = (x = {}, tok = { firebase: { sign_in_provider: "anonymous" } }) => ({ app: {}, auth: { uid: "u2", token: tok }, rawRequest: { headers: {} }, data: { campaignId: "E", receiptNumber: "134/5/218", receipt: payload(x) } });
 
+const ADMIN = { role: "admin", firebase: { sign_in_provider: "password" } };
+test("2.0.152: approved doc is locked for anonymous rep: no writes, details returned", async () => {
+  const old = { campaignId: "E", companySlug: "583", status: "accepted", is_valid: true, total_value: 772, branch_detected: "B1", prize_won: "100", customerPhone: "0111", timestamp: new Date("2026-10-30T14:12:00Z") };
+  const db = mkDb(old);
+  await assert.rejects(replaceReceiptHandler(db, req()), (e) => {
+    assert.strictEqual(e.code, "failed-precondition");
+    assert.strictEqual(e.message, "الفاتورة دي اتعمدت قبل كده");
+    assert.strictEqual(e.details.locked, true);
+    assert.strictEqual(e.details.summary.total, 772);
+    assert.strictEqual(e.details.summary.branch, "B1");
+    assert.strictEqual(e.details.summary.giftValue, "100");
+    assert.strictEqual(e.details.summary.approvedAt, "2026-10-30T14:12:00.000Z");
+    assert.ok(!JSON.stringify(e.details).includes("0111"));
+    return true;
+  });
+  assert.strictEqual(db.writes.length, 0);
+});
+test("2.0.152: approved doc locked for non-admin signed-in roles and partner ops", async () => {
+  const old = { campaignId: "E", companySlug: "583", status: "accepted", is_valid: true };
+  for (const tok of [{ role: "partner", partnerAccess: "ops", companySlug: "583", firebase: { sign_in_provider: "password" } }, { role: "admin", firebase: { sign_in_provider: "anonymous" } }]) {
+    const db = mkDb(old);
+    await assert.rejects(replaceReceiptHandler(db, req({}, tok)), (e) => e.code === "failed-precondition" || e.code === "permission-denied");
+    assert.strictEqual(db.writes.length, 0);
+  }
+});
+test("2.0.152: super_admin may replace approved doc and history is kept", async () => {
+  const db = mkDb({ campaignId: "E", companySlug: "583", status: "accepted", is_valid: true, total_value: 1 });
+  const r = await replaceReceiptHandler(db, req({}, { role: "super_admin", firebase: { sign_in_provider: "password" } }));
+  assert.strictEqual(r.mode, "replace"); assert.match(db.writes[0].path, /history/);
+});
+test("2.0.152: rejected-but-claimed doc is locked for rep too", async () => {
+  const db = mkDb({ campaignId: "E", companySlug: "583", status: "rejected", is_valid: false, game_played: true });
+  await assert.rejects(replaceReceiptHandler(db, req()), (e) => e.details && e.details.locked === true);
+  assert.strictEqual(db.writes.length, 0);
+});
 test("no existing doc: tells client to create normally (case 134)", async () => {
   const db = mkDb(null);
   const r = await replaceReceiptHandler(db, req());
@@ -46,7 +81,7 @@ test("rejected doc: re-upload, history kept, becomes accepted with fresh game", 
 test("approved claimed doc: replace keeps claim, prize, whatsapp, customer, status", async () => {
   const old = { campaignId: "E", companySlug: "583", status: "accepted", is_valid: true, total_value: 10, customerPhone: "0111", game_played: true, prize_won: "50", claimed_gifts: ["g"], claim_stock_sources: [{ c: "Y" }], whatsapp_winner: { status: "sent" }, submittedByUid: "u1", timestamp: "T0" };
   const db = mkDb(old);
-  const r = await replaceReceiptHandler(db, req({ customerPhone: "0999", game_played: false, prize_won: null, status: "accepted" }));
+  const r = await replaceReceiptHandler(db, req({ customerPhone: "0999", game_played: false, prize_won: null, status: "accepted" }, ADMIN));
   assert.strictEqual(r.mode, "replace");
   const n = db.writes[1].d;
   assert.strictEqual(n.total_value, 832.95);
