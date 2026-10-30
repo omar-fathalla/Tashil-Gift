@@ -173,6 +173,8 @@ function branchIdFromStoreCode(prizes, receipt, extraIds) {
   return ids.size === 1 ? [...ids][0] : "";
 }
 
+const NO_BRANCH_STOCK_MESSAGE = "مفيش رصيد للهدية دي في فرع الفاتورة، كلّم المشرف";
+
 function resolvePrizeIndexForDecrement(prizes, decrement, receipt) {
   const rec = receipt || {};
   // Store code in the receipt number wins over client / AI branch hints.
@@ -202,6 +204,12 @@ function resolvePrizeIndexForDecrement(prizes, decrement, receipt) {
       String(picked.branchId || "").trim() === branchId ||
       String(picked.branchName || "").trim() === branchId ||
       (branchNorm && normalizePrizeText(picked.branchName) === branchNorm));
+    if (!pickedIsBranch && branchId) {
+      // 2.0.154: the receipt branch is known but holds no row for this gift.
+      // Not an ambiguity: let the caller try the shared company pool for this
+      // exact branch, then report "no stock for this branch".
+      return { index: -1, branchId, fromStoreCode: !!codeBranch, noBranchStock: true };
+    }
     if (!pickedIsBranch) {
       throw new HttpsError(
         "failed-precondition",
@@ -540,6 +548,9 @@ async function applyCampaignPrizeClaim(db, input) {
           pooled.set(sib.eventId, sib);
         }
       }
+      if (index === -1 && resolved.noBranchStock) {
+        throw new HttpsError("failed-precondition", NO_BRANCH_STOCK_MESSAGE, { reason: "no_branch_stock" });
+      }
       if (index === -1) {
         // failed-precondition (not not-found): the campaign exists but has no
         // stock row for this gift, so the client must not treat it as a
@@ -616,6 +627,6 @@ exports.decrementCampaignPrize = onCall(callableOptions, async (request) => {
 
 // Non-enumerable so index.js Object.assign does not expose it as a function group.
 Object.defineProperty(exports, "_testing", {
-  value: { findBestPrizeMatchIndex, resolvePrizeIndexForDecrement, storeCodeFromReceiptNumber, branchIdFromStoreCode, findSharedPoolRow, sharedPoolEnabled, applyCampaignPrizeClaim },
+  value: { NO_BRANCH_STOCK_MESSAGE, findBestPrizeMatchIndex, resolvePrizeIndexForDecrement, storeCodeFromReceiptNumber, branchIdFromStoreCode, findSharedPoolRow, sharedPoolEnabled, applyCampaignPrizeClaim },
   enumerable: false,
 });

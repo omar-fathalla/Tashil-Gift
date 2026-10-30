@@ -22,8 +22,19 @@ test("empty branch falls back to receipt.branch_detected name", () => {
 test("empty branch with several branch rows and no hint is refused", () => {
   assert.throws(() => resolvePrizeIndexForDecrement(rows, dec(), {}), /تعذر تحديد فرع/);
 });
-test("unknown branch hint with several branch rows is refused", () => {
-  assert.throws(() => resolvePrizeIndexForDecrement(rows, dec(), { branch_id: "other_1" }), /تعذر تحديد فرع/);
+test("known receipt branch without a stock row -> noBranchStock (not ambiguity)", () => {
+  const r = resolvePrizeIndexForDecrement(rows, dec(), { branch_id: "other_1" });
+  assert.strictEqual(r.index, -1);
+  assert.strictEqual(r.noBranchStock, true);
+  assert.strictEqual(r.branchId, "other_1");
+});
+test("store-coded receipt for a branch with no row -> noBranchStock", () => {
+  const r = resolvePrizeIndexForDecrement(rows, dec(), { receipt_number: "200/4/243/301026", branch_id: "fathalla_243" });
+  assert.strictEqual(r.index, -1);
+  assert.strictEqual(r.noBranchStock, true);
+});
+test("no-branch-stock message text", () => {
+  assert.strictEqual(require("../security_functions")._testing.NO_BRANCH_STOCK_MESSAGE, "مفيش رصيد للهدية دي في فرع الفاتورة، كلّم المشرف");
 });
 test("single branch row or general row stays allowed", () => {
   assert.strictEqual(resolvePrizeIndexForDecrement([rows[0]], dec(), {}).index, 0);

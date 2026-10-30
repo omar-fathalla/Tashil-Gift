@@ -103,3 +103,26 @@ test("opted-out campaign does not draw from the pool", async () => {
   });
   await assert.rejects(applyCampaignPrizeClaim(db, { eventId: "NEW", receiptId: "r1", actor, decrements: [{ prizeIdentifier: "g50", count: 1 }] }), /لا يوجد رصيد مخصص/);
 });
+
+// 2.0.154: receipt branch known, campaign has the gift only on other branches.
+test("branch without a row: shared pool for that exact branch is used", async () => {
+  const db = fakeDb({
+    "events/NEW": { companySlug: "583", isActive: true, allocatedPrizes: [row("g50", "b2", 5), row("g50", "b3", 5)] },
+    "events/OLD": { companySlug: "583", isActive: true, allocatedPrizes: [row("g50", "b1", 4)] },
+    "receipts_transactions/r1": receipt,
+  });
+  const out = await applyCampaignPrizeClaim(db, { eventId: "NEW", receiptId: "r1", actor, decrements: [{ prizeIdentifier: "g50", count: 1 }] });
+  assert.strictEqual(out.applied[0].stockEventId, "OLD");
+  assert.strictEqual(db.store.get("events/OLD").allocatedPrizes[0].remainingQuantity, 3);
+  assert.strictEqual(db.store.get("events/NEW").allocatedPrizes[0].remainingQuantity, 5);
+});
+test("branch without a row and no pool: clear no-branch-stock error, nothing written", async () => {
+  const db = fakeDb({
+    "events/NEW": { companySlug: "583", isActive: true, allocatedPrizes: [row("g50", "b2", 5), row("g50", "b3", 5)] },
+    "receipts_transactions/r1": receipt,
+  });
+  await assert.rejects(
+    applyCampaignPrizeClaim(db, { eventId: "NEW", receiptId: "r1", actor, decrements: [{ prizeIdentifier: "g50", count: 1 }] }),
+    (e) => e.message === "مفيش رصيد للهدية دي في فرع الفاتورة، كلّم المشرف" && !/أكثر من فرع/.test(e.message));
+  assert.strictEqual(db.writes.length, 0);
+});

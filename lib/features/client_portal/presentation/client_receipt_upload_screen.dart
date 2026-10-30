@@ -24,6 +24,7 @@ import '../../../core/services/chain_products_intelligence_service.dart';
 import '../../../core/services/company_products_service.dart';
 import '../../../core/services/retail_chains_service.dart';
 import '../../../core/utils/error_handler.dart';
+import '../../../core/utils/web_image_resizer.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
 import '../../../core/utils/slug_utils.dart';
 import '../../../core/widgets/switch_point_branding.dart';
@@ -84,6 +85,30 @@ class _ClientReceiptUploadScreenState
   // with Image.memory on web (avoids fetching blob: URLs, which CanvasKit does
   // via XHR and a strict CSP connect-src can block -> blank white preview).
   final Map<String, Uint8List> _receiptImageBytes = {};
+  // 2.0.154+215: web preview bytes = the browser-resized JPEG (same
+  // createImageBitmap/canvas path and limits as the scan), so HEIC / motion
+  // photos / huge camera files still preview. Raw bytes stay the fallback.
+  final Map<String, Uint8List> _receiptPreviewBytes = {};
+
+  Future<void> _preparePreviewBytes(String path, Uint8List raw) async {
+    if (!kIsWeb) return;
+    try {
+      final web = await resizeReceiptInBrowser(
+        raw,
+        maxWidth: 1400,
+        maxHeight: 1600,
+        quality: 78,
+        contrast: 1.25,
+        brightness: 1.05,
+      );
+      if (web == null || !mounted) return;
+      if (!_receiptImageBytes.containsKey(path)) return;
+      setState(() => _receiptPreviewBytes[path] = web.bytes);
+    } catch (e) {
+      debugPrint('[ReceiptPreview] browser resize failed: $e');
+    }
+  }
+
   int _selectedPreviewIndex = 0;
   bool _isAiLoading = false;
   int _aiPhase = 0;
@@ -154,6 +179,7 @@ class _ClientReceiptUploadScreenState
     _customerPhoneController.clear();
     _receiptImages.clear();
     _receiptImageBytes.clear();
+    _receiptPreviewBytes.clear();
     _selectedPreviewIndex = 0;
     _aiPhaseText = '';
     if (mounted) {
@@ -435,11 +461,16 @@ class _ClientReceiptUploadScreenState
     double? width,
     bool compact = false,
   }) {
-    Widget onError(
-      BuildContext context,
-      Object error,
-      StackTrace? stackTrace,
-    ) => _receiptImageErrorFallback(compact: compact);
+    Widget onError(BuildContext context, Object error, StackTrace? stackTrace) {
+      // Debug only, no PII: error, mime type and byte sizes.
+      debugPrint(
+        '[ReceiptPreview] render failed: $error | mime=${file.mimeType ?? 'unknown'}'
+        ' raw=${_receiptImageBytes[file.path]?.lengthInBytes ?? -1}B'
+        ' preview=${_receiptPreviewBytes[file.path]?.lengthInBytes ?? -1}B',
+      );
+      return _receiptImageErrorFallback(compact: compact);
+    }
+
     if (!kIsWeb) {
       return Image.file(
         File(file.path),
@@ -448,12 +479,14 @@ class _ClientReceiptUploadScreenState
         errorBuilder: onError,
       );
     }
-    final cached = _receiptImageBytes[file.path];
+    final cached =
+        _receiptPreviewBytes[file.path] ?? _receiptImageBytes[file.path];
     if (cached != null) {
       return Image.memory(
         cached,
         fit: fit,
         width: width,
+        cacheWidth: 1024,
         gaplessPlayback: true,
         errorBuilder: onError,
       );
@@ -463,10 +496,14 @@ class _ClientReceiptUploadScreenState
       builder: (context, snap) {
         if (snap.hasData) {
           _receiptImageBytes[file.path] = snap.data!;
+          if (!_receiptPreviewBytes.containsKey(file.path)) {
+            unawaited(_preparePreviewBytes(file.path, snap.data!));
+          }
           return Image.memory(
             snap.data!,
             fit: fit,
             width: width,
+            cacheWidth: 1024,
             gaplessPlayback: true,
             errorBuilder: onError,
           );
@@ -510,7 +547,10 @@ class _ClientReceiptUploadScreenState
         if (!mounted) return;
         setState(() {
           if (pickedBytes != null) {
-            if (!append) _receiptImageBytes.clear();
+            if (!append) {
+              _receiptImageBytes.clear();
+              _receiptPreviewBytes.clear();
+            }
             _receiptImageBytes[pickedFile.path] = pickedBytes;
           }
           if (append) {
@@ -523,6 +563,9 @@ class _ClientReceiptUploadScreenState
             _selectedPreviewIndex = 0;
           }
         });
+        if (pickedBytes != null) {
+          unawaited(_preparePreviewBytes(pickedFile.path, pickedBytes));
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -640,6 +683,7 @@ class _ClientReceiptUploadScreenState
         final removed = _receiptImages.removeAt(index);
         if (!_receiptImages.any((f) => f.path == removed.path)) {
           _receiptImageBytes.remove(removed.path);
+          _receiptPreviewBytes.remove(removed.path);
         }
         if (_selectedPreviewIndex >= _receiptImages.length) {
           _selectedPreviewIndex = math.max(0, _receiptImages.length - 1);
@@ -652,6 +696,7 @@ class _ClientReceiptUploadScreenState
     setState(() {
       _receiptImages.clear();
       _receiptImageBytes.clear();
+      _receiptPreviewBytes.clear();
       _selectedPreviewIndex = 0;
     });
   }
@@ -764,7 +809,9 @@ class _ClientReceiptUploadScreenState
     }
   }
 
-  Future<void> _submitAndValidateReceiptImpl({bool isSessionRetry = false}) async {
+  Future<void> _submitAndValidateReceiptImpl({
+    bool isSessionRetry = false,
+  }) async {
     var retryAfterSessionRestore = false;
     if (_receiptImages.isEmpty) {
       _showIssue(ReceiptIssueKind.noImage);
@@ -826,7 +873,8 @@ class _ClientReceiptUploadScreenState
       final primaryImage = _receiptImages.first;
       // 2.0.148+209: reuse the bytes already read at pick time instead of a
       // second full read (one in-memory copy; matters on iOS Safari).
-      final rawPrimaryBytes = _receiptImageBytes[primaryImage.path] ??
+      final rawPrimaryBytes =
+          _receiptImageBytes[primaryImage.path] ??
           await primaryImage.readAsBytes();
 
       if (mounted) {
@@ -968,35 +1016,42 @@ class _ClientReceiptUploadScreenState
                 ));
 
       // Run Gemini AI analysis
-      final result = await aiService.analyzeReceiptImage(
-        bytes,
-        mimeType,
-        additionalImagesBytes: additionalBytesList,
-        additionalMimeTypes: additionalMimesList,
-        targetCompany: primaryTargetEvent.targetCompany,
-        minimumSpend: effectiveCampaignMinSpend,
-        requiredProducts: combinedRequiredProducts,
-        registeredBarcodes: registeredBarcodes,
-        catalogBarcodeMap: catalogBarcodeMap,
-        retailChainName: primaryTargetEvent.retailChainName,
-        allowedBranches: combinedAllowedBranches,
-        isAllBranches: combinedIsAllBranches,
-        registeredBranches: chainBranches,
-        startDate: isMultiScan ? null : _activeEvent!.startDate,
-        endDate: isMultiScan ? null : _activeEvent!.endDate,
-        customPrompt: isMultiScan ? '' : _activeEvent!.customPrompt,
-        allowMultipleChances: true,
-        multiplierBasis: isMultiScan ? 'both' : _activeEvent!.multiplierBasis,
-        maxChancesPerReceipt: isMultiScan
-            ? 0
-            : _activeEvent!.maxChancesPerReceipt,
-        promotionalRules: combinedPromotionalRules,
-        allowComplementaryReceipts:
-            _activeEvent?.allowComplementaryReceipts ?? false,
-      ).timeout(AiReceiptService.stage2Ceiling,
-          onTimeout: () => throw TimeoutException(
+      final result = await aiService
+          .analyzeReceiptImage(
+            bytes,
+            mimeType,
+            additionalImagesBytes: additionalBytesList,
+            additionalMimeTypes: additionalMimesList,
+            targetCompany: primaryTargetEvent.targetCompany,
+            minimumSpend: effectiveCampaignMinSpend,
+            requiredProducts: combinedRequiredProducts,
+            registeredBarcodes: registeredBarcodes,
+            catalogBarcodeMap: catalogBarcodeMap,
+            retailChainName: primaryTargetEvent.retailChainName,
+            allowedBranches: combinedAllowedBranches,
+            isAllBranches: combinedIsAllBranches,
+            registeredBranches: chainBranches,
+            startDate: isMultiScan ? null : _activeEvent!.startDate,
+            endDate: isMultiScan ? null : _activeEvent!.endDate,
+            customPrompt: isMultiScan ? '' : _activeEvent!.customPrompt,
+            allowMultipleChances: true,
+            multiplierBasis: isMultiScan
+                ? 'both'
+                : _activeEvent!.multiplierBasis,
+            maxChancesPerReceipt: isMultiScan
+                ? 0
+                : _activeEvent!.maxChancesPerReceipt,
+            promotionalRules: combinedPromotionalRules,
+            allowComplementaryReceipts:
+                _activeEvent?.allowComplementaryReceipts ?? false,
+          )
+          .timeout(
+            AiReceiptService.stage2Ceiling,
+            onTimeout: () => throw TimeoutException(
               AiReceiptService.stage2TimeoutMessage,
-              AiReceiptService.stage2Ceiling));
+              AiReceiptService.stage2Ceiling,
+            ),
+          );
 
       final previewImgUrl = 'data:$mimeType;base64,${base64Encode(bytes)}';
       // 2.0.148+208: built lazily, only when the multi-bundle upload failed.
@@ -1106,7 +1161,9 @@ class _ClientReceiptUploadScreenState
       if (isUnusableReceiptNumber(candidateReceiptNumber)) {
         _showIssue(
           ReceiptIssueKind.unreadable,
-          subtitle: _isAr ? kUnreadableReceiptNumberAr : 'The receipt number could not be read. Retake a clear photo showing the full receipt number.',
+          subtitle: _isAr
+              ? kUnreadableReceiptNumberAr
+              : 'The receipt number could not be read. Retake a clear photo showing the full receipt number.',
           onPrimary: _clearPhotosForRetake,
         );
         return;
@@ -1223,6 +1280,7 @@ class _ClientReceiptUploadScreenState
           setState(() {
             _receiptImages.clear();
             _receiptImageBytes.clear();
+            _receiptPreviewBytes.clear();
             _selectedPreviewIndex = 0;
             _isAiLoading = false;
             _aiPhaseText = '';
@@ -1247,7 +1305,13 @@ class _ClientReceiptUploadScreenState
                 initialAiMetadata: {
                   'store_chain_detected': result.storeChainDetected,
                   'branch_detected': result.branchDetected,
-                  'branch_id': ReceiptBranchResolver.resolve(_activeEvent ?? widget.event, result.branchDetected, receiptNumber: result.receiptNumber).id ?? '',
+                  'branch_id':
+                      ReceiptBranchResolver.resolve(
+                        _activeEvent ?? widget.event,
+                        result.branchDetected,
+                        receiptNumber: result.receiptNumber,
+                      ).id ??
+                      '',
                   'receipt_date': result.receiptDate,
                   'analysis_duration_seconds': result.durationSeconds,
                   'analysis_duration_ms': result.durationMs,
@@ -1482,7 +1546,9 @@ class _ClientReceiptUploadScreenState
               .replaceAll(RegExp(r'[/\\?%*:|"<>]'), '_') +
           // Storage is create-only: a re-upload gets its own image file so the
           // previous version's image stays intact for the audit history.
-          (existingExact != null ? '_r${DateTime.now().millisecondsSinceEpoch}' : '');
+          (existingExact != null
+              ? '_r${DateTime.now().millisecondsSinceEpoch}'
+              : '');
 
       final List<String> uploadedImageUrls = [];
       final List<String> uploadedStoragePaths = [];
@@ -1569,7 +1635,13 @@ class _ClientReceiptUploadScreenState
             .toList(),
         'store_chain_detected': result.storeChainDetected,
         'branch_detected': result.branchDetected,
-        'branch_id': ReceiptBranchResolver.resolve(_activeEvent ?? widget.event, result.branchDetected, receiptNumber: result.receiptNumber).id ?? '',
+        'branch_id':
+            ReceiptBranchResolver.resolve(
+              _activeEvent ?? widget.event,
+              result.branchDetected,
+              receiptNumber: result.receiptNumber,
+            ).id ??
+            '',
         'is_branch_matched': result.isBranchMatched,
         'is_handwritten': result.isHandwritten,
         'is_thermal_pos_receipt': result.isThermalPosReceipt,
@@ -1625,18 +1697,24 @@ class _ClientReceiptUploadScreenState
         }
         if (replaceMode == 'replace') {
           // Approved receipt: scan replaced, prize/claim/WhatsApp untouched.
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(_isAr
-                ? 'تم استبدال الفاتورة رقم ($receiptNumber) المعتمدة بالنسخة الجديدة. الهدية المصروفة لم تتغير.'
-                : 'Approved receipt $receiptNumber was replaced with the new copy. The prize is unchanged.'),
-            duration: const Duration(seconds: 6),
-          ));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                _isAr
+                    ? 'تم استبدال الفاتورة رقم ($receiptNumber) المعتمدة بالنسخة الجديدة. الهدية المصروفة لم تتغير.'
+                    : 'Approved receipt $receiptNumber was replaced with the new copy. The prize is unchanged.',
+              ),
+              duration: const Duration(seconds: 6),
+            ),
+          );
           _resetFormForNextCustomer();
           return;
         }
       }
       try {
-        if (replaceMode != 'reupload') await transactionRef.set(transactionData);
+        if (replaceMode != 'reupload') {
+          await transactionRef.set(transactionData);
+        }
       } on FirebaseException catch (e) {
         if (!ReceiptDeduplicationHelper.isDuplicateWriteDenied(e) &&
             receiptErrorCode(e) != 'unauthenticated') {
@@ -1675,6 +1753,7 @@ class _ClientReceiptUploadScreenState
       setState(() {
         _receiptImages.clear();
         _receiptImageBytes.clear();
+        _receiptPreviewBytes.clear();
         _selectedPreviewIndex = 0;
       });
 
@@ -1682,8 +1761,11 @@ class _ClientReceiptUploadScreenState
       final currentEvent = _activeEvent ?? widget.event;
       final currentEventId = currentEvent?.id ?? '';
       // Smart branch ID resolution (AIR-80 & Rule 8). No first-branch guess.
-      final branchResolution =
-          ReceiptBranchResolver.resolve(currentEvent, result.branchDetected, receiptNumber: result.receiptNumber);
+      final branchResolution = ReceiptBranchResolver.resolve(
+        currentEvent,
+        result.branchDetected,
+        receiptNumber: result.receiptNumber,
+      );
       final String? resolvedBranchId = branchResolution.id;
       final String resolvedCanonicalBranchName = branchResolution.name;
 
@@ -1990,7 +2072,9 @@ class _ClientReceiptUploadScreenState
       debugPrint('Receipt processing error: $e\n$stack');
       if (mounted) {
         // 2.0.148: one silent retry after restoring the anonymous session.
-        if (!isSessionRetry && isRepSessionError(e) && _receiptImages.isNotEmpty) {
+        if (!isSessionRetry &&
+            isRepSessionError(e) &&
+            _receiptImages.isNotEmpty) {
           await _restoreRepSession(forceRefresh: true);
           retryAfterSessionRestore = true;
           return;
@@ -2001,7 +2085,12 @@ class _ClientReceiptUploadScreenState
             error: e,
             currentUid: ref.read(firebaseAuthProvider).currentUser?.uid,
           );
-          _showSaveFailure(f, onPrimary: _receiptImages.isNotEmpty ? _submitAndValidateReceipt : null);
+          _showSaveFailure(
+            f,
+            onPrimary: _receiptImages.isNotEmpty
+                ? _submitAndValidateReceipt
+                : null,
+          );
           return;
         }
         _showIssue(
@@ -2033,6 +2122,7 @@ class _ClientReceiptUploadScreenState
     setState(() {
       _receiptImages.clear();
       _receiptImageBytes.clear();
+      _receiptPreviewBytes.clear();
       _selectedPreviewIndex = 0;
     });
   }
@@ -2096,12 +2186,17 @@ class _ClientReceiptUploadScreenState
     try {
       final snap = await firestore.collection('events').doc(ev.id).get();
       final d = snap.data();
-      campaignActive = snap.exists && d != null && d['isActive'] == true && d['isPromoterActive'] != false;
+      campaignActive =
+          snap.exists &&
+          d != null &&
+          d['isActive'] == true &&
+          d['isPromoterActive'] != false;
     } catch (_) {}
     final branch = (data['branch_detected'] ?? '').toString().trim();
     bool? branchInCampaign;
     if (branch.isNotEmpty && !ev.isAllBranches && ev.branchNames.isNotEmpty) {
-      branchInCampaign = (data['branch_id'] ?? '').toString().isNotEmpty ||
+      branchInCampaign =
+          (data['branch_id'] ?? '').toString().isNotEmpty ||
           ev.branchNames.any((b) => b.trim() == branch);
     }
     if (!mounted) return;
@@ -2117,11 +2212,18 @@ class _ClientReceiptUploadScreenState
     );
   }
 
-  void _showSaveFailure(ReceiptSaveFailure f, {String? branch, VoidCallback? onPrimary}) {
+  void _showSaveFailure(
+    ReceiptSaveFailure f, {
+    String? branch,
+    VoidCallback? onPrimary,
+  }) {
     final kind = switch (f.kind) {
-      ReceiptSaveFailureKind.alreadyUploaded => ReceiptIssueKind.alreadyRedeemed,
-      ReceiptSaveFailureKind.campaignStopped => ReceiptIssueKind.campaignUnavailable,
-      ReceiptSaveFailureKind.branchNotInCampaign => ReceiptIssueKind.wrongBranch,
+      ReceiptSaveFailureKind.alreadyUploaded =>
+        ReceiptIssueKind.alreadyRedeemed,
+      ReceiptSaveFailureKind.campaignStopped =>
+        ReceiptIssueKind.campaignUnavailable,
+      ReceiptSaveFailureKind.branchNotInCampaign =>
+        ReceiptIssueKind.wrongBranch,
       _ => ReceiptIssueKind.permission,
     };
     _showIssue(
@@ -2147,7 +2249,10 @@ class _ClientReceiptUploadScreenState
   }
 
   /// Already-redeemed receipt: show when/where/what it was redeemed for (no personal data).
-  void _showAlreadyRedeemed(ReceiptDuplicateCheckResult dup, {String? subtitle}) {
+  void _showAlreadyRedeemed(
+    ReceiptDuplicateCheckResult dup, {
+    String? subtitle,
+  }) {
     String fmtDate(String? iso) {
       final d = iso == null ? null : DateTime.tryParse(iso)?.toLocal();
       if (d == null) return iso ?? '';
@@ -2160,7 +2265,8 @@ class _ClientReceiptUploadScreenState
         RegExp(r'^\d+(\.\d+)?$').hasMatch(v) ? '$v $currency' : v;
     _showIssue(
       ReceiptIssueKind.alreadyRedeemed,
-      subtitle: subtitle ??
+      subtitle:
+          subtitle ??
           (dup.locked && _isAr
               ? ReceiptDeduplicationHelper.lockedMessage(dup.receiptNumber)
               : null),
@@ -2226,7 +2332,10 @@ class _ClientReceiptUploadScreenState
             Icons.verified_rounded,
             'حالة الفاتورة',
             'Status',
-            receiptStatusLabel(dup.existingStatus!, isAr: AppStrings.of(ref).isAr),
+            receiptStatusLabel(
+              dup.existingStatus!,
+              isAr: AppStrings.of(ref).isAr,
+            ),
           ),
       ],
     );
@@ -2284,7 +2393,9 @@ class _ClientReceiptUploadScreenState
       r'(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})',
     ).firstMatch(r.receiptDate);
     final ev = _activeEvent;
-    if (m == null || ev == null || (ev.startDate == null && ev.endDate == null)) {
+    if (m == null ||
+        ev == null ||
+        (ev.startDate == null && ev.endDate == null)) {
       return null;
     }
     var y = int.parse(m.group(3)!);
@@ -3711,7 +3822,13 @@ class _ClientReceiptUploadScreenState
             .toList(),
         'store_chain_detected': result.storeChainDetected,
         'branch_detected': result.branchDetected,
-        'branch_id': ReceiptBranchResolver.resolve(_activeEvent ?? widget.event, result.branchDetected, receiptNumber: result.receiptNumber).id ?? '',
+        'branch_id':
+            ReceiptBranchResolver.resolve(
+              _activeEvent ?? widget.event,
+              result.branchDetected,
+              receiptNumber: result.receiptNumber,
+            ).id ??
+            '',
         'is_branch_matched': result.isBranchMatched,
         'is_handwritten': result.isHandwritten,
         'is_thermal_pos_receipt': result.isThermalPosReceipt,
