@@ -440,6 +440,14 @@ const { replaceReceiptHandler } = require("./receipt_replace");
 exports.replaceReceipt = onCall(callableOptions, (request) =>
   replaceReceiptHandler(db, request));
 
+const { logReceiptSaveFailureHandler } = require("./receipt_save_failure_log");
+/**
+ * 2.0.155: log-only report of a failed rep receipt save (step + error code).
+ * No App Check enforcement so failures caused by App Check are still logged.
+ */
+exports.logReceiptSaveFailure = onCall(httpsOptions, (request) =>
+  logReceiptSaveFailureHandler(db, request));
+
 const { listBranchReceiptsHandler } = require("./list_branch_receipts");
 /** Rep branch history for one campaign, independent of the anonymous uid. */
 exports.listBranchReceipts = onCall(callableOptions, (request) =>

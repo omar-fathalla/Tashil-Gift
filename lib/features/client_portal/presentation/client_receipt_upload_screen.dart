@@ -17,6 +17,8 @@ import '../../../core/services/firebase_service.dart';
 import '../../../core/services/ai_receipt_service.dart';
 import '../../../core/update/app_update_checker.dart';
 import '../../../core/services/receipt_save_failure.dart';
+import '../../../core/utils/receipt_date_window.dart';
+import '../../../core/services/receipt_save_failure_reporter.dart';
 import '../../../core/services/rep_session_guard.dart';
 import 'package:firebase_auth/firebase_auth.dart' show User;
 import '../../../core/services/ai_product_discovery_service.dart';
@@ -137,6 +139,21 @@ class _ClientReceiptUploadScreenState
 
   /// 2.0.148: if another tab (e.g. partner portal) swaps or clears the shared
   /// Firebase identity, silently return this rep screen to anonymous.
+  // 2.0.155: current pipeline step, shown with the error code and logged.
+  String _saveStep = ReceiptSaveStep.session;
+  String _saveReceiptNumber = '';
+
+  /// 2.0.155: catalog/branch harvesting writes admin-only collections
+  /// (discovered_products_inbox, company_products, chain_products_catalog,
+  /// branches). Anonymous reps are always denied there (live repro: 403
+  /// batchGets right after a rejection), and those denied background
+  /// transactions are the main suspect for the next scan's permission-denied,
+  /// so they only run for signed-in staff.
+  bool get _canHarvestCatalog {
+    final u = ref.read(firebaseAuthProvider).currentUser;
+    return u != null && !u.isAnonymous;
+  }
+
   void _watchRepSession() {
     try {
       final auth = ref.read(firebaseAuthProvider);
@@ -838,6 +855,8 @@ class _ClientReceiptUploadScreenState
     });
 
     try {
+      _saveStep = ReceiptSaveStep.session;
+      _saveReceiptNumber = '';
       // 2.0.148: make sure this tab still holds an anonymous rep session.
       await _restoreRepSession();
       // 1. Check event active dates if single focused campaign mode
@@ -926,6 +945,7 @@ class _ClientReceiptUploadScreenState
       Map<String, String> catalogBarcodeMap = {};
       List<BranchModel> chainBranches = [];
 
+      _saveStep = ReceiptSaveStep.lookup;
       try {
         final results = await Future.wait([
           productsService
@@ -1016,6 +1036,7 @@ class _ClientReceiptUploadScreenState
                 ));
 
       // Run Gemini AI analysis
+      _saveStep = ReceiptSaveStep.ai;
       final result = await aiService
           .analyzeReceiptImage(
             bytes,
@@ -1060,31 +1081,33 @@ class _ClientReceiptUploadScreenState
           .toList();
 
       // Asynchronously stage any newly harvested branch metadata for admin review & merge
-      unawaited(
-        ref
-            .read(retailChainsServiceProvider)
-            .stageBranchEnrichment(
-              chainName: result.storeChainDetected.isNotEmpty
-                  ? result.storeChainDetected
-                  : primaryTargetEvent.retailChainName,
-              branchName: result.branchDetected,
-              storeId: result.storeId,
-              posNumber: result.posNumber,
-              taxNumber: result.taxNumber,
-              commercialReg: result.commercialReg,
-              hotline: result.hotline,
-              branchAddress: result.branchAddress,
-              receiptNumber: result.receiptNumber,
-              receiptDate: result.receiptDate,
-              sourceReceiptUrl: previewImgUrl,
-            )
-            .catchError((_) => false),
-      );
+      if (_canHarvestCatalog) {
+        unawaited(
+          ref
+              .read(retailChainsServiceProvider)
+              .stageBranchEnrichment(
+                chainName: result.storeChainDetected.isNotEmpty
+                    ? result.storeChainDetected
+                    : primaryTargetEvent.retailChainName,
+                branchName: result.branchDetected,
+                storeId: result.storeId,
+                posNumber: result.posNumber,
+                taxNumber: result.taxNumber,
+                commercialReg: result.commercialReg,
+                hotline: result.hotline,
+                branchAddress: result.branchAddress,
+                receiptNumber: result.receiptNumber,
+                receiptDate: result.receiptDate,
+                sourceReceiptUrl: previewImgUrl,
+              )
+              .catchError((_) => false),
+        );
+      }
 
       if (!result.isValid) {
         if (!mounted) return;
         final activeCountry = ref.read(activeCountryProvider);
-        final unfulfilledList = result.unfulfilledConditions.isNotEmpty
+        final rawUnfulfilled = result.unfulfilledConditions.isNotEmpty
             ? result.unfulfilledConditions
             : (_activeEvent!.promotionalRules.isNotEmpty
                   ? PromotionalRuleMatcher.getUnfulfilledPromotionReasons(
@@ -1096,6 +1119,14 @@ class _ClientReceiptUploadScreenState
                           ? result.message.trim()
                           : 'الفاتورة غير مطابقة لشروط الحملة',
                     ]);
+
+        // 2.0.155: never store/show an empty rejection reason.
+        final unfulfilledList = rawUnfulfilled
+            .where((r) => r.trim().isNotEmpty)
+            .toList();
+        if (unfulfilledList.isEmpty) {
+          unfulfilledList.add(fallbackRejectionReason(result.message));
+        }
 
         final conditions = buildValidationConditionItems(
           isValid: false,
@@ -1156,6 +1187,7 @@ class _ClientReceiptUploadScreenState
       }
 
       final candidateReceiptNumber = result.receiptNumber.trim();
+      _saveReceiptNumber = candidateReceiptNumber;
       // 2.0.148: never save a receipt without a readable number (it would
       // collide on rcpt_{campaignId}_UNKNOWN). Ask for a clearer photo.
       if (isUnusableReceiptNumber(candidateReceiptNumber)) {
@@ -1168,6 +1200,7 @@ class _ClientReceiptUploadScreenState
         );
         return;
       }
+      _saveStep = ReceiptSaveStep.dupCheck;
       {
         final duplicateCheck =
             await ReceiptDeduplicationHelper.checkReceiptDuplicate(
@@ -1214,6 +1247,7 @@ class _ClientReceiptUploadScreenState
           final List<String> uploadedImageUrls = [];
           final List<String> uploadedStoragePaths = [];
 
+          _saveStep = ReceiptSaveStep.storage;
           await Future.wait(
             List.generate(allBytesList.length, (index) async {
               final partNum = index + 1;
@@ -1263,18 +1297,20 @@ class _ClientReceiptUploadScreenState
           );
 
           // Harvest discovered products asynchronously
-          unawaited(
-            ref
-                .read(aiProductDiscoveryServiceProvider)
-                .autoHarvestFromReceiptAnalysis(
-                  companySlug: primaryTargetEvent.companySlug,
-                  companyName: primaryTargetEvent.targetCompany,
-                  retailChain: result.storeChainDetected,
-                  branch: result.branchDetected,
-                  receiptNumber: receiptNumber,
-                  extractedProducts: result.extractedProducts,
-                ),
-          );
+          if (_canHarvestCatalog) {
+            unawaited(
+              ref
+                  .read(aiProductDiscoveryServiceProvider)
+                  .autoHarvestFromReceiptAnalysis(
+                    companySlug: primaryTargetEvent.companySlug,
+                    companyName: primaryTargetEvent.targetCompany,
+                    retailChain: result.storeChainDetected,
+                    branch: result.branchDetected,
+                    receiptNumber: receiptNumber,
+                    extractedProducts: result.extractedProducts,
+                  ),
+            );
+          }
 
           // Reset image preview and analysis state immediately
           setState(() {
@@ -1470,18 +1506,20 @@ class _ClientReceiptUploadScreenState
 
         // Harvest unlisted company products so they immediately appear in "تحديث الأصناف" for review & one-click catalog addition
         if (result.extractedProducts.any((p) => p.isTargetCompany)) {
-          unawaited(
-            ref
-                .read(aiProductDiscoveryServiceProvider)
-                .autoHarvestFromReceiptAnalysis(
-                  companySlug: _activeEvent!.companySlug,
-                  companyName: _activeEvent!.targetCompany,
-                  retailChain: result.storeChainDetected,
-                  branch: result.branchDetected,
-                  receiptNumber: receiptNumber,
-                  extractedProducts: result.extractedProducts,
-                ),
-          );
+          if (_canHarvestCatalog) {
+            unawaited(
+              ref
+                  .read(aiProductDiscoveryServiceProvider)
+                  .autoHarvestFromReceiptAnalysis(
+                    companySlug: _activeEvent!.companySlug,
+                    companyName: _activeEvent!.targetCompany,
+                    retailChain: result.storeChainDetected,
+                    branch: result.branchDetected,
+                    receiptNumber: receiptNumber,
+                    extractedProducts: result.extractedProducts,
+                  ),
+            );
+          }
         }
 
         _showIssue(
@@ -1552,6 +1590,7 @@ class _ClientReceiptUploadScreenState
 
       final List<String> uploadedImageUrls = [];
       final List<String> uploadedStoragePaths = [];
+      _saveStep = ReceiptSaveStep.storage;
 
       await Future.wait(
         List.generate(allBytesList.length, (index) async {
@@ -1679,6 +1718,7 @@ class _ClientReceiptUploadScreenState
       transactionData['prize_won'] = null;
       String? replaceMode;
       if (existingExact != null) {
+        _saveStep = ReceiptSaveStep.replace;
         replaceMode = await ReceiptDeduplicationHelper.replaceReceipt(
           campaignId: _activeEvent!.id,
           receiptNumber: receiptNumber,
@@ -1712,9 +1752,11 @@ class _ClientReceiptUploadScreenState
         }
       }
       try {
+        _saveStep = ReceiptSaveStep.save;
         if (replaceMode != 'reupload') {
           await transactionRef.set(transactionData);
         }
+        _saveStep = ReceiptSaveStep.after;
       } on FirebaseException catch (e) {
         if (!ReceiptDeduplicationHelper.isDuplicateWriteDenied(e) &&
             receiptErrorCode(e) != 'unauthenticated') {
@@ -1727,25 +1769,29 @@ class _ClientReceiptUploadScreenState
       }
 
       // Harvest discovered products asynchronously for the AI Product Discovery Hub
-      unawaited(
-        ref
-            .read(aiProductDiscoveryServiceProvider)
-            .autoHarvestFromReceiptAnalysis(
-              companySlug: _activeEvent!.companySlug,
-              companyName: _activeEvent!.targetCompany,
-              retailChain: result.storeChainDetected,
-              branch: result.branchDetected,
-              receiptNumber: receiptNumber,
-              extractedProducts: result.extractedProducts,
-            ),
-      );
+      if (_canHarvestCatalog) {
+        unawaited(
+          ref
+              .read(aiProductDiscoveryServiceProvider)
+              .autoHarvestFromReceiptAnalysis(
+                companySlug: _activeEvent!.companySlug,
+                companyName: _activeEvent!.targetCompany,
+                retailChain: result.storeChainDetected,
+                branch: result.branchDetected,
+                receiptNumber: receiptNumber,
+                extractedProducts: result.extractedProducts,
+              ),
+        );
+      }
 
       // Live Ingest into Cross-Chain Price Intelligence & Competitor Threat Catalog (0ms dynamic radar update)
-      unawaited(
-        ref
-            .read(chainProductsIntelligenceServiceProvider)
-            .ingestReceiptLive(receiptData: transactionData),
-      );
+      if (_canHarvestCatalog) {
+        unawaited(
+          ref
+              .read(chainProductsIntelligenceServiceProvider)
+              .ingestReceiptLive(receiptData: transactionData),
+        );
+      }
 
       if (!mounted) return;
 
@@ -2075,6 +2121,19 @@ class _ClientReceiptUploadScreenState
         if (!isSessionRetry &&
             isRepSessionError(e) &&
             _receiptImages.isNotEmpty) {
+          // 2.0.155: log the first failure too (the retry may hide it).
+          unawaited(
+            reportReceiptSaveFailure(
+              step: 'first_try:$_saveStep',
+              code: repErrorCode(e),
+              error:
+                  '$e | ${stack.toString().split('\n').take(8).join(' <- ')}',
+              uid: ref.read(firebaseAuthProvider).currentUser?.uid,
+              receiptNumber: _saveReceiptNumber,
+              campaignId: _activeEvent?.id,
+              companySlug: _activeEvent?.companySlug,
+            ),
+          );
           await _restoreRepSession(forceRefresh: true);
           retryAfterSessionRestore = true;
           return;
@@ -2087,6 +2146,8 @@ class _ClientReceiptUploadScreenState
           );
           _showSaveFailure(
             f,
+            rawError: e,
+            stack: stack,
             onPrimary: _receiptImages.isNotEmpty
                 ? _submitAndValidateReceipt
                 : null,
@@ -2209,6 +2270,7 @@ class _ClientReceiptUploadScreenState
         branchInCampaign: branchInCampaign,
       ),
       branch: branch,
+      rawError: error,
     );
   }
 
@@ -2216,6 +2278,8 @@ class _ClientReceiptUploadScreenState
     ReceiptSaveFailure f, {
     String? branch,
     VoidCallback? onPrimary,
+    Object? rawError,
+    StackTrace? stack,
   }) {
     final kind = switch (f.kind) {
       ReceiptSaveFailureKind.alreadyUploaded =>
@@ -2226,10 +2290,24 @@ class _ClientReceiptUploadScreenState
         ReceiptIssueKind.wrongBranch,
       _ => ReceiptIssueKind.permission,
     };
+    final step = _saveStep;
+    final ev = _activeEvent;
+    unawaited(
+      reportReceiptSaveFailure(
+        step: step,
+        code: f.code ?? '',
+        error:
+            '${f.kind.name}${f.field == null ? '' : ' field=${f.field}'} | ${rawError ?? ''} | ${stack == null ? '' : stack.toString().split('\n').take(8).join(' <- ')}',
+        uid: ref.read(firebaseAuthProvider).currentUser?.uid,
+        receiptNumber: _saveReceiptNumber,
+        campaignId: ev?.id,
+        companySlug: ev?.companySlug,
+      ),
+    );
     _showIssue(
       kind,
       subtitle: receiptSaveFailureMessage(f, branch: branch),
-      errorCode: f.code,
+      errorCode: errorCodeWithStep(f.code, step),
       onPrimary: onPrimary,
     );
   }
@@ -2388,29 +2466,11 @@ class _ClientReceiptUploadScreenState
         .any((c) => g.contains(c) || c.contains(g));
   }
 
-  bool? _dateMet(AiReceiptAnalysisResult r) {
-    final m = RegExp(
-      r'(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})',
-    ).firstMatch(r.receiptDate);
-    final ev = _activeEvent;
-    if (m == null ||
-        ev == null ||
-        (ev.startDate == null && ev.endDate == null)) {
-      return null;
-    }
-    var y = int.parse(m.group(3)!);
-    if (y < 100) y += 2000;
-    final d = DateTime(y, int.parse(m.group(2)!), int.parse(m.group(1)!));
-    final start = ev.startDate == null
-        ? null
-        : DateTime(ev.startDate!.year, ev.startDate!.month, ev.startDate!.day);
-    final end = ev.endDate == null
-        ? null
-        : DateTime(ev.endDate!.year, ev.endDate!.month, ev.endDate!.day);
-    if (start != null && d.isBefore(start)) return false;
-    if (end != null && d.isAfter(end)) return false;
-    return true;
-  }
+  bool? _dateMet(AiReceiptAnalysisResult r) => receiptDateWithinCampaign(
+    r.receiptDate,
+    _activeEvent?.startDate,
+    _activeEvent?.endDate,
+  );
 
   List<ReceiptCheckChip> _receiptChips(
     AiReceiptAnalysisResult r, {
@@ -3861,25 +3921,29 @@ class _ClientReceiptUploadScreenState
       await docRef.set(transactionData);
 
       // Harvest discovered products asynchronously even if receipt didn't meet spend threshold
-      unawaited(
-        ref
-            .read(aiProductDiscoveryServiceProvider)
-            .autoHarvestFromReceiptAnalysis(
-              companySlug: activeEvent.companySlug,
-              companyName: activeEvent.targetCompany,
-              retailChain: result.storeChainDetected,
-              branch: result.branchDetected,
-              receiptNumber: receiptNumber,
-              extractedProducts: result.extractedProducts,
-            ),
-      );
+      if (_canHarvestCatalog) {
+        unawaited(
+          ref
+              .read(aiProductDiscoveryServiceProvider)
+              .autoHarvestFromReceiptAnalysis(
+                companySlug: activeEvent.companySlug,
+                companyName: activeEvent.targetCompany,
+                retailChain: result.storeChainDetected,
+                branch: result.branchDetected,
+                receiptNumber: receiptNumber,
+                extractedProducts: result.extractedProducts,
+              ),
+        );
+      }
 
       // Live Ingest into Cross-Chain Price Intelligence & Competitor Threat Catalog (0ms dynamic radar update)
-      unawaited(
-        ref
-            .read(chainProductsIntelligenceServiceProvider)
-            .ingestReceiptLive(receiptData: transactionData),
-      );
+      if (_canHarvestCatalog) {
+        unawaited(
+          ref
+              .read(chainProductsIntelligenceServiceProvider)
+              .ingestReceiptLive(receiptData: transactionData),
+        );
+      }
     } catch (e) {
       debugPrint(
         'Error recording rejected receipt transaction to Firestore: $e',

@@ -2903,7 +2903,20 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
     DateTime? endDate,
   }) {
     try {
-      final clean = dateStr.replaceAll(RegExp(r'[^\d/\-]'), '');
+      // 2.0.155: take only the first date token (ignores a trailing time such
+      // as "17:37") and accept '/', '-' or '.' separators. Year-first dates
+      // (yyyy/mm/dd) are matched before dd/mm/yy.
+      final ymd = RegExp(r'(\d{4})\s*[/\-.]\s*(\d{1,2})\s*[/\-.]\s*(\d{1,2})(?!\d)')
+          .firstMatch(dateStr);
+      final dmy = ymd == null
+          ? RegExp(r'(?<!\d)(\d{1,2})\s*[/\-.]\s*(\d{1,2})\s*[/\-.]\s*(\d{2,4})(?!\d)')
+              .firstMatch(dateStr)
+          : null;
+      final clean = ymd != null
+          ? '${ymd.group(1)}/${ymd.group(2)}/${ymd.group(3)}'
+          : dmy != null
+              ? '${dmy.group(1)}/${dmy.group(2)}/${dmy.group(3)}'
+              : dateStr.replaceAll(RegExp(r'[^\d/\-]'), '');
       if (clean.contains('/')) {
         final parts = clean.split('/');
         if (parts.length >= 3) {
@@ -2934,9 +2947,11 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
             return direct;
           }
 
-          // Case 1: YYYY/MM/DD format
+          // Case 1: YYYY/MM/DD format.
+          // 2.0.155: the third part is the day here; it was read as a 2-digit
+          // year (+2000), so 2026/10/30 became day 2030 -> 2032-04-21.
           if (a > 1000) {
-            return resolveHealedDate(a, b, year);
+            return resolveHealedDate(a, b, int.parse(parts[2]));
           }
 
           // Case 2: Unambiguous day/month
