@@ -1270,7 +1270,8 @@ class WhatsAppGatewayService {
   }) {
     final customerName = contact.name.isNotEmpty ? contact.name : 'عميلنا العزيز';
     final branchName = contact.lastBranch.isNotEmpty ? contact.lastBranch : (contact.branches.isNotEmpty ? contact.branches.first : 'أقرب فرع');
-    final giftsText = contact.isWinner ? contact.prizesWon.join(', ') : 'هدايا وقسائم تسوق فورية';
+    // 2.0.158: never send the prize/gift name to customers on WhatsApp.
+    const giftsText = 'هدايا وقسائم تسوق فورية';
 
     return template
         .replaceAll('{اسم_العميل}', customerName)

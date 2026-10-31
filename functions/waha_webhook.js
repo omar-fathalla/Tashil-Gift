@@ -14,7 +14,8 @@ const TERMINAL_STATUSES = new Set([
 ]);
 
 const DEFAULT_TEMPLATES = {
-  verified: "تم التحقق من فاتورتك رقم {receipt}. جائزتك: {prize}. حملة {campaign}.",
+  // 2.0.158: never name the gift to the customer (all companies).
+  verified: "🎉 ألف مبروك يا {name}! كسبت معانا. تم التحقق من فاتورتك رقم {receipt} - {campaign}.",
   pendingReview: "مرحباً {name}، استلمنا رسالتك وهي قيد المراجعة لحملة {campaign}.",
   rejected: "تعذر قبول الفاتورة {receipt}. {campaign}",
   notAllowed: "هذا الرقم غير مسموح به. اطلب رابط الدعوة من المسؤول للانضمام.",
@@ -215,13 +216,23 @@ function json(res, status, body) {
   res.status(status).json(body);
 }
 
+function stripPrizePlaceholder(template) {
+  return String(template)
+    .replace(/(?:جائزتك|جائزتكم|الجائزة|هديتك|هديتكم|الهدية|your\s+prize|prize|gift)\s*[:：-]?\s*\{prize\}\s*[.،,!]?/giu, "")
+    .replaceAll("{prize}", "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\s+([.،,!])/g, "$1")
+    .trim();
+}
+
 function renderTemplate(config, key, vars) {
   const custom = config && config.templates && config.templates[key];
   const template = String((custom && String(custom).trim()) || DEFAULT_TEMPLATES[key] || "");
   const values = vars || {};
-  return template
-    .replaceAll("{name}", String(values.name || ""))
-    .replaceAll("{prize}", String(values.prize || ""))
+  // 2.0.158: the prize/gift name is never sent; saved custom templates that
+  // still use {prize} lose it together with its label (e.g. "جائزتك: ").
+  return stripPrizePlaceholder(template)
+    .replaceAll("{name}", String(values.name || "").trim() || "عميلنا العزيز")
     .replaceAll("{receipt}", String(values.receipt || ""))
     .replaceAll("{campaign}", String(values.campaign || ""));
 }
@@ -711,6 +722,8 @@ async function recordAck(req, res, deps, { payload, session, stamp }) {
 }
 
 module.exports = {
+  stripPrizePlaceholder,
+  renderTemplate,
   TOKEN_HEADER,
   HMAC_HEADER,
   formatInternationalPhone,

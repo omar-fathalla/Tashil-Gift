@@ -53,7 +53,9 @@ void main() {
       expect(result, contains('فرع سموحة'));
       expect(result, contains('حملة مهرجان الصيف'));
       expect(result, contains('لشركة يونيليفر'));
-      expect(result, contains('قسيمة 50 ج.م, شامبو تريسمي'));
+      // 2.0.158: prize names are never sent to customers.
+      expect(result, isNot(contains('شامبو تريسمي')));
+      expect(result, contains('هدايا وقسائم تسوق فورية'));
       expect(result, contains('1500 ج.م'));
     });
 

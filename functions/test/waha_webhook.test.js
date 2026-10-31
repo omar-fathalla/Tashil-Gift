@@ -434,7 +434,8 @@ test("stores the Gemini analysis and the verified reply on an awarded invoice", 
   assert.equal(stored.analysis.confidence, 0.91);
   assert.equal(stored.analysis.verdict, "valid");
   assert.equal(stored.analysis.receiptNumber, "R-77");
-  assert.equal(stored.replyText, "Prize Gift A receipt R-77");
+  assert.equal(stored.replyText, "receipt R-77");
+  assert.ok(!stored.replyText.includes("Gift A"));
   assert.equal(stored.replyMessageId, "award-reply");
 });
 
@@ -492,4 +493,14 @@ test("drops messages from a sender over the per-sender rate limit", async () => 
   assert.equal(seen[0].scope, "wahaSender");
   assert.equal(calls.verify.length, 0);
   assert.equal(calls.claim.length, 0);
+});
+
+test("2.0.158: verified reply never includes the prize name", () => {
+  const { renderTemplate } = require("../waha_webhook");
+  const vars = { name: "نور", prize: "Gift A", receipt: "R-1", campaign: "Durra" };
+  const def = renderTemplate({}, "verified", vars);
+  assert.ok(!def.includes("Gift A"));
+  assert.ok(def.includes("ألف مبروك يا نور! كسبت معانا"));
+  const old = renderTemplate({ templates: { verified: "تم التحقق من فاتورتك رقم {receipt}. جائزتك: {prize}. حملة {campaign}." } }, "verified", vars);
+  assert.equal(old, "تم التحقق من فاتورتك رقم R-1. حملة Durra.");
 });
