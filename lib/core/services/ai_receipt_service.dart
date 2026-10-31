@@ -3144,7 +3144,7 @@ class PromotionalRuleMatcher {
           ? matchedRule.effectiveMinSpend
           : matchedRule.minSpend;
       if (effectiveMin > 0 && totalTriggerSpend >= effectiveMin) {
-        if (matchedRule.allowMultipliers || allowCampaignMultipliers) {
+        if (allowCampaignMultipliers && matchedRule.allowMultipliers) {
           final divisor = matchedRule.minSpend > 0 ? matchedRule.minSpend : effectiveMin;
           multiplier = divisor > 0 ? (totalTriggerSpend ~/ divisor) : 1;
           if (multiplier < 1) multiplier = 1;
@@ -3155,7 +3155,7 @@ class PromotionalRuleMatcher {
     } else {
       if (matchedRule.minQuantity > 0 &&
           totalTriggerQty >= matchedRule.minQuantity) {
-        if (matchedRule.allowMultipliers || allowCampaignMultipliers) {
+        if (allowCampaignMultipliers && matchedRule.allowMultipliers) {
           multiplier = totalTriggerQty ~/ matchedRule.minQuantity;
           if (multiplier < 1) multiplier = 1;
         } else {
@@ -3361,7 +3361,7 @@ class PromotionalRuleMatcher {
             if (isBoundedBracket) {
               // Bounded middle bracket range (e.g. 95 to 139 EGP) qualifies as 1 bracket match
               count = 1;
-            } else if (rule.allowMultipliers || allowCampaignMultipliers) {
+            } else if (allowCampaignMultipliers && rule.allowMultipliers) {
               final divisor = rule.minSpend > 0 ? rule.minSpend : effectiveMin;
               final effectiveSpendForMultiplier = totalEligibleSpend +
                   (rule.discountTolerance > 0 ? rule.discountTolerance : 0.0);
@@ -3441,7 +3441,7 @@ class PromotionalRuleMatcher {
 
           if (rule.minQuantity > 0 && availableQtyForRule >= rule.minQuantity) {
             int count = 1;
-            if (rule.allowMultipliers || allowCampaignMultipliers) {
+            if (allowCampaignMultipliers && rule.allowMultipliers) {
               count = availableQtyForRule ~/ rule.minQuantity;
               if (count < 1) count = 1;
             }
