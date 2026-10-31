@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/utils/claim_retry.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -256,7 +257,8 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
 
       if (!widget.isDemo && widget.transactionId.isNotEmpty) {
         final giftsService = ref.read(companyGiftsServiceProvider);
-        await giftsService.decrementCampaignPrize(
+        await runGameClaim(
+          () => giftsService.decrementCampaignPrize(
           widget.eventId,
           selectedPrize,
           branchId: widget.branchId,
@@ -277,6 +279,8 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
               'isVoucher': p.contains('فواتشر') || p.contains('قسيمة') || p.toLowerCase().contains('voucher'),
             }).toList(),
           },
+        ),
+          isFinalChance: _remainingChances <= 0,
         );
         claimSaved = true;
 
@@ -336,7 +340,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(AppErrorHandler.getFriendlyMessage(e, defaultMessage: 'حدث خطأ أثناء تسجيل الهدية')),
+          content: Text(AppErrorHandler.claimFailureMessage(e)),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );

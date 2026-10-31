@@ -201,6 +201,7 @@ class MultiCampaignReceiptEvaluator {
       result: result,
       promotionalRules: campaign.promotionalRules,
       allowCampaignMultipliers: campaign.allowMultipleChances,
+      maxUnitsPerReceipt: campaign.maxChancesPerReceipt,
     );
 
     // If campaign mandates promotional rules and none match -> Reject

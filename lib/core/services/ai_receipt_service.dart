@@ -2150,6 +2150,7 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                   result: result,
                   promotionalRules: promotionalRules,
                   allowCampaignMultipliers: allowMultipleChances,
+                  maxUnitsPerReceipt: maxChancesPerReceipt,
                 )
               : <MatchedPromotionalRuleResult>[];
 
@@ -2160,14 +2161,14 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
             // Spend-rule quantity isolation (AIR-83): When a rule is spend-based
             // (e.g. 150 EGP with Halawa prerequisite), chances MUST strictly depend on spend.
             // Piece counts (quantity) in the basket must NEVER inflate chances!
-            final ruleTotalChances = dartMatchedRules.fold<int>(0, (sum, r) => sum + r.multiplier);
+            final ruleTotalChances = dartMatchedRules.fold<int>(0, (sum, r) => sum + PromotionalRuleMatcher.matchedRuleUnits(r));
             calculatedChances = ruleTotalChances > 0 ? ruleTotalChances : 1;
             if (maxChancesPerReceipt > 0 && calculatedChances > maxChancesPerReceipt) {
               calculatedChances = maxChancesPerReceipt;
             }
           } else if (hasAnyRuleMatch) {
             // Pure quantity-based rules (e.g. buy 2 get 1)
-            final ruleTotalChances = dartMatchedRules.fold<int>(0, (sum, r) => sum + r.multiplier);
+            final ruleTotalChances = dartMatchedRules.fold<int>(0, (sum, r) => sum + PromotionalRuleMatcher.matchedRuleUnits(r));
             calculatedChances = ruleTotalChances > 0 ? ruleTotalChances : 1;
             if (maxChancesPerReceipt > 0 && calculatedChances > maxChancesPerReceipt) {
               calculatedChances = maxChancesPerReceipt;
@@ -3380,7 +3381,113 @@ class PromotionalRuleMatcher {
   /// Evaluates ALL promotional rules against the receipt products,
   /// grouping by unique trigger product family so higher tiers beat lower tiers,
   /// and different products purchased together in the same receipt ALL produce rewards!
+  ///
+  /// [maxUnitsPerReceipt]: when non-null the campaign's per-receipt unit cap
+  /// is enforced on the result (see [capMatchedRuleUnits]): ON => at most
+  /// [maxUnitsPerReceipt] gift units (0 = no cap), OFF => exactly 1 unit.
   static List<MatchedPromotionalRuleResult> matchAllWithMultipliers({
+    AiReceiptAnalysisResult? result,
+    List<ExtractedProductItem> extractedProducts = const [],
+    required List<PromotionalRuleItem> promotionalRules,
+    bool allowCampaignMultipliers = true,
+    bool capSpendToAiTotal = true,
+    int? maxUnitsPerReceipt,
+  }) {
+    final raw = _matchAllUncapped(
+      result: result,
+      extractedProducts: extractedProducts,
+      promotionalRules: promotionalRules,
+      allowCampaignMultipliers: allowCampaignMultipliers,
+      capSpendToAiTotal: capSpendToAiTotal,
+    );
+    if (maxUnitsPerReceipt == null) return raw;
+    return capMatchedRuleUnits(
+      raw,
+      allowMultipleChances: allowCampaignMultipliers,
+      maxChancesPerReceipt: maxUnitsPerReceipt,
+    );
+  }
+
+  /// Number of gift units a matched rule hands over.
+  /// Award units of one matched rule = its offer count (multiplier). A rule
+  /// whose single offer hands over several pieces (e.g. 6 bags) still counts
+  /// as ONE unit, so the cap never splits an offer.
+  static int matchedRuleUnits(MatchedPromotionalRuleResult r) {
+    return r.multiplier > 0 ? r.multiplier : 1;
+  }
+
+  static double _ruleUnitValue(MatchedPromotionalRuleResult r) {
+    double best = 0;
+    for (final g in r.rule.linkedGifts) {
+      if (g.unitValue > best) best = g.unitValue;
+    }
+    if (best > 0) return best;
+    if (r.rule.rewardAmount > 0) return r.rule.rewardAmount;
+    return r.rule.totalVoucherValue > 0 ? r.rule.totalVoucherValue : 0.0;
+  }
+
+  static String _prizeSummary(PromotionalRuleItem rule, int count, double baseAmount) {
+    if (count <= 1) return rule.rewardValue;
+    if (rule.rewardType == 'voucher' || baseAmount > 0) {
+      final totalAmount = baseAmount * count;
+      final totalInt = totalAmount == totalAmount.roundToDouble() ? totalAmount.toInt() : totalAmount;
+      return '$count × ${rule.rewardValue} (إجمالي $totalInt جنيه)';
+    }
+    return '$count × ${rule.rewardValue}';
+  }
+
+  /// Caps the total gift UNITS handed over for one receipt.
+  /// Smart Multipliers ON => at most [maxChancesPerReceipt] units (0 = no cap);
+  /// OFF => 1 unit. Highest-value gifts are kept first; lower-value rules are
+  /// reduced or dropped. Order of the returned list follows unit value (desc).
+  static List<MatchedPromotionalRuleResult> capMatchedRuleUnits(
+    List<MatchedPromotionalRuleResult> matches, {
+    required bool allowMultipleChances,
+    int maxChancesPerReceipt = 0,
+  }) {
+    if (matches.isEmpty) return matches;
+    // Switch OFF keeps the existing behaviour (each rule already limited to
+    // one offer); the cross-rule cap applies only when multiple chances are ON.
+    final int cap = allowMultipleChances && maxChancesPerReceipt > 0 ? maxChancesPerReceipt : 0;
+    if (cap <= 0) return matches;
+    final total = matches.fold<int>(0, (s, r) => s + matchedRuleUnits(r));
+    if (total <= cap) return matches;
+
+    final sorted = List<MatchedPromotionalRuleResult>.from(matches)
+      ..sort((a, b) => _ruleUnitValue(b).compareTo(_ruleUnitValue(a)));
+    final out = <MatchedPromotionalRuleResult>[];
+    int remaining = cap;
+    for (final r in sorted) {
+      if (remaining <= 0) break;
+      final units = matchedRuleUnits(r);
+      if (units <= remaining) {
+        out.add(r);
+        remaining -= units;
+        continue;
+      }
+      final rule = r.rule;
+      final double baseAmount = rule.totalVoucherValue > 0
+          ? rule.totalVoucherValue
+          : (rule.rewardAmount > 0 ? rule.rewardAmount : 0.0);
+      final int newCount = remaining;
+      final List<LinkedGiftAllocation> gifts =
+          rule.linkedGifts.map((g) => g.copyWith(quantity: g.quantity * newCount)).toList();
+      out.add(MatchedPromotionalRuleResult(
+        rule: rule,
+        multiplier: newCount,
+        totalTriggerQuantity: r.totalTriggerQuantity,
+        totalRewardAmount: baseAmount * newCount,
+        formattedPrizeSummary: _prizeSummary(rule, newCount, baseAmount),
+        multipliedLinkedGifts: gifts,
+        qualifyingProductNames: r.qualifyingProductNames,
+        qualifyingSpend: r.qualifyingSpend,
+      ));
+      remaining -= newCount;
+    }
+    return out;
+  }
+
+  static List<MatchedPromotionalRuleResult> _matchAllUncapped({
     AiReceiptAnalysisResult? result,
     List<ExtractedProductItem> extractedProducts = const [],
     required List<PromotionalRuleItem> promotionalRules,
@@ -5375,7 +5482,8 @@ class CompositePromotionalBundle {
       totalVoucher += ruleChoice != null
           ? ruleChoice.options.first.toAllocation(multiplier: ruleChoice.multiplier).totalMonetaryValue
           : r.totalRewardAmount;
-      chances += r.multiplier;
+      // Chances == gift units handed over (cap is enforced on units).
+      chances += PromotionalRuleMatcher.matchedRuleUnits(r);
       if (r.rule.gameType != null && r.rule.gameType!.trim().isNotEmpty) {
         ruleLevelGameType = r.rule.gameType!.trim();
       }

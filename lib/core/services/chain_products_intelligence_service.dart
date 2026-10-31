@@ -631,34 +631,68 @@ class ChainProductsIntelligenceService {
     'بيم',
   ];
 
-  /// Normalizes store chain variants into standard Enterprise Retail Chains
+  static const List<List<Object>> _chainRules = [
+    [['فتح الله', 'fathalla'], 'أسواق فتح الله'],
+    // Beit El Gomla MUST be checked BEFORE Gomla Market (substring overlap);
+    // its tokens are stripped before the remaining rules run.
+    [['بيت الجملة', 'beit el gomla', 'beit elgomla'], 'بيت الجملة'],
+    [['جملة ماركت', 'gomla', 'km gomla', 'جملة'], 'جملة ماركت'],
+    [['كارفور', 'carrefour'], 'كارفور'],
+    [['هايبر وان', 'hyper one', 'hyperone', 'هايبر1', 'hyper 1'], 'هايبر وان'],
+    [['لولو', 'lulu'], 'لولو هايبرماركت'],
+    [['سبينس', 'spinneys'], 'سبينس'],
+    [['بنده', 'باندا', 'panda'], 'هايبر بنده'],
+    [['نجمة هليوبوليس', 'جمال سلامه', 'هليوبوليس', 'heliopolis'], 'نجمة هليوبوليس'],
+    [['زهران', 'zahran'], 'زهران ماركت'],
+    [['علام', 'allam'], 'أسواق علام'],
+    [['خير زمان', 'kheir zaman'], 'خير زمان'],
+    [['مترو', 'metro'], 'مترو ماركت'],
+    [['سعودي', 'seoudi'], 'سعودي ماركت'],
+    [['كازيون', 'kazyon'], 'كازيون'],
+    [['بيم', 'bim'], 'بيم'],
+    [['رجب', 'ragab'], 'أولاد رجب'],
+    [['محلاوي', 'mahallawy'], 'المحلاوي'],
+    [['الراية', 'raya'], 'أسواق الراية'],
+    [['الهواري', 'hawary', 'el hawary'], 'الهواري'],
+    [['اوسكار', 'أوسكار', 'oscar'], 'أوسكار'],
+    [['الفار', 'el far', 'elfar'], 'الفار'],
+  ];
+
+  /// First canonical chain matched in [raw] (rule priority order), or null.
+  static String? _firstChain(String raw) {
+    final s = raw.toLowerCase().trim();
+    for (final rule in _chainRules) {
+      if ((rule[0] as List<String>).any(s.contains)) return rule[1] as String;
+    }
+    return null;
+  }
+
+  /// Distinct canonical chains named in [rawChain], one per separated part
+  /// (`-`, `•`, `,`, `،`, `|`, `/`, `+`, `&`, ` و `). A single chain name such
+  /// as "أسواق فتح الله للجملة" yields one chain.
+  static List<String> detectRetailChains(String rawChain) {
+    final parts = rawChain
+        .split(RegExp(r'\s[-–]\s|[•,،|/+&\n]|\sو\s'))
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty);
+    final found = <String>[];
+    for (final p in parts) {
+      final c = _firstChain(p);
+      if (c != null && !found.contains(c)) found.add(c);
+    }
+    return found;
+  }
+
+  /// Normalizes store chain variants into standard Enterprise Retail Chains.
+  ///
+  /// Returns an EMPTY string when [rawChain] names more than one chain (e.g. a
+  /// multi-chain campaign name), so callers never attribute a branch to the
+  /// first chain that happens to appear in such a string.
   static String normalizeRetailChain(String rawChain) {
     final s = rawChain.toLowerCase().trim();
     if (s.isEmpty) return 'سلسلة تجارية عامة';
-    if (s.contains('فتح الله') || s.contains('fathalla')) return 'أسواق فتح الله';
-    // Priority: Beit El Gomla MUST be checked BEFORE Gomla Market to avoid false substring matching!
-    if (s.contains('بيت الجملة') || s.contains('beit el gomla') || s.contains('beit elgomla')) return 'بيت الجملة';
-    if (s.contains('جملة ماركت') || s.contains('gomla') || s.contains('km gomla') || s.contains('جملة')) return 'جملة ماركت';
-    if (s.contains('كارفور') || s.contains('carrefour')) return 'كارفور';
-    if (s.contains('هايبر وان') || s.contains('hyper one') || s.contains('hyperone') || s.contains('هايبر1') || s.contains('hyper 1')) return 'هايبر وان';
-    if (s.contains('لولو') || s.contains('lulu')) return 'لولو هايبرماركت';
-    if (s.contains('سبينس') || s.contains('spinneys')) return 'سبينس';
-    if (s.contains('بنده') || s.contains('باندا') || s.contains('panda')) return 'هايبر بنده';
-    if (s.contains('نجمة هليوبوليس') || s.contains('جمال سلامه') || s.contains('هليوبوليس') || s.contains('heliopolis')) return 'نجمة هليوبوليس';
-    if (s.contains('زهران') || s.contains('zahran')) return 'زهران ماركت';
-    if (s.contains('علام') || s.contains('allam')) return 'أسواق علام';
-    if (s.contains('خير زمان') || s.contains('kheir zaman')) return 'خير زمان';
-    if (s.contains('مترو') || s.contains('metro')) return 'مترو ماركت';
-    if (s.contains('سعودي') || s.contains('seoudi')) return 'سعودي ماركت';
-    if (s.contains('كازيون') || s.contains('kazyon')) return 'كازيون';
-    if (s.contains('بيم') || s.contains('bim')) return 'بيم';
-    if (s.contains('رجب') || s.contains('ragab')) return 'أولاد رجب';
-    if (s.contains('محلاوي') || s.contains('mahallawy')) return 'المحلاوي';
-    if (s.contains('الراية') || s.contains('raya')) return 'أسواق الراية';
-    if (s.contains('الهواري') || s.contains('hawary') || s.contains('el hawary')) return 'الهواري';
-    if (s.contains('اوسكار') || s.contains('أوسكار') || s.contains('oscar')) return 'أوسكار';
-    if (s.contains('الفار') || s.contains('el far') || s.contains('elfar')) return 'الفار';
-    return rawChain.trim();
+    if (detectRetailChains(rawChain).length > 1) return '';
+    return _firstChain(rawChain) ?? rawChain.trim();
   }
 
   static String normalizeName(String s) {

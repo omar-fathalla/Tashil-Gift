@@ -654,6 +654,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         result: result,
         promotionalRules: activeEvent.promotionalRules,
         allowCampaignMultipliers: activeEvent.allowMultipleChances,
+        maxUnitsPerReceipt: activeEvent.maxChancesPerReceipt,
       );
 
       // Strict Zero-Fallback Rule: If campaign has promotional rules and none are met, reject receipt

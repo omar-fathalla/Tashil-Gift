@@ -34,7 +34,12 @@ const CLAIM_PATCH_KEYS = new Set([
   "is_voucher",
   "chosen_reward_option",
   "chosen_reward_options",
+  "handed_over_confirmed",
 ]);
+
+// 2.0.163: claiming is automatic; the rep's handover tap only confirms. A
+// confirm-only patch (no decrements) may touch these keys after the claim.
+const CONFIRM_PATCH_KEYS = new Set(["handed_over_confirmed", "voucher_serials", "voucher_serial"]);
 
 function assertAppCheck(request) {
   if (!request || request.app == null) {
@@ -411,6 +416,48 @@ exports.setUserRole = onCall(callableOptions, async (request) => {
  * receipts_transactions, then sharded counters. `actor.allowCreateReceipt`
  * lets the WhatsApp webhook insert the receipt inside that transaction.
  */
+/** Sum of quantities in a claimed_gifts array. */
+function claimedUnits(gifts) {
+  if (!Array.isArray(gifts)) return 0;
+  return gifts.reduce((s, g) => {
+    const q = Number(g && g.quantity != null ? g.quantity : 1);
+    return s + (Number.isFinite(q) && q > 0 ? q : 0);
+  }, 0);
+}
+
+/**
+ * Max gift units one receipt may receive: Smart Multipliers OFF => 1,
+ * ON => maxChancesPerReceipt (0 = no cap); further bounded by the receipt's
+ * chances_earned when it is a positive number.
+ */
+// Pieces handed over per ONE offer (max over the event's rules, >= 1). An
+// offer such as "6 bags" counts as one award unit, so the piece limit is
+// units * piecesPerOffer.
+function piecesPerOffer(event) {
+  const rules = Array.isArray(event && event.promotionalRules) ? event.promotionalRules : [];
+  let best = 1;
+  for (const r of rules) {
+    const gifts = Array.isArray(r && r.linkedGifts) ? r.linkedGifts : [];
+    const sum = gifts.reduce((s, g) => s + Math.max(0, Math.floor(Number(g && g.quantity) || 0)), 0);
+    if (sum > best) best = sum;
+  }
+  return best;
+}
+
+// Max gift PIECES this receipt may claim. Switch ON with a cap: cap offers
+// (highest value first on the client). Switch OFF: no cross-offer cap here
+// (each rule is already limited to one offer by the client). Always bounded by
+// the receipt's own chances_earned (offers).
+function receiptUnitLimit(event, receipt, patch) {
+  const allow = event && event.allowMultipleChances === true;
+  const cap = Number(event && event.maxChancesPerReceipt);
+  let units = allow && Number.isFinite(cap) && cap > 0 ? Math.floor(cap) : Infinity;
+  const src = patch && patch.chances_earned != null ? patch.chances_earned : (receipt && receipt.chances_earned);
+  const chances = Number(src);
+  if (Number.isFinite(chances) && chances > 0) units = Math.min(units, Math.floor(chances));
+  return Number.isFinite(units) ? units * piecesPerOffer(event) : Infinity;
+}
+
 async function applyCampaignPrizeClaim(db, input) {
   const eventId = String((input && input.eventId) || "").trim();
   const receiptId = String((input && input.receiptId) || "").trim();
@@ -436,6 +483,14 @@ async function applyCampaignPrizeClaim(db, input) {
       "permission-denied",
       "A receipt id is required to dispense a gift.",
     );
+  }
+
+  const patchKeys = Object.keys(patch);
+  const confirmOnly = decrements.length === 0 && !input.receiptCreate && patchKeys.length > 0 &&
+    patchKeys.every((k) => CONFIRM_PATCH_KEYS.has(k));
+  if (confirmOnly) {
+    if (!receiptId) throw new HttpsError("invalid-argument", "A receipt id is required.");
+    if ("handed_over_confirmed" in patch) patch.handed_over_confirmed = true;
   }
 
   const eventRef = db.collection("events").doc(eventId);
@@ -479,7 +534,11 @@ async function applyCampaignPrizeClaim(db, input) {
             throw new HttpsError("permission-denied", "You can only claim your own receipt.");
           }
         }
-        if (anonymous || partner || system) {
+        if (confirmOnly) {
+          if (receipt.game_played !== true) {
+            throw new HttpsError("failed-precondition", "لم يتم صرف هدية هذه الفاتورة بعد.");
+          }
+        } else if (anonymous || partner || system) {
           const played = receipt.game_played === true;
           const remaining = Number(
             receipt.remaining_chances != null ? receipt.remaining_chances : (receipt.chances_earned || 1),
@@ -488,6 +547,20 @@ async function applyCampaignPrizeClaim(db, input) {
             throw new HttpsError("failed-precondition", "This receipt was already claimed.");
           }
         }
+      }
+    }
+
+    // 2.0.163: max gift UNITS per receipt = min(campaign cap, receipt chances).
+    if (receipt && decrements.length > 0) {
+      const limit = receiptUnitLimit(event, receipt, patch);
+      const already = createdReceipt ? 0 : claimedUnits(receipt.claimed_gifts);
+      const requested = decrements.reduce((s, d) => s + Number(d.count || 0), 0);
+      if (Number.isFinite(limit) && already + requested > limit) {
+        throw new HttpsError(
+          "failed-precondition",
+          `عدد الهدايا المطلوبة (${already + requested}) أكبر من الحد المسموح لهذه الفاتورة (${limit}).`,
+          { reason: "unit_cap_exceeded", limit, requested, already },
+        );
       }
     }
 
@@ -585,7 +658,11 @@ async function applyCampaignPrizeClaim(db, input) {
       const payload = createdReceipt
         ? Object.assign({}, receipt, patch)
         : Object.assign({}, patch);
-      payload.claim_processed_at = admin.firestore.FieldValue.serverTimestamp();
+      if (confirmOnly) {
+        if (payload.handed_over_confirmed) payload.handed_over_confirmed_at = admin.firestore.FieldValue.serverTimestamp();
+      } else {
+        payload.claim_processed_at = admin.firestore.FieldValue.serverTimestamp();
+      }
       // Lets a later restock/refund return stock to the campaign it came from.
       if (pooledSources.length > 0) payload.claim_stock_sources = pooledSources;
       tx.set(receiptRef, payload, { merge: true });
@@ -602,7 +679,50 @@ async function applyCampaignPrizeClaim(db, input) {
 
 exports.applyCampaignPrizeClaim = applyCampaignPrizeClaim;
 
+/** Structured log + receipt marker for a failed claim (no secrets). */
+async function recordClaimFailure(db, data, uid, err) {
+  const code = (err && err.code) || "internal";
+  const message = String((err && err.message) || "").slice(0, 500);
+  const details = err && err.details && typeof err.details === "object" ? err.details : null;
+  console.warn(JSON.stringify({
+    severity: "WARNING",
+    fn: "decrementCampaignPrize",
+    code,
+    message,
+    reason: details && details.reason ? String(details.reason) : null,
+    eventId: String((data && data.eventId) || "").slice(0, 128),
+    receiptId: String((data && data.receiptId) || "").slice(0, 200),
+    uid: uid || null,
+  }));
+  const receiptId = String((data && data.receiptId) || "").trim();
+  if (!db || !receiptId || receiptId.includes("/") || receiptId.length > 200) return;
+  try {
+    // update() never creates a missing receipt.
+    await db.collection("receipts_transactions").doc(receiptId).update({
+      claim_last_error: message,
+      claim_last_error_code: code,
+      claim_last_error_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  } catch (_) {
+    // best effort
+  }
+}
+
 exports.decrementCampaignPrize = onCall(callableOptions, async (request) => {
+  const data = (request && request.data) || {};
+  try {
+    return await decrementCampaignPrizeImpl(request);
+  } catch (err) {
+    const isHttps = err instanceof HttpsError;
+    // Only touch the receipt once the caller passed auth checks.
+    const authed = isHttps && err.code !== "unauthenticated" && err.code !== "permission-denied" && !(err.message || "").includes("App Check");
+    await recordClaimFailure(authed ? admin.firestore() : null, data,
+      request && request.auth ? request.auth.uid : null, err);
+    throw err;
+  }
+});
+
+async function decrementCampaignPrizeImpl(request) {
   assertAppCheck(request);
   assertSignedIn(request);
   const data = request.data || {};
@@ -623,10 +743,11 @@ exports.decrementCampaignPrize = onCall(callableOptions, async (request) => {
       token,
     },
   });
-});
+}
 
 // Non-enumerable so index.js Object.assign does not expose it as a function group.
 Object.defineProperty(exports, "_testing", {
-  value: { NO_BRANCH_STOCK_MESSAGE, findBestPrizeMatchIndex, resolvePrizeIndexForDecrement, storeCodeFromReceiptNumber, branchIdFromStoreCode, findSharedPoolRow, sharedPoolEnabled, applyCampaignPrizeClaim },
+  value: { NO_BRANCH_STOCK_MESSAGE, findBestPrizeMatchIndex, resolvePrizeIndexForDecrement, storeCodeFromReceiptNumber, branchIdFromStoreCode, findSharedPoolRow, sharedPoolEnabled, applyCampaignPrizeClaim, receiptUnitLimit,
+    piecesPerOffer, claimedUnits, recordClaimFailure },
   enumerable: false,
 });

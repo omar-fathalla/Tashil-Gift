@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/utils/claim_retry.dart';
 import 'dart:async';
 import 'dart:math';
 
@@ -146,7 +147,8 @@ class _ScratchCardScreenState extends ConsumerState<ScratchCardScreen> {
 
       if (!widget.isDemo && widget.transactionId.isNotEmpty) {
         final giftsService = ref.read(companyGiftsServiceProvider);
-        await giftsService.decrementCampaignPrize(
+        await runGameClaim(
+          () => giftsService.decrementCampaignPrize(
           widget.eventId,
           _prize,
           branchId: widget.branchId,
@@ -167,6 +169,8 @@ class _ScratchCardScreenState extends ConsumerState<ScratchCardScreen> {
               'isVoucher': p.contains('فواتشر') || p.contains('قسيمة') || p.toLowerCase().contains('voucher'),
             }).toList(),
           },
+        ),
+          isFinalChance: _remainingChances <= 0,
         );
 
         if (_remainingChances == 0 && !_whatsappSent) {
@@ -212,7 +216,7 @@ class _ScratchCardScreenState extends ConsumerState<ScratchCardScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(AppErrorHandler.getFriendlyMessage(e, defaultMessage: 'حدث خطأ أثناء تسجيل الجائزة')),
+          content: Text(AppErrorHandler.claimFailureMessage(e)),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );

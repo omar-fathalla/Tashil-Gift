@@ -1485,6 +1485,7 @@ class _ClientReceiptUploadScreenState
         result: result,
         promotionalRules: _activeEvent!.promotionalRules,
         allowCampaignMultipliers: _activeEvent!.allowMultipleChances,
+        maxUnitsPerReceipt: _activeEvent!.maxChancesPerReceipt,
       );
 
       if (_activeEvent!.promotionalRules.isNotEmpty &&
@@ -1668,8 +1669,15 @@ class _ClientReceiptUploadScreenState
         _aiPhaseText = '3/3 جاري حفظ المعاملة وتجهيز الجائزة...';
       });
 
+      // For rule campaigns chances == capped gift units (highest value first).
+      final int ruleUnits = matchedRulesList.fold<int>(
+        0,
+        (acc, r) => acc + PromotionalRuleMatcher.matchedRuleUnits(r),
+      );
       final int calculatedChances = clampCampaignChances(
-        result.chancesEarned > 0 ? result.chancesEarned : 1,
+        ruleUnits > 0
+            ? ruleUnits
+            : (result.chancesEarned > 0 ? result.chancesEarned : 1),
         allowMultipleChances: _activeEvent!.allowMultipleChances,
         maxChancesPerReceipt: _activeEvent!.maxChancesPerReceipt,
       );

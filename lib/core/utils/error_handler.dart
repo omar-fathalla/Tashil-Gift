@@ -134,7 +134,38 @@ class AppErrorHandler {
 
     return 'حدث خطأ أثناء معالجة بيانات الفاتورة. يرجى التأكد من وضوح الصورة وإعادة المحاولة.';
   }
+
+  /// True when the claim callable says the receipt's gift was already
+  /// dispensed (safe to treat a retried auto-claim as done).
+  static bool isAlreadyClaimedError(dynamic error) {
+    if (error is FirebaseFunctionsException) {
+      final m = (error.message ?? '').toLowerCase();
+      return error.code == 'failed-precondition' && m.contains('already claimed');
+    }
+    return error.toString().toLowerCase().contains('already claimed');
+  }
+
+  /// Real Arabic reason for a failed gift claim (server English messages
+  /// are translated; Arabic server messages are shown as-is).
+  static String claimFailureMessage(dynamic error) {
+    if (error is FirebaseFunctionsException) {
+      final msg = (error.message ?? '').trim();
+      if (RegExp(r'[\u0600-\u06FF]').hasMatch(msg)) return msg;
+      final m = msg.toLowerCase();
+      if (m.contains('already claimed')) return 'تم صرف هدية هذه الفاتورة من قبل.';
+      if (m.contains('not enough prize stock')) return 'رصيد الهدايا في هذا الفرع لا يكفي. يرجى تغذية الرصيد ثم إعادة المحاولة.';
+      if (m.contains('campaign is not active')) return 'الحملة غير نشطة حالياً، لا يمكن صرف الهدايا.';
+      if (m.contains('campaign not found')) return 'الحملة غير موجودة.';
+      if (m.contains('receipt not found')) return 'الفاتورة غير موجودة.';
+      if (m.contains('your own receipt')) return 'لا يمكنك صرف هدية فاتورة سجلها مندوب آخر.';
+      if (m.contains('different campaign')) return 'الفاتورة تابعة لحملة أخرى.';
+      if (m.contains('cannot dispense')) return 'هذا الحساب غير مسموح له بصرف الهدايا.';
+      if (m.contains('app check')) return 'فشل التحقق من التطبيق (App Check). أغلق التطبيق وافتحه ثم أعد المحاولة.';
+      if (m.contains('nothing to claim')) return 'لا توجد هدية لصرفها لهذه الفاتورة.';
+      if (error.code == 'unauthenticated') return 'انتهت جلسة الدخول. سجّل الدخول مرة أخرى ثم أعد المحاولة.';
+      if (error.code == 'unavailable' || error.code == 'deadline-exceeded') return 'تعذر الاتصال بالخادم. تأكد من الإنترنت ثم أعد المحاولة.';
+      return 'تعذر صرف الهدية (${error.code})${msg.isNotEmpty ? ': $msg' : ''}';
+    }
+    return getFriendlyMessage(error, defaultMessage: 'حدث خطأ أثناء صرف الهدية');
+  }
 }
-
-
-

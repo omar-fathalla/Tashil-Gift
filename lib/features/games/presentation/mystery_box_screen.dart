@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/utils/claim_retry.dart';
 import 'dart:async';
 import 'dart:math';
 
@@ -135,7 +136,8 @@ class _MysteryBoxScreenState extends ConsumerState<MysteryBoxScreen>
     if (!widget.isDemo && widget.transactionId.isNotEmpty) {
       try {
         final giftsService = ref.read(companyGiftsServiceProvider);
-        await giftsService.decrementCampaignPrize(
+        await runGameClaim(
+          () => giftsService.decrementCampaignPrize(
           widget.eventId,
           _wonPrize,
           gameType: 'mysteryBox',
@@ -155,12 +157,14 @@ class _MysteryBoxScreenState extends ConsumerState<MysteryBoxScreen>
               'isVoucher': false,
             }],
           },
+        ),
+          isFinalChance: _remainingChances <= 0,
         );
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(AppErrorHandler.getFriendlyMessage(e, defaultMessage: 'حدث خطأ أثناء تسجيل الجائزة')),
+              content: Text(AppErrorHandler.claimFailureMessage(e)),
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
           );

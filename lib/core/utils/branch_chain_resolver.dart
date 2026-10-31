@@ -52,9 +52,40 @@ class BranchChainResolver {
     final nb = b.trim().toLowerCase();
     if (na.isEmpty || nb.isEmpty) return false;
     if (na == nb || na.contains(nb) || nb.contains(na)) return true;
-    return ChainProductsIntelligenceService.normalizeRetailChain(a).toLowerCase() ==
-        ChainProductsIntelligenceService.normalizeRetailChain(b).toLowerCase();
+    final ca = ChainProductsIntelligenceService.normalizeRetailChain(a).toLowerCase();
+    final cb = ChainProductsIntelligenceService.normalizeRetailChain(b).toLowerCase();
+    if (ca.isEmpty || cb.isEmpty) return false;
+    return ca == cb;
   }
+
+  /// Display chain for one branch row. Priority: the branch doc's chain
+  /// (looked up by branch id), then the receipt-detected chain, then the
+  /// campaign chain ONLY when it names a single chain. Empty when unknown.
+  static String resolveBranchDisplayChain({
+    String branchDocChain = '',
+    String receiptChain = '',
+    String campaignChain = '',
+  }) {
+    String norm(String raw) {
+      final r = raw.trim();
+      if (r.isEmpty || r == '-' || r == 'غير محدد') return '';
+      final n = ChainProductsIntelligenceService.normalizeRetailChain(r);
+      return n == 'سلسلة تجارية عامة' ? '' : n;
+    }
+
+    for (final c in [branchDocChain, receiptChain]) {
+      final n = norm(c);
+      if (n.isNotEmpty) return n;
+    }
+    if (ChainProductsIntelligenceService.detectRetailChains(campaignChain).length <= 1) {
+      return norm(campaignChain);
+    }
+    return '';
+  }
+
+  /// Number of distinct branches after merging rows by branch name.
+  static int countMergedBranches(Iterable<String> branchNames) =>
+      branchNames.map((n) => n.trim()).where((n) => n.isNotEmpty).toSet().length;
 
   /// Returns, for each event chain name (in order), the branch labels that
   /// belong to it. Labels are `branchNames[i]` (or the id when no name).

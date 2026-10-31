@@ -377,7 +377,7 @@ class _UnifiedMultiCampaignClaimScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            AppErrorHandler.getFriendlyMessage(e, defaultMessage: 'حدث خطأ أثناء تسليم الجوائز.'),
+            AppErrorHandler.claimFailureMessage(e),
             style: GoogleFonts.cairo(),
           ),
           backgroundColor: Theme.of(context).colorScheme.error,
