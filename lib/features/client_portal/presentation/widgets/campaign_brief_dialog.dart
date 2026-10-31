@@ -13,6 +13,7 @@ import '../../../../core/services/retail_chains_service.dart';
 import '../../../../core/utils/branch_chain_resolver.dart';
 import 'campaign_gift_balance_dialog.dart';
 import 'promoter_invoices_dialog.dart';
+import 'package:al_mraay/core/utils/receipt_date_window.dart';
 
 /// Interactive Material Design 3 Dialog displaying the Campaign Concept, Brief, and Structured Promotional Rules
 class CampaignBriefDialog extends ConsumerStatefulWidget {
@@ -442,8 +443,8 @@ class _CampaignBriefDialogState extends ConsumerState<CampaignBriefDialog> {
   }) {
     final isAr = Localizations.localeOf(context).languageCode == 'ar';
     final dateFormat = DateFormat('yyyy/MM/dd');
-    final startDateStr = event.startDate != null ? dateFormat.format(event.startDate!) : '—';
-    final endDateStr = event.endDate != null ? dateFormat.format(event.endDate!) : '—';
+    final startDateStr = event.startDate != null ? dateFormat.format(campaignFirstDay(event.startDate)!) : '—';
+    final endDateStr = event.endDate != null ? dateFormat.format(campaignLastDay(event.endDate)!) : '—';
 
     return Container(
       padding: EdgeInsets.all(isMobile ? 12 : 16),
@@ -530,7 +531,7 @@ class _CampaignBriefDialogState extends ConsumerState<CampaignBriefDialog> {
                 ),
               _buildInfoBadge(
                 icon: Icons.calendar_month_outlined,
-                label: 'ساري: $startDateStr إلى $endDateStr',
+                label: 'ساري: $startDateStr إلى $endDateStr (آخر يوم شامل)',
                 colorScheme: colorScheme,
               ),
             ],

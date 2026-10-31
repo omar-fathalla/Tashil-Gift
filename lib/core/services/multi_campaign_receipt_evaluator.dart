@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import '../../features/admin/domain/event_model.dart';
 import 'ai_receipt_service.dart';
+import '../utils/receipt_date_window.dart';
 
 /// Result of evaluating a receipt against a single campaign.
 class CampaignQualificationResult {
@@ -137,7 +138,7 @@ class MultiCampaignReceiptEvaluator {
     // 2. Date check
     if (campaign.isExpired) {
       final endStr = campaign.endDate != null
-          ? "${campaign.endDate!.day}/${campaign.endDate!.month}/${campaign.endDate!.year}"
+          ? campaignLastDayLabel(campaign.endDate)
           : "تاريخ الانتهاء";
       final msg = 'انتهت سريان فترة هذه الحملة بتاريخ $endStr.';
       return CampaignQualificationResult(
@@ -149,7 +150,7 @@ class MultiCampaignReceiptEvaluator {
     }
     if (campaign.isNotStartedYet) {
       final startStr = campaign.startDate != null
-          ? "${campaign.startDate!.day}/${campaign.startDate!.month}/${campaign.startDate!.year}"
+          ? campaignFirstDayLabel(campaign.startDate)
           : "تاريخ البدء";
       final msg = 'تبدأ هذه الحملة بتاريخ $startStr.';
       return CampaignQualificationResult(
@@ -157,6 +158,22 @@ class MultiCampaignReceiptEvaluator {
         isQualified: false,
         rejectionReason: msg,
         unfulfilledConditions: [msg],
+      );
+    }
+    // 2.0.162: the receipt's purchase date must fall inside this campaign's
+    // own window (Cairo days, end day inclusive). Multi-scan and admin
+    // re-scans run the AI without dates, so this is where they are checked.
+    final dateMsg = campaignReceiptDateRejection(
+      result.receiptDate,
+      campaign.startDate,
+      campaign.endDate,
+    );
+    if (dateMsg != null) {
+      return CampaignQualificationResult(
+        campaign: campaign,
+        isQualified: false,
+        rejectionReason: dateMsg,
+        unfulfilledConditions: [dateMsg],
       );
     }
 

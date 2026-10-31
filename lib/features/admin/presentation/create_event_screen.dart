@@ -14,6 +14,7 @@ import '../../../core/utils/error_handler.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
 import '../../../core/utils/slug_utils.dart';
 import '../../../core/utils/url_builder.dart';
+import '../../../core/utils/receipt_date_window.dart';
 import '../../../core/constants/country_currency_config.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
@@ -4002,10 +4003,12 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   }
 
   Future<void> _pickDate(bool isStart) async {
-    final initialDate = isStart 
-        ? (_startDate ?? DateTime.now()) 
-        : (_endDate ?? DateTime.now().add(const Duration(days: 30)));
-        
+    // 2.0.162: show and store Cairo calendar days.
+    final initialDate = isStart
+        ? (campaignFirstDay(_startDate) ?? cairoCalendarDay(DateTime.now()))
+        : (campaignLastDay(_endDate) ??
+            cairoCalendarDay(DateTime.now()).add(const Duration(days: 30)));
+
     final picked = await showDatePicker(
       context: context,
       initialDate: initialDate,
@@ -4016,10 +4019,11 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
     if (picked != null) {
       setState(() {
+        // Stored as Cairo 00:00 of the picked day; the end day is inclusive.
         if (isStart) {
-          _startDate = picked;
+          _startDate = pickedDayToCairoInstant(picked);
         } else {
-          _endDate = picked;
+          _endDate = pickedDayToCairoInstant(picked);
         }
       });
     }
@@ -4027,6 +4031,49 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
   Future<void> _saveEvent() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // 2.0.162 (issue #3): block an end day before the start day.
+    final datesError = campaignDatesError(_startDate, _endDate);
+    if (datesError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(datesError, style: GoogleFonts.cairo()),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+      return;
+    }
+    // Warn when an active campaign has no start or end date.
+    final willBeActive = widget.eventToEdit?.isActive ?? true;
+    if (willBeActive && (_startDate == null || _endDate == null)) {
+      final missing = [
+        if (_startDate == null) 'تاريخ البداية',
+        if (_endDate == null) 'آخر يوم في الحملة',
+      ].join(' و');
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('تواريخ الحملة غير مكتملة',
+              style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+          content: Text(
+            'لم يتم تحديد $missing. الحملة مفعّلة، لذلك ستبقى مفتوحة بلا حد '
+            'زمني وتُقبل الفواتير بأي تاريخ. هل تريد الحفظ على أي حال؟',
+            style: GoogleFonts.cairo(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text('رجوع وتحديد التاريخ', style: GoogleFonts.cairo()),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text('حفظ على أي حال', style: GoogleFonts.cairo()),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true || !mounted) return;
+    }
     
     setState(() => _isLoading = true);
     
@@ -5173,7 +5220,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             label: Text(
                               _startDate == null 
                                   ? 'تاريخ البداية: غير محدد' 
-                                  : 'البداية: ${_startDate!.day}/${_startDate!.month}/${_startDate!.year}',
+                                  : 'البداية: ${campaignFirstDayLabel(_startDate)}',
                               style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
                             ),
                             style: OutlinedButton.styleFrom(
@@ -5192,9 +5239,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             onPressed: () => _pickDate(false),
                             icon: Icon(Icons.event_busy_rounded, color: colorScheme.primary),
                             label: Text(
-                              _endDate == null 
-                                  ? 'تاريخ النهاية: غير محدد' 
-                                  : 'النهاية: ${_endDate!.day}/${_endDate!.month}/${_endDate!.year}',
+                              _endDate == null
+                                  ? 'آخر يوم في الحملة: غير محدد'
+                                  : 'آخر يوم في الحملة: ${campaignLastDay(_endDate)!.day}/${campaignLastDay(_endDate)!.month} (شامل)',
                               style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
                             ),
                             style: OutlinedButton.styleFrom(

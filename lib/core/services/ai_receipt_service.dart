@@ -10,6 +10,7 @@ import 'package:al_mraay/features/admin/domain/retail_chain_model.dart';
 import '../config/ai_config.dart';
 import 'gemini_cloud_model.dart';
 import '../utils/arabic_numbers_utils.dart';
+import '../utils/receipt_date_window.dart';
 import '../utils/store_code_branch_resolver.dart';
 import 'campaign_ai_assistant_service.dart';
 import 'company_gifts_service.dart';
@@ -2654,9 +2655,8 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
               endDate: endDate,
             );
             if (parsedDate != null) {
-              if (startDate != null && parsedDate.isBefore(startDate)) {
-                final startStr =
-                    "${startDate.day}/${startDate.month}/${startDate.year}";
+              if (receiptDayBeforeStart(parsedDate, startDate)) {
+                final startStr = campaignFirstDayLabel(startDate);
                 return result.copyWith(
                   isValid: false,
                   durationMs: finalDurationMs,
@@ -2668,10 +2668,9 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                       'تاريخ الشراء بالفاتورة ($rawDateStr) أقدم من تاريخ بداية الحملة ($startStr). الشراء غير مشمول بالعرض.',
                 );
               }
-              if (endDate != null &&
-                  parsedDate.isAfter(endDate.add(const Duration(days: 1)))) {
-                final endStr =
-                    "${endDate.day}/${endDate.month}/${endDate.year}";
+              // 2.0.162: the end day is the last inclusive day (Cairo).
+              if (receiptDayAfterEnd(parsedDate, endDate)) {
+                final endStr = campaignLastDayLabel(endDate);
                 return result.copyWith(
                   isValid: false,
                   durationMs: finalDurationMs,
@@ -2906,6 +2905,9 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
     DateTime? startDate,
     DateTime? endDate,
   }) {
+    // 2.0.162: compare against Cairo calendar days, end day inclusive.
+    final DateTime? sDay = campaignFirstDay(startDate);
+    final DateTime? eDay = campaignLastDay(endDate);
     try {
       // 2.0.155: take only the first date token (ignores a trailing time such
       // as "17:37") and accept '/', '-' or '.' separators. Year-first dates
@@ -2931,13 +2933,13 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
 
           DateTime resolveHealedDate(int y, int m, int d) {
             final direct = DateTime(y, m, d);
-            if (startDate != null && direct.isBefore(startDate)) {
-              final healedYear = startDate.year;
+            if (sDay != null && direct.isBefore(sDay)) {
+              final healedYear = sDay.year;
               if (y != healedYear) {
                 final healedDate = DateTime(healedYear, m, d);
-                final startBound = DateTime(startDate.year, startDate.month, startDate.day);
-                final endBound = endDate != null
-                    ? DateTime(endDate.year, endDate.month, endDate.day).add(const Duration(days: 1))
+                final startBound = DateTime(sDay.year, sDay.month, sDay.day);
+                final endBound = eDay != null
+                    ? DateTime(eDay.year, eDay.month, eDay.day)
                     : DateTime(2100);
                 final tomorrow = DateTime.now().add(const Duration(days: 1));
                 if (!healedDate.isBefore(startBound) &&
@@ -2988,14 +2990,13 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
             return candidateDDMM;
           }
 
-          // Check against campaign window [startDate, endDate]
-          if (startDate != null || endDate != null) {
-            final startBound = startDate != null
-                ? DateTime(startDate.year, startDate.month, startDate.day)
+          // Check against campaign window [sDay, eDay]
+          if (sDay != null || eDay != null) {
+            final startBound = sDay != null
+                ? DateTime(sDay.year, sDay.month, sDay.day)
                 : DateTime(2000);
-            final endBound = endDate != null
-                ? DateTime(endDate.year, endDate.month, endDate.day)
-                    .add(const Duration(days: 1))
+            final endBound = eDay != null
+                ? DateTime(eDay.year, eDay.month, eDay.day)
                 : DateTime(2100);
 
             final bool ddmmInWindow = !candidateDDMM.isBefore(startBound) &&
@@ -3029,13 +3030,13 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
 
           DateTime resolveHealedDate(int y, int m, int d) {
             final direct = DateTime(y, m, d);
-            if (startDate != null && direct.isBefore(startDate)) {
-              final healedYear = startDate.year;
+            if (sDay != null && direct.isBefore(sDay)) {
+              final healedYear = sDay.year;
               if (y != healedYear) {
                 final healedDate = DateTime(healedYear, m, d);
-                final startBound = DateTime(startDate.year, startDate.month, startDate.day);
-                final endBound = endDate != null
-                    ? DateTime(endDate.year, endDate.month, endDate.day).add(const Duration(days: 1))
+                final startBound = DateTime(sDay.year, sDay.month, sDay.day);
+                final endBound = eDay != null
+                    ? DateTime(eDay.year, eDay.month, eDay.day)
                     : DateTime(2100);
                 final tomorrow = DateTime.now().add(const Duration(days: 1));
                 if (!healedDate.isBefore(startBound) &&
@@ -3067,13 +3068,12 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
               return candidateDDMM;
             }
 
-            if (startDate != null || endDate != null) {
-              final startBound = startDate != null
-                  ? DateTime(startDate.year, startDate.month, startDate.day)
+            if (sDay != null || eDay != null) {
+              final startBound = sDay != null
+                  ? DateTime(sDay.year, sDay.month, sDay.day)
                   : DateTime(2000);
-              final endBound = endDate != null
-                  ? DateTime(endDate.year, endDate.month, endDate.day)
-                      .add(const Duration(days: 1))
+              final endBound = eDay != null
+                  ? DateTime(eDay.year, eDay.month, eDay.day)
                   : DateTime(2100);
 
               final bool ddmmInWindow = !candidateDDMM.isBefore(startBound) &&

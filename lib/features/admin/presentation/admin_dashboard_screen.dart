@@ -32,6 +32,7 @@ import 'widgets/voucher_serials_management_dialog.dart';
 import 'widgets/portal_credentials_dialog.dart';
 import '../../../core/services/company_gifts_service.dart';
 import '../../../core/utils/url_builder.dart';
+import '../../../core/utils/receipt_date_window.dart';
 import '../../../core/utils/responsive.dart';
 
 class AdminDashboardScreen extends ConsumerStatefulWidget {
@@ -1601,7 +1602,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 if (event.startDate != null || event.endDate != null)
                   _buildMetadataPill(
                     icon: Icons.calendar_month_rounded,
-                    label: '${isAr ? "الفترة: " : "Period: "}${event.startDate != null ? "${event.startDate!.day}/${event.startDate!.month}/${event.startDate!.year}" : (isAr ? "مفتوح" : "Open")} ${isAr ? "إلى" : "to"} ${event.endDate != null ? "${event.endDate!.day}/${event.endDate!.month}/${event.endDate!.year}" : (isAr ? "مفتوح" : "Open")}',
+                    label: '${isAr ? "الفترة: " : "Period: "}${event.startDate != null ? campaignFirstDayLabel(event.startDate) : (isAr ? "مفتوح" : "Open")} ${isAr ? "إلى" : "to"} ${event.endDate != null ? campaignLastDayLabel(event.endDate) : (isAr ? "مفتوح" : "Open")}',
                     colorScheme: colorScheme,
                     tooltip: isAr ? 'تاريخ بداية ونهاية سريان الحملة' : 'Campaign validity date range',
                   ),

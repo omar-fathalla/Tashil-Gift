@@ -876,8 +876,7 @@ class _ClientReceiptUploadScreenState
       // 1. Check event active dates if single focused campaign mode
       if (!isMultiScan && _activeEvent != null) {
         if (_activeEvent!.isExpired) {
-          final endStr =
-              "${_activeEvent!.endDate!.day}/${_activeEvent!.endDate!.month}/${_activeEvent!.endDate!.year}";
+          final endStr = campaignLastDayLabel(_activeEvent!.endDate);
           _showIssue(
             ReceiptIssueKind.campaignEnded,
             subtitle: _isAr
@@ -888,7 +887,7 @@ class _ClientReceiptUploadScreenState
         }
         if (_activeEvent!.isNotStartedYet) {
           final startStr =
-              "${_activeEvent!.startDate!.day}/${_activeEvent!.startDate!.month}/${_activeEvent!.startDate!.year}";
+              campaignFirstDayLabel(_activeEvent!.startDate);
           _showIssue(
             ReceiptIssueKind.campaignNotStarted,
             subtitle: _isAr

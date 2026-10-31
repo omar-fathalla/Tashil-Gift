@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../core/services/company_gifts_service.dart';
+import '../../../../core/utils/receipt_date_window.dart';
 
 /// Represents a specific quantity of an inventory gift allocated to a promotional rule
 class LinkedGiftAllocation {
@@ -750,15 +751,12 @@ class EventModel {
     this.customAgencyCredentialVersion = 1,
   });
 
-  bool get isExpired {
-    if (endDate == null) return false;
-    return DateTime.now().isAfter(endDate!);
-  }
+  /// 2.0.162: the end day is inclusive in Cairo time; the campaign closes at
+  /// Cairo 00:00 of the following day, whatever the device timezone.
+  bool get isExpired => isCampaignExpired(endDate);
 
-  bool get isNotStartedYet {
-    if (startDate == null) return false;
-    return DateTime.now().isBefore(startDate!);
-  }
+  /// 2.0.162: opens at Cairo 00:00 of the start day.
+  bool get isNotStartedYet => isCampaignNotStarted(startDate);
 
   bool get isWithinValidDates {
     if (!isActive) return false;
