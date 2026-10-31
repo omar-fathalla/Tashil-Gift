@@ -448,8 +448,9 @@ class _ClientReceiptUploadScreenState
 
   Widget _receiptImageErrorFallback({required bool compact}) {
     final isAr = ref.read(localeProvider).languageCode == 'ar';
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
-      color: Colors.grey.shade200,
+      color: colorScheme.surfaceContainerHighest,
       alignment: Alignment.center,
       padding: const EdgeInsets.all(8),
       child: Column(
@@ -458,7 +459,7 @@ class _ClientReceiptUploadScreenState
           Icon(
             Icons.broken_image_outlined,
             size: compact ? 22 : 48,
-            color: Colors.grey.shade600,
+            color: colorScheme.onSurfaceVariant,
           ),
           if (!compact) ...[
             const SizedBox(height: 8),
@@ -467,7 +468,7 @@ class _ClientReceiptUploadScreenState
                   ? 'تعذر عرض المعاينة، الصورة محفوظة وسيتم رفعها'
                   : 'Preview unavailable — the image is saved and will be uploaded',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+              style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 13),
             ),
           ],
         ],

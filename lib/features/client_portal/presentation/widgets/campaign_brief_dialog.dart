@@ -468,17 +468,21 @@ class _CampaignBriefDialogState extends ConsumerState<CampaignBriefDialog> {
             children: [
               Icon(Icons.storefront_rounded, color: colorScheme.primary, size: 18),
               const SizedBox(width: 8),
-              Text(
-                isAr
-                    ? 'الجهات والفروع المشاركة'
-                    : 'Participating organizations & branches',
-                style: GoogleFonts.cairo(
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.primary,
+              Expanded(
+                child: Text(
+                  isAr
+                      ? 'الجهات والفروع المشاركة'
+                      : 'Participating organizations & branches',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.cairo(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.primary,
+                  ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
