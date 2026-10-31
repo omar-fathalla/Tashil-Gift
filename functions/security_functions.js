@@ -29,6 +29,8 @@ const CLAIM_PATCH_KEYS = new Set([
   "remaining_chances",
   "claim_status",
   "claimed_at",
+  "matched_reward_value",
+  "claim_trimmed_to_limit",
   "linked_gifts",
   "unit_value",
   "is_voucher",
@@ -458,10 +460,72 @@ function receiptUnitLimit(event, receipt, patch) {
   return Number.isFinite(units) ? units * piecesPerOffer(event) : Infinity;
 }
 
+
+// 2.0.164: an over-limit request is trimmed (highest unit value first) instead
+// of rejected, so stale clients still hand over exactly the allowed units.
+function decrementUnitValue(d, prizes) {
+  if (typeof d.unitValue === "number" && Number.isFinite(d.unitValue)) return d.unitValue;
+  const id = String(d.prizeIdentifier || "");
+  const row = (prizes || []).find((p) => p && (p.giftId === id || p.name === id || p.giftName === id));
+  const v = Number(row && (row.unitValue != null ? row.unitValue : row.value));
+  return Number.isFinite(v) ? v : 0;
+}
+
+function trimDecrementsToLimit(decrements, allowed, prizes) {
+  const order = decrements.map((d, i) => ({ d, i, v: decrementUnitValue(d, prizes) }))
+    .sort((a, b) => (b.v - a.v) || (a.i - b.i));
+  let left = Math.max(0, Math.floor(allowed));
+  const kept = new Map();
+  for (const { d, i } of order) {
+    const take = Math.min(d.count, left);
+    left -= take;
+    if (take > 0) kept.set(i, Object.assign({}, d, { count: take }));
+  }
+  return decrements.map((_, i) => kept.get(i)).filter(Boolean);
+}
+
+function giftKey(g) {
+  return String((g && (g.giftId || g.giftName || g.name)) || "");
+}
+
+/** Rewrites the client patch so the receipt records only what was granted. */
+function trimPatchToDecrements(patch, granted) {
+  const left = new Map();
+  for (const d of granted) left.set(d.prizeIdentifier, (left.get(d.prizeIdentifier) || 0) + d.count);
+  const total = granted.reduce((s, d) => s + d.count, 0);
+  let gifts = Array.isArray(patch.claimed_gifts) ? patch.claimed_gifts : null;
+  if (gifts) {
+    gifts = gifts.map((g) => {
+      const key = [g && g.giftId, g && g.giftName].find((k) => k && left.has(String(k)));
+      if (!key) return null;
+      const q = Math.min(Number(g.quantity || 1), left.get(String(key)));
+      left.set(String(key), left.get(String(key)) - q);
+      return q > 0 ? Object.assign({}, g, { quantity: q }) : null;
+    }).filter(Boolean);
+    if (gifts.length === 0 && granted.length > 0) {
+      gifts = granted.map((d) => ({ giftId: "", giftName: d.prizeIdentifier, quantity: d.count,
+        unitValue: d.unitValue || 0, isVoucher: d.isVoucher === true }));
+    }
+    patch.claimed_gifts = gifts;
+  }
+  const names = (gifts || granted.map((d) => ({ giftName: d.prizeIdentifier, quantity: d.count })))
+    .map((g) => {
+      const n = String(g.giftName || g.name || giftKey(g));
+      const q = Number(g.quantity || 1);
+      return q > 1 ? `${q} × ${n}` : n;
+    });
+  const summary = names.join(" + ");
+  patch.matched_reward_value = summary;
+  if (typeof patch.prize_won === "string") patch.prize_won = summary;
+  if (Array.isArray(patch.prizes_won)) patch.prizes_won = patch.prizes_won.slice(0, total);
+  patch.claim_trimmed_to_limit = true;
+  return patch;
+}
+
 async function applyCampaignPrizeClaim(db, input) {
   const eventId = String((input && input.eventId) || "").trim();
   const receiptId = String((input && input.receiptId) || "").trim();
-  const decrements = sanitizeDecrements((input && input.decrements) || []);
+  let decrements = sanitizeDecrements((input && input.decrements) || []);
   const patch = sanitizePatch(input && input.receiptPatch);
   const actor = input.actor || {};
   const staff = actor.staff === true;
@@ -551,16 +615,21 @@ async function applyCampaignPrizeClaim(db, input) {
     }
 
     // 2.0.163: max gift UNITS per receipt = min(campaign cap, receipt chances).
+    // 2.0.164: over-limit requests are trimmed, highest value first, no error.
+    let trim = null;
     if (receipt && decrements.length > 0) {
       const limit = receiptUnitLimit(event, receipt, patch);
       const already = createdReceipt ? 0 : claimedUnits(receipt.claimed_gifts);
       const requested = decrements.reduce((s, d) => s + Number(d.count || 0), 0);
       if (Number.isFinite(limit) && already + requested > limit) {
-        throw new HttpsError(
-          "failed-precondition",
-          `عدد الهدايا المطلوبة (${already + requested}) أكبر من الحد المسموح لهذه الفاتورة (${limit}).`,
-          { reason: "unit_cap_exceeded", limit, requested, already },
-        );
+        const allowed = Math.max(0, limit - already);
+        if (allowed <= 0) {
+          throw new HttpsError("failed-precondition", "This receipt was already claimed.",
+            { reason: "unit_cap_exhausted", limit, requested, already });
+        }
+        decrements = trimDecrementsToLimit(decrements, allowed, event.allocatedPrizes);
+        trimPatchToDecrements(patch, decrements);
+        trim = { limit, requested, granted: allowed, already };
       }
     }
 
@@ -667,14 +736,20 @@ async function applyCampaignPrizeClaim(db, input) {
       if (pooledSources.length > 0) payload.claim_stock_sources = pooledSources;
       tx.set(receiptRef, payload, { merge: true });
     }
-    return { applied, hadReceipt: !!receipt };
+    return { applied, hadReceipt: !!receipt, trim };
   });
 
   await Promise.all(decrements.map((decrement) => recordShards(db, eventId, decrement).catch((err) => {
     console.error("Shard increment failed", err);
   })));
 
-  return { ok: true, eventId, receiptId: receiptId || null, applied: result.applied };
+  return {
+    ok: true, eventId, receiptId: receiptId || null, applied: result.applied,
+    trimmed: !!result.trim, limit: result.trim ? result.trim.limit : null,
+    grantedUnits: result.trim ? result.trim.granted : null,
+    matchedRewardValue: result.trim ? patch.matched_reward_value : null,
+    claimedGifts: result.trim ? (patch.claimed_gifts || null) : null,
+  };
 }
 
 exports.applyCampaignPrizeClaim = applyCampaignPrizeClaim;
@@ -748,6 +823,6 @@ async function decrementCampaignPrizeImpl(request) {
 // Non-enumerable so index.js Object.assign does not expose it as a function group.
 Object.defineProperty(exports, "_testing", {
   value: { NO_BRANCH_STOCK_MESSAGE, findBestPrizeMatchIndex, resolvePrizeIndexForDecrement, storeCodeFromReceiptNumber, branchIdFromStoreCode, findSharedPoolRow, sharedPoolEnabled, applyCampaignPrizeClaim, receiptUnitLimit,
-    piecesPerOffer, claimedUnits, recordClaimFailure },
+    piecesPerOffer, claimedUnits, recordClaimFailure, trimDecrementsToLimit, trimPatchToDecrements },
   enumerable: false,
 });

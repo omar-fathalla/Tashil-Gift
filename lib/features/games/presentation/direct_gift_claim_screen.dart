@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/utils/receipt_unit_clamp.dart';
 import 'package:al_mraay/core/utils/claim_retry.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -123,6 +124,8 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
   String? _voucherSerialMode;
   bool? _enableWhatsAppWinnerNotification;
   String? _resolvedCustomerPhone;
+  /// 2.0.164: max pieces this receipt may receive (null = no cap).
+  int? _pieceLimit;
 
   String get _effectiveVoucherSerialMode {
     final m = _voucherSerialMode ?? widget.voucherSerialMode;
@@ -176,11 +179,26 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
     if (_allChoicesMade) _maybeAutoClaim();
   }
 
-  List<LinkedGiftAllocation> get _effectiveLinkedGifts {
+  List<LinkedGiftAllocation> get _rawEffectiveLinkedGifts {
     if (_hasRewardChoice && _allChoicesMade) return _choiceLinkedGifts;
     return (_resolvedLinkedGifts != null && _resolvedLinkedGifts!.isNotEmpty)
         ? _resolvedLinkedGifts!
         : widget.linkedGifts;
+  }
+
+  /// 2.0.164: never show or claim more pieces than the receipt's cap
+  /// (highest value first), so the server never has to trim.
+  List<LinkedGiftAllocation> get _effectiveLinkedGifts =>
+      clampLinkedGiftsToPieces(_rawEffectiveLinkedGifts, _pieceLimit);
+
+  bool get _giftsWereClamped =>
+      _pieceLimit != null && totalPieces(_rawEffectiveLinkedGifts) > _pieceLimit!;
+
+  /// Quantity used when the rule has no linked gifts, clamped to the cap.
+  int get _effectiveQuantity {
+    final q = widget.quantity > 0 ? widget.quantity : 1;
+    if (_pieceLimit != null && _pieceLimit! > 0 && q > _pieceLimit!) return _pieceLimit!;
+    return q;
   }
 
   bool get _effectiveIsVoucher {
@@ -231,8 +249,11 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
   }
 
   String get _effectivePrizeName {
+    if (_giftsWereClamped && _effectiveLinkedGifts.isNotEmpty) {
+      return linkedGiftsSummary(_effectiveLinkedGifts);
+    }
     if (_hasRewardChoice && _allChoicesMade) {
-      return _choiceLinkedGifts.map((g) => g.quantity > 1 ? '${g.quantity} × ${g.giftName}' : g.giftName).join(' + ');
+      return linkedGiftsSummary(_choiceLinkedGifts);
     }
     if (_resolvedPrizeName != null &&
         _resolvedPrizeName!.isNotEmpty &&
@@ -308,7 +329,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
         }
       }
     } else if (_effectiveIsVoucher) {
-      final effectiveQty = widget.quantity > 0 ? widget.quantity : 1;
+      final effectiveQty = _effectiveQuantity;
       for (int i = 0; i < effectiveQty; i++) {
         requiredCards.add((
           giftId: '',
@@ -506,6 +527,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
             _voucherSerialMode = EventModel.resolveVoucherSerialMode(Map<String, dynamic>.from(data));
             _enableWhatsAppWinnerNotification = data['enableWhatsAppWinnerNotification'] != false && data['enable_whatsapp_winner_notification'] != false;
             _remainingStock = foundRemaining >= 0 ? foundRemaining : null;
+            _pieceLimit = receiptPieceLimitFromEvent(Map<String, dynamic>.from(data));
             _resolvedBranchName = branchNameFound;
             final isPlaceholder = widget.prizeName.isEmpty ||
                 widget.prizeName == 'هدية ترويجية مميزة' ||
@@ -707,7 +729,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
     });
 
     try {
-      final effectiveQuantity = widget.quantity > 0 ? widget.quantity : 1;
+      final effectiveQuantity = _effectiveQuantity;
       final finalPrizeName = _effectivePrizeName;
       final finalUnitValue = _effectiveUnitValue;
       final finalIsVoucher = _effectiveIsVoucher;
@@ -896,7 +918,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
     final colorScheme = theme.colorScheme;
     final isAr = ref.isArabic;
     final strings = AppStrings.of(ref);
-    final effectiveQuantity = widget.quantity > 0 ? widget.quantity : 1;
+    final effectiveQuantity = _effectiveQuantity;
     final isOutOfStock = !_hasRewardChoice && _remainingStock != null && _remainingStock! <= 0 && !widget.isDemo;
 
     _syncVoucherSlots();

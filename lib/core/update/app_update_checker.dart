@@ -114,6 +114,35 @@ bool isNewerBuild(String remoteJson, int currentBuild) {
   }
 }
 
+/// 2.0.164: key holding `version|epochMs` of the last forced reload.
+const String kForcedReloadKey = 'update_forced_reload_attempt';
+
+/// Forced reloads for the same remote version are not repeated within this
+/// window, so a CDN still serving the old bundle can never cause a loop.
+const Duration kForcedReloadCooldown = Duration(minutes: 30);
+
+/// 2.0.164: true when a newer build is live and we have not already forced a
+/// reload to that same version recently. Never true when nothing is newer.
+@visibleForTesting
+bool shouldForceReload({
+  required BuildId? remote,
+  required BuildId running,
+  String? lastAttempt,
+  required DateTime now,
+}) {
+  if (remote == null || !(remote > running)) return false;
+  final parts = (lastAttempt ?? '').split('|');
+  if (parts.length == 2) {
+    final v = BuildId.tryParse(parts[0]);
+    final at = int.tryParse(parts[1]);
+    if (v != null && at != null && !(remote > v)) {
+      final age = now.difference(DateTime.fromMillisecondsSinceEpoch(at));
+      if (age >= Duration.zero && age < kForcedReloadCooldown) return false;
+    }
+  }
+  return true;
+}
+
 /// localStorage key (via shared_preferences on web) for the last version the
 /// user dismissed or pressed "تحديث" for.
 const String kUpdateHandledVersionKey = 'update_prompt_handled_version';
@@ -125,9 +154,10 @@ bool isUpdatePromptAllowedForPath(String path) {
   return !kUpdatePromptExcludedPaths.contains(p.toLowerCase());
 }
 
-/// Web-only: polls `/version.json` (served no-cache) and shows a non-blocking
-/// SnackBar with a reload action when a newer build is deployed. It never
-/// reloads automatically.
+/// Web-only: polls `/version.json` (served no-cache). 2.0.164: when a newer
+/// build is live it reloads automatically (never during a scan/save, and at
+/// most once per version per [kForcedReloadCooldown]); otherwise it falls back
+/// to the non-blocking banner.
 class AppUpdateChecker {
   AppUpdateChecker({
     required this.messengerKey,
@@ -143,7 +173,7 @@ class AppUpdateChecker {
 
   void start() {
     if (!kIsWeb || _timer != null) return;
-    Future<void>.delayed(const Duration(seconds: 30), check);
+    Future<void>.delayed(const Duration(seconds: 5), check);
     _timer = Timer.periodic(interval, (_) => check());
   }
 
@@ -167,6 +197,18 @@ class AppUpdateChecker {
       if (res.statusCode != 200) return;
       final remote = BuildId.fromVersionJson(res.body);
       final prefs = await SharedPreferences.getInstance();
+      final now = DateTime.now();
+      if (shouldForceReload(
+          remote: remote,
+          running: BuildId.current,
+          lastAttempt: prefs.getString(kForcedReloadKey),
+          now: now)) {
+        await prefs.setString(
+            kForcedReloadKey, '${remote!}|${now.millisecondsSinceEpoch}');
+        _prompted = true;
+        reloadPage();
+        return;
+      }
       final handled = BuildId.tryParse(prefs.getString(kUpdateHandledVersionKey));
       if (!shouldPromptForUpdate(
           remote: remote, running: BuildId.current, lastHandled: handled)) {

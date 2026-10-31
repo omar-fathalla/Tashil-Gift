@@ -33,19 +33,42 @@ test("receiptUnitLimit: ON uses cap, OFF => chances only, bounded by chances", (
   assert.strictEqual(claimedUnits([{ quantity: 2 }, { quantity: 1 }]), 3);
 });
 
-test("server rejects 4 units when cap is 3 (no stock change)", async () => {
+const rem = (db, i) => db.store.get("events/E").allocatedPrizes[i].remainingQuantity;
+
+test("server trims 4 units to 3 when cap is 3 (no error)", async () => {
   const db = fakeDb({ "events/E": edita(), "receipts_transactions/r1": rcpt() });
-  await assert.rejects(
-    applyCampaignPrizeClaim(db, { eventId: "E", receiptId: "r1", actor, decrements: [{ prizeIdentifier: "g100", count: 4 }], receiptPatch: { game_played: true } }),
-    (e) => e.code === "failed-precondition" && e.details.reason === "unit_cap_exceeded" && e.details.limit === 3,
-  );
-  assert.strictEqual(db.store.get("events/E").allocatedPrizes[0].remainingQuantity, 48);
+  const out = await applyCampaignPrizeClaim(db, { eventId: "E", receiptId: "r1", actor, decrements: [{ prizeIdentifier: "g100", count: 4 }], receiptPatch: { game_played: true } });
+  assert.strictEqual(out.trimmed, true);
+  assert.strictEqual(out.grantedUnits, 3);
+  assert.strictEqual(rem(db, 0), 45);
 });
 
-test("server rejects 5x100+1x50 (the 62/12/250 case)", async () => {
+test("server trims 5x100+1x50 to 3x100 (highest value first)", async () => {
   const db = fakeDb({ "events/E": edita(), "receipts_transactions/r1": rcpt() });
-  await assert.rejects(applyCampaignPrizeClaim(db, { eventId: "E", receiptId: "r1", actor,
-    decrements: [{ prizeIdentifier: "g100", count: 5 }, { prizeIdentifier: "g50", count: 1 }], receiptPatch: { game_played: true } }));
+  await applyCampaignPrizeClaim(db, { eventId: "E", receiptId: "r1", actor,
+    decrements: [{ prizeIdentifier: "g50", count: 1, unitValue: 50 }, { prizeIdentifier: "g100", count: 5, unitValue: 100 }], receiptPatch: { game_played: true } });
+  assert.strictEqual(rem(db, 0), 45);
+  assert.strictEqual(rem(db, 1), 48);
+});
+
+test("Panda: 7 x 'العب مع باندا' with cap 3 => 3 granted, receipt says '3 × ...', no error", async () => {
+  const ev = { companySlug: "370", isActive: true, allowMultipleChances: true, maxChancesPerReceipt: 3, balanceMode: "campaign_only",
+    promotionalRules: [{ linkedGifts: [{ giftId: "GP", giftName: "العب مع باندا", quantity: "1" }] }],
+    allocatedPrizes: [{ giftId: "GP", name: "العب مع باندا", giftType: "product", unitValue: 0, branchId: "b1", remainingQuantity: 100 }] };
+  const db = fakeDb({ "events/E": ev, "receipts_transactions/r1": rcpt({ chances_earned: "3", companySlug: "370" }) });
+  const out = await applyCampaignPrizeClaim(db, { eventId: "E", receiptId: "r1", actor,
+    decrements: [{ prizeIdentifier: "GP", branchId: "b1", count: 7, unitValue: 0, gameType: "directGift" }],
+    receiptPatch: { game_played: true, prize_won: "7 × العب مع باندا", prizes_won: Array(7).fill("العب مع باندا"),
+      claimed_gifts: [{ giftId: "GP", giftName: "العب مع باندا", quantity: 7, unitValue: 0, isVoucher: false }], remaining_chances: 0 } });
+  assert.strictEqual(out.trimmed, true);
+  assert.strictEqual(out.grantedUnits, 3);
+  assert.strictEqual(rem(db, 0), 97);
+  const r = db.store.get("receipts_transactions/r1");
+  assert.strictEqual(r.matched_reward_value, "3 × العب مع باندا");
+  assert.strictEqual(r.prize_won, "3 × العب مع باندا");
+  assert.strictEqual(r.prizes_won.length, 3);
+  assert.strictEqual(r.claimed_gifts[0].quantity, 3);
+  assert.strictEqual(r.claim_trimmed_to_limit, true);
 });
 
 test("server accepts 3 units at cap 3", async () => {
@@ -54,22 +77,27 @@ test("server accepts 3 units at cap 3", async () => {
   assert.strictEqual(db.store.get("events/E").allocatedPrizes[0].remainingQuantity, 45);
 });
 
-test("receipt chances 1 rejects 2 units (the 293/4/218 case)", async () => {
+test("receipt chances 1 trims 2 units to 1 (the 293/4/218 case)", async () => {
   const db = fakeDb({ "events/E": edita(), "receipts_transactions/r1": rcpt({ chances_earned: 1 }) });
-  await assert.rejects(applyCampaignPrizeClaim(db, { eventId: "E", receiptId: "r1", actor,
-    decrements: [{ prizeIdentifier: "g100", count: 2 }], receiptPatch: { game_played: true } }));
+  await applyCampaignPrizeClaim(db, { eventId: "E", receiptId: "r1", actor,
+    decrements: [{ prizeIdentifier: "g100", count: 2 }], receiptPatch: { game_played: true } });
+  assert.strictEqual(rem(db, 0), 47);
 });
 
 test("switch OFF: bounded by the receipt's chances (1 => exactly 1 unit)", async () => {
   const db = fakeDb({ "events/E": edita({ allowMultipleChances: false }), "receipts_transactions/r1": rcpt({ chances_earned: 1 }) });
-  await assert.rejects(applyCampaignPrizeClaim(db, { eventId: "E", receiptId: "r1", actor, decrements: [{ prizeIdentifier: "g100", count: 2 }], receiptPatch: {} }));
-  await applyCampaignPrizeClaim(db, { eventId: "E", receiptId: "r1", actor, decrements: [{ prizeIdentifier: "g100", count: 1 }], receiptPatch: {} });
+  await applyCampaignPrizeClaim(db, { eventId: "E", receiptId: "r1", actor, decrements: [{ prizeIdentifier: "g100", count: 2 }], receiptPatch: {} });
+  assert.strictEqual(rem(db, 0), 47);
 });
 
 test("units already claimed on a multi-chance receipt count toward the cap", async () => {
   const db = fakeDb({ "events/E": edita(), "receipts_transactions/r1": rcpt({ claimed_gifts: [{ giftId: "g100", quantity: 2 }], remaining_chances: 1 }) });
-  await assert.rejects(applyCampaignPrizeClaim(db, { eventId: "E", receiptId: "r1", actor, decrements: [{ prizeIdentifier: "g100", count: 2 }], receiptPatch: {} }));
-  await applyCampaignPrizeClaim(db, { eventId: "E", receiptId: "r1", actor, decrements: [{ prizeIdentifier: "g100", count: 1 }], receiptPatch: {} });
+  const out = await applyCampaignPrizeClaim(db, { eventId: "E", receiptId: "r1", actor, decrements: [{ prizeIdentifier: "g100", count: 2 }],
+    receiptPatch: { game_played: true, remaining_chances: 0 } });
+  assert.strictEqual(out.grantedUnits, 1);
+  assert.strictEqual(rem(db, 0), 47);
+  await assert.rejects(applyCampaignPrizeClaim(db, { eventId: "E", receiptId: "r1", actor, decrements: [{ prizeIdentifier: "g100", count: 1 }], receiptPatch: {} }),
+    (e) => /already claimed/.test(e.message));
 });
 
 test("confirm-only tap after auto-claim: no stock change, marks confirmed", async () => {
