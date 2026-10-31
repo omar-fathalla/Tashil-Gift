@@ -3925,6 +3925,55 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
       );
     }
 
+    // 2.0.165: one-tap اليوم / الكل toggle next to the date menu. Stays in sync
+    // with the menu: shows no selection for هذا الشهر / مخصص.
+    Widget buildQuickDateToggle({bool isMobile = false}) {
+      Widget lbl(String t) => Text(
+            t,
+            style: GoogleFonts.cairo(fontSize: isMobile ? 11.5 : 12, fontWeight: FontWeight.bold),
+          );
+      final selected = <String>{
+        if (_dateFilter == DateFilterType.today) 'today',
+        if (_dateFilter == DateFilterType.all) 'all',
+      };
+      return SegmentedButton<String>(
+        key: const ValueKey('invoices_quick_date_toggle'),
+        segments: [
+          ButtonSegment<String>(
+            value: 'today',
+            label: lbl(isAr ? 'اليوم' : (isHi ? 'आज' : 'Today')),
+            icon: isMobile ? null : const Icon(Icons.today_rounded, size: 16),
+          ),
+          ButtonSegment<String>(
+            value: 'all',
+            label: lbl(isAr ? 'الكل' : (isHi ? 'सभी' : 'All')),
+            icon: isMobile ? null : const Icon(Icons.calendar_today_rounded, size: 16),
+          ),
+        ],
+        selected: selected,
+        emptySelectionAllowed: true,
+        onSelectionChanged: (set) {
+          if (set.isEmpty) return; // tapping the selected one keeps it
+          setState(() {
+            _dateFilter = set.first == 'all' ? DateFilterType.all : DateFilterType.today;
+            _customDateRange = null;
+          });
+          _resetPagination();
+        },
+        showSelectedIcon: !isMobile,
+        style: SegmentedButton.styleFrom(
+          selectedBackgroundColor: colorScheme.primaryContainer,
+          selectedForegroundColor: colorScheme.onPrimaryContainer,
+          backgroundColor: colorScheme.surfaceContainerLow,
+          foregroundColor: colorScheme.onSurfaceVariant,
+          side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.7)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          visualDensity: VisualDensity.compact,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+      );
+    }
+
     Widget buildDatePickerWidget({bool isMobile = false}) {
       final String dateLabel = _getDateFilterLabel(strings);
 
@@ -4208,6 +4257,8 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                       const SizedBox(width: 10),
                       buildBranchPickerWidget(isMobile: false),
                       const SizedBox(width: 10),
+                      buildQuickDateToggle(isMobile: false),
+                      const SizedBox(width: 6),
                       buildDatePickerWidget(isMobile: false),
                       const SizedBox(width: 10),
                       exportCsvButton,
@@ -4254,6 +4305,12 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                 ),
                 const SizedBox(height: 8),
 
+                // 2.0.165: quick اليوم / الكل toggle on its own row (fits 360px).
+                SizedBox(
+                  width: double.infinity,
+                  child: buildQuickDateToggle(isMobile: true),
+                ),
+                const SizedBox(height: 8),
                 // Row 4: (التاريخ + مجموعة أزرار الإجراءات CSV/فلترة/مسح)
                 Row(
                   children: [
