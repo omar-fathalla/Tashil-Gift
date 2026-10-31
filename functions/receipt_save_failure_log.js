@@ -33,7 +33,8 @@ async function logReceiptSaveFailureHandler(db, request) {
   logger.warn("receipt_save_failure", {
     step: clip(data.step, 40),
     code: clip(data.code, 60),
-    message: clip(data.message, 500),
+    // 2.0.156: "message" collides with the log entry's own message field.
+    rawError: clip(data.message, 2000),
     uid,
     authProvider: request.auth ? clip(request.auth.token.firebase && request.auth.token.firebase.sign_in_provider, 40) : "none",
     role: request.auth ? clip(request.auth.token.role, 40) : "",

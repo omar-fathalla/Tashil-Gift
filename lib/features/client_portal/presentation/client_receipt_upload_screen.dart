@@ -19,6 +19,7 @@ import '../../../core/update/app_update_checker.dart';
 import '../../../core/services/receipt_save_failure.dart';
 import '../../../core/utils/receipt_date_window.dart';
 import '../../../core/services/receipt_save_failure_reporter.dart';
+import '../../../core/utils/receipt_run_guard.dart';
 import '../../../core/services/rep_session_guard.dart';
 import 'package:firebase_auth/firebase_auth.dart' show User;
 import '../../../core/services/ai_product_discovery_service.dart';
@@ -140,8 +141,10 @@ class _ClientReceiptUploadScreenState
   /// 2.0.148: if another tab (e.g. partner portal) swaps or clears the shared
   /// Firebase identity, silently return this rep screen to anonymous.
   // 2.0.155: current pipeline step, shown with the error code and logged.
-  String _saveStep = ReceiptSaveStep.session;
-  String _saveReceiptNumber = '';
+  // 2.0.156: state of the current (single, guarded) run.
+  ReceiptRunState _run = ReceiptRunState(step: ReceiptSaveStep.session);
+  final ReceiptRunGuard _runGuard = ReceiptRunGuard();
+  bool _pendingSessionRetry = false;
 
   /// 2.0.155: catalog/branch harvesting writes admin-only collections
   /// (discovered_products_inbox, company_products, chain_products_catalog,
@@ -817,19 +820,31 @@ class _ClientReceiptUploadScreenState
   }
 
   /// 2.0.150+211: holds back the update banner / reload while scanning+saving.
-  Future<void> _submitAndValidateReceipt({bool isSessionRetry = false}) async {
-    UpdatePromptGuard.begin();
-    try {
-      await _submitAndValidateReceiptImpl(isSessionRetry: isSessionRetry);
-    } finally {
-      UpdatePromptGuard.end();
-    }
+  /// 2.0.156: single entry for taps, dialog retry and the silent session
+  /// retry. A call while a run is in progress is ignored; the silent retry is
+  /// awaited inside the same guarded run.
+  Future<void> _submitAndValidateReceipt() async {
+    await _runGuard.run(() async {
+      UpdatePromptGuard.begin();
+      try {
+        _pendingSessionRetry = false;
+        await _submitAndValidateReceiptImpl();
+        if (_pendingSessionRetry && mounted) {
+          _pendingSessionRetry = false;
+          await _submitAndValidateReceiptImpl(isSessionRetry: true);
+        }
+      } finally {
+        _pendingSessionRetry = false;
+        UpdatePromptGuard.end();
+      }
+    });
   }
 
   Future<void> _submitAndValidateReceiptImpl({
     bool isSessionRetry = false,
   }) async {
-    var retryAfterSessionRestore = false;
+    final run = ReceiptRunState(step: ReceiptSaveStep.session);
+    _run = run;
     if (_receiptImages.isEmpty) {
       _showIssue(ReceiptIssueKind.noImage);
       return;
@@ -855,8 +870,6 @@ class _ClientReceiptUploadScreenState
     });
 
     try {
-      _saveStep = ReceiptSaveStep.session;
-      _saveReceiptNumber = '';
       // 2.0.148: make sure this tab still holds an anonymous rep session.
       await _restoreRepSession();
       // 1. Check event active dates if single focused campaign mode
@@ -945,7 +958,7 @@ class _ClientReceiptUploadScreenState
       Map<String, String> catalogBarcodeMap = {};
       List<BranchModel> chainBranches = [];
 
-      _saveStep = ReceiptSaveStep.lookup;
+      run.step = ReceiptSaveStep.lookup;
       try {
         final results = await Future.wait([
           productsService
@@ -1036,7 +1049,7 @@ class _ClientReceiptUploadScreenState
                 ));
 
       // Run Gemini AI analysis
-      _saveStep = ReceiptSaveStep.ai;
+      run.step = ReceiptSaveStep.ai;
       final result = await aiService
           .analyzeReceiptImage(
             bytes,
@@ -1187,7 +1200,7 @@ class _ClientReceiptUploadScreenState
       }
 
       final candidateReceiptNumber = result.receiptNumber.trim();
-      _saveReceiptNumber = candidateReceiptNumber;
+      run.receiptNumber = candidateReceiptNumber;
       // 2.0.148: never save a receipt without a readable number (it would
       // collide on rcpt_{campaignId}_UNKNOWN). Ask for a clearer photo.
       if (isUnusableReceiptNumber(candidateReceiptNumber)) {
@@ -1200,7 +1213,7 @@ class _ClientReceiptUploadScreenState
         );
         return;
       }
-      _saveStep = ReceiptSaveStep.dupCheck;
+      run.step = ReceiptSaveStep.dupCheck;
       {
         final duplicateCheck =
             await ReceiptDeduplicationHelper.checkReceiptDuplicate(
@@ -1247,7 +1260,7 @@ class _ClientReceiptUploadScreenState
           final List<String> uploadedImageUrls = [];
           final List<String> uploadedStoragePaths = [];
 
-          _saveStep = ReceiptSaveStep.storage;
+          run.step = ReceiptSaveStep.storage;
           await Future.wait(
             List.generate(allBytesList.length, (index) async {
               final partNum = index + 1;
@@ -1590,7 +1603,7 @@ class _ClientReceiptUploadScreenState
 
       final List<String> uploadedImageUrls = [];
       final List<String> uploadedStoragePaths = [];
-      _saveStep = ReceiptSaveStep.storage;
+      run.step = ReceiptSaveStep.storage;
 
       await Future.wait(
         List.generate(allBytesList.length, (index) async {
@@ -1718,7 +1731,7 @@ class _ClientReceiptUploadScreenState
       transactionData['prize_won'] = null;
       String? replaceMode;
       if (existingExact != null) {
-        _saveStep = ReceiptSaveStep.replace;
+        run.step = ReceiptSaveStep.replace;
         replaceMode = await ReceiptDeduplicationHelper.replaceReceipt(
           campaignId: _activeEvent!.id,
           receiptNumber: receiptNumber,
@@ -1752,11 +1765,11 @@ class _ClientReceiptUploadScreenState
         }
       }
       try {
-        _saveStep = ReceiptSaveStep.save;
+        run.step = ReceiptSaveStep.save;
         if (replaceMode != 'reupload') {
           await transactionRef.set(transactionData);
         }
-        _saveStep = ReceiptSaveStep.after;
+        run.step = ReceiptSaveStep.after;
       } on FirebaseException catch (e) {
         if (!ReceiptDeduplicationHelper.isDuplicateWriteDenied(e) &&
             receiptErrorCode(e) != 'unauthenticated') {
@@ -2124,18 +2137,18 @@ class _ClientReceiptUploadScreenState
           // 2.0.155: log the first failure too (the retry may hide it).
           unawaited(
             reportReceiptSaveFailure(
-              step: 'first_try:$_saveStep',
+              step: 'first_try:${run.step}',
               code: repErrorCode(e),
               error:
                   '$e | ${stack.toString().split('\n').take(8).join(' <- ')}',
               uid: ref.read(firebaseAuthProvider).currentUser?.uid,
-              receiptNumber: _saveReceiptNumber,
+              receiptNumber: run.receiptNumber,
               campaignId: _activeEvent?.id,
               companySlug: _activeEvent?.companySlug,
             ),
           );
           await _restoreRepSession(forceRefresh: true);
-          retryAfterSessionRestore = true;
+          _pendingSessionRetry = true;
           return;
         }
         final kind = classifyReceiptException(e);
@@ -2169,9 +2182,6 @@ class _ClientReceiptUploadScreenState
           _aiPhase = 0;
           _aiPhaseText = '';
         });
-      }
-      if (retryAfterSessionRestore && mounted) {
-        unawaited(_submitAndValidateReceipt(isSessionRetry: true));
       }
     }
   }
@@ -2290,7 +2300,7 @@ class _ClientReceiptUploadScreenState
         ReceiptIssueKind.wrongBranch,
       _ => ReceiptIssueKind.permission,
     };
-    final step = _saveStep;
+    final step = _run.step;
     final ev = _activeEvent;
     unawaited(
       reportReceiptSaveFailure(
@@ -2299,7 +2309,7 @@ class _ClientReceiptUploadScreenState
         error:
             '${f.kind.name}${f.field == null ? '' : ' field=${f.field}'} | ${rawError ?? ''} | ${stack == null ? '' : stack.toString().split('\n').take(8).join(' <- ')}',
         uid: ref.read(firebaseAuthProvider).currentUser?.uid,
-        receiptNumber: _saveReceiptNumber,
+        receiptNumber: _run.receiptNumber,
         campaignId: ev?.id,
         companySlug: ev?.companySlug,
       ),
