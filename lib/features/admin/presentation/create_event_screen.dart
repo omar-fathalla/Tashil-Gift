@@ -205,7 +205,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           : '',
     );
     _requiredProductsController = TextEditingController(text: e?.requiredProducts.join(', ') ?? '');
-    _allowMultipleChances = e?.allowMultipleChances ?? false;
+    _allowMultipleChances = e?.allowMultipleChances ?? true;
     _multiplierBasis = e?.multiplierBasis ?? 'both';
     _requireVoucherSerials = e?.requireVoucherSerials ?? false;
     _allowComplementaryReceipts = e?.allowComplementaryReceipts ?? false;
@@ -215,9 +215,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     _customAgencyPasswordController = TextEditingController(text: e?.customAgencyPassword ?? '');
     _customAgencyCredentialVersion = e?.customAgencyCredentialVersion ?? 1;
     _maxChancesController = TextEditingController(
-      text: (e?.maxChancesPerReceipt != null && e!.maxChancesPerReceipt > 0)
-          ? e.maxChancesPerReceipt.toString()
-          : '',
+      text: e == null
+          ? '3'
+          : ((e.maxChancesPerReceipt > 0) ? e.maxChancesPerReceipt.toString() : ''),
     );
 
     _startDate = e?.startDate;
@@ -2804,7 +2804,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     String conditionType = existingRule?.conditionType ?? 'by_quantity';
     String rewardType = existingRule?.rewardType ?? 'free_product';
     String? selectedRuleGameType = existingRule?.gameType;
-    bool allowMultipliers = existingRule?.allowMultipliers ?? true;
     List<String> selectedProductIds = List<String>.from(existingRule?.selectedProductIds ?? []);
     List<String> selectedBarcodes = List<String>.from(existingRule?.selectedBarcodes ?? []);
     List<String> selectedProductNames = List<String>.from(existingRule?.selectedProductNames ?? []);
@@ -3784,17 +3783,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         ),
                         const SizedBox(height: 12),
                       ],
-
-                      SwitchListTile(
-                        title: Text(
-                          strings.multipliersAllowedLabel,
-                          style: GoogleFonts.cairo(fontSize: 13),
-                        ),
-                        value: allowMultipliers,
-                        contentPadding: EdgeInsets.zero,
-                        dense: true,
-                        onChanged: (v) => setDialogState(() => allowMultipliers = v),
-                      ),
                     ],
                   ),
                 ),
@@ -3849,7 +3837,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       rewardType: rewardType,
                       rewardValue: rewardVal.isNotEmpty ? rewardVal : title,
                       rewardAmount: rewardAmt,
-                      allowMultipliers: allowMultipliers,
+                      allowMultipliers: existingRule?.allowMultipliers ?? _allowMultipleChances,
                       linkedGiftId: finalLinkedGifts.isNotEmpty ? finalLinkedGifts.first.giftId : selectedGift?.id,
                       linkedGiftName: finalLinkedGifts.isNotEmpty
                           ? finalLinkedGifts.map((d) => d.quantity > 1 ? '${d.quantity}x ${d.giftName}' : d.giftName).join(' + ')
@@ -4692,6 +4680,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   title: 'البيانات الأساسية للحملة',
                   subtitle: 'حدد اسم الحملة، الشركة المستهدفة، وشروط الإنفاق',
                   children: [
+                    _buildMultipleChancesSection(context, colorScheme, isMobile, activeCountry),
+                    const SizedBox(height: 16),
                     TextFormField(
                       controller: _eventNameController,
                       style: GoogleFonts.cairo(),
@@ -5013,7 +5003,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       ],
                     ),
                     _buildProductSelectorSection(context, colorScheme, isMobile),
-                    _buildMultipleChancesSection(context, colorScheme, isMobile, activeCountry),
                     _buildVoucherSerialsSettingSection(context, colorScheme, isMobile),
                     _buildComplementaryReceiptsSettingSection(context, colorScheme, isMobile),
                     _buildWhatsAppWinnerNotificationSettingSection(context, colorScheme, isMobile),
@@ -5903,7 +5892,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'منح العميل فرص سحب أو جوائز إضافية عند تكرار شراء كميات المنتجات المشروطة أو مضاعفة قيمة الفاتورة.',
+                      'الزرار الوحيد لفتح وإغلاق المضاعفة على الحملة كلها. قواعد العروض تفضل كما هي، وشرائح الإنفاق المحددة لا تتضاعف.',
                       style: GoogleFonts.cairo(
                         fontSize: 12,
                         color: colorScheme.onSurfaceVariant,
@@ -5918,6 +5907,12 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                 onChanged: (val) {
                   setState(() {
                     _allowMultipleChances = val;
+                    _promotionalRules = [
+                      for (final rule in _promotionalRules)
+                        rule.hasSpendRange
+                            ? rule.copyWith(allowMultipliers: false)
+                            : rule.copyWith(allowMultipliers: val),
+                    ];
                     _updatePromptForMultipleChances(val);
                   });
                 },
