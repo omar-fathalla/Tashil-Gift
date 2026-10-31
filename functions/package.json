@@ -15,6 +15,6 @@
   "private": true,
   "scripts": {
     "bootstrap:super-admin": "node scripts/bootstrap-super-admin.js",
-    "test": "node --test test/rate_limit.test.js test/waha_webhook.test.js test/receipt_verification.test.js test/whatsapp_webhook_admin.test.js test/partner_portal.test.js test/branch_allocations.test.js test/prize_branch_resolution.test.js test/list_branch_receipts.test.js test/receipt_duplicate_exact.test.js test/shared_prize_pool.test.js test/receipt_replace.test.js && node test/gemini_gateway_test.js"
+    "test": "node --test test/rate_limit.test.js test/waha_webhook.test.js test/receipt_verification.test.js test/whatsapp_webhook_admin.test.js test/partner_portal.test.js test/branch_allocations.test.js test/prize_branch_resolution.test.js test/list_branch_receipts.test.js test/receipt_duplicate_exact.test.js test/shared_prize_pool.test.js test/receipt_replace.test.js test/winner_whatsapp_message.test.js && node test/gemini_gateway_test.js"
   }
 }

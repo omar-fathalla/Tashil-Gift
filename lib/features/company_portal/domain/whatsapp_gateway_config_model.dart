@@ -72,13 +72,13 @@ class WhatsAppGatewayConfigModel {
   final bool autoNotifyWinnersOnGiftHandover;
   final String winnerNotificationTemplate;
 
+  // 2.0.157: no gift/prize name in the customer message.
   static const String defaultWinnerTemplate =
-      '🎉 ألف مبروك يا {customer_name}! 🎁\n'
+      '🎉 ألف مبروك يا {customer_name}! كسبت معانا 🎁\n'
       '📱 رقم الواتساب: {phone}\n\n'
       'يسر {retail_chain} - {branch_name}\n'
       'بالتعاون مع {company_name}\n'
-      'تهنئتكم بالفوز بـ:\n'
-      '✨ {prize_name} ✨\n'
+      'تهنئتكم بالفوز معانا! 🎉\n'
       '{voucher_details}'
       '📌 تفاصيل المشاركة:\n'
       '• الحملة: {campaign_name}\n'

@@ -10,13 +10,13 @@ const { FieldValue } = require("firebase-admin/firestore");
 const { consumeRateLimit, clientKey, RateLimitError } = require("./rate_limit");
 
 // Same default as WhatsAppGatewayConfigModel.defaultWinnerTemplate (client).
+// 2.0.157: no gift/prize name in the customer message (all companies).
 const DEFAULT_TEMPLATE =
-  "🎉 ألف مبروك يا {customer_name}! 🎁\n" +
+  "🎉 ألف مبروك يا {customer_name}! كسبت معانا 🎁\n" +
   "📱 رقم الواتساب: {phone}\n\n" +
   "يسر {retail_chain} - {branch_name}\n" +
   "بالتعاون مع {company_name}\n" +
-  "تهنئتكم بالفوز بـ:\n" +
-  "✨ {prize_name} ✨\n" +
+  "تهنئتكم بالفوز معانا! 🎉\n" +
   "{voucher_details}" +
   "📌 تفاصيل المشاركة:\n" +
   "• الحملة: {campaign_name}\n" +
@@ -91,9 +91,24 @@ function formatClaimDate(v) {
   return `${p.year}/${p.month}/${p.day} - ${p.hour}:${p.minute} ${s(p.dayPeriod).toLowerCase() === "pm" ? "م" : "ص"}`;
 }
 
+/**
+ * 2.0.157: the customer message never names the gift. Company templates saved
+ * in Firestore may still contain {prize_name}; it is removed, and lines left
+ * empty or only decoration (e.g. "✨  ✨") or the old "بالفوز بـ:" lead-in are
+ * replaced/dropped.
+ */
+function stripPrizeFromTemplate(template) {
+  return template.split("\n").map((line) => {
+    if (!line.includes("{prize_name}") && !/بالفوز\s*بـ\s*:?\s*$/.test(line)) return line;
+    if (/بالفوز\s*بـ\s*:?\s*$/.test(line)) return line.replace(/بالفوز\s*بـ\s*:?\s*$/, "بالفوز معانا! 🎉");
+    const rest = line.split("{prize_name}").join("");
+    return /[\p{L}\p{N}{]/u.test(rest) ? rest.replace(/\s{2,}/g, " ") : null;
+  }).filter((l) => l !== null).join("\n");
+}
+
 function buildMessage(template, f) {
   const voucherDetails = f.serials.length ? `🎟️ كود الفواتشر / الرقم التسلسلي: ${f.serials.join(" ، ")}\n` : "";
-  return (s(template) || DEFAULT_TEMPLATE)
+  return stripPrizeFromTemplate(s(template) || DEFAULT_TEMPLATE)
     .split("{customer_name}").join(f.customerName || "عميلنا العزيز")
     .split("{phone}").join(f.phone || "")
     .split("{whatsapp}").join(f.phone || "")
@@ -101,8 +116,7 @@ function buildMessage(template, f) {
     .split("{branch_name}").join(f.branch)
     .split("{company_name}").join(f.company || "إدارة العروض الترويجية")
     .split("{campaign_name}").join(f.campaign || "حملة الهدايا الفورية")
-    .split("{prize_name}").join(f.prize)
-    .split("{voucher_details}").join(voucherDetails)
+        .split("{voucher_details}").join(voucherDetails)
     .split("{voucher_code}").join(f.serials[0] || "")
     .split("{receipt_number}").join(f.receipt || "بون الشراء المعتمد")
     .split("{claim_date}").join(f.claimDate);
@@ -229,4 +243,4 @@ async function sendWinnerWhatsAppHandler(db, request, apiKey) {
   return { sent: false, reason: res.code, recipientPhone: s(d.customerPhone || phone) };
 }
 
-module.exports = { sendWinnerWhatsAppHandler, buildMessage, formatInternationalPhone, isWinner, giftInfo, formatClaimDate };
+module.exports = { sendWinnerWhatsAppHandler, buildMessage, stripPrizeFromTemplate, DEFAULT_TEMPLATE, formatInternationalPhone, isWinner, giftInfo, formatClaimDate };

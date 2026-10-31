@@ -1048,7 +1048,6 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                           '{branch_name}',
                           '{company_name}',
                           '{campaign_name}',
-                          '{prize_name}',
                           '{voucher_details}',
                           '{receipt_number}',
                           '{claim_date}',

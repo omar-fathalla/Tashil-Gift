@@ -73,7 +73,8 @@ class WhatsAppWinnerNotificationService {
         ? config.winnerNotificationTemplate
         : WhatsAppGatewayConfigModel.defaultWinnerTemplate;
 
-    return template
+    // 2.0.157: never name the gift (old saved templates included).
+    return stripPrizeFromWinnerTemplate(template)
         .replaceAll('{customer_name}', effectiveName)
         .replaceAll('{phone}', (customerPhone ?? '').trim())
         .replaceAll('{whatsapp}', (customerPhone ?? '').trim())
@@ -81,7 +82,6 @@ class WhatsAppWinnerNotificationService {
         .replaceAll('{branch_name}', effectiveBranch)
         .replaceAll('{company_name}', effectiveCompany)
         .replaceAll('{campaign_name}', effectiveCampaign)
-        .replaceAll('{prize_name}', prizeName.trim())
         .replaceAll('{voucher_details}', voucherDetails)
         .replaceAll('{voucher_code}', voucherSerials.isNotEmpty ? voucherSerials.first : '')
         .replaceAll('{receipt_number}', effectiveReceiptNumber)
@@ -337,4 +337,27 @@ class WhatsAppWinnerNotificationService {
       return (handled: true, result: WhatsAppGatewayResult.failure(error: e.toString(), statusCode: 500, recipientPhone: phone));
     }
   }
+}
+
+/// 2.0.157: removes {prize_name} from a winner template (same rules as the
+/// server's stripPrizeFromTemplate). Lines left empty or only decoration are
+/// dropped; the old "بالفوز بـ:" lead-in becomes "بالفوز معانا! 🎉".
+String stripPrizeFromWinnerTemplate(String template) {
+  final lead = RegExp(r'بالفوز\s*بـ\s*:?\s*$');
+  final out = <String>[];
+  for (final line in template.split('\n')) {
+    if (lead.hasMatch(line)) {
+      out.add(line.replaceFirst(lead, 'بالفوز معانا! 🎉'));
+      continue;
+    }
+    if (!line.contains('{prize_name}')) {
+      out.add(line);
+      continue;
+    }
+    final rest = line.replaceAll('{prize_name}', '');
+    if (RegExp(r'[\p{L}\p{N}{]', unicode: true).hasMatch(rest)) {
+      out.add(rest.replaceAll(RegExp(r'\s{2,}'), ' '));
+    }
+  }
+  return out.join('\n');
 }
