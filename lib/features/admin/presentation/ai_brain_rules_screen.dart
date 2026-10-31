@@ -89,7 +89,7 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
         allDirectives.where((d) => d.isGloballyActive).length;
     final canPop = Navigator.of(context).canPop();
 
-    final modelConfig = ref.watch(aiModelConfigStreamProvider).value;
+    final modelConfig = ref.watch(aiModelConfigStreamProvider).valueOrNull;
     final activeModelName =
         modelConfig?.effectivePrimaryModel ?? AiModels.defaultPrimary;
     final activeAgentMode = modelConfig?.mode ?? AiAgentMode.standardVision;

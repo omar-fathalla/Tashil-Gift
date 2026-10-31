@@ -34,7 +34,7 @@ class _AiModelSwitcherDialogState extends ConsumerState<AiModelSwitcherDialog> {
   @override
   void initState() {
     super.initState();
-    final currentConfig = ref.read(aiModelConfigStreamProvider).value ?? const AiModelConfig();
+    final currentConfig = ref.read(aiModelConfigStreamProvider).valueOrNull ?? const AiModelConfig();
     _selectedPrimaryModel = currentConfig.primaryModel;
     _selectedFallbackModel = currentConfig.fallbackModel;
     _selectedAgentMode = currentConfig.agentMode;

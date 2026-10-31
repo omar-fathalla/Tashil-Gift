@@ -10,7 +10,7 @@ import 'ai_model_config_service.dart';
 
 final aiBrainCoPilotServiceProvider = Provider<AiBrainCoPilotService>((ref) {
   final directivesService = ref.watch(aiDirectivesServiceProvider);
-  final config = ref.watch(aiModelConfigStreamProvider).value;
+  final config = ref.watch(aiModelConfigStreamProvider).valueOrNull;
   return AiBrainCoPilotService(
     directivesService,
     modelName: config?.effectivePrimaryModel ?? AiConfig.primaryModel,

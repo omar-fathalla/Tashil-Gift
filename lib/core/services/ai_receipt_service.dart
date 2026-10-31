@@ -16,7 +16,7 @@ import 'company_gifts_service.dart';
 import 'ai_model_config_service.dart';
 
 final aiReceiptServiceProvider = Provider<AiReceiptService>((ref) {
-  final config = ref.watch(aiModelConfigStreamProvider).value;
+  final config = ref.watch(aiModelConfigStreamProvider).valueOrNull;
   return AiReceiptService(
     modelName: config?.effectivePrimaryModel ?? AiConfig.primaryModel,
     fastTierModelName: config?.fastTierModel ?? AiConfig.fastTierModel,

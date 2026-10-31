@@ -765,7 +765,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
               text: analysisText,
               timestamp: DateTime.now(),
               durationSeconds: 2.1,
-              modelNameUsed: ref.read(aiModelConfigStreamProvider).value?.effectivePrimaryModel,
+              modelNameUsed: ref.read(aiModelConfigStreamProvider).valueOrNull?.effectivePrimaryModel,
             ),
           );
           _isLoading = false;
@@ -934,7 +934,7 @@ class _AiBrainCoPilotStudioWidgetState extends ConsumerState<AiBrainCoPilotStudi
   }
 
   Widget _buildStudioHeaderBar(ColorScheme colorScheme, bool isAr, int directivesCount) {
-    final modelConfig = ref.watch(aiModelConfigStreamProvider).value;
+    final modelConfig = ref.watch(aiModelConfigStreamProvider).valueOrNull;
     final activeModelName = modelConfig?.effectivePrimaryModel ?? AiModels.defaultPrimary;
     final activeMode = modelConfig?.mode ?? AiAgentMode.standardVision;
 

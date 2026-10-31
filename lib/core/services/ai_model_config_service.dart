@@ -1,4 +1,6 @@
 import 'package:al_mraay/core/constants/ai_models.dart';
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -307,7 +309,49 @@ final aiModelConfigServiceProvider = Provider<AiModelConfigService>((ref) {
   return AiModelConfigService(scopedFirestore());
 });
 
+/// 2.0.159: `system_settings/ai_engine` is admin-only. Signed-out and
+/// anonymous users (reps) never subscribe and get the default config; any
+/// stream error (e.g. permission-denied for partners) also becomes the default
+/// config, so readers of this provider never rethrow a Firestore error.
 final aiModelConfigStreamProvider = StreamProvider<AiModelConfig>((ref) {
   final service = ref.watch(aiModelConfigServiceProvider);
-  return service.streamConfig();
+  return scopedAuth().authStateChanges().asyncExpand(
+        (user) => aiConfigStreamForUser(
+          signedIn: user != null,
+          isAnonymous: user?.isAnonymous ?? false,
+          source: service.streamConfig,
+        ),
+      );
 });
+
+/// Pure helper (unit-tested): picks the config stream for a user.
+Stream<AiModelConfig> aiConfigStreamForUser({
+  required bool signedIn,
+  required bool isAnonymous,
+  required Stream<AiModelConfig> Function() source,
+}) {
+  if (!signedIn || isAnonymous) return Stream.value(const AiModelConfig());
+  return safeAiConfigStream(source());
+}
+
+/// Errors (e.g. permission-denied) become the default config, once.
+Stream<AiModelConfig> safeAiConfigStream(Stream<AiModelConfig> src) {
+  late StreamController<AiModelConfig> c;
+  StreamSubscription<AiModelConfig>? sub;
+  c = StreamController<AiModelConfig>(
+    onListen: () {
+      sub = src.listen(
+        c.add,
+        onError: (Object e, StackTrace st) {
+          debugPrint('AI config stream unavailable, using defaults: $e');
+          c.add(const AiModelConfig());
+          sub?.cancel();
+          c.close();
+        },
+        onDone: c.close,
+      );
+    },
+    onCancel: () => sub?.cancel(),
+  );
+  return c.stream;
+}
