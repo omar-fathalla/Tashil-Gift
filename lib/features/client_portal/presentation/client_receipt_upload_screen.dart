@@ -1068,7 +1068,11 @@ class _ClientReceiptUploadScreenState
             startDate: isMultiScan ? null : _activeEvent!.startDate,
             endDate: isMultiScan ? null : _activeEvent!.endDate,
             customPrompt: isMultiScan ? '' : _activeEvent!.customPrompt,
-            allowMultipleChances: true,
+            // Multi-scan keeps true here; the per-campaign evaluator applies
+            // each campaign's own switch and cap afterwards.
+            allowMultipleChances: isMultiScan
+                ? true
+                : _activeEvent!.allowMultipleChances,
             multiplierBasis: isMultiScan
                 ? 'both'
                 : _activeEvent!.multiplierBasis,
@@ -1664,9 +1668,11 @@ class _ClientReceiptUploadScreenState
         _aiPhaseText = '3/3 جاري حفظ المعاملة وتجهيز الجائزة...';
       });
 
-      final int calculatedChances = result.chancesEarned > 0
-          ? result.chancesEarned
-          : 1;
+      final int calculatedChances = clampCampaignChances(
+        result.chancesEarned > 0 ? result.chancesEarned : 1,
+        allowMultipleChances: _activeEvent!.allowMultipleChances,
+        maxChancesPerReceipt: _activeEvent!.maxChancesPerReceipt,
+      );
       final DocumentReference<Map<String, dynamic>> transactionRef = firestore
           .collection('receipts_transactions')
           .doc(deterministicDocId);
@@ -1845,9 +1851,13 @@ class _ClientReceiptUploadScreenState
             : (prizeNames.isNotEmpty ? prizeNames.first : 'هدية ترويجية مميزة'),
       );
       // Composite bundle chances govern (AIR-83)
-      final totalChances = compositeBundle.matchedRules.isNotEmpty
-          ? compositeBundle.totalChances
-          : (result.chancesEarned > 0 ? result.chancesEarned : 1);
+      final totalChances = clampCampaignChances(
+        compositeBundle.matchedRules.isNotEmpty
+            ? compositeBundle.totalChances
+            : (result.chancesEarned > 0 ? result.chancesEarned : 1),
+        allowMultipleChances: _activeEvent!.allowMultipleChances,
+        maxChancesPerReceipt: _activeEvent!.maxChancesPerReceipt,
+      );
 
       final ruleLevelGame =
           (compositeBundle.resolvedGameType != null &&

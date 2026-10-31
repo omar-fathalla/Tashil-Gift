@@ -1881,7 +1881,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'free_product',
         rewardValue: matchedGift.giftName,
         rewardAmount: 0.0,
-        allowMultipliers: true,
         linkedGiftId: matchedGift.id,
         linkedGiftName: matchedGift.giftName,
         linkedGifts: [
@@ -1912,7 +1911,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'free_product',
         rewardValue: matchedGift.giftName,
         rewardAmount: 0.0,
-        allowMultipliers: true,
         linkedGiftId: matchedGift.id,
         linkedGiftName: matchedGift.giftName,
         linkedGifts: [
@@ -1943,7 +1941,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'free_product',
         rewardValue: matchedGift.giftName,
         rewardAmount: 0.0,
-        allowMultipliers: true,
         linkedGiftId: matchedGift.id,
         linkedGiftName: matchedGift.giftName,
         linkedGifts: [
@@ -1962,7 +1959,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 50 ج.م',
         rewardAmount: 50.0,
-        allowMultipliers: true,
         linkedGifts: decomposed,
         linkedGiftId: decomposed.firstOrNull?.giftId,
         linkedGiftName: decomposed.firstOrNull?.giftName,
@@ -1979,7 +1975,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 125 ج.م',
         rewardAmount: 125.0,
-        allowMultipliers: true,
         linkedGifts: decomposed,
         linkedGiftId: decomposed.firstOrNull?.giftId,
         linkedGiftName: decomposed.firstOrNull?.giftName,
@@ -1996,7 +1991,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 50 ج.م',
         rewardAmount: 50.0,
-        allowMultipliers: true,
         linkedGifts: decomposed,
         linkedGiftId: decomposed.firstOrNull?.giftId,
         linkedGiftName: decomposed.firstOrNull?.giftName,
@@ -2013,7 +2007,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 50 ج.م',
         rewardAmount: 50.0,
-        allowMultipliers: true,
         linkedGifts: decomposed,
         linkedGiftId: decomposed.firstOrNull?.giftId,
         linkedGiftName: decomposed.firstOrNull?.giftName,
@@ -2030,7 +2023,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 125 ج.م',
         rewardAmount: 125.0,
-        allowMultipliers: true,
         linkedGifts: decomposed,
         linkedGiftId: decomposed.firstOrNull?.giftId,
         linkedGiftName: decomposed.firstOrNull?.giftName,
@@ -2057,7 +2049,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 25 ج.م',
         rewardAmount: 25.0,
-        allowMultipliers: true,
         linkedGifts: decomposed,
         linkedGiftId: decomposed.firstOrNull?.giftId,
         linkedGiftName: decomposed.firstOrNull?.giftName,
@@ -2084,7 +2075,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 50 ج.م',
         rewardAmount: 50.0,
-        allowMultipliers: true,
         linkedGifts: decomposed,
         linkedGiftId: decomposed.firstOrNull?.giftId,
         linkedGiftName: decomposed.firstOrNull?.giftName,
@@ -2111,7 +2101,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 75 ج.م',
         rewardAmount: 75.0,
-        allowMultipliers: true,
         linkedGifts: decomposed,
         linkedGiftId: decomposed.firstOrNull?.giftId,
         linkedGiftName: decomposed.firstOrNull?.giftName,
@@ -2144,7 +2133,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 25 ج.م',
         rewardAmount: 25.0,
-        allowMultipliers: false,
         linkedGifts: decomposed25,
         linkedGiftId: decomposed25.firstOrNull?.giftId,
         linkedGiftName: decomposed25.firstOrNull?.giftName,
@@ -2166,7 +2154,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 50 ج.م',
         rewardAmount: 50.0,
-        allowMultipliers: false,
         linkedGifts: decomposed50,
         linkedGiftId: decomposed50.firstOrNull?.giftId,
         linkedGiftName: decomposed50.firstOrNull?.giftName,
@@ -2187,7 +2174,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 75 ج.م',
         rewardAmount: 75.0,
-        allowMultipliers: true,
         linkedGifts: decomposed75,
         linkedGiftId: decomposed75.firstOrNull?.giftId,
         linkedGiftName: decomposed75.firstOrNull?.giftName,
@@ -2820,7 +2806,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     String conditionType = existingRule?.conditionType ?? 'by_quantity';
     String rewardType = existingRule?.rewardType ?? 'free_product';
     String? selectedRuleGameType = existingRule?.gameType;
-    bool allowMultipliers = existingRule?.allowMultipliers ?? true;
     List<String> selectedProductIds = List<String>.from(existingRule?.selectedProductIds ?? []);
     List<String> selectedBarcodes = List<String>.from(existingRule?.selectedBarcodes ?? []);
     List<String> selectedProductNames = List<String>.from(existingRule?.selectedProductNames ?? []);
@@ -3933,16 +3918,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       ),
                       const SizedBox(height: 12),
 
-                      SwitchListTile(
-                        title: Text(
-                          strings.multipliersAllowedLabel,
-                          style: GoogleFonts.cairo(fontSize: 13),
-                        ),
-                        value: allowMultipliers,
-                        contentPadding: EdgeInsets.zero,
-                        dense: true,
-                        onChanged: (v) => setDialogState(() => allowMultipliers = v),
-                      ),
                     ],
                   ),
                 ),
@@ -3997,7 +3972,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       rewardType: rewardType,
                       rewardValue: rewardVal.isNotEmpty ? rewardVal : title,
                       rewardAmount: rewardAmt,
-                      allowMultipliers: allowMultipliers,
                       linkedGiftId: finalLinkedGifts.isNotEmpty ? finalLinkedGifts.first.giftId : selectedGift?.id,
                       linkedGiftName: finalLinkedGifts.isNotEmpty
                           ? finalLinkedGifts.map((d) => d.quantity > 1 ? '${d.quantity}x ${d.giftName}' : d.giftName).join(' + ')
@@ -7745,23 +7719,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   ],
                 ),
               ),
-            ),
-          ],
-          if (rule.allowMultipliers) ...[
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Icon(Icons.all_inclusive_rounded, size: 14, color: colorScheme.primary),
-                const SizedBox(width: 4),
-                Text(
-                  strings.multipliersAllowedLabel,
-                  style: GoogleFonts.cairo(
-                    fontSize: 11,
-                    color: colorScheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
             ),
           ],
           const SizedBox(height: 10),

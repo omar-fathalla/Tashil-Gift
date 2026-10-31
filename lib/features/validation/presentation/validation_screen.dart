@@ -727,9 +727,13 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       );
 
       // Save or Update in Firestore (Upsert) - Composite bundle chances govern (AIR-83)
-      final int totalChances = compositeBundle.matchedRules.isNotEmpty
-          ? compositeBundle.totalChances
-          : (result.chancesEarned > 0 ? result.chancesEarned : 1);
+      final int totalChances = clampCampaignChances(
+        compositeBundle.matchedRules.isNotEmpty
+            ? compositeBundle.totalChances
+            : (result.chancesEarned > 0 ? result.chancesEarned : 1),
+        allowMultipleChances: activeEvent.allowMultipleChances,
+        maxChancesPerReceipt: activeEvent.maxChancesPerReceipt,
+      );
       final DocumentReference<Map<String, dynamic>> transactionRef =
           existingDoc != null ? existingDoc.reference : firestore.collection('receipts_transactions').doc(deterministicDocId);
       final bool isExistingRecord = existingDoc != null;

@@ -118,9 +118,6 @@ class CampaignAiAssistantService {
                   'rewardAmount': Schema.number(
                     description: 'Numeric monetary amount if reward is voucher (e.g. 50.0), or 0 otherwise.',
                   ),
-                  'allowMultipliers': Schema.boolean(
-                    description: 'True if purchasing multiples of the required quantity/spend grants multiple rewards.',
-                  ),
                   'linkedGiftId': Schema.string(
                     description: 'The exact ID of the matched gift from the company master inventory list, or empty string if not matched.',
                   ),
@@ -136,7 +133,6 @@ class CampaignAiAssistantService {
                   'rewardType',
                   'rewardValue',
                   'rewardAmount',
-                  'allowMultipliers',
                 ],
               ),
             ),
@@ -619,7 +615,6 @@ $rawIdeaText
       for (int i = 0; i < promotionalRules.length; i++) {
         final r = promotionalRules[i];
         final id = r.id.isNotEmpty ? r.id : 'rule_${i + 1}';
-        final multText = r.allowMultipliers ? ' (تتضاعف الجوائز بمضاعفة الاستهلاك/الإنفاق)' : '';
         final voucherVal = r.totalVoucherValue > 0
             ? ' [قيمة نقدية: ${r.totalVoucherValue.toInt()} ج.م]'
             : (r.rewardAmount > 0 ? ' [قيمة نقدية: ${r.rewardAmount.toInt()} ج.م]' : '');
@@ -636,7 +631,7 @@ $rawIdeaText
         final gameDelivery = (r.gameType != null && r.gameType!.isNotEmpty)
             ? ' (طريقة التسليم: ${r.gameType == 'directGift' ? 'هدية فورية مباشرة' : (r.gameType == 'scratch' ? 'خربش واكسب' : (r.gameType == 'wheel' ? 'عجلة الحظ' : 'اختر هديتك'))})'
             : '';
-        buffer.writeln('   - المكافأة المستحقة: [${r.rewardValue}$voucherVal] (نوع: ${r.rewardType})$giftBinding$gameDelivery$multText');
+        buffer.writeln('   - المكافأة المستحقة: [${r.rewardValue}$voucherVal] (نوع: ${r.rewardType})$giftBinding$gameDelivery');
       }
       buffer.writeln();
       buffer.writeln('⚠️ تعليمات هامة للذكاء الاصطناعي أثناء التدقيق ومطابقة القواعد (Mandatory Invariants):');
@@ -911,7 +906,6 @@ $rawIdeaText
         rewardType: firstGift?.isVoucher == true ? 'voucher' : 'free_product',
         rewardValue: firstGift != null ? firstGift.giftName : 'هدية فورية من العرض',
         rewardAmount: firstGift?.unitValue ?? 0.0,
-        allowMultipliers: true,
         linkedGiftId: firstGift?.id,
         linkedGiftName: firstGift?.giftName,
       ),

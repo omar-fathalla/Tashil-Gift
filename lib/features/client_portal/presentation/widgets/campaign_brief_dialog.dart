@@ -757,23 +757,6 @@ class _CampaignBriefDialogState extends ConsumerState<CampaignBriefDialog> {
                             ),
                           ),
                         ),
-                        if (rule.allowMultipliers)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
-                            decoration: BoxDecoration(
-                              color: colorScheme.primaryContainer,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: colorScheme.primaryFixedDim),
-                            ),
-                            child: Text(
-                              'مضاعفة الهدايا مع زيادة الكمية',
-                              style: GoogleFonts.cairo(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: colorScheme.onPrimaryContainer,
-                              ),
-                            ),
-                          ),
                       ],
                     ),
                   ],

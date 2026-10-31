@@ -3094,9 +3094,9 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
       startDate: null,
       endDate: null,
       customPrompt: activeEvent.customPrompt,
-      allowMultipleChances: true,
-      multiplierBasis: 'both',
-      maxChancesPerReceipt: 0,
+      allowMultipleChances: activeEvent.allowMultipleChances,
+      multiplierBasis: activeEvent.multiplierBasis,
+      maxChancesPerReceipt: activeEvent.maxChancesPerReceipt,
       promotionalRules: combinedPromotionalRules,
       allowComplementaryReceipts: activeEvent.allowComplementaryReceipts,
     );

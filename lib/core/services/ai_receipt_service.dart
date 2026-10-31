@@ -1502,9 +1502,6 @@ class AiReceiptService {
               final idx = entry.key + 1;
               final r = entry.value;
               final id = r.id.isNotEmpty ? r.id : 'rule_$idx';
-              final multText = r.allowMultipliers
-                  ? ' (تتضاعف الهدايا مع زيادة الكمية)'
-                  : '';
               final voucherVal = r.totalVoucherValue > 0
                   ? ' [قيمة نقدية: ${r.totalVoucherValue.toInt()} ج.م]'
                   : (r.rewardAmount > 0
@@ -1534,7 +1531,7 @@ class AiReceiptService {
                 conditionDetails =
                     'شراء (${r.minQuantity}) أو أكثر من [${r.triggerProduct}]';
               }
-              return '$idx. [معرف ID: "$id"] "${r.ruleTitle}" ➔ الشرط: $conditionDetails ➔ الجائزة المستحقة: [${r.rewardValue}$voucherVal] (نوع: ${r.rewardType})$multText';
+              return '$idx. [معرف ID: "$id"] "${r.ruleTitle}" ➔ الشرط: $conditionDetails ➔ الجائزة المستحقة: [${r.rewardValue}$voucherVal] (نوع: ${r.rewardType})';
             })
             .join('\n');
 
@@ -2231,6 +2228,13 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         } else {
           calculatedChances = 0;
         }
+        // Campaign-level Smart Multipliers switch is the single source of
+        // truth: OFF => at most 1 chance; ON => capped by maxChancesPerReceipt.
+        calculatedChances = clampCampaignChances(
+          calculatedChances,
+          allowMultipleChances: allowMultipleChances,
+          maxChancesPerReceipt: maxChancesPerReceipt,
+        );
         result = result.copyWith(chancesEarned: calculatedChances);
 
         // Enrich extractedProducts with matched barcodes and canonical names from catalog bidirectionally
@@ -3315,7 +3319,7 @@ class PromotionalRuleMatcher {
           ? matchedRule.effectiveMinSpend
           : matchedRule.minSpend;
       if (effectiveMin > 0 && totalTriggerSpend >= effectiveMin) {
-        if (matchedRule.allowMultipliers || allowCampaignMultipliers) {
+        if (allowCampaignMultipliers) {
           final divisor = matchedRule.minSpend > 0 ? matchedRule.minSpend : effectiveMin;
           multiplier = divisor > 0 ? (totalTriggerSpend ~/ divisor) : 1;
           if (multiplier < 1) multiplier = 1;
@@ -3326,7 +3330,7 @@ class PromotionalRuleMatcher {
     } else {
       if (matchedRule.minQuantity > 0 &&
           totalTriggerQty >= matchedRule.minQuantity) {
-        if (matchedRule.allowMultipliers || allowCampaignMultipliers) {
+        if (allowCampaignMultipliers) {
           multiplier = totalTriggerQty ~/ matchedRule.minQuantity;
           if (multiplier < 1) multiplier = 1;
         } else {
@@ -3579,7 +3583,7 @@ class PromotionalRuleMatcher {
             if (isBoundedBracket) {
               // Bounded middle bracket range (e.g. 95 to 139 EGP) qualifies as 1 bracket match
               count = 1;
-            } else if (rule.allowMultipliers || allowCampaignMultipliers) {
+            } else if (allowCampaignMultipliers) {
               final divisor = rule.minSpend > 0 ? rule.minSpend : effectiveMin;
               final effectiveSpendForMultiplier = totalEligibleSpend +
                   (rule.discountTolerance > 0 ? rule.discountTolerance : 0.0);
@@ -3665,7 +3669,7 @@ class PromotionalRuleMatcher {
 
           if (rule.minQuantity > 0 && availableQtyForRule >= rule.minQuantity) {
             int count = 1;
-            if (rule.allowMultipliers || allowCampaignMultipliers) {
+            if (allowCampaignMultipliers) {
               count = availableQtyForRule ~/ rule.minQuantity;
               if (count < 1) count = 1;
             }
@@ -5289,6 +5293,22 @@ List<LinkedGiftAllocation> consolidateLinkedGifts(Iterable<LinkedGiftAllocation>
 }
 
 /// Represents a composite multi-offer prize bundle synthesized from all matched rules in a single receipt
+/// Applies the campaign-level Smart Multipliers switch to a chance count.
+/// OFF => at most 1; ON => capped by [maxChancesPerReceipt] when > 0.
+/// Values <= 0 are returned unchanged (0 means "no chance / rejected").
+int clampCampaignChances(
+  int chances, {
+  required bool allowMultipleChances,
+  int maxChancesPerReceipt = 0,
+}) {
+  if (chances <= 0) return chances;
+  if (!allowMultipleChances) return 1;
+  if (maxChancesPerReceipt > 0 && chances > maxChancesPerReceipt) {
+    return maxChancesPerReceipt;
+  }
+  return chances;
+}
+
 class CompositePromotionalBundle {
   final List<MatchedPromotionalRuleResult> matchedRules;
   final List<LinkedGiftAllocation> combinedLinkedGifts;
