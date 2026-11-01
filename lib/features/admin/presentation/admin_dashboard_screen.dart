@@ -12,10 +12,10 @@ import '../../validation/presentation/invoices_log_screen.dart';
 import '../../client_portal/presentation/client_receipt_upload_screen.dart';
 import '../../company_portal/presentation/company_manager_portal_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/widgets/switch_point_branding.dart';
 import '../../../core/constants/country_currency_config.dart';
-import '../../../core/widgets/m3_button_groups.dart';
 import '../../../core/widgets/m3_action_menu.dart';
 import 'company_catalog_screen.dart';
 import '../../company_portal/presentation/company_customers_marketing_screen.dart';
@@ -616,6 +616,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       backgroundColor: colorScheme.surface,
       appBar: const SwitchPointHeader(
         subtitle: 'System Admin and Company Manager Portal',
+        showVersionInSettings: true,
       ),
       body: Row(
         children: [
@@ -819,7 +820,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               ],
             )
           : null,
-      floatingActionButton: _selectedIndex == 0
+      floatingActionButton: _selectedIndex == 0 && isMobile
           ? FloatingActionButton.extended(
               onPressed: _openCreateEventScreen,
               icon: const Icon(Icons.add_rounded),
@@ -1049,156 +1050,107 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
 
     final isCompactPage = MediaQuery.sizeOf(context).width < 600;
     final textTheme = theme.textTheme;
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-        isCompactPage ? M3Spacing.sm : M3Spacing.md,
-        isCompactPage ? M3Spacing.sm : M3Spacing.md,
-        isCompactPage ? M3Spacing.sm : M3Spacing.md,
-        96, // keep last card clear of the extended FAB
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 0. M3 page header (headline + supporting text)
-          Text(
-            isAr ? 'إدارة الحملات' : 'Campaigns',
-            style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: M3Spacing.xxs),
-          Text(
-            isAr ? 'نظرة عامة على كل الحملات والشركات الراعية' : 'Overview of all campaigns and sponsor companies',
-            style: textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: M3Spacing.md),
-          // 1. Dashboard Metrics Banner (M3 Single-Seed Design)
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final layout = M3Layout.fromConstraints(constraints);
-              final cardWidth = layout.isDesktop
-                  ? (constraints.maxWidth - (3 * M3Spacing.sm)) / 4 
-                  : (layout.isMedium || constraints.maxWidth >= 420)
-                      ? (constraints.maxWidth - M3Spacing.sm) / 2
-                      : (constraints.maxWidth - M3Spacing.sm) / 2; // compact: 2-up grid
+    final isFabLayout = M3Layout.of(context).isCompact; // FAB only where the bottom bar is shown
+    final pagePad = isCompactPage ? M3Spacing.sm : M3Spacing.md;
+    final metricNumber = NumberFormat.decimalPattern(isAr ? 'ar_EG' : 'en');
+    String n(int v) => metricNumber.format(v);
 
-              return Wrap(
-                spacing: M3Spacing.sm,
-                runSpacing: M3Spacing.sm,
-                children: [
-                  _buildMetricCard(
-                    context: context,
-                    title: strings.totalActiveEvents,
-                    subtitle: isAr ? 'إجمالي الحملات المسجلة' : 'All Registered Campaigns',
-                    value: '$totalCampaigns',
-                    icon: Icons.campaign_rounded,
-                    color: colorScheme.primary,
-                    width: cardWidth,
-                    tooltip: isAr ? 'إجمالي عدد الحملات والفعاليات في النظام (انقر للتصفية)' : 'Total number of campaigns in system (click to filter)',
-                    isSelected: _campaignFilter == 'ALL',
-                    onTap: () => setState(() => _campaignFilter = 'ALL'),
-                  ),
-                  _buildMetricCard(
-                    context: context,
-                    title: strings.activeStatus,
-                    subtitle: isAr ? 'حملات جارية وسارية الآن' : 'Live & Running Campaigns',
-                    value: '$activeCount',
-                    icon: Icons.check_circle_rounded,
-                    color: colorScheme.tertiary,
-                    width: cardWidth,
-                    hasPulse: true,
-                    tooltip: isAr ? 'الحملات النشطة التي تستقبل فواتير العملاء حالياً (انقر للتصفية)' : 'Campaigns currently active and accepting receipts (click to filter)',
-                    isSelected: _campaignFilter == 'ACTIVE',
-                    onTap: () => setState(() => _campaignFilter = 'ACTIVE'),
-                  ),
-                  _buildMetricCard(
-                    context: context,
-                    title: strings.totalCompaniesRegistered,
-                    subtitle: isAr ? 'الشركات الراعية للحملات' : 'Partner Sponsor Companies',
-                    value: '$partnerCompaniesCount',
-                    icon: Icons.apartment_rounded,
-                    color: colorScheme.tertiary,
-                    width: cardWidth,
-                    tooltip: isAr ? 'عدد الشركات المسجلة التي لها حملات ترويجية' : 'Total partner companies with campaigns',
-                  ),
-                  _buildMetricCard(
-                    context: context,
-                    title: isAr ? 'المتوقفة والمنتهية' : 'Inactive / Expired',
-                    subtitle: isAr ? 'حملات تم إيقافها أو انتهت' : 'Disabled or ended campaigns',
-                    value: '$expiredOrDisabledCount',
-                    icon: Icons.pause_circle_outline_rounded,
-                    color: colorScheme.secondary,
-                    width: cardWidth,
-                    tooltip: isAr ? 'حملات متوقفة مؤقتاً أو انتهت صلاحيتها الزمنية (انقر للتصفية)' : 'Paused or expired campaigns (click to filter)',
-                    isSelected: _campaignFilter == 'INACTIVE',
-                    onTap: () => setState(() => _campaignFilter = 'INACTIVE'),
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: M3Spacing.md),
+    return Align(
+      alignment: AlignmentDirectional.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1200),
+        child: SingleChildScrollView(
+          // Bottom inset clears the 56dp FAB + 16dp margin (+16dp breathing room) on mobile.
+          padding: EdgeInsets.fromLTRB(pagePad, pagePad, pagePad, isFabLayout ? 56 + 16 + 24 : M3Spacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 0. Page header
+              Text(
+                isAr ? 'إدارة الحملات' : 'Campaigns',
+                style: textTheme.headlineMedium?.copyWith(color: colorScheme.onSurface),
+              ),
+              const SizedBox(height: M3Spacing.xxs),
+              Text(
+                isAr ? 'نظرة عامة على كل الحملات والشركات الراعية' : 'Overview of all campaigns and sponsor companies',
+                style: textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: M3Spacing.md),
 
-          // 2. Filter Tabs & Search Controls (M3 Button Group Standard)
-          Card.outlined(
-            margin: EdgeInsets.zero,
-            color: colorScheme.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: M3Shape.radiusMedium,
-              side: BorderSide(color: colorScheme.outlineVariant),
-            ),
-            child: Padding(
-            padding: const EdgeInsets.all(M3Spacing.sm),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Flex(
-                  direction: MediaQuery.of(context).size.width < 700 ? Axis.vertical : Axis.horizontal,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: MediaQuery.of(context).size.width < 700 ? CrossAxisAlignment.stretch : CrossAxisAlignment.center,
-                  children: [
-                    // Segmented Button Group
-                    M3ConnectedButtonGroup<String>(
-                      segments: [
-                        M3ButtonSegment<String>(
-                          value: 'ALL',
-                          label: isAr ? 'جميع الحملات' : 'All Campaigns',
-                          icon: Icons.apps_rounded,
-                          badgeText: '$totalCampaigns',
-                          tooltip: isAr ? 'عرض جميع الحملات المسجلة بدون استثناء' : 'Show all registered campaigns',
-                        ),
-                        M3ButtonSegment<String>(
-                          value: 'ACTIVE',
-                          label: isAr ? 'النشطة والسارية' : 'Active',
-                          icon: Icons.check_circle_rounded,
-                          badgeText: '$activeCount',
-                          tooltip: isAr ? 'تصفية الحملات الجارية والنشطة فقط' : 'Filter by active and running campaigns',
-                        ),
-                        M3ButtonSegment<String>(
-                          value: 'INACTIVE',
-                          label: isAr ? 'المتوقفة والمنتهية' : 'Inactive',
-                          icon: Icons.pause_circle_rounded,
-                          badgeText: '$expiredOrDisabledCount',
-                          tooltip: isAr ? 'تصفية الحملات المتوقفة أو منتهية الصلاحية' : 'Filter by paused or expired campaigns',
-                        ),
-                      ],
-                      selectedValue: _campaignFilter,
-                      onSelected: (val) {
-                        setState(() => _campaignFilter = val);
-                      },
-                    ),
-                    if (MediaQuery.of(context).size.width < 700) const SizedBox(height: 12),
+              // 1. Summary metrics (non-interactive; the chips/segments below are the single filter control)
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final wide = constraints.maxWidth >= 840;
+                  final gap = wide ? M3Spacing.md : M3Spacing.sm;
+                  final cols = wide ? 4 : 2;
+                  final cardWidth = (constraints.maxWidth - gap * (cols - 1)) / cols;
+                  return Wrap(
+                    spacing: gap,
+                    runSpacing: gap,
+                    children: [
+                      _buildMetricCard(
+                        context: context,
+                        title: strings.totalActiveEvents,
+                        subtitle: isAr ? 'إجمالي الحملات المسجلة' : 'All registered campaigns',
+                        value: n(totalCampaigns),
+                        icon: Icons.campaign_outlined,
+                        width: cardWidth,
+                      ),
+                      _buildMetricCard(
+                        context: context,
+                        title: strings.activeStatus,
+                        subtitle: isAr ? 'حملات جارية وسارية الآن' : 'Live & running',
+                        value: n(activeCount),
+                        icon: Icons.check_circle_outline_rounded,
+                        width: cardWidth,
+                      ),
+                      _buildMetricCard(
+                        context: context,
+                        title: strings.totalCompaniesRegistered,
+                        subtitle: isAr ? 'الشركات الراعية للحملات' : 'Sponsor companies',
+                        value: n(partnerCompaniesCount),
+                        icon: Icons.apartment_outlined,
+                        width: cardWidth,
+                      ),
+                      _buildMetricCard(
+                        context: context,
+                        title: isAr ? 'المتوقفة والمنتهية' : 'Inactive / expired',
+                        subtitle: isAr ? 'حملات تم إيقافها أو انتهت' : 'Disabled or ended',
+                        value: n(expiredOrDisabledCount),
+                        icon: Icons.pause_circle_outline_rounded,
+                        width: cardWidth,
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: M3Spacing.md),
 
-                    // Search input
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width < 700 ? double.infinity : 280,
-                      child: SearchBar(
+              // 2. Filter + search (filled card, surfaceContainerLow, 16dp corners)
+              Card.filled(
+                margin: EdgeInsets.zero,
+                elevation: M3Elevation.level0,
+                color: colorScheme.surfaceContainerLow,
+                shape: const RoundedRectangleBorder(borderRadius: M3Shape.radiusLarge),
+                child: Padding(
+                  padding: const EdgeInsets.all(M3Spacing.sm),
+                  child: LayoutBuilder(
+                    builder: (context, c) {
+                      final filter = _buildFilterControl(
+                        compact: MediaQuery.sizeOf(context).width < 600,
+                        isAr: isAr,
+                        counts: {'ALL': totalCampaigns, 'ACTIVE': activeCount, 'INACTIVE': expiredOrDisabledCount},
+                        format: n,
+                      );
+                      final search = SearchBar(
                         controller: _searchController,
                         onChanged: (_) => setState(() {}),
                         hintText: isAr ? 'بحث باسم الحملة أو الشركة...' : 'Search campaigns or companies...',
-                        leading: Icon(Icons.search_rounded, color: colorScheme.onSurfaceVariant),
+                        leading: const Icon(Icons.search_rounded),
                         trailing: [
                           if (_searchController.text.isNotEmpty)
                             IconButton(
-                              tooltip: isAr ? 'مسح' : 'Clear',
+                              tooltip: isAr ? 'مسح البحث' : 'Clear search',
                               icon: const Icon(Icons.clear_rounded),
                               onPressed: () {
                                 _searchController.clear();
@@ -1206,180 +1158,207 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                               },
                             ),
                         ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            ),
-          ),
-          const SizedBox(height: M3Spacing.md),
-
-          // 3. Section Title with Count Indicator
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '${strings.eventsTitle} (${filteredEvents.length})',
-                  style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (filteredEvents.length != allEvents.length && !isCompactPage) ...[
-                Text(
-                  isAr ? 'تمت تصفية ${filteredEvents.length} من أصل $totalCampaigns' : 'Showing ${filteredEvents.length} of $totalCampaigns',
-                  style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
-                ),
-                const SizedBox(width: M3Spacing.xs),
-              ],
-              if (!isCompactPage)
-                FilledButton.tonalIcon(
-                  onPressed: _openCreateEventScreen,
-                  icon: const Icon(Icons.add_rounded, size: 18),
-                  label: Text(isAr ? 'إنشاء حملة جديدة' : 'New Campaign'),
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(0, 40),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                      );
+                      if (c.maxWidth < 720) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [filter, const SizedBox(height: M3Spacing.sm), search],
+                        );
+                      }
+                      return Row(
+                        children: [
+                          Expanded(child: Align(alignment: AlignmentDirectional.centerStart, child: filter)),
+                          const SizedBox(width: M3Spacing.sm),
+                          SizedBox(width: 320, child: search),
+                        ],
+                      );
+                    },
                   ),
                 ),
-            ],
-          ),
-          const SizedBox(height: M3Spacing.xs),
+              ),
+              const SizedBox(height: M3Spacing.md),
 
-          // 4. Campaigns List (M3 Cards)
-          if (filteredEvents.isEmpty)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 40.0),
-                child: Column(
-                  children: [
-                    Icon(Icons.filter_alt_off_rounded, size: 48, color: colorScheme.outline),
-                    const SizedBox(height: 12),
-                    Text(
-                      isAr ? 'لا توجد حملات تطابق معايير البحث أو التصفية الحالية.' : 'No campaigns match the current search or filter criteria.',
-                      style: GoogleFonts.cairo(fontSize: 14, color: colorScheme.onSurfaceVariant),
+              // 3. Section title
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${strings.eventsTitle} (${n(filteredEvents.length)})',
+                      style: textTheme.titleLarge?.copyWith(color: colorScheme.onSurface),
+                      overflow: TextOverflow.ellipsis,
                     ),
+                  ),
+                  if (filteredEvents.length != allEvents.length && !isCompactPage) ...[
+                    Text(
+                      isAr ? 'تمت تصفية ${n(filteredEvents.length)} من أصل ${n(totalCampaigns)}' : 'Showing ${filteredEvents.length} of $totalCampaigns',
+                      style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                    ),
+                    const SizedBox(width: M3Spacing.sm),
                   ],
+                  if (!isFabLayout)
+                    FilledButton.icon(
+                      onPressed: _openCreateEventScreen,
+                      icon: const Icon(Icons.add_rounded),
+                      label: Text(isAr ? 'إنشاء حملة جديدة' : 'New campaign'),
+                      style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+                    ),
+                ],
+              ),
+              const SizedBox(height: M3Spacing.sm),
+
+              // 4. Campaigns list — fades on filter change (200ms, M3 standard easing)
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                switchInCurve: Easing.standard,
+                switchOutCurve: Easing.standard,
+                layoutBuilder: (current, previous) => Stack(
+                  alignment: AlignmentDirectional.topStart,
+                  children: [...previous, ?current],
+                ),
+                child: KeyedSubtree(
+                  key: ValueKey('$_campaignFilter|$searchQuery'),
+                  child: filteredEvents.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: M3Spacing.xl),
+                            child: Column(
+                              children: [
+                                Icon(Icons.filter_alt_off_outlined, size: 48, color: colorScheme.onSurfaceVariant),
+                                const SizedBox(height: M3Spacing.sm),
+                                Text(
+                                  isAr ? 'لا توجد حملات تطابق معايير البحث أو التصفية الحالية.' : 'No campaigns match the current search or filter.',
+                                  textAlign: TextAlign.center,
+                                  style: textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: filteredEvents.length,
+                          itemBuilder: (context, index) {
+                            final event = filteredEvents[index];
+                            return _buildCampaignCard(context, event, firestore, activeCountry, strings, isAr, colorScheme);
+                          },
+                        ),
                 ),
               ),
-            )
-          else
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: filteredEvents.length,
-              itemBuilder: (context, index) {
-                final event = filteredEvents[index];
-                return _buildCampaignCard(context, event, firestore, activeCountry, strings, isAr, colorScheme);
-              },
-            ),
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }
 
+  /// Single filter control: scrollable single-select FilterChips under 600dp,
+  /// SegmentedButton (no selected icon) at 600dp and above.
+  Widget _buildFilterControl({
+    required bool compact,
+    required bool isAr,
+    required Map<String, int> counts,
+    required String Function(int) format,
+  }) {
+    final labels = {
+      'ALL': isAr ? 'جميع الحملات' : 'All',
+      'ACTIVE': isAr ? 'النشطة والسارية' : 'Active',
+      'INACTIVE': isAr ? 'المتوقفة والمنتهية' : 'Inactive',
+    };
+    final icons = {
+      'ALL': Icons.apps_rounded,
+      'ACTIVE': Icons.check_circle_outline_rounded,
+      'INACTIVE': Icons.pause_circle_outline_rounded,
+    };
+    final textTheme = Theme.of(context).textTheme;
+    if (compact) {
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final key in labels.keys) ...[
+              FilterChip(
+                selected: _campaignFilter == key,
+                showCheckmark: true,
+                label: Text('${labels[key]} (${format(counts[key] ?? 0)})'),
+                labelStyle: textTheme.labelLarge,
+                shape: const RoundedRectangleBorder(borderRadius: M3Shape.radiusSmall),
+                onSelected: (_) => setState(() => _campaignFilter = key),
+              ),
+              const SizedBox(width: M3Spacing.xs),
+            ],
+          ],
+        ),
+      );
+    }
+    return SegmentedButton<String>(
+      showSelectedIcon: false,
+      style: const ButtonStyle(minimumSize: WidgetStatePropertyAll(Size(0, 48))),
+      segments: [
+        for (final key in labels.keys)
+          ButtonSegment<String>(
+            value: key,
+            icon: Icon(icons[key]),
+            label: Text('${labels[key]} (${format(counts[key] ?? 0)})'),
+          ),
+      ],
+      selected: {_campaignFilter},
+      onSelectionChanged: (s) => setState(() => _campaignFilter = s.first),
+    );
+  }
+
+  /// Non-interactive M3 outlined summary card with merged semantics.
   Widget _buildMetricCard({
     required BuildContext context,
     required String title,
     required String subtitle,
     required String value,
     required IconData icon,
-    required Color color,
     required double width,
-    required String tooltip,
-    bool hasPulse = false,
-    bool isSelected = false,
-    VoidCallback? onTap,
   }) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    final textTheme = theme.textTheme;
-    final selectedBg = colorScheme.secondaryContainer;
-    final onSelected = colorScheme.onSecondaryContainer;
-    final content = Padding(
-      padding: const EdgeInsets.all(M3Spacing.sm),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: isSelected ? colorScheme.surface : color.withValues(alpha: 0.12),
-                  borderRadius: M3Shape.radiusMedium,
-                ),
-                child: Icon(icon, color: color, size: 24),
-              ),
-              const Spacer(),
-              if (hasPulse)
-                Chip(
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  avatar: Icon(Icons.circle, size: 8, color: colorScheme.tertiary),
-                  label: const Text('LIVE'),
-                  labelStyle: textTheme.labelSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.onTertiaryContainer,
-                  ),
-                  backgroundColor: colorScheme.tertiaryContainer,
-                  side: BorderSide.none,
-                ),
-            ],
-          ),
-          const SizedBox(height: M3Spacing.sm),
-          Text(
-            value,
-            style: textTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: isSelected ? onSelected : colorScheme.onSurface,
-              height: 1.1,
-            ),
-          ),
-          const SizedBox(height: M3Spacing.xxs),
-          Text(
-            title,
-            style: textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: isSelected ? onSelected : colorScheme.onSurface,
-            ),
-          ),
-          Text(
-            subtitle,
-            style: textTheme.bodySmall?.copyWith(
-              color: isSelected ? onSelected : colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    );
-
-    // M3 card variants: filled (secondaryContainer) when selected, outlined otherwise.
-    final card = SizedBox(
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    return SizedBox(
       width: width,
-      child: Card(
-        margin: EdgeInsets.zero,
-        elevation: M3Elevation.level0,
-        color: isSelected ? selectedBg : colorScheme.surface,
-        surfaceTintColor: Colors.transparent,
-        clipBehavior: Clip.antiAlias,
-        shape: RoundedRectangleBorder(
-          borderRadius: M3Shape.radiusMedium,
-          side: isSelected ? BorderSide.none : BorderSide(color: colorScheme.outlineVariant),
+      child: MergeSemantics(
+        child: Semantics(
+          container: true,
+          label: '$title: $value',
+          excludeSemantics: true,
+          child: Card.outlined(
+            margin: EdgeInsets.zero,
+            elevation: M3Elevation.level0,
+            color: colorScheme.surfaceContainerLowest,
+            shape: RoundedRectangleBorder(
+              borderRadius: M3Shape.radiusMedium,
+              side: BorderSide(color: colorScheme.outlineVariant),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(M3Spacing.sm),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: colorScheme.secondaryContainer,
+                      borderRadius: M3Shape.radiusMedium,
+                    ),
+                    child: Icon(icon, color: colorScheme.onSecondaryContainer, size: 24),
+                  ),
+                  const SizedBox(height: M3Spacing.sm),
+                  Text(value, style: textTheme.headlineLarge?.copyWith(color: colorScheme.onSurface, height: 1.1)),
+                  const SizedBox(height: M3Spacing.xxs),
+                  Text(title, style: textTheme.titleSmall?.copyWith(color: colorScheme.onSurface), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(subtitle, style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          ),
         ),
-        child: onTap != null ? InkWell(onTap: onTap, child: content) : content,
       ),
-    );
-
-    return Tooltip(
-      message: tooltip,
-      waitDuration: const Duration(milliseconds: 400),
-      child: card,
     );
   }
 
@@ -1396,287 +1375,242 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
 
     // Determine status badge
     Color statusBg;
-    Color statusBorder;
     Color statusTextColor;
     IconData statusIcon;
     String statusLabel;
 
     if (!event.isActive) {
       statusBg = colorScheme.surfaceContainerHighest;
-      statusBorder = colorScheme.outlineVariant;
       statusTextColor = colorScheme.onSurfaceVariant;
       statusIcon = Icons.pause_circle_outline_rounded;
       statusLabel = isAr ? 'معطلة' : 'Disabled';
     } else if (event.isExpired) {
       statusBg = colorScheme.errorContainer;
-      statusBorder = colorScheme.errorContainer;
       statusTextColor = colorScheme.onErrorContainer;
       statusIcon = Icons.event_busy_rounded;
       statusLabel = isAr ? 'منتهية' : 'Expired';
     } else if (event.isNotStartedYet) {
       statusBg = colorScheme.secondaryContainer;
-      statusBorder = colorScheme.secondaryFixedDim;
       statusTextColor = colorScheme.onSecondaryContainer;
       statusIcon = Icons.schedule_rounded;
       statusLabel = isAr ? 'لم تبدأ بعد' : 'Upcoming';
     } else {
       statusBg = colorScheme.tertiaryContainer;
-      statusBorder = colorScheme.tertiaryFixedDim;
       statusTextColor = colorScheme.onTertiaryFixedVariant;
       statusIcon = Icons.check_circle_rounded;
       statusLabel = isAr ? 'نشطة وسارية' : 'Active & Running';
     }
 
-    // M3 outlined card (level 0, medium shape, outlineVariant stroke)
+    // Status chip uses tonal container pairs only (>=4.5:1): on*Container text on *Container fill.
+    if (!event.isActive) {
+      statusBg = colorScheme.surfaceContainerHighest;
+      statusTextColor = colorScheme.onSurfaceVariant;
+    } else if (event.isExpired) {
+      statusBg = colorScheme.errorContainer;
+      statusTextColor = colorScheme.onErrorContainer;
+    } else if (event.isNotStartedYet) {
+      statusBg = colorScheme.secondaryContainer;
+      statusTextColor = colorScheme.onSecondaryContainer;
+    } else {
+      statusBg = colorScheme.tertiaryContainer;
+      statusTextColor = colorScheme.onTertiaryContainer;
+    }
+    final textTheme = Theme.of(context).textTheme;
+    final compact = MediaQuery.sizeOf(context).width < 600;
+    final amountFmt = NumberFormat.decimalPattern(isAr ? 'ar_EG' : 'en');
+    const lri = '\u2066', pdi = '\u2069'; // isolate Latin runs inside RTL text
+
+    Future<void> toggleActive(bool value) async {
+      if (firestore != null) {
+        await firestore.collection('events').doc(event.id).update({'isActive': value});
+      }
+      if (event.companySlug.isNotEmpty) {
+        await ref.read(companyGiftsServiceProvider).syncCompanyGiftsAvailableQuantities(event.companySlug);
+      }
+    }
+
+    final statusChip = Chip(
+      avatar: Icon(statusIcon, size: 18, color: statusTextColor),
+      label: Text(statusLabel),
+      labelStyle: textTheme.labelLarge?.copyWith(color: statusTextColor),
+      backgroundColor: statusBg,
+      side: BorderSide.none,
+      shape: const RoundedRectangleBorder(borderRadius: M3Shape.radiusSmall),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+
+    final statusSwitch = Semantics(
+      label: isAr
+          ? 'حالة الحملة ${event.eventName}: ${event.isActive ? "مفعلة" : "متوقفة"}'
+          : 'Campaign ${event.eventName} status: ${event.isActive ? "active" : "paused"}',
+      toggled: event.isActive,
+      child: Tooltip(
+        message: event.isActive
+            ? (isAr ? 'الحملة مفعلة حالياً - اضغط لإيقافها مؤقتاً' : 'Campaign is active - tap to pause')
+            : (isAr ? 'الحملة متوقفة - اضغط لتفعيلها فورياً' : 'Campaign is paused - tap to activate'),
+        waitDuration: const Duration(milliseconds: 400),
+        child: Switch(
+          value: event.isActive,
+          thumbIcon: _m3SwitchThumbIcon,
+          onChanged: toggleActive,
+        ),
+      ),
+    );
+
+    String periodLabel() {
+      String fmt(DateTime? d, bool isStart) {
+        if (d == null) return isAr ? 'مفتوح' : 'Open';
+        final day = isStart ? campaignFirstDay(d) : campaignLastDay(d);
+        try {
+          return DateFormat('d MMM y', isAr ? 'ar' : 'en').format(day!);
+        } catch (_) {
+          return isStart ? campaignFirstDayLabel(d) : campaignLastDayLabel(d);
+        }
+      }
+      return '${isAr ? "الفترة: " : "Period: "}${fmt(event.startDate, true)} ${isAr ? "إلى" : "to"} ${fmt(event.endDate, false)}${isAr ? " (شامل)" : " (inclusive)"}';
+    }
+
+    final minSpend = event.minimumSpend == event.minimumSpend.roundToDouble()
+        ? amountFmt.format(event.minimumSpend.toInt())
+        : amountFmt.format(event.minimumSpend);
+
+    // M3 outlined card (level 0, medium shape, outlineVariant 1dp, surfaceContainerLowest)
     return Card.outlined(
       margin: const EdgeInsets.only(bottom: M3Spacing.sm),
-      color: colorScheme.surface,
+      elevation: M3Elevation.level0,
+      color: colorScheme.surfaceContainerLowest,
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
         borderRadius: M3Shape.radiusMedium,
         side: BorderSide(color: colorScheme.outlineVariant),
       ),
       child: Padding(
-        padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 600 ? M3Spacing.sm : M3Spacing.md),
+        padding: EdgeInsets.all(compact ? M3Spacing.sm : M3Spacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top Row: Campaign Title, Status Badge, and Quick Switch Toggle
+            // Header: title + sponsor supporting text, one tonal status chip, status switch
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 10,
-                    runSpacing: 6,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Text(event.eventName, style: textTheme.titleMedium?.copyWith(color: colorScheme.onSurface)),
+                      const SizedBox(height: M3Spacing.xxs),
                       Text(
-                        event.eventName,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: colorScheme.onSurface,
-                        ),
+                        '${isAr ? "الشركة الراعية: " : "Sponsor: "}$lri${event.targetCompany}$pdi',
+                        style: textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: statusBg,
-                          borderRadius: M3Shape.radiusSmall,
-                          border: Border.all(color: statusBorder),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(statusIcon, size: 14, color: statusTextColor),
-                            const SizedBox(width: 4),
-                            Text(
-                              statusLabel,
-                              style: GoogleFonts.cairo(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: statusTextColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      const SizedBox(height: M3Spacing.xs),
+                      statusChip,
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      isAr ? 'الحالة: ' : 'Status: ',
-                      style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600, color: colorScheme.onSurface),
-                    ),
-                    Tooltip(
-                      message: event.isActive
-                          ? (isAr ? 'الحملة مفعلة حالياً - اضغط لإيقافها مؤقتاً' : 'Campaign is active - tap to pause')
-                          : (isAr ? 'الحملة متوقفة - اضغط لتفعيلها فورياً' : 'Campaign is paused - tap to activate'),
-                      waitDuration: const Duration(milliseconds: 400),
-                      child: Switch(
-                        value: event.isActive,
-                        onChanged: (value) async {
-                          if (firestore != null) {
-                            await firestore.collection('events').doc(event.id).update({'isActive': value});
-                          }
-                          if (event.companySlug.isNotEmpty) {
-                            await ref.read(companyGiftsServiceProvider).syncCompanyGiftsAvailableQuantities(event.companySlug);
-                          }
-                        },
-                      ),
-                    ),
-                  ],
-                ),
+                const SizedBox(width: M3Spacing.xs),
+                statusSwitch,
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: M3Spacing.sm),
 
-            // Metadata Chips (Company, Retail Chain, Min Spend, Date Range)
+            // Metadata: outlined, non-interactive assist-style chips
             Wrap(
-              spacing: 10,
-              runSpacing: 8,
+              spacing: M3Spacing.xs,
+              runSpacing: M3Spacing.xs,
               children: [
-                _buildMetadataPill(
-                  icon: Icons.apartment_rounded,
-                  label: '${isAr ? "الشركة الراعية: " : "Company: "}${event.targetCompany}',
-                  colorScheme: colorScheme,
-                  tooltip: isAr ? 'الشركة المصنعة وصاحبة الحملة الراعية' : 'Sponsor brand company',
-                  customBg: colorScheme.primary,
-                  customColor: colorScheme.onPrimary,
-                  customBorder: colorScheme.primary,
-                  isHero: true,
-                ),
                 if (event.retailChainName.isNotEmpty)
                   _buildMetadataPill(
-                    icon: Icons.storefront_rounded,
+                    icon: Icons.storefront_outlined,
                     label: event.branchesDisplaySummary,
                     colorScheme: colorScheme,
-                    customBg: colorScheme.secondaryContainer,
-                    customBorder: colorScheme.secondaryFixedDim,
-                    customColor: colorScheme.onSecondaryContainer,
                     tooltip: isAr ? 'السلسلة والفروع المحددة لسريان العرض' : 'Eligible retail chain & branch',
                   ),
                 _buildMetadataPill(
-                  icon: Icons.key_rounded,
-                  label: '${isAr ? "كود الرابط: " : "Slug: "}$companySlug',
+                  icon: Icons.key_outlined,
+                  label: '${isAr ? "كود الرابط: " : "Slug: "}$lri$companySlug$pdi',
                   colorScheme: colorScheme,
                   tooltip: isAr ? 'المعرف الفريد لرابط الحملة' : 'Unique URL slug identifier',
                 ),
                 _buildMetadataPill(
-                  icon: Icons.payments_rounded,
+                  icon: Icons.payments_outlined,
                   label: event.minimumSpend > 0
-                      ? '${isAr ? "الحد الأدنى: " : "Min Spend: "}${event.minimumSpend == event.minimumSpend.roundToDouble() ? event.minimumSpend.toInt() : event.minimumSpend} ${activeCountry.currencySymbol}'
-                      : (isAr ? 'بدون حد أدنى' : 'No Min Spend'),
+                      ? '${isAr ? "الحد الأدنى: " : "Min spend: "}$minSpend ${activeCountry.currencySymbol}'
+                      : (isAr ? 'بدون حد أدنى' : 'No min spend'),
                   colorScheme: colorScheme,
-                  customBg: colorScheme.tertiaryContainer,
-                  customBorder: colorScheme.tertiaryFixedDim,
-                  customColor: colorScheme.onTertiaryContainer,
                   tooltip: isAr ? 'قيمة المشتريات المطلوبة لقبول الفاتورة' : 'Minimum purchase threshold for receipt acceptance',
                 ),
                 if (event.startDate != null || event.endDate != null)
                   _buildMetadataPill(
-                    icon: Icons.calendar_month_rounded,
-                    label: '${isAr ? "الفترة: " : "Period: "}${event.startDate != null ? campaignFirstDayLabel(event.startDate) : (isAr ? "مفتوح" : "Open")} ${isAr ? "إلى" : "to"} ${event.endDate != null ? campaignLastDayLabel(event.endDate) : (isAr ? "مفتوح" : "Open")}',
+                    icon: Icons.calendar_month_outlined,
+                    label: periodLabel(),
                     colorScheme: colorScheme,
-                    tooltip: isAr ? 'تاريخ بداية ونهاية سريان الحملة' : 'Campaign validity date range',
+                    tooltip: isAr ? 'تاريخ بداية ونهاية سريان الحملة (يوم النهاية محسوب بتوقيت القاهرة)' : 'Campaign validity (end day inclusive, Cairo time)',
                   ),
                 if (event.requiredProducts.isNotEmpty)
                   _buildMetadataPill(
-                    icon: Icons.inventory_2_rounded,
-                    label: '${isAr ? "الأصناف المستهدفة: " : "Target Items: "}${event.requiredProducts.length} ${isAr ? "صنفاً" : "items"}',
+                    icon: Icons.inventory_2_outlined,
+                    label: '${isAr ? "الأصناف المستهدفة: " : "Target items: "}${amountFmt.format(event.requiredProducts.length)} ${isAr ? "صنفاً" : "items"}',
                     colorScheme: colorScheme,
-                    customBg: colorScheme.primaryContainer,
-                    customBorder: colorScheme.primaryFixedDim,
-                    customColor: colorScheme.onPrimaryContainer,
                     tooltip: isAr
                         ? 'الأصناف المستهدفة (${event.requiredProducts.length} صنف):\n${event.requiredProducts.join(" • ")}'
                         : 'Target Products (${event.requiredProducts.length} items):\n${event.requiredProducts.join(" • ")}',
                   ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: M3Spacing.sm),
 
-            // AI Prompt Guidelines (Smart Tonal Container)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: colorScheme.primaryContainer.withValues(alpha: 0.35),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: colorScheme.primary.withValues(alpha: 0.2)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.auto_awesome_rounded, size: 16, color: colorScheme.primary),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          isAr ? 'البرومبت المخصص للذكاء الاصطناعي (Gemini Vision AI Prompt):' : 'Custom Gemini AI Verification Prompt:',
-                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12, color: colorScheme.primary),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Tooltip(
-                        message: isAr ? 'نسخ نص برومبت الذكاء الاصطناعي للحافظة' : 'Copy AI prompt text',
-                        child: InkWell(
-                          onTap: () {
-                            Clipboard.setData(ClipboardData(text: event.customPrompt));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(isAr ? 'تم نسخ البرومبت بنجاح!' : 'AI Prompt copied to clipboard!'),
-                                duration: const Duration(seconds: 2),
-                              ),
-                            );
-                          },
-                          borderRadius: BorderRadius.circular(6),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            child: Row(
-                              children: [
-                                Icon(Icons.copy_rounded, size: 13, color: colorScheme.primary),
-                                const SizedBox(width: 4),
-                                Text(
-                                  isAr ? 'نسخ البرومبت' : 'Copy',
-                                  style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: colorScheme.primary),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
+            // AI prompt — collapsed ExpansionTile on a nested surfaceContainer panel
+            _buildNestedExpansion(
+              context,
+              icon: Icons.auto_awesome_outlined,
+              title: isAr ? 'برومبت الذكاء الاصطناعي' : 'AI verification prompt',
+              subtitle: event.customPrompt.isNotEmpty
+                  ? (isAr ? 'برومبت مخصص' : 'Custom prompt')
+                  : (isAr ? 'البرومبت الافتراضي للنظام' : 'System default prompt'),
+              children: [
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: SelectableText(
                     event.customPrompt.isNotEmpty ? event.customPrompt : (isAr ? 'يستخدم البرومبت الافتراضي الذكي للنظام' : 'Using smart system default prompt'),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurface),
+                    style: textTheme.bodyMedium?.copyWith(color: colorScheme.onSurface),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-
-            // Granular Portal Access Toggles & Live Controls (M3 Dual Control Strip)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.tune_rounded, size: 16, color: colorScheme.primary),
-                      const SizedBox(width: 8),
-                      Text(
-                        isAr ? 'التحكم في بوابات الوصول المباشرة (Portal Access Controls):' : 'Direct Portal Access Controls:',
-                        style: GoogleFonts.cairo(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.onSurface,
+                ),
+                const SizedBox(height: M3Spacing.xs),
+                Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: event.customPrompt));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(isAr ? 'تم نسخ البرومبت بنجاح!' : 'AI Prompt copied to clipboard!'),
+                          duration: const Duration(seconds: 2),
                         ),
-                      ),
-                    ],
+                      );
+                    },
+                    icon: const Icon(Icons.copy_rounded, size: 18),
+                    label: Text(isAr ? 'نسخ البرومبت' : 'Copy prompt'),
                   ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 10,
-                    children: [
+                ),
+              ],
+            ),
+            const SizedBox(height: M3Spacing.xs),
+
+            // Portal access — collapsed ExpansionTile
+            _buildNestedExpansion(
+              context,
+              icon: Icons.tune_rounded,
+              title: isAr ? 'التحكم في بوابات الوصول' : 'Portal access controls',
+              subtitle: isAr
+                  ? '${amountFmt.format([event.isActive && event.isPromoterActive, event.isActive && event.isAgencyActive, event.isManagerActive, event.isActive && event.enableWhatsAppWinnerNotification].where((x) => x).length)} من ${amountFmt.format(4)} مفعلة'
+                  : '${[event.isActive && event.isPromoterActive, event.isActive && event.isAgencyActive, event.isManagerActive, event.isActive && event.enableWhatsAppWinnerNotification].where((x) => x).length} of 4 enabled',
+              children: [
+                Wrap(
+                  spacing: M3Spacing.xs,
+                  runSpacing: M3Spacing.xs,
+                  children: [
                       // 1. Promoter & In-Store Portal Switch
                       _buildPortalControlTile(
                         context,
@@ -1749,12 +1683,11 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                           }
                         },
                       ),
-                    ],
-                  ),
-                ],
-              ),
+                  ],
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: M3Spacing.sm),
 
             // Action Buttons (Material Design 3 Standard with Rich Tooltips)
             Wrap(
@@ -1987,65 +1920,66 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     );
   }
 
+  static final WidgetStateProperty<Icon?> _m3SwitchThumbIcon =
+      WidgetStateProperty.resolveWith<Icon?>((states) {
+    if (states.contains(WidgetState.selected)) return const Icon(Icons.check_rounded);
+    return const Icon(Icons.close_rounded);
+  });
+
+  /// Collapsed-by-default nested panel (surfaceContainer, 12dp corners).
+  Widget _buildNestedExpansion(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required List<Widget> children,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    return Card.filled(
+      margin: EdgeInsets.zero,
+      elevation: M3Elevation.level0,
+      color: colorScheme.surfaceContainer,
+      clipBehavior: Clip.antiAlias,
+      shape: const RoundedRectangleBorder(borderRadius: M3Shape.radiusMedium),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: false,
+          minTileHeight: 48,
+          leading: Icon(icon, color: colorScheme.onSurfaceVariant),
+          title: Text(title, style: textTheme.titleSmall?.copyWith(color: colorScheme.onSurface)),
+          subtitle: Text(subtitle, style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant)),
+          shape: const RoundedRectangleBorder(borderRadius: M3Shape.radiusMedium),
+          collapsedShape: const RoundedRectangleBorder(borderRadius: M3Shape.radiusMedium),
+          childrenPadding: const EdgeInsetsDirectional.fromSTEB(M3Spacing.sm, 0, M3Spacing.sm, M3Spacing.sm),
+          children: children,
+        ),
+      ),
+    );
+  }
+
+  /// Outlined, non-interactive assist-style metadata chip (8dp corners, labelLarge).
   Widget _buildMetadataPill({
     required IconData icon,
     required String label,
     required ColorScheme colorScheme,
     required String tooltip,
-    Color? customBg,
-    Color? customBorder,
-    Color? customColor,
-    bool isHero = false,
   }) {
+    final textTheme = Theme.of(context).textTheme;
     return Tooltip(
       message: tooltip,
       waitDuration: const Duration(milliseconds: 400),
-      child: Container(
+      child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480),
-        padding: EdgeInsets.symmetric(
-          horizontal: isHero ? 14 : 10,
-          vertical: isHero ? 7 : 6,
-        ),
-        decoration: BoxDecoration(
-          color: customBg ?? colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(isHero ? 12 : 10),
-          border: Border.all(
-            color: customBorder ?? colorScheme.outlineVariant.withValues(alpha: 0.5),
-            width: isHero ? 1.4 : 1.0,
-          ),
-          boxShadow: isHero
-              ? [
-                  BoxShadow(
-                    color: (customBg ?? colorScheme.primary).withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: isHero ? 17 : 15,
-              color: customColor ?? colorScheme.primary,
-            ),
-            const SizedBox(width: 7),
-            Flexible(
-              child: Text(
-                label,
-                style: GoogleFonts.cairo(
-                  fontSize: isHero ? 13 : 12,
-                  fontWeight: isHero ? FontWeight.bold : FontWeight.w600,
-                  color: customColor ?? colorScheme.onSurface,
-                  letterSpacing: isHero ? 0.2 : 0,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
+        child: Chip(
+          avatar: Icon(icon, size: 18, color: colorScheme.primary),
+          label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+          labelStyle: textTheme.labelLarge?.copyWith(color: colorScheme.onSurfaceVariant),
+          backgroundColor: colorScheme.surfaceContainerLowest,
+          side: BorderSide(color: colorScheme.outlineVariant),
+          shape: const RoundedRectangleBorder(borderRadius: M3Shape.radiusSmall),
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
       ),
     );
@@ -2062,80 +1996,48 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     required String tooltip,
     required ValueChanged<bool> onChanged,
   }) {
-    final statusColor = isActive ? colorScheme.onTertiaryFixedVariant : colorScheme.onSecondaryContainer;
-    final statusBg = isActive ? colorScheme.tertiaryContainer : colorScheme.secondaryContainer;
-    final statusBorder = isActive ? colorScheme.tertiaryFixedDim : colorScheme.primaryFixedDim;
-    final statusText = isActive ? (isAr ? 'مفعلة 🟢' : 'Active 🟢') : (isAr ? 'متوقفة ⏸️' : 'Paused ⏸️');
+    final textTheme = Theme.of(context).textTheme;
+    final statusColor = isActive ? colorScheme.onTertiaryContainer : colorScheme.onSurfaceVariant;
+    final statusBg = isActive ? colorScheme.tertiaryContainer : colorScheme.surfaceContainerHighest;
+    final statusText = isActive ? (isAr ? 'مفعلة' : 'Active') : (isAr ? 'متوقفة' : 'Paused');
 
     return Container(
-      constraints: const BoxConstraints(minWidth: 260, maxWidth: 340),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      constraints: const BoxConstraints(minWidth: 260, maxWidth: 360),
+      padding: const EdgeInsetsDirectional.fromSTEB(M3Spacing.sm, M3Spacing.xs, M3Spacing.xs, M3Spacing.xs),
       decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isActive ? colorScheme.outlineVariant.withValues(alpha: 0.6) : colorScheme.primaryFixedDim,
-          width: isActive ? 1 : 1.5,
-        ),
+        color: colorScheme.surfaceContainerHigh,
+        borderRadius: M3Shape.radiusMedium,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: isActive ? colorScheme.primaryContainer : colorScheme.secondaryContainer,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              icon,
-              size: 18,
-              color: isActive ? colorScheme.onPrimaryContainer : colorScheme.onSecondaryContainer,
-            ),
-          ),
-          const SizedBox(width: 10),
+          Icon(icon, size: 24, color: colorScheme.onSurfaceVariant),
+          const SizedBox(width: M3Spacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  title,
-                  style: GoogleFonts.cairo(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.onSurface,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
+                Text(title, style: textTheme.titleSmall?.copyWith(color: colorScheme.onSurface), overflow: TextOverflow.ellipsis),
+                const SizedBox(height: M3Spacing.xxs),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: statusBg,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: statusBorder),
-                  ),
-                  child: Text(
-                    statusText,
-                    style: GoogleFonts.cairo(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: statusColor,
-                    ),
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: M3Spacing.xs, vertical: 2),
+                  decoration: BoxDecoration(color: statusBg, borderRadius: M3Shape.radiusSmall),
+                  child: Text(statusText, style: textTheme.labelMedium?.copyWith(color: statusColor)),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          Tooltip(
-            message: tooltip,
-            waitDuration: const Duration(milliseconds: 300),
-            child: Transform.scale(
-              scale: 0.85,
+          const SizedBox(width: M3Spacing.xs),
+          Semantics(
+            label: '$title: $statusText',
+            toggled: isActive,
+            child: Tooltip(
+              message: tooltip,
+              waitDuration: const Duration(milliseconds: 300),
               child: Switch(
                 value: isActive,
+                thumbIcon: _m3SwitchThumbIcon,
                 onChanged: onChanged,
               ),
             ),

@@ -58,6 +58,10 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
   final bool showCountryCurrencySelector;
   final bool showDarkModeToggle;
 
+  /// When true, the version chip is removed from the app bar and the version
+  /// is shown as an "About" entry inside the settings menu instead (M3 review #11).
+  final bool showVersionInSettings;
+
   const SwitchPointHeader({
     super.key,
     this.leading,
@@ -69,6 +73,7 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
     this.showLanguageSelector = true,
     this.showCountryCurrencySelector = true,
     this.showDarkModeToggle = true,
+    this.showVersionInSettings = false,
   });
 
   @override
@@ -165,7 +170,7 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
                 ],
 
                 // 3. Version & Build Badge + Dark Mode Toggle on Mobile
-                if (screenWidth >= 400) ...[
+                if (screenWidth >= 400 && !showVersionInSettings) ...[
                   _buildHeaderVersionPill(
                     colorScheme,
                     isMobile: true,
@@ -186,7 +191,7 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
                       showCountryCurrencySelector &&
                       onMobileMenuPressed == null,
                   showTheme: showDarkModeToggle,
-                  dense: true,
+                  dense: !showVersionInSettings,
                 ),
                 if (showMobileMenu && onMobileMenuPressed != null) ...[
                   const SizedBox(width: 4),
@@ -289,12 +294,14 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
               const SizedBox(width: 10),
             ],
 
-            _buildHeaderVersionPill(
-              colorScheme,
-              isMobile: false,
-              isCompact: true,
-            ),
-            const SizedBox(width: 10),
+            if (!showVersionInSettings) ...[
+              _buildHeaderVersionPill(
+                colorScheme,
+                isMobile: false,
+                isCompact: true,
+              ),
+              const SizedBox(width: 10),
+            ],
             _buildCompactControlsGroup(
               context,
               ref,
@@ -326,7 +333,7 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
     required bool showTheme,
     bool dense = false,
   }) {
-    if (!showLanguage && !showCurrency && !showTheme) {
+    if (!showLanguage && !showCurrency && !showTheme && !showVersionInSettings) {
       return const SizedBox.shrink();
     }
     final lang = ref.watch(localeProvider).languageCode;
@@ -358,6 +365,31 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
         );
       },
       children: [
+        if (showVersionInSettings) ...[
+          M3ActionMenu.item(
+            context: context,
+            label: isAr ? 'حول التطبيق' : 'About',
+            subtitle: AppVersionConfig.fullBuildDisplay,
+            icon: Icons.info_outline_rounded,
+            onPressed: () {
+              showDialog<void>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  icon: const Icon(Icons.info_outline_rounded),
+                  title: Text(isAr ? 'حول التطبيق' : 'About'),
+                  content: Text(AppVersionConfig.tooltipText),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: Text(isAr ? 'إغلاق' : 'Close'),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          if (showTheme || showLanguage || showCurrency) M3ActionMenu.divider(),
+        ],
         if (showTheme)
           M3ActionMenu.item(
             context: context,
