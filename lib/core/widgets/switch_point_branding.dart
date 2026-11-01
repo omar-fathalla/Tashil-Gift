@@ -143,18 +143,19 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
                                   height: 1.15,
                                 ),
                               ),
-                              Text(
-                                subtitle ??
-                                    'System Admins & Promoters Login Portal',
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                                style: GoogleFonts.cairo(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: colorScheme.onSurfaceVariant,
-                                  height: 1.15,
+                              if (subtitle == null || subtitle!.isNotEmpty)
+                                Text(
+                                  subtitle ??
+                                      'System Admins & Promoters Login Portal',
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.onSurfaceVariant,
+                                    height: 1.15,
+                                  ),
                                 ),
-                              ),
                             ],
                           ),
                         ),
@@ -170,11 +171,12 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
                 ],
 
                 // 3. Version & Build Badge + Dark Mode Toggle on Mobile
-                if (screenWidth >= 400 && !showVersionInSettings) ...[
+                if (!showVersionInSettings) ...[
                   _buildHeaderVersionPill(
                     colorScheme,
                     isMobile: true,
                     isCompact: true,
+                    hideIcon: screenWidth < 400,
                   ),
                   const SizedBox(width: 6),
                 ],
@@ -268,18 +270,19 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
                               height: 1.15,
                             ),
                           ),
-                          Text(
-                            subtitle ??
-                                'System Admins & Promoters Login Portal',
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                            style: GoogleFonts.cairo(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
-                              color: colorScheme.onSurfaceVariant,
-                              height: 1.2,
+                          if (subtitle == null || subtitle!.isNotEmpty)
+                            Text(
+                              subtitle ??
+                                  'System Admins & Promoters Login Portal',
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                              style: GoogleFonts.cairo(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: colorScheme.onSurfaceVariant,
+                                height: 1.2,
+                              ),
                             ),
-                          ),
                         ],
                       ),
                     ),
@@ -333,7 +336,10 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
     required bool showTheme,
     bool dense = false,
   }) {
-    if (!showLanguage && !showCurrency && !showTheme && !showVersionInSettings) {
+    if (!showLanguage &&
+        !showCurrency &&
+        !showTheme &&
+        !showVersionInSettings) {
       return const SizedBox.shrink();
     }
     final lang = ref.watch(localeProvider).languageCode;
@@ -441,6 +447,7 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
     ColorScheme colorScheme, {
     required bool isMobile,
     bool isCompact = false,
+    bool hideIcon = false,
   }) {
     return Tooltip(
       message: AppVersionConfig.tooltipText,
@@ -460,12 +467,14 @@ class SwitchPointHeader extends ConsumerWidget implements PreferredSizeWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.verified_outlined,
-              size: isCompact ? 12 : (isMobile ? 13 : 15),
-              color: colorScheme.primary,
-            ),
-            SizedBox(width: isCompact ? 3 : (isMobile ? 4 : 6)),
+            if (!hideIcon) ...[
+              Icon(
+                Icons.verified_outlined,
+                size: isCompact ? 12 : (isMobile ? 13 : 15),
+                color: colorScheme.primary,
+              ),
+              SizedBox(width: isCompact ? 3 : (isMobile ? 4 : 6)),
+            ],
             Text(
               isCompact
                   ? AppVersionConfig.versionDisplay

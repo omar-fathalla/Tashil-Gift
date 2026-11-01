@@ -468,7 +468,10 @@ class _ClientReceiptUploadScreenState
                   ? 'تعذر عرض المعاينة، الصورة محفوظة وسيتم رفعها'
                   : 'Preview unavailable — the image is saved and will be uploaded',
               textAlign: TextAlign.center,
-              style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 13),
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant,
+                fontSize: 13,
+              ),
             ),
           ],
         ],
@@ -886,8 +889,7 @@ class _ClientReceiptUploadScreenState
           return;
         }
         if (_activeEvent!.isNotStartedYet) {
-          final startStr =
-              campaignFirstDayLabel(_activeEvent!.startDate);
+          final startStr = campaignFirstDayLabel(_activeEvent!.startDate);
           _showIssue(
             ReceiptIssueKind.campaignNotStarted,
             subtitle: _isAr
@@ -2587,7 +2589,8 @@ class _ClientReceiptUploadScreenState
     return Scaffold(
       backgroundColor: colorScheme.surface,
       appBar: SwitchPointHeader(
-        subtitle: '${strings.clientPortalSubtitle} — ${event.targetCompany}',
+        // Header shows the platform name only (no subtitle line).
+        subtitle: '',
         companyLogoUrl: event.companyLogoUrl,
         customActions: [
           // 1. Campaign Concept & Offer Rules Action Button (Brief & Conditions)
@@ -2901,9 +2904,11 @@ class _ClientReceiptUploadScreenState
                                           isAr
                                               ? 'اختر الحملة / العرض المستهدف للفاتورة:'
                                               : 'Select Target Offer / Campaign:',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                           style: GoogleFonts.cairo(
-                                            fontSize: isMobile ? 12 : 13,
-                                            fontWeight: FontWeight.bold,
+                                            fontSize: isMobile ? 9.5 : 10.5,
+                                            fontWeight: FontWeight.w600,
                                             color: colorScheme.onSurface,
                                           ),
                                         ),
