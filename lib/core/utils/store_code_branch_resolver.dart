@@ -24,11 +24,29 @@ class StoreCodeBranchResolver {
 
   static bool _isDate(String s) => RegExp(r'^\d{6,8}$').hasMatch(s);
 
-  static String _code(BranchModel b) {
-    final c = b.branchCode.trim().toEnglishDigits();
-    if (c.isNotEmpty && c != '0' && c.toUpperCase() != 'DEF') return c;
-    final s = (b.receiptSignature?.storeId ?? '').trim().toEnglishDigits();
-    return (s.isNotEmpty && s != '0') ? s : '';
+  static bool _usable(String c) =>
+      c.isNotEmpty && c != '0' && c.toUpperCase() != 'DEF';
+
+  /// Digits at the end of a code like `GML-418` / `gml_418` -> `418`.
+  static String trailingDigits(String raw) {
+    final m = RegExp(r'(\d+)$').firstMatch(raw.trim().toEnglishDigits());
+    return m == null ? '' : m.group(1)!;
+  }
+
+  /// 2.0.170: every code a branch may print on a receipt: branchCode,
+  /// storeId and the digits at the end of each (`GML-418` -> `418`).
+  /// Upper-cased so `gml-418` == `GML-418`.
+  static List<String> codes(BranchModel b) {
+    final out = <String>[];
+    void add(String raw) {
+      final c = raw.trim().toEnglishDigits().toUpperCase();
+      if (_usable(c) && !out.contains(c)) out.add(c);
+      final d = trailingDigits(c);
+      if (_usable(d) && !out.contains(d)) out.add(d);
+    }
+    add(b.branchCode);
+    add(b.receiptSignature?.storeId ?? '');
+    return out;
   }
 
   /// Position of the code counted from the end of the receipt number, read
@@ -36,8 +54,8 @@ class StoreCodeBranchResolver {
   static int? _offsetFromEnd(BranchModel b, String code) {
     final pattern = (b.receiptSignature?.receiptPattern ?? '').trim();
     if (pattern.isEmpty) return null;
-    final segs = segments(pattern);
-    final i = segs.lastIndexOf(code);
+    final segs = segments(pattern).map((e) => e.toUpperCase()).toList();
+    final i = segs.lastIndexOf(code.toUpperCase());
     if (i < 0) return null;
     return segs.length - 1 - i;
   }
@@ -45,20 +63,23 @@ class StoreCodeBranchResolver {
   /// Returns the single branch whose store code appears at its expected
   /// position in [receiptNumber], or null (no match / ambiguous).
   static BranchModel? resolve(String receiptNumber, List<BranchModel> branches) {
-    final segs = segments(receiptNumber);
+    final segs = segments(receiptNumber).map((e) => e.toUpperCase()).toList();
     if (segs.length < 2) return null;
     final hits = <String, BranchModel>{};
     for (final b in branches) {
-      final code = _code(b);
-      if (code.isEmpty) continue;
-      int? offset = _offsetFromEnd(b, code);
-      if (offset == null) {
-        if (!_isDate(segs.last)) continue;
-        offset = 1;
+      for (final code in codes(b)) {
+        int? offset = _offsetFromEnd(b, code);
+        if (offset == null) {
+          if (!_isDate(segs.last)) continue;
+          offset = 1;
+        }
+        final idx = segs.length - 1 - offset;
+        if (idx < 0 || idx >= segs.length) continue;
+        if (segs[idx] == code) {
+          hits[b.id] = b;
+          break;
+        }
       }
-      final idx = segs.length - 1 - offset;
-      if (idx < 0 || idx >= segs.length) continue;
-      if (segs[idx] == code) hits[b.id] = b;
     }
     return hits.length == 1 ? hits.values.first : null;
   }
@@ -79,8 +100,26 @@ class StoreCodeBranchResolver {
     final idx = <int>[];
     for (int i = 0; i < branchIds.length; i++) {
       final id = branchIds[i].trim();
-      if (id == code || id.endsWith('_$code')) idx.add(i);
+      // 2.0.170: `gomla-market_gml-418` also owns store code `418`.
+      final tail = id.contains('_') ? id.substring(id.lastIndexOf('_') + 1) : id;
+      if (id == code || id.endsWith('_$code') || trailingDigits(tail) == code) {
+        idx.add(i);
+      }
     }
     return idx.length == 1 ? idx.first : null;
+  }
+
+  /// 2.0.170: campaign branch name for the store code in [receiptNumber],
+  /// using the campaign's aligned branchIds/branchNames. Works without any
+  /// branch docs (e.g. when loading them timed out). Null when no unique hit.
+  static String? campaignBranchName(
+    String receiptNumber,
+    List<String> branchIds,
+    List<String> branchNames,
+  ) {
+    final i = campaignBranchIndex(receiptNumber, branchIds);
+    if (i == null || i >= branchNames.length) return null;
+    final n = branchNames[i].trim();
+    return n.isEmpty ? null : n;
   }
 }

@@ -1373,6 +1373,8 @@ class AiReceiptService {
     List<String> allowedBranches = const [],
     bool isAllBranches = true,
     List<BranchModel> registeredBranches = const [],
+    List<String> campaignBranchIds = const [],
+    List<String> campaignBranchNames = const [],
     DateTime? startDate,
     DateTime? endDate,
     String customPrompt = '',
@@ -2508,6 +2510,26 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
             bNorm = bNorm.substring(0, bNorm.length - 1).trim();
           }
           result = result.copyWith(branchDetected: bNorm);
+        }
+
+        // 2.0.170: the store code in the receipt number belongs to one of the
+        // campaign's own branch ids (e.g. 418 -> gomla-market_gml-418). This
+        // needs no branch docs, so it still works if loading them failed.
+        if (!result.isBranchMatched && campaignBranchIds.isNotEmpty) {
+          final codeName = StoreCodeBranchResolver.campaignBranchName(
+            result.receiptNumber,
+            campaignBranchIds,
+            campaignBranchNames,
+          );
+          if (codeName != null) {
+            result = result.copyWith(
+              isBranchMatched: true,
+              branchDetected: codeName,
+              unfulfilledConditions: result.unfulfilledConditions
+                  .where((c) => !c.contains('فرع') && !c.contains('الفروع'))
+                  .toList(),
+            );
+          }
         }
 
         // Multi-chain matching reconciliation

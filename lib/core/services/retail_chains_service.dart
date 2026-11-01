@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_service.dart';
@@ -215,6 +216,40 @@ class RetailChainsService {
   }
 
   /// Fetches all branches matching the event's chains, branch IDs, and branch names with their POS signatures.
+  /// 2.0.170: loads only the given campaign branch docs (a few small doc
+  /// reads) instead of the whole `branches` collection. With no ids, falls
+  /// back to the campaign's chains (all-branches campaigns). Throws on a
+  /// read failure so callers can retry and log instead of silently
+  /// continuing with an empty list.
+  Future<List<BranchModel>> getCampaignBranches({
+    List<String> branchIds = const [],
+    String retailChainId = '',
+  }) async {
+    final ids = branchIds.map((s) => s.trim()).where((s) => s.isNotEmpty).toSet().toList();
+    if (ids.isNotEmpty) {
+      final snaps = await Future.wait(ids.map((id) => _branchesCollection.doc(id).get()));
+      final found = [
+        for (final d in snaps)
+          if (d.exists) BranchModel.fromFirestore(d),
+      ];
+      if (found.isNotEmpty) return _deduplicateBranchList(found);
+    }
+    final chainIds = retailChainId
+        .split(RegExp(r'[,،]'))
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toSet()
+        .toList();
+    if (chainIds.isEmpty) return const [];
+    final out = <BranchModel>[];
+    for (int i = 0; i < chainIds.length; i += 30) {
+      final chunk = chainIds.sublist(i, math.min(i + 30, chainIds.length));
+      final q = await _branchesCollection.where('retailChainId', whereIn: chunk).get();
+      out.addAll(q.docs.map((d) => BranchModel.fromFirestore(d)));
+    }
+    return _deduplicateBranchList(out);
+  }
+
   Future<List<BranchModel>> getBranchesForEvent({
     String retailChainId = '',
     List<String> branchIds = const [],
@@ -770,7 +805,9 @@ class RetailChainsService {
       branchAddress: branchAddress.trim(),
       receiptNumber: receiptNumber.trim(),
       receiptDate: receiptDate.trim(),
-      sourceReceiptUrl: sourceReceiptUrl.trim(),
+      // 2.0.170: never store inline base64 images on branch docs (they made
+      // every branch read megabytes); only real URLs are kept.
+      sourceReceiptUrl: sourceReceiptUrl.trim().startsWith('data:') ? '' : sourceReceiptUrl.trim(),
       detectedAt: DateTime.now(),
     );
 

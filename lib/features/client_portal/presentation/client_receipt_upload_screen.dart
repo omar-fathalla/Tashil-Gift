@@ -79,6 +79,8 @@ class _ClientReceiptUploadScreenState
 
   EventModel? _activeEvent;
   List<EventModel> _availableCompanyEvents = [];
+  // 2.0.170: outcome of the last branch-docs load, logged on receipts.
+  Map<String, dynamic> _lastBranchLoad = const {};
   bool _isLoadingEvent = true;
   String? _errorMessage;
   StreamSubscription? _eventSubscription;
@@ -961,24 +963,76 @@ class _ClientReceiptUploadScreenState
       List<BranchModel> chainBranches = [];
 
       run.step = ReceiptSaveStep.lookup;
+      // 2.0.170: branches load on their own (campaign branch docs only, own
+      // timeout, one retry) so a slow products catalog can't leave the
+      // scanner without branch signatures. The outcome is logged on the
+      // receipt record (`branch_load`).
+      final scanEvents = isMultiScan && _availableCompanyEvents.isNotEmpty
+          ? _availableCompanyEvents
+          : <EventModel>[primaryTargetEvent];
+      final List<String> campaignBranchIds = [];
+      final List<String> campaignBranchNames = [];
+      for (final ev in scanEvents) {
+        for (int i = 0; i < ev.branchIds.length; i++) {
+          final id = ev.branchIds[i].trim();
+          if (id.isEmpty || campaignBranchIds.contains(id)) continue;
+          campaignBranchIds.add(id);
+          campaignBranchNames.add(
+            i < ev.branchNames.length ? ev.branchNames[i] : '',
+          );
+        }
+      }
+      final chainIdsJoined = scanEvents
+          .map((e) => e.retailChainId)
+          .where((c) => c.trim().isNotEmpty)
+          .join(',');
+      final branchesSvc = ref.read(retailChainsServiceProvider);
+      String branchLoadStatus = 'ok';
+      String branchLoadError = '';
+      int branchLoadAttempts = 0;
+      final branchLoadWatch = Stopwatch()..start();
+      Future<List<BranchModel>> loadBranches() async {
+        for (int attempt = 1; attempt <= 2; attempt++) {
+          branchLoadAttempts = attempt;
+          try {
+            final list =
+                (campaignBranchIds.isEmpty && chainIdsJoined.isEmpty)
+                ? await branchesSvc
+                      .getBranchesForEvent(
+                        retailChainId: primaryTargetEvent.retailChainId,
+                        branchIds: primaryTargetEvent.branchIds,
+                        branchNames: primaryTargetEvent.branchNames,
+                      )
+                      .timeout(AiReceiptService.preScanLookupTimeout)
+                : await branchesSvc
+                      .getCampaignBranches(
+                        branchIds: campaignBranchIds,
+                        retailChainId: chainIdsJoined,
+                      )
+                      .timeout(AiReceiptService.preScanLookupTimeout);
+            if (list.isNotEmpty) {
+              branchLoadStatus = 'ok';
+              return list;
+            }
+            branchLoadStatus = 'empty';
+          } on TimeoutException {
+            branchLoadStatus = 'timeout';
+          } catch (e) {
+            branchLoadStatus = 'error';
+            final msg = e.toString();
+            branchLoadError = msg.length > 200 ? msg.substring(0, 200) : msg;
+          }
+        }
+        return <BranchModel>[];
+      }
+
+      final productsFuture = productsService
+          .getProductsForCompany(primaryTargetEvent.companySlug)
+          .timeout(AiReceiptService.preScanLookupTimeout)
+          .catchError((_) => <CompanyProductItem>[]);
+      final branchesFuture = loadBranches();
       try {
-        final results = await Future.wait([
-          productsService
-              .getProductsForCompany(primaryTargetEvent.companySlug)
-              .catchError((_) => <CompanyProductItem>[]),
-          ref
-              .read(retailChainsServiceProvider)
-              .getBranchesForEvent(
-                retailChainId: primaryTargetEvent.retailChainId,
-                branchIds: primaryTargetEvent.branchIds,
-                branchNames: primaryTargetEvent.branchNames,
-              )
-              .catchError((_) => <BranchModel>[]),
-        ]).timeout(AiReceiptService.preScanLookupTimeout);
-
-        final catalogItems = results[0] as List<CompanyProductItem>;
-        chainBranches = results[1] as List<BranchModel>;
-
+        final catalogItems = await productsFuture;
         registeredBarcodes = catalogItems
             .map((e) => "${e.productName} (${e.barcode})")
             .toList();
@@ -988,6 +1042,16 @@ class _ClientReceiptUploadScreenState
               item.productName: item.barcode,
         };
       } catch (_) {}
+      chainBranches = await branchesFuture;
+      branchLoadWatch.stop();
+      _lastBranchLoad = {
+        'status': branchLoadStatus,
+        'attempts': branchLoadAttempts,
+        'count': chainBranches.length,
+        'campaign_branch_ids': campaignBranchIds.length,
+        'ms': branchLoadWatch.elapsedMilliseconds,
+        if (branchLoadError.isNotEmpty) 'error': branchLoadError,
+      };
 
       List<String> combinedRequiredProducts = [];
       List<PromotionalRuleItem> combinedPromotionalRules = [];
@@ -1067,6 +1131,8 @@ class _ClientReceiptUploadScreenState
             allowedBranches: combinedAllowedBranches,
             isAllBranches: combinedIsAllBranches,
             registeredBranches: chainBranches,
+            campaignBranchIds: campaignBranchIds,
+            campaignBranchNames: campaignBranchNames,
             startDate: isMultiScan ? null : _activeEvent!.startDate,
             endDate: isMultiScan ? null : _activeEvent!.endDate,
             customPrompt: isMultiScan ? '' : _activeEvent!.customPrompt,
@@ -1360,6 +1426,7 @@ class _ClientReceiptUploadScreenState
                 initialAiMetadata: {
                   'store_chain_detected': result.storeChainDetected,
                   'branch_detected': result.branchDetected,
+                  if (_lastBranchLoad.isNotEmpty) 'branch_load': _lastBranchLoad,
                   'branch_id':
                       ReceiptBranchResolver.resolve(
                         _activeEvent ?? widget.event,
@@ -1711,6 +1778,7 @@ class _ClientReceiptUploadScreenState
             ).id ??
             '',
         'is_branch_matched': result.isBranchMatched,
+        if (_lastBranchLoad.isNotEmpty) 'branch_load': _lastBranchLoad,
         'is_handwritten': result.isHandwritten,
         'is_thermal_pos_receipt': result.isThermalPosReceipt,
         'is_tampered': result.isTampered,
@@ -3951,6 +4019,7 @@ class _ClientReceiptUploadScreenState
             ).id ??
             '',
         'is_branch_matched': result.isBranchMatched,
+        if (_lastBranchLoad.isNotEmpty) 'branch_load': _lastBranchLoad,
         'is_handwritten': result.isHandwritten,
         'is_thermal_pos_receipt': result.isThermalPosReceipt,
         'is_tampered': result.isTampered,
