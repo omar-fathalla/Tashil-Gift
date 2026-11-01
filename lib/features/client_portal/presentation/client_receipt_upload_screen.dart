@@ -3086,25 +3086,30 @@ class _ClientReceiptUploadScreenState
                             controller: _customerNameController,
                             textInputAction: TextInputAction.next,
                             onChanged: (_) => setState(() {}),
-                            style: GoogleFonts.cairo(
-                              fontSize: isMobile ? 14 : 15,
-                            ),
+                            style: GoogleFonts.cairo(fontSize: 12.5),
                             decoration: InputDecoration(
                               labelText: strings.customerNameOptional,
                               labelStyle: GoogleFonts.cairo(
+                                fontSize: 12,
                                 color: colorScheme.onSurfaceVariant,
                               ),
                               prefixIcon: Icon(
                                 Icons.person_outline_rounded,
                                 color: colorScheme.primary,
-                                size: isMobile ? 22 : 24,
+                                size: 18,
                               ),
                               suffixIcon:
                                   _customerNameController.text.isNotEmpty
                                   ? IconButton(
                                       icon: const Icon(
                                         Icons.clear_rounded,
-                                        size: 20,
+                                        size: 16,
+                                      ),
+                                      visualDensity: VisualDensity.compact,
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(
+                                        minWidth: 32,
+                                        minHeight: 32,
                                       ),
                                       tooltip: isAr
                                           ? 'مسح اسم العميل'
@@ -3118,9 +3123,18 @@ class _ClientReceiptUploadScreenState
                               filled: true,
                               fillColor: colorScheme.surfaceContainerHighest
                                   .withValues(alpha: 0.35),
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: isMobile ? 14 : 16,
+                              isDense: true,
+                              prefixIconConstraints: const BoxConstraints(
+                                minWidth: 40,
+                                minHeight: 36,
+                              ),
+                              suffixIconConstraints: const BoxConstraints(
+                                minWidth: 36,
+                                minHeight: 36,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
                               ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(16),
@@ -3146,7 +3160,7 @@ class _ClientReceiptUploadScreenState
                             ),
                           ),
 
-                          SizedBox(height: isMobile ? 12 : 16),
+                          SizedBox(height: isMobile ? 8 : 10),
 
                           TextField(
                             controller: _customerPhoneController,
@@ -3156,25 +3170,30 @@ class _ClientReceiptUploadScreenState
                             inputFormatters: [
                               const ArabicToEnglishDigitsFormatter.digitsOnly(),
                             ],
-                            style: GoogleFonts.cairo(
-                              fontSize: isMobile ? 14 : 15,
-                            ),
+                            style: GoogleFonts.cairo(fontSize: 12.5),
                             decoration: InputDecoration(
                               labelText: strings.customerPhoneLabel,
                               labelStyle: GoogleFonts.cairo(
+                                fontSize: 12,
                                 color: colorScheme.onSurfaceVariant,
                               ),
                               prefixIcon: Icon(
                                 Icons.phone_outlined,
                                 color: colorScheme.primary,
-                                size: isMobile ? 22 : 24,
+                                size: 18,
                               ),
                               suffixIcon:
                                   _customerPhoneController.text.isNotEmpty
                                   ? IconButton(
                                       icon: const Icon(
                                         Icons.clear_rounded,
-                                        size: 20,
+                                        size: 16,
+                                      ),
+                                      visualDensity: VisualDensity.compact,
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(
+                                        minWidth: 32,
+                                        minHeight: 32,
                                       ),
                                       tooltip: isAr
                                           ? 'مسح رقم الهاتف'
@@ -3188,16 +3207,25 @@ class _ClientReceiptUploadScreenState
                               filled: true,
                               fillColor: colorScheme.surfaceContainerHighest
                                   .withValues(alpha: 0.35),
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: isMobile ? 14 : 16,
+                              isDense: true,
+                              prefixIconConstraints: const BoxConstraints(
+                                minWidth: 40,
+                                minHeight: 36,
+                              ),
+                              suffixIconConstraints: const BoxConstraints(
+                                minWidth: 36,
+                                minHeight: 36,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
                               ),
                               helperText: isAr
                                   ? '📲 يُنصح بكتابة رقم الهاتف لإرسال تهنئة الهدية للعميل عبر الواتساب فوراً'
                                   : '📲 Enter phone number for instant WhatsApp gift notification',
                               helperStyle: GoogleFonts.cairo(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w600,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
                                 color: colorScheme.onTertiaryFixedVariant,
                               ),
                               border: OutlineInputBorder(
