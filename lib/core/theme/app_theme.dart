@@ -97,6 +97,22 @@ class AppTheme {
         margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
       ),
 
+      // M3 Search Bar Specification (full-radius, surfaceContainerHigh, level 0)
+      searchBarTheme: SearchBarThemeData(
+        elevation: const WidgetStatePropertyAll(0),
+        backgroundColor: WidgetStatePropertyAll(colorScheme.surfaceContainerHigh),
+        constraints: const BoxConstraints(minHeight: 48, maxHeight: 56),
+        padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 16)),
+        textStyle: WidgetStatePropertyAll(GoogleFonts.cairo(fontSize: 14, color: colorScheme.onSurface)),
+        hintStyle: WidgetStatePropertyAll(GoogleFonts.cairo(fontSize: 14, color: colorScheme.onSurfaceVariant)),
+      ),
+
+      // M3 List Tile & Icon Button Specifications
+      listTileTheme: ListTileThemeData(
+        iconColor: colorScheme.onSurfaceVariant,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+
       // M3 Divider Specification
       dividerTheme: DividerThemeData(
         color: colorScheme.outlineVariant.withValues(alpha: 0.5),

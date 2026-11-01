@@ -34,6 +34,7 @@ import '../../../core/services/company_gifts_service.dart';
 import '../../../core/utils/url_builder.dart';
 import '../../../core/utils/receipt_date_window.dart';
 import '../../../core/utils/responsive.dart';
+import '../../../core/theme/m3_shape_tokens.dart';
 
 class AdminDashboardScreen extends ConsumerStatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -645,18 +646,18 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                                     backgroundColor: Colors.transparent,
                                     indicatorColor: colorScheme.secondaryContainer,
                                     selectedIconTheme: IconThemeData(color: colorScheme.onSecondaryContainer, size: 24),
-                                    unselectedIconTheme: IconThemeData(color: colorScheme.onSurfaceVariant, size: 22),
+                                    unselectedIconTheme: IconThemeData(color: colorScheme.onSurfaceVariant, size: 24),
                                     selectedLabelTextStyle: GoogleFonts.cairo(
-                                      color: colorScheme.primary,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 11,
-                                      height: 1.2,
+                                      color: colorScheme.onSurface,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12,
+                                      height: 1.33,
                                     ),
                                     unselectedLabelTextStyle: GoogleFonts.cairo(
                                       color: colorScheme.onSurfaceVariant,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 10.5,
-                                      height: 1.2,
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 12,
+                                      height: 1.33,
                                     ),
                                     destinations: [
                                       NavigationRailDestination(
@@ -821,8 +822,6 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       floatingActionButton: _selectedIndex == 0
           ? FloatingActionButton.extended(
               onPressed: _openCreateEventScreen,
-              backgroundColor: colorScheme.primary,
-              foregroundColor: colorScheme.onPrimary,
               icon: const Icon(Icons.add_rounded),
               label: Text(
                 isAr ? 'إنشاء حملة' : 'New Campaign',
@@ -1048,11 +1047,29 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       );
     }
 
+    final isCompactPage = MediaQuery.sizeOf(context).width < 600;
+    final textTheme = theme.textTheme;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.fromLTRB(
+        isCompactPage ? M3Spacing.sm : M3Spacing.md,
+        isCompactPage ? M3Spacing.sm : M3Spacing.md,
+        isCompactPage ? M3Spacing.sm : M3Spacing.md,
+        96, // keep last card clear of the extended FAB
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 0. M3 page header (headline + supporting text)
+          Text(
+            isAr ? 'إدارة الحملات' : 'Campaigns',
+            style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: M3Spacing.xxs),
+          Text(
+            isAr ? 'نظرة عامة على كل الحملات والشركات الراعية' : 'Overview of all campaigns and sponsor companies',
+            style: textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: M3Spacing.md),
           // 1. Dashboard Metrics Banner (M3 Single-Seed Design)
           LayoutBuilder(
             builder: (context, constraints) {
@@ -1060,8 +1077,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               final cardWidth = layout.isDesktop
                   ? (constraints.maxWidth - (3 * M3Spacing.sm)) / 4 
                   : (layout.isMedium || constraints.maxWidth >= 420)
-                      ? (constraints.maxWidth - M3Spacing.sm) / 2 
-                      : constraints.maxWidth;
+                      ? (constraints.maxWidth - M3Spacing.sm) / 2
+                      : (constraints.maxWidth - M3Spacing.sm) / 2; // compact: 2-up grid
 
               return Wrap(
                 spacing: M3Spacing.sm,
@@ -1118,16 +1135,18 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               );
             },
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: M3Spacing.md),
 
           // 2. Filter Tabs & Search Controls (M3 Button Group Standard)
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+          Card.outlined(
+            margin: EdgeInsets.zero,
+            color: colorScheme.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: M3Shape.radiusMedium,
+              side: BorderSide(color: colorScheme.outlineVariant),
             ),
+            child: Padding(
+            padding: const EdgeInsets.all(M3Spacing.sm),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1171,88 +1190,62 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     // Search input
                     SizedBox(
                       width: MediaQuery.of(context).size.width < 700 ? double.infinity : 280,
-                      child: TextField(
+                      child: SearchBar(
                         controller: _searchController,
-                        style: GoogleFonts.cairo(fontSize: 13),
                         onChanged: (_) => setState(() {}),
-                        decoration: InputDecoration(
-                          hintText: isAr ? 'بحث باسم الحملة أو الشركة...' : 'Search campaigns or companies...',
-                          hintStyle: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
-                          prefixIcon: Icon(Icons.search_rounded, size: 20, color: colorScheme.primary),
-                          suffixIcon: _searchController.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear_rounded, size: 18),
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    setState(() {});
-                                  },
-                                )
-                              : null,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          filled: true,
-                          fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
-                          ),
-                        ),
+                        hintText: isAr ? 'بحث باسم الحملة أو الشركة...' : 'Search campaigns or companies...',
+                        leading: Icon(Icons.search_rounded, color: colorScheme.onSurfaceVariant),
+                        trailing: [
+                          if (_searchController.text.isNotEmpty)
+                            IconButton(
+                              tooltip: isAr ? 'مسح' : 'Clear',
+                              icon: const Icon(Icons.clear_rounded),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {});
+                              },
+                            ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ],
             ),
+            ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: M3Spacing.md),
 
           // 3. Section Title with Count Indicator
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(8),
+              Expanded(
+                child: Text(
+                  '${strings.eventsTitle} (${filteredEvents.length})',
+                  style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                  overflow: TextOverflow.ellipsis,
                 ),
-                child: Icon(Icons.view_list_rounded, size: 18, color: colorScheme.onPrimaryContainer),
               ),
-              const SizedBox(width: 10),
-              Text(
-                '${strings.eventsTitle} (${filteredEvents.length}):',
-                style: GoogleFonts.cairo(fontSize: 17, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
-              ),
-              const Spacer(),
-              if (filteredEvents.length != allEvents.length) ...[
+              if (filteredEvents.length != allEvents.length && !isCompactPage) ...[
                 Text(
                   isAr ? 'تمت تصفية ${filteredEvents.length} من أصل $totalCampaigns' : 'Showing ${filteredEvents.length} of $totalCampaigns',
-                  style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                  style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: M3Spacing.xs),
               ],
-              FilledButton.icon(
-                onPressed: _openCreateEventScreen,
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: Text(
-                  isAr ? 'إنشاء حملة جديدة' : 'New Campaign',
-                  style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+              if (!isCompactPage)
+                FilledButton.tonalIcon(
+                  onPressed: _openCreateEventScreen,
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: Text(isAr ? 'إنشاء حملة جديدة' : 'New Campaign'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 40),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                  ),
                 ),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: M3Spacing.xs),
 
           // 4. Campaigns List (M3 Cards)
           if (filteredEvents.isEmpty)
@@ -1302,116 +1295,91 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    final card = Container(
-      width: width,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: isSelected ? color.withValues(alpha: 0.08) : colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isSelected ? color : color.withValues(alpha: 0.25),
-          width: isSelected ? 2.0 : 1.0,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: isSelected ? 0.12 : 0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    final textTheme = theme.textTheme;
+    final selectedBg = colorScheme.secondaryContainer;
+    final onSelected = colorScheme.onSecondaryContainer;
+    final content = Padding(
+      padding: const EdgeInsets.all(M3Spacing.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(14),
+                  color: isSelected ? colorScheme.surface : color.withValues(alpha: 0.12),
+                  borderRadius: M3Shape.radiusMedium,
                 ),
                 child: Icon(icon, color: color, size: 24),
               ),
+              const Spacer(),
               if (hasPulse)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: colorScheme.tertiaryContainer,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: colorScheme.tertiaryFixedDim),
+                Chip(
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  avatar: Icon(Icons.circle, size: 8, color: colorScheme.tertiary),
+                  label: const Text('LIVE'),
+                  labelStyle: textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onTertiaryContainer,
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: colorScheme.tertiary,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'LIVE',
-                        style: GoogleFonts.cairo(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.onTertiaryFixedVariant,
-                        ),
-                      ),
-                    ],
-                  ),
+                  backgroundColor: colorScheme.tertiaryContainer,
+                  side: BorderSide.none,
                 ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: M3Spacing.sm),
           Text(
             value,
-            style: GoogleFonts.cairo(
-              fontSize: 26,
-              fontWeight: FontWeight.w900,
-              color: colorScheme.onSurface,
+            style: textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: isSelected ? onSelected : colorScheme.onSurface,
               height: 1.1,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: M3Spacing.xxs),
           Text(
             title,
-            style: GoogleFonts.cairo(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: colorScheme.onSurface,
+            style: textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: isSelected ? onSelected : colorScheme.onSurface,
             ),
           ),
           Text(
             subtitle,
-            style: GoogleFonts.cairo(
-              fontSize: 11,
-              color: colorScheme.onSurfaceVariant,
+            style: textTheme.bodySmall?.copyWith(
+              color: isSelected ? onSelected : colorScheme.onSurfaceVariant,
             ),
           ),
         ],
       ),
     );
 
+    // M3 card variants: filled (secondaryContainer) when selected, outlined otherwise.
+    final card = SizedBox(
+      width: width,
+      child: Card(
+        margin: EdgeInsets.zero,
+        elevation: M3Elevation.level0,
+        color: isSelected ? selectedBg : colorScheme.surface,
+        surfaceTintColor: Colors.transparent,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: M3Shape.radiusMedium,
+          side: isSelected ? BorderSide.none : BorderSide(color: colorScheme.outlineVariant),
+        ),
+        child: onTap != null ? InkWell(onTap: onTap, child: content) : content,
+      ),
+    );
+
     return Tooltip(
       message: tooltip,
       waitDuration: const Duration(milliseconds: 400),
-      child: onTap != null
-          ? Material(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(20),
-              child: InkWell(
-                onTap: onTap,
-                borderRadius: BorderRadius.circular(20),
-                child: card,
-              ),
-            )
-          : card,
+      child: card,
     );
   }
 
@@ -1459,25 +1427,17 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       statusLabel = isAr ? 'نشطة وسارية' : 'Active & Running';
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.8),
-          width: 1.2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withValues(alpha: 0.05),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
+    // M3 outlined card (level 0, medium shape, outlineVariant stroke)
+    return Card.outlined(
+      margin: const EdgeInsets.only(bottom: M3Spacing.sm),
+      color: colorScheme.surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: M3Shape.radiusMedium,
+        side: BorderSide(color: colorScheme.outlineVariant),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(22),
+        padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 600 ? M3Spacing.sm : M3Spacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1494,17 +1454,16 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     children: [
                       Text(
                         event.eventName,
-                        style: GoogleFonts.cairo(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                          color: colorScheme.primary,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: colorScheme.onSurface,
                         ),
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: statusBg,
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: M3Shape.radiusSmall,
                           border: Border.all(color: statusBorder),
                         ),
                         child: Row(
