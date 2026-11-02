@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/widgets/slow_load_placeholder.dart';
 import 'package:al_mraay/core/config/ai_config.dart';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -104,7 +105,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     final isLocked = lockedSlug.isNotEmpty;
     final isCampaignLocked = widget.lockedEventId != null && widget.lockedEventId!.isNotEmpty;
     final effectiveCampaignId = isCampaignLocked ? widget.lockedEventId! : _selectedCampaignId;
-    final effectiveKey = '${widget.lockedCompanySlug ?? 'all'}_$effectiveCampaignId';
+    final effectiveKey = '${widget.lockedCompanySlug ?? 'all'}_${effectiveCampaignId}_${_serverDateKey()}';
 
     if (_lastStreamsKey != effectiveKey || force || _transactionsStream == null) {
       _lastStreamsKey = effectiveKey;
@@ -126,6 +127,17 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       }
       if (effectiveCampaignId != 'ALL' && effectiveCampaignId != 'all' && effectiveCampaignId.isNotEmpty) {
         transactionsQuery = transactionsQuery.where('campaignId', isEqualTo: effectiveCampaignId);
+      }
+      // 2.0.172: the unscoped super-admin view used to stream the WHOLE
+      // receipts collection and filter dates client-side (>90s). Push the
+      // date window to Firestore. Single-field range => no composite index.
+      // Scoped (company/campaign) queries keep the old shape until the
+      // companySlug/campaignId+timestamp indexes are deployed.
+      final range = _serverDateRange();
+      if (range != null && !isLocked && (effectiveCampaignId == 'all' || effectiveCampaignId == 'ALL' || effectiveCampaignId.isEmpty)) {
+        transactionsQuery = transactionsQuery
+            .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(range.start))
+            .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(range.end));
       }
       _transactionsStream = transactionsQuery.snapshots();
     }
@@ -416,6 +428,34 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
     }
 
     return clean;
+  }
+
+  /// Server-side window for the current date filter (null = no bound).
+  DateTimeRange? _serverDateRange() {
+    final now = DateTime.now();
+    switch (_dateFilter) {
+      case DateFilterType.all:
+        return null;
+      case DateFilterType.today:
+        return DateTimeRange(
+            start: DateTime(now.year, now.month, now.day),
+            end: DateTime(now.year, now.month, now.day, 23, 59, 59, 999));
+      case DateFilterType.thisMonth:
+        return DateTimeRange(
+            start: DateTime(now.year, now.month, 1),
+            end: DateTime(now.year, now.month + 1, 1).subtract(const Duration(milliseconds: 1)));
+      case DateFilterType.custom:
+        if (_customDateRange == null) return null;
+        final st = _customDateRange!.start, en = _customDateRange!.end;
+        return DateTimeRange(
+            start: DateTime(st.year, st.month, st.day),
+            end: DateTime(en.year, en.month, en.day, 23, 59, 59, 999));
+    }
+  }
+
+  String _serverDateKey() {
+    final r = _serverDateRange();
+    return r == null ? 'any' : '${r.start.millisecondsSinceEpoch}-${r.end.millisecondsSinceEpoch}';
   }
 
   bool _passesDateFilter(DateTime? date) {
@@ -2543,7 +2583,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
       _selectedCampaignId = widget.lockedEventId!;
     }
     final eventsKey = widget.lockedCompanySlug ?? 'all';
-    final txKey = '${widget.lockedCompanySlug ?? 'all'}_$_selectedCampaignId';
+    final txKey = '${widget.lockedCompanySlug ?? 'all'}_${_selectedCampaignId}_${_serverDateKey()}';
 
     // Clean M3 Scaffold with NO duplicate AppBar & 0ms instant cached rendering
     return Scaffold(
@@ -2587,7 +2627,9 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
               }
 
               if (transactionsSnapshot.connectionState == ConnectionState.waiting && cachedDocs == null) {
-                return const Center(child: CircularProgressIndicator());
+                return SlowLoadPlaceholder(
+                  onRetry: () => setState(() => _ensureStreams(activeFirestore, force: true)),
+                );
               }
 
               final unFilteredDocs = cachedDocs ?? transactionsSnapshot.data?.docs ?? [];

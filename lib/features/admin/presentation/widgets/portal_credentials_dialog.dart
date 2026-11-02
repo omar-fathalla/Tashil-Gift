@@ -671,6 +671,7 @@ class _PortalCredentialsDialogState extends ConsumerState<PortalCredentialsDialo
               Expanded(
                 child: TextField(
                   controller: passController,
+                  obscureText: true,
                   decoration: InputDecoration(
                     labelText: isAr ? 'كلمة المرور' : 'Password',
                     prefixIcon: const Icon(Icons.key_rounded, size: 18),

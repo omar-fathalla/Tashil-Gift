@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/widgets/slow_load_placeholder.dart';
 import 'package:al_mraay/core/widgets/portal_data_error_view.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -481,18 +482,9 @@ class _CampaignReportsScreenState extends ConsumerState<CampaignReportsScreen>
                     _cachedMetrics == null &&
                     cachedResult == null &&
                     cachedDocs == null) {
-                  return Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircularProgressIndicator(color: colorScheme.primary),
-                        const SizedBox(height: 16),
-                        Text(
-                          isAr ? 'جاري تحميل التقارير والبيانات الإحصائية...' : (isHi ? 'डेटा लोड हो रहा है...' : 'Loading analytics & reports...'),
-                          style: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant, fontSize: 13),
-                        ),
-                      ],
-                    ),
+                  return SlowLoadPlaceholder(
+                    message: isAr ? 'جاري تحميل التقارير… لو طوّل تقدر تعيد المحاولة.' : null,
+                    onRetry: () => setState(() => _ensureStreams(firestore, force: true)),
                   );
                 }
 

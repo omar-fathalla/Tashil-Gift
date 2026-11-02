@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/widgets/slow_load_placeholder.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -146,7 +147,9 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
     return Scaffold(
       backgroundColor: cs.surface,
       body: productsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => SlowLoadPlaceholder(
+          onRetry: () => ref.invalidate(chainProductsStreamProvider),
+        ),
         error: (err, stack) => Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -437,6 +440,7 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
                             isAr: isAr,
                             currency: currency,
                             threatItems: filteredProducts,
+                            totalThreats: threatsCount,
                             isMobile: isMobile,
                           ),
                         if (_viewFilterMode == 'COMPETITOR_PROMO_NOT_AT_FATHALLA' && filteredProducts.isNotEmpty)
@@ -519,9 +523,18 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
     required bool isAr,
     required String currency,
     required List<ChainProductItem> threatItems,
+    int? totalThreats,
     required bool isMobile,
   }) {
     if (threatItems.isEmpty) return const SizedBox.shrink();
+    // 2.0.172: the KPI card counts all products; this banner counts the
+    // currently filtered list (search/chain/brand). Say so when they differ.
+    final scopeSuffixAr = (totalThreats != null && totalThreats != threatItems.length)
+        ? ' (من أصل $totalThreats حسب الفلاتر الحالية)'
+        : '';
+    final scopeSuffixEn = (totalThreats != null && totalThreats != threatItems.length)
+        ? ' (of $totalThreats, current filters)'
+        : '';
 
     // Aggregate threat counts by competitor chain
     final Map<String, int> competitorThreatCounts = {};
@@ -555,8 +568,8 @@ class _ChainProductsIntelligenceScreenState extends ConsumerState<ChainProductsI
           const SizedBox(width: 6),
           Text(
             isAr
-                ? 'رصد ${threatItems.length} صنف أرخص لدى المنافسين'
-                : '${threatItems.length} SKUs cheaper at competitors',
+                ? 'رصد ${threatItems.length} صنف أرخص لدى المنافسين$scopeSuffixAr'
+                : '${threatItems.length} SKUs cheaper at competitors$scopeSuffixEn',
             style: GoogleFonts.cairo(
               color: cs.onErrorContainer,
               fontWeight: FontWeight.bold,

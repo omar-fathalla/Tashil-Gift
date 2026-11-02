@@ -192,6 +192,35 @@
       }
     });
     observer.observe(document.body, { childList: true, subtree: true });
+
+    // 2.0.172: splash watchdog. If Flutter has not painted after 20s (stale
+    // service worker / blocked CDN / hung init), offer a one-tap clean reload
+    // instead of spinning forever; after 40s do it automatically once.
+    setTimeout(function () {
+      const loader = document.getElementById('app-splash-loader');
+      if (!loader || loader.classList.contains('loaded')) return;
+      const card = loader.querySelector('.splash-card');
+      if (card && !document.getElementById('splash-retry')) {
+        const p = document.createElement('p');
+        p.className = 'splash-subtitle';
+        p.textContent = 'التحميل بياخد وقت أطول من المعتاد.';
+        const b = document.createElement('button');
+        b.id = 'splash-retry';
+        b.textContent = 'إعادة المحاولة';
+        b.style.cssText = 'margin-top:12px;padding:10px 24px;border:0;border-radius:20px;background:#5A5E1E;color:#fff;font-size:14px;cursor:pointer';
+        b.onclick = function () { window.tashilHardReload ? window.tashilHardReload() : location.reload(); };
+        card.appendChild(p); card.appendChild(b);
+      }
+    }, 20000);
+    setTimeout(function () {
+      const loader = document.getElementById('app-splash-loader');
+      if (!loader || loader.classList.contains('loaded')) return;
+      try {
+        if (sessionStorage.getItem('tashil_splash_autoreload')) return;
+        sessionStorage.setItem('tashil_splash_autoreload', '1');
+      } catch (e) { return; }
+      if (window.tashilHardReload) window.tashilHardReload();
+    }, 40000);
   </script>
   <script>
     // Used by the "يوجد إصدار جديد" banner: drop the service worker and its

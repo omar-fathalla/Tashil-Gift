@@ -40,10 +40,22 @@ void main() async {
     }
   };
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  await activateFirebaseAppCheck();
+  // 2.0.172: never hang the splash. Firebase init gets a timeout + one retry,
+  // App Check activation and the device id are bounded (they are optional).
+  for (var attempt = 0; attempt < 2; attempt++) {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      ).timeout(const Duration(seconds: 12));
+      break;
+    } catch (e) {
+      debugPrint('Firebase init attempt ${attempt + 1} failed: $e');
+      if (Firebase.apps.isNotEmpty) break;
+    }
+  }
+  try {
+    await activateFirebaseAppCheck().timeout(const Duration(seconds: 8));
+  } catch (_) {}
 
   // Field reps never see a login form. Anonymous Auth is their only session,
   // so it is created only on public link routes, not on admin visits (M4).
@@ -65,7 +77,10 @@ void main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
     if (FirebaseScope.isPartnerPortal) {
-      await activateFirebaseAppCheck(app: FirebaseScope.app);
+      try {
+        await activateFirebaseAppCheck(app: FirebaseScope.app)
+            .timeout(const Duration(seconds: 8));
+      } catch (_) {}
       await scopedAuth()
           .authStateChanges()
           .first
@@ -81,7 +96,9 @@ void main() async {
     }
   } catch (_) {}
 
-  await RepDeviceId.init();
+  try {
+    await RepDeviceId.init().timeout(const Duration(seconds: 4));
+  } catch (_) {}
   runApp(
     const ProviderScope(
       child: MyApp(),

@@ -964,17 +964,20 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
 
     final allEvents = allDocs.map((d) => EventModel.fromFirestore(d)).toList();
     final totalCampaigns = allEvents.length;
-    final activeCount = allEvents.where((e) => e.isActive && !e.isExpired && !e.isNotStartedYet).length;
-    final expiredOrDisabledCount = allEvents.where((e) => !e.isActive || e.isExpired).length;
+    // 2.0.172: one definition of "active" (EventModel.isWithinValidDates) for
+    // the card, the segmented-filter counts and the filtered list, so they can
+    // no longer disagree (not-started campaigns were counted inconsistently).
+    final activeCount = allEvents.where((e) => e.isWithinValidDates).length;
+    final expiredOrDisabledCount = totalCampaigns - activeCount;
     final partnerCompaniesCount = allEvents.map((e) => e.companySlug).toSet().length;
 
     // Filter events by selected filter tab and search text
     final searchQuery = _searchController.text.trim().toLowerCase();
     final filteredEvents = allEvents.where((event) {
       if (_campaignFilter == 'ACTIVE') {
-        if (!event.isActive || event.isExpired) return false;
+        if (!event.isWithinValidDates) return false;
       } else if (_campaignFilter == 'INACTIVE') {
-        if (event.isActive && !event.isExpired) return false;
+        if (event.isWithinValidDates) return false;
       }
 
       if (searchQuery.isNotEmpty) {
@@ -1090,8 +1093,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     children: [
                       _buildMetricCard(
                         context: context,
-                        title: strings.totalActiveEvents,
-                        subtitle: isAr ? 'إجمالي الحملات المسجلة' : 'All registered campaigns',
+                        title: isAr ? 'إجمالي الحملات' : 'Total campaigns',
+                        subtitle: isAr ? 'كل الحملات المسجلة' : 'All registered campaigns',
                         value: n(totalCampaigns),
                         icon: Icons.campaign_outlined,
                         width: cardWidth,
@@ -1114,8 +1117,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                       ),
                       _buildMetricCard(
                         context: context,
-                        title: isAr ? 'المتوقفة والمنتهية' : 'Inactive / expired',
-                        subtitle: isAr ? 'حملات تم إيقافها أو انتهت' : 'Disabled or ended',
+                        title: isAr ? 'غير الجارية' : 'Not running',
+                        subtitle: isAr ? 'متوقفة أو منتهية أو لم تبدأ' : 'Paused, ended or not started',
                         value: n(expiredOrDisabledCount),
                         icon: Icons.pause_circle_outline_rounded,
                         width: cardWidth,

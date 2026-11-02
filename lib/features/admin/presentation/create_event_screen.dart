@@ -4590,7 +4590,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${isAr ? 'المستخدم:' : 'User:'} ${resolvedCreds.effectiveAgencyUsername}  |  ${isAr ? 'كلمة المرور:' : 'Pass:'} ${resolvedCreds.effectiveAgencyPassword}',
+                        '${isAr ? 'المستخدم:' : 'User:'} ${resolvedCreds.effectiveAgencyUsername}  |  ${isAr ? 'كلمة المرور: مخفية (انسخ كارت الواتساب)' : 'Pass: hidden'}',
                         style: GoogleFonts.sourceCodePro(fontSize: 11, color: colorScheme.onSecondaryContainer, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
@@ -4663,7 +4663,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${isAr ? 'المستخدم:' : 'User:'} ${resolvedCreds.brandManagerUsername}  |  ${isAr ? 'كلمة المرور:' : 'Pass:'} ${resolvedCreds.brandManagerPassword}',
+                        '${isAr ? 'المستخدم:' : 'User:'} ${resolvedCreds.brandManagerUsername}  |  ${isAr ? 'كلمة المرور: مخفية (انسخ كارت الواتساب)' : 'Pass: hidden'}',
                         style: GoogleFonts.sourceCodePro(fontSize: 11, color: colorScheme.onPrimaryContainer, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
@@ -4980,6 +4980,16 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                       _loadCompanyLogo(comp.slug);
                                     }
                                   },
+                                )
+                              // 2.0.172: while the companies stream is still loading
+                              // (typical on the edit page) show progress, not the
+                              // misleading "no companies" empty state.
+                              else if (!snapshot.hasData && !snapshot.hasError)
+                                const LinearProgressIndicator()
+                              else if (snapshot.hasError)
+                                Text(
+                                  'تعذّر تحميل الشركات. أعد فتح الصفحة.',
+                                  style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.error),
                                 )
                               else
                                 Text(
