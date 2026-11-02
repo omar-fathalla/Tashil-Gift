@@ -34,24 +34,22 @@ void main() {
     );
   });
 
-  test('re-tap joins the running call, then later calls reuse the answer', () async {
+  test('re-tap joins the running call, but a later upload re-reads fresh', () async {
     var calls = 0;
     final c = Completer<CloudGenerateContentResponse>();
     Future<CloudGenerateContentResponse> run() {
       calls++;
-      return c.future;
+      return calls == 1 ? c.future : Future.value(answer);
     }
     final a = AiReceiptService.dedupedGenerateForTest('k3', run);
     final b = AiReceiptService.dedupedGenerateForTest('k3', run);
     c.complete(answer);
-    final ra = await a.timeout(const Duration(seconds: 2));
-    final rb = await b.timeout(const Duration(seconds: 2));
-    expect(ra.text, answer.text);
-    expect(rb.text, answer.text);
-    final rc = await AiReceiptService.dedupedGenerateForTest('k3', run)
+    expect((await a.timeout(const Duration(seconds: 2))).text, answer.text);
+    expect((await b.timeout(const Duration(seconds: 2))).text, answer.text);
+    expect(calls, 1, reason: 'concurrent re-tap shares one call');
+    await AiReceiptService.dedupedGenerateForTest('k3', run)
         .timeout(const Duration(seconds: 2));
-    expect(rc.text, answer.text);
-    expect(calls, 1);
+    expect(calls, 2, reason: 're-upload after completion must call the AI again');
   });
 
   test('a failed scan is not cached and can be retried', () async {

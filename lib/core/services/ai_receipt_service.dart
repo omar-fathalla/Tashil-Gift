@@ -1254,8 +1254,6 @@ class AiReceiptService {
 
   // 2.0.148+209: in-flight / recent scan dedupe (see analyzeReceiptImage).
   static final Map<String, Future<CloudGenerateContentResponse>> _inflightScans = {};
-  static final Map<String, (DateTime, CloudGenerateContentResponse)> _recentScans = {};
-  static const Duration _recentScanTtl = Duration(minutes: 10);
 
   @visibleForTesting
   static String scanCacheKeyForTest(String model, String prompt, List<Uint8List> images) =>
@@ -1287,10 +1285,9 @@ class AiReceiptService {
     Future<CloudGenerateContentResponse> Function() run,
   ) {
     if (key == null) return run();
-    final now = DateTime.now();
-    _recentScans.removeWhere((_, v) => now.difference(v.$1) > _recentScanTtl);
-    final recent = _recentScans[key];
-    if (recent != null) return Future.value(recent.$2);
+    // 2.0.171+232: only an IN-FLIGHT call is shared (double tap / app switch
+    // during the same submit = one Gemini call, no double billing). A finished
+    // answer is never reused: every new upload gets a fresh read.
     final pending = _inflightScans[key];
     if (pending != null) return pending;
     // 2.0.150+211: hard cap so a stuck call can never pin the in-flight entry
@@ -1298,10 +1295,6 @@ class AiReceiptService {
     // failure, timeout or cancel (whenComplete); failures are never cached.
     late final Future<CloudGenerateContentResponse> f;
     f = run().timeout(firstCheckBudget + const Duration(seconds: 5)).then((r) {
-      if (r.text != null && r.text!.trim().isNotEmpty) {
-        if (_recentScans.length >= 8) _recentScans.remove(_recentScans.keys.first);
-        _recentScans[key] = (DateTime.now(), r);
-      }
       return r;
     // 2.0.151+212: block body on purpose. The arrow form returned the removed
     // map value (this very future) to whenComplete, which then awaited itself:
@@ -1323,7 +1316,6 @@ class AiReceiptService {
   @visibleForTesting
   static void clearScanDedupeForTest() {
     _inflightScans.clear();
-    _recentScans.clear();
   }
 
   /// Executes Gemini generateContent with automatic exponential backoff retry on HTTP 429 quota errors.
@@ -1385,14 +1377,18 @@ class AiReceiptService {
     bool allowComplementaryReceipts = false,
     bool forceDeepAudit = false,
     bool forceRefresh = false,
+    bool reuseStoredAnalysis = false,
   }) async {
     final stopwatch = Stopwatch()..start();
     try {
       final allImagesBytesList = [imageBytes, ...additionalImagesBytes];
       final String fingerprint = computeBytesFingerprint(allImagesBytesList);
 
-      // Check LRU In-Memory Cache for identical receipt image submissions
-      if (!forceRefresh && fingerprint.isNotEmpty) {
+      // 2.0.171+232: a new scan/upload is ALWAYS a fresh AI read. Serving a
+      // stored result here meant a re-upload of the same photo could never
+      // correct a misread (rep saw the same wrong total every time). The LRU
+      // is only consulted when a caller explicitly opts in.
+      if (reuseStoredAnalysis && !forceRefresh && fingerprint.isNotEmpty) {
         final cached = getCachedReceiptAnalysis(fingerprint);
         if (cached != null) {
           debugPrint('⚡ [AiReceiptService] In-Memory Cache Hit for fingerprint $fingerprint (0ms)');
@@ -1832,11 +1828,9 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         Content.multi([prompt, ...allImageParts]),
       ];
 
-      // 2.0.148+209: same images + same prompt within 10 min reuse one Gemini
-      // call: a re-tap while the first call is still running (e.g. the rep
-      // switched apps and came back) joins it instead of re-scanning, and a
-      // re-tap after it finished reuses its response. temperature 0, so the
-      // answer would be the same anyway. Fast tier only; forensic unchanged.
+      // 2.0.148+209 / 2.0.171+232: a re-tap while the same call is still
+      // running joins it; once it has finished, the next upload re-reads.
+      // Fast tier only; forensic unchanged.
       // Admin forced deep re-scan always runs fresh.
       final scanKey = forceDeepAudit
           ? null
