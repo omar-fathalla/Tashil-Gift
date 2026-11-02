@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../../core/utils/receipt_scan_checks.dart';
 import '../../../core/utils/receipt_branch_resolver.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -81,6 +82,9 @@ class _ClientReceiptUploadScreenState
   List<EventModel> _availableCompanyEvents = [];
   // 2.0.170: outcome of the last branch-docs load, logged on receipts.
   Map<String, dynamic> _lastBranchLoad = const {};
+  // 2.0.171: price sanity check (A) and spend near-miss (B), logged on receipts.
+  Map<String, dynamic> _lastPriceCheck = const {};
+  Map<String, dynamic> _lastNearMiss = const {};
   bool _isLoadingEvent = true;
   String? _errorMessage;
   StreamSubscription? _eventSubscription;
@@ -1031,8 +1035,10 @@ class _ClientReceiptUploadScreenState
           .timeout(AiReceiptService.preScanLookupTimeout)
           .catchError((_) => <CompanyProductItem>[]);
       final branchesFuture = loadBranches();
+      List<CompanyProductItem> catalogForPriceCheck = const [];
       try {
         final catalogItems = await productsFuture;
+        catalogForPriceCheck = catalogItems;
         registeredBarcodes = catalogItems
             .map((e) => "${e.productName} (${e.barcode})")
             .toList();
@@ -1116,7 +1122,7 @@ class _ClientReceiptUploadScreenState
 
       // Run Gemini AI analysis
       run.step = ReceiptSaveStep.ai;
-      final result = await aiService
+      Future<AiReceiptAnalysisResult> analyze({String extraPrompt = ''}) => aiService
           .analyzeReceiptImage(
             bytes,
             mimeType,
@@ -1135,7 +1141,10 @@ class _ClientReceiptUploadScreenState
             campaignBranchNames: campaignBranchNames,
             startDate: isMultiScan ? null : _activeEvent!.startDate,
             endDate: isMultiScan ? null : _activeEvent!.endDate,
-            customPrompt: isMultiScan ? '' : _activeEvent!.customPrompt,
+            customPrompt: [
+              if (!isMultiScan) _activeEvent!.customPrompt,
+              extraPrompt,
+            ].where((t) => t.trim().isNotEmpty).join('\n\n'),
             // Multi-scan keeps true here; the per-campaign evaluator applies
             // each campaign's own switch and cap afterwards.
             allowMultipleChances: isMultiScan
@@ -1158,6 +1167,57 @@ class _ClientReceiptUploadScreenState
               AiReceiptService.stage2Ceiling,
             ),
           );
+
+      _lastNearMiss = const {};
+      _lastPriceCheck = const {};
+      var result = await analyze();
+
+      // 2.0.171 (A): target lines priced far from the catalog reference get
+      // ONE focused fresh re-read; the re-read is used only if it fixed them.
+      final priceFlags = ReceiptPriceSanity.suspiciousLines(
+        result.extractedProducts,
+        catalogForPriceCheck,
+      );
+      if (priceFlags.isNotEmpty) {
+        final checkWatch = Stopwatch()..start();
+        String used = 'original';
+        List<PriceSanityFlag> afterFlags = const [];
+        String reReadError = '';
+        if (mounted) {
+          setState(() => _aiPhaseText = '2/3 جاري مراجعة أسعار منتجات العرض...');
+        }
+        try {
+          final second = await analyze(
+            extraPrompt: ReceiptPriceSanity.reReadPrompt(priceFlags),
+          ).timeout(AiReceiptService.stage2Ceiling);
+          afterFlags = ReceiptPriceSanity.suspiciousLines(
+            second.extractedProducts,
+            catalogForPriceCheck,
+          );
+          if (ReceiptPriceSanity.reReadIsBetter(
+            before: priceFlags,
+            after: afterFlags,
+            reRead: second,
+          )) {
+            used = 'reread';
+            result = second.copyWith(
+              durationMs: result.durationMs + second.durationMs,
+            );
+          }
+        } catch (e) {
+          final m = e.toString();
+          reReadError = m.length > 150 ? m.substring(0, 150) : m;
+        }
+        checkWatch.stop();
+        _lastPriceCheck = {
+          'flags': [for (final f in priceFlags.take(5)) f.toJson()],
+          'reread': true,
+          'used': used,
+          'flags_after': afterFlags.length,
+          'ms': checkWatch.elapsedMilliseconds,
+          if (reReadError.isNotEmpty) 'error': reReadError,
+        };
+      }
 
       final previewImgUrl = 'data:$mimeType;base64,${base64Encode(bytes)}';
       // 2.0.148+208: built lazily, only when the multi-bundle upload failed.
@@ -1211,6 +1271,17 @@ class _ClientReceiptUploadScreenState
             .toList();
         if (unfulfilledList.isEmpty) {
           unfulfilledList.add(fallbackRejectionReason(result.message));
+        }
+
+        if (_tryNearMissRetake(
+          result: result,
+          reasons: unfulfilledList,
+          campaigns: scanEvents,
+          allBytesList: allBytesList,
+          allImagesList: allImagesList,
+          recordEvent: _activeEvent!,
+        )) {
+          return;
         }
 
         final conditions = buildValidationConditionItems(
@@ -1427,6 +1498,8 @@ class _ClientReceiptUploadScreenState
                   'store_chain_detected': result.storeChainDetected,
                   'branch_detected': result.branchDetected,
                   if (_lastBranchLoad.isNotEmpty) 'branch_load': _lastBranchLoad,
+        if (_lastPriceCheck.isNotEmpty) 'price_check': _lastPriceCheck,
+        if (_lastNearMiss.isNotEmpty) 'near_miss': _lastNearMiss,
                   'branch_id':
                       ReceiptBranchResolver.resolve(
                         _activeEvent ?? widget.event,
@@ -1478,6 +1551,17 @@ class _ClientReceiptUploadScreenState
             );
           }
 
+          if (_tryNearMissRetake(
+            result: result,
+            reasons: allUnfulfilled,
+            campaigns: _availableCompanyEvents,
+            allBytesList: allBytesList,
+            allImagesList: allImagesList,
+            recordEvent: primaryTargetEvent,
+          )) {
+            return;
+          }
+
           _recordRejectedReceipt(
             result: result,
             allBytesList: allBytesList,
@@ -1522,6 +1606,17 @@ class _ClientReceiptUploadScreenState
                 '$totalValue / ${_activeEvent!.minimumSpend} ${activeCountry.currencySymbol}',
           ),
         ];
+
+        if (_tryNearMissRetake(
+          result: result,
+          reasons: unfulfilledList,
+          campaigns: [_activeEvent!],
+          allBytesList: allBytesList,
+          allImagesList: allImagesList,
+          recordEvent: _activeEvent!,
+        )) {
+          return;
+        }
 
         // Asynchronously persist rejected transaction to Firestore & Storage for audit
         _recordRejectedReceipt(
@@ -1577,6 +1672,17 @@ class _ClientReceiptUploadScreenState
             isMet: false,
           ),
         ];
+
+        if (_tryNearMissRetake(
+          result: result,
+          reasons: unfulfilledPromoList,
+          campaigns: [_activeEvent!],
+          allBytesList: allBytesList,
+          allImagesList: allImagesList,
+          recordEvent: _activeEvent!,
+        )) {
+          return;
+        }
 
         // Asynchronously persist rejected transaction to Firestore & Storage for audit
         _recordRejectedReceipt(
@@ -1779,6 +1885,8 @@ class _ClientReceiptUploadScreenState
             '',
         'is_branch_matched': result.isBranchMatched,
         if (_lastBranchLoad.isNotEmpty) 'branch_load': _lastBranchLoad,
+        if (_lastPriceCheck.isNotEmpty) 'price_check': _lastPriceCheck,
+        if (_lastNearMiss.isNotEmpty) 'near_miss': _lastNearMiss,
         'is_handwritten': result.isHandwritten,
         'is_thermal_pos_receipt': result.isThermalPosReceipt,
         'is_tampered': result.isTampered,
@@ -2515,6 +2623,67 @@ class _ClientReceiptUploadScreenState
           ),
       ],
     );
+  }
+
+  /// 2.0.171 (B): spend is the only failing condition and the target total
+  /// is within 10% below the closest spend threshold -> ask for a retake
+  /// (photo misreads are the usual cause) instead of a final rejection. The
+  /// attempt is still logged as rejected, with a `near_miss` map.
+  bool _tryNearMissRetake({
+    required AiReceiptAnalysisResult result,
+    required List<String> reasons,
+    required List<EventModel> campaigns,
+    required List<Uint8List> allBytesList,
+    required List<XFile> allImagesList,
+    required EventModel recordEvent,
+  }) {
+    if (!mounted) return false;
+    if (result.isHandwritten ||
+        result.isTampered ||
+        result.isScreenCapture ||
+        !result.isThermalPosReceipt ||
+        !result.isBranchMatched ||
+        _chainMet(result) == false ||
+        _dateMet(result) == false) {
+      return false;
+    }
+    final hasProducts =
+        result.extractedProducts.any((p) => p.isTargetCompany) ||
+        result.targetCompanyTotal > 0;
+    if (!hasProducts) return false;
+    if (!onlySpendReasons(reasons)) return false;
+    final miss = ReceiptNearMiss.find(
+      total: result.targetCompanyTotal,
+      campaigns: campaigns,
+    );
+    if (miss == null) return false;
+    _lastNearMiss = miss.toJson();
+    final cur = ref.read(activeCountryProvider).currencySymbol;
+    _recordRejectedReceipt(
+      result: result,
+      allBytesList: allBytesList,
+      allImagesList: allImagesList,
+      activeEvent: recordEvent,
+      rejectionReason:
+          'قريبة من الحد الأدنى (${miss.total.toStringAsFixed(2)} / ${miss.threshold.toStringAsFixed(2)} $cur) - طُلب إعادة التصوير',
+      unfulfilledConditions: reasons,
+      totalValue: result.targetCompanyTotal,
+    );
+    _showIssue(
+      ReceiptIssueKind.nearMissRetake,
+      chips: _receiptChips(
+        result,
+        minimumSpend: miss.threshold,
+        currency: cur,
+      ),
+      extraReasons: [
+        _isAr
+            ? 'قرينا إجمالي منتجات العرض ${miss.total.toStringAsFixed(2)} $cur، والمطلوب ${miss.threshold.toStringAsFixed(2)} $cur. الفرق صغير، وغالباً سعر اتقرا غلط من الصورة.'
+            : 'We read ${miss.total.toStringAsFixed(2)} $cur of offer products; ${miss.threshold.toStringAsFixed(2)} $cur is needed. The gap is small and is often a misread price.',
+      ],
+      onPrimary: _clearPhotosForRetake,
+    );
+    return true;
   }
 
   ReceiptIssueKind _kindForInvalidResult(
@@ -4020,6 +4189,8 @@ class _ClientReceiptUploadScreenState
             '',
         'is_branch_matched': result.isBranchMatched,
         if (_lastBranchLoad.isNotEmpty) 'branch_load': _lastBranchLoad,
+        if (_lastPriceCheck.isNotEmpty) 'price_check': _lastPriceCheck,
+        if (_lastNearMiss.isNotEmpty) 'near_miss': _lastNearMiss,
         'is_handwritten': result.isHandwritten,
         'is_thermal_pos_receipt': result.isThermalPosReceipt,
         'is_tampered': result.isTampered,

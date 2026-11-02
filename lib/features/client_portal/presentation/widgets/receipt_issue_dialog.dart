@@ -21,6 +21,7 @@ enum ReceiptIssueKind {
   outOfDate,
   noProducts,
   belowMinimum,
+  nearMissRetake,
   promoNotMet,
   multiNoMatch,
   alreadyRedeemed,
@@ -77,6 +78,8 @@ const Map<ReceiptIssueKind, ReceiptIssueSpec> receiptIssueSpecs = {
       'تأكد أن الفاتورة تحتوي منتجات الشركة المشاركة.', 'Check the receipt contains the brand\'s products.', ReceiptIssueAction.retake),
   ReceiptIssueKind.belowMinimum: ReceiptIssueSpec(Icons.price_check_rounded, 'قيمة المشتريات أقل من المطلوب', 'Purchase is below the minimum',
       'يحتاج العميل لإضافة منتجات حتى يصل للحد الأدنى.', 'The customer needs to buy more to reach the minimum.', ReceiptIssueAction.close),
+  ReceiptIssueKind.nearMissRetake: ReceiptIssueSpec(Icons.photo_camera_rounded, 'صوّر الفاتورة تاني مفرودة وفي نور كويس', 'Retake the receipt flat and in good light',
+      'الإجمالي قريب جداً من المطلوب، وممكن يكون سعر اتقرا غلط. افرد الفاتورة كويس وصوّرها من فوق في نور حلو، وخلي سطور منتجات العرض واضحة.', 'The total is very close to the minimum; a price may have been misread. Flatten the receipt and shoot it straight in good light.', ReceiptIssueAction.retake),
   ReceiptIssueKind.promoNotMet: ReceiptIssueSpec(Icons.inventory_2_outlined, 'شروط العرض غير مكتملة', 'Offer conditions not met',
       'راجع الأصناف والكميات المطلوبة للعرض.', 'Check the required items and quantities.', ReceiptIssueAction.close),
   ReceiptIssueKind.multiNoMatch: ReceiptIssueSpec(Icons.layers_clear_rounded, 'الفاتورة لا تطابق أي عرض', 'Receipt matches no offer',
@@ -390,4 +393,21 @@ class ReceiptIssueDialog extends StatelessWidget {
       ),
     );
   }
+}
+
+
+/// 2.0.171: true when every reason is about spend/products/offer totals only
+/// (nothing about photo quality, branch, chain, date or fraud).
+bool onlySpendReasons(List<String> reasons) {
+  const ok = {
+    ReceiptIssueKind.belowMinimum,
+    ReceiptIssueKind.noProducts,
+    ReceiptIssueKind.promoNotMet,
+    ReceiptIssueKind.generic,
+  };
+  for (final r in reasons) {
+    if (r.trim().isEmpty) continue;
+    if (!ok.contains(classifyConditionText(r))) return false;
+  }
+  return true;
 }
