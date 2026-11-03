@@ -1652,12 +1652,12 @@ class AppStrings {
     hi: 'एआई रसीद स्कैन और शाखा हस्ताक्षर निकालें',
   );
   String get aiScanReceiptTemplateSub => _t(
-    ar: 'قم برفع أو تصوير بونة الفاتورة لاستخراج السلسلة والفرع وكود المتجر ونمط الباركود آلياً',
+    ar: 'ارفع أو صوّر الفاتورة لاستخراج السلسلة والفرع وكود المتجر ونمط الباركود آلياً',
     en: 'Upload or snap a sample receipt to auto-extract chain, branch, store code, and barcode pattern',
     hi: 'श्रृंखला, शाखा, स्टोर कोड और बारकोड पैटर्न को स्वतः निकालने के लिए रसीद अपलोड करें',
   );
   String get uploadReceiptSampleBtn => _t(
-    ar: 'رفع صورة بونة الفاتورة',
+    ar: 'رفع صورة الفاتورة',
     en: 'Upload Sample Receipt',
     hi: 'नमूना रसीद अपलोड करें',
   );

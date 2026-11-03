@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -70,7 +71,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       final email = _emailController.text.trim();
       final password = _passwordController.text.trim();
 
-      await authService.signIn(email, password);
+      // 2.0.173: never spin forever (seen ~90s hangs when App Check stalls).
+      await authService.signIn(email, password).timeout(const Duration(seconds: 30));
 
       // Save or clear Remember Me email preference (never passwords)
       try {
@@ -93,10 +95,16 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       }
     } catch (e) {
       if (mounted) {
-        final errorMsg = AppErrorHandler.getFriendlyMessage(
-          e,
-          defaultMessage: strings.invalidAdminCredentialsMsg,
-        );
+        final isTimeout = e is TimeoutException;
+        final isAr = Localizations.maybeLocaleOf(context)?.languageCode != 'en';
+        final errorMsg = isTimeout
+            ? (isAr
+                ? 'تسجيل الدخول أخد وقت أطول من المعتاد. تأكد من الاتصال وحاول مرة أخرى.'
+                : 'Sign-in is taking too long. Check your connection and try again.')
+            : AppErrorHandler.getFriendlyMessage(
+                e,
+                defaultMessage: strings.invalidAdminCredentialsMsg,
+              );
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -117,6 +125,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             ),
             backgroundColor: Theme.of(context).colorScheme.error,
             behavior: SnackBarBehavior.floating,
+            duration: isTimeout ? const Duration(seconds: 10) : const Duration(seconds: 4),
+            action: isTimeout
+                ? SnackBarAction(
+                    label: isAr ? 'إعادة المحاولة' : 'Retry',
+                    textColor: Colors.white,
+                    onPressed: () => _login(strings),
+                  )
+                : null,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
         );

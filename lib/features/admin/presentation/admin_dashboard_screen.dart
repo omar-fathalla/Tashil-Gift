@@ -782,10 +782,12 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       ),
       bottomNavigationBar: isMobile
           ? NavigationBar(
-              selectedIndex: _selectedIndex.clamp(0, 4),
+              // 2.0.173: bottom-bar slots are not tab indexes. Slot 3 is the
+              // invoices tab (index 5); every other tab lives under "More".
+              selectedIndex: switch (_selectedIndex) { 0 || 1 || 2 => _selectedIndex, 5 => 3, _ => 4 },
               onDestinationSelected: (idx) {
                 if (idx < 4) {
-                  _selectTab(idx);
+                  _selectTab(idx == 3 ? 5 : idx);
                 } else {
                   _showMobileMoreSheet(context, strings, isAr);
                 }
@@ -1275,11 +1277,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     };
     final textTheme = Theme.of(context).textTheme;
     if (compact) {
-      return SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            for (final key in labels.keys) ...[
+      // 2.0.173: wrap instead of a hidden horizontal scroll so the last chip
+      // ("المتوقفة والمنتهية") is never off-screen on phones.
+      return Wrap(
+        spacing: M3Spacing.xs,
+        runSpacing: M3Spacing.xs,
+        children: [
+            for (final key in labels.keys)
               FilterChip(
                 selected: _campaignFilter == key,
                 showCheckmark: true,
@@ -1288,10 +1292,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 shape: const RoundedRectangleBorder(borderRadius: M3Shape.radiusSmall),
                 onSelected: (_) => setState(() => _campaignFilter = key),
               ),
-              const SizedBox(width: M3Spacing.xs),
-            ],
-          ],
-        ),
+        ],
       );
     }
     return SegmentedButton<String>(
