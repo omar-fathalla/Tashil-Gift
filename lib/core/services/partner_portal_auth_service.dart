@@ -5,21 +5,31 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../security/password_hash.dart';
 import 'firebase_service.dart';
 
 /// Role types for Partner Portals with strict role isolation.
 /// - [brandManager]: Accesses Brand Executive Portal (`/portal/:slug`) — Read-Only on Stock Balances.
 /// - [agencyOps]: Accesses Agency Operations Portal (`/ops/:slug`, `/ep/:id`) — Full Read/Write on Stock Balances.
+/// - [repUploader]: Shared field-rep account (`/rep/:slug`) — receipt upload only. Not `agency_ops`.
 enum PartnerPortalRole {
   brandManager('brand_manager'),
-  agencyOps('agency_ops');
+  agencyOps('agency_ops'),
+  repUploader('rep_uploader');
 
   final String value;
   const PartnerPortalRole(this.value);
 
   static PartnerPortalRole fromString(String? val) {
-    if (val == 'brand_manager') return PartnerPortalRole.brandManager;
-    return PartnerPortalRole.agencyOps;
+    switch (val) {
+      case 'brand_manager':
+        return PartnerPortalRole.brandManager;
+      case 'rep_uploader':
+        return PartnerPortalRole.repUploader;
+      case 'agency_ops':
+      default:
+        return PartnerPortalRole.agencyOps;
+    }
   }
 }
 
@@ -85,6 +95,12 @@ class ResolvedPortalCredentials {
   final String customAgencyPassword;
   final int customAgencyCredentialVersion;
 
+  /// Shared مندوب account. The hash is never a password to display.
+  final String repUploaderUsername;
+  final String repUploaderPasswordHash;
+  final int repUploaderCredentialVersion;
+  final bool repUploaderConfigured;
+
   /// Public company logo (https) for portal branding; may be empty.
   final String companyLogoUrl;
 
@@ -108,6 +124,10 @@ class ResolvedPortalCredentials {
     this.customAgencyUsername = '',
     this.customAgencyPassword = '',
     this.customAgencyCredentialVersion = 1,
+    this.repUploaderUsername = '',
+    this.repUploaderPasswordHash = '',
+    this.repUploaderCredentialVersion = 1,
+    this.repUploaderConfigured = false,
     this.companyLogoUrl = '',
     this.serverResolved = false,
   });
@@ -225,6 +245,9 @@ class PartnerPortalAuthService {
   Future<bool> _firebaseIdentityMatches(PartnerPortalSession session) async {
     final auth = _auth;
     if (auth == null || _functions == null) return true;
+    // Receipt upload stays on anonymous auth until rules explicitly allow the
+    // upload claim. Revocation is the credentialVersion check.
+    if (session.role == PartnerPortalRole.repUploader) return true;
     final user = auth.currentUser;
     if (user == null || user.isAnonymous) return false;
     try {
@@ -256,6 +279,34 @@ class PartnerPortalAuthService {
   }
 
   static int _asInt(dynamic v, [int fallback = 1]) => v is num ? v.toInt() : (int.tryParse('${v ?? ''}') ?? fallback);
+
+  static String _invalidReason(PartnerPortalRole role) {
+    switch (role) {
+      case PartnerPortalRole.brandManager:
+        return 'invalid_brand';
+      case PartnerPortalRole.repUploader:
+        return 'invalid_rep';
+      case PartnerPortalRole.agencyOps:
+        return 'invalid_agency';
+    }
+  }
+
+  static bool _secretOk(String stored, String plain) => PasswordHash.passwordMatches(stored, plain).ok;
+
+  static bool _isRepCredential(ResolvedPortalCredentials resolved, String user, String pass) {
+    return resolved.repUploaderUsername.isNotEmpty &&
+        user.toLowerCase() == resolved.repUploaderUsername.toLowerCase() &&
+        resolved.repUploaderPasswordHash.isNotEmpty &&
+        _secretOk(resolved.repUploaderPasswordHash, pass);
+  }
+
+  static PortalAuthResult _failure(String reason) {
+    final msg = _serverReasonMessages[reason] ?? _serverReasonMessages['invalid_rep']!;
+    return PortalAuthResult.failure(errorMessageAr: msg[0], errorMessageEn: msg[1]);
+  }
+
+  /// Suggested مندوب username. There is no default password.
+  static String defaultRepUsername(String slug) => 'rep_${_sanitizeSlug(slug)}';
 
   /// Branding + credential versions from the server (no secrets). Used when the
   /// caller cannot read `companies/*` (everyone except admins).
@@ -294,6 +345,8 @@ class PartnerPortalAuthService {
       eventName: m['eventName']?.toString(),
       hasCustomAgencyCredentials: m['hasCustomAgencyCredentials'] == true,
       customAgencyCredentialVersion: _asInt(m['customAgencyCredentialVersion']),
+      repUploaderCredentialVersion: _asInt(m['repUploaderCredentialVersion']),
+      repUploaderConfigured: m['repUploaderConfigured'] == true,
       serverResolved: true,
     );
   }
@@ -318,6 +371,30 @@ class PartnerPortalAuthService {
     'invalid_agency': [
       'اسم المستخدم أو كلمة المرور غير صحيحة لبوابة العمليات',
       'Invalid username or password for Agency Operations Portal',
+    ],
+    'partner_creds_on_rep': [
+      'بيانات الدخول هذه لبوابة الشركة أو العمليات، وليست حساب المندوبين.',
+      'These credentials belong to a company portal, not the field-rep account.',
+    ],
+    'rep_creds_on_partner': [
+      'بيانات الدخول هذه خاصة بحساب المندوبين ولا تفتح بوابة الإدارة.',
+      'These are field-rep credentials and cannot open a management portal.',
+    ],
+    'rep_not_configured': [
+      'لم يتم إنشاء حساب المندوبين لهذه الشركة بعد.',
+      'No field-rep account has been created for this company yet.',
+    ],
+    'invalid_rep': [
+      'اسم المستخدم أو كلمة المرور غير صحيحة لحساب المندوبين',
+      'Invalid username or password for the field-rep account',
+    ],
+    'username_required': [
+      'يرجى إدخال اسم المستخدم',
+      'Username is required',
+    ],
+    'password_required': [
+      'ولّد كلمة مرور للمندوبين قبل الحفظ',
+      'Generate a field-rep password before saving',
     ],
   };
 
@@ -350,20 +427,23 @@ class PartnerPortalAuthService {
           isCampaignTier: sm['isCampaignTier'] == true,
           authenticatedAt: DateTime.now(),
         );
-        final adopted = await _adoptPortalIdentity(m['customToken']?.toString());
-        if (!adopted) {
-          return PortalAuthResult.failure(
-            errorMessageAr: 'تم التحقق من البيانات لكن تعذر فتح جلسة البوابة. حاول مرة أخرى.',
-            errorMessageEn: 'Credentials verified, but the portal session could not be opened. Please try again.',
-          );
+        // Rep upload keeps the anonymous Firebase user. A partner custom token
+        // with partnerAccess "upload" cannot create receipts under the current
+        // rules, and swapping it in would close the public upload path.
+        if (requiredRole != PartnerPortalRole.repUploader) {
+          final adopted = await _adoptPortalIdentity(m['customToken']?.toString());
+          if (!adopted) {
+            return PortalAuthResult.failure(
+              errorMessageAr: 'تم التحقق من البيانات لكن تعذر فتح جلسة البوابة. حاول مرة أخرى.',
+              errorMessageEn: 'Credentials verified, but the portal session could not be opened. Please try again.',
+            );
+          }
         }
         await _persistSession(session, rememberMe: rememberMe, eventId: eventId);
         return PortalAuthResult.success(session);
       }
       final msg = _serverReasonMessages[m['reason']?.toString()] ??
-          (requiredRole == PartnerPortalRole.brandManager
-              ? _serverReasonMessages['invalid_brand']!
-              : _serverReasonMessages['invalid_agency']!);
+          _serverReasonMessages[_invalidReason(requiredRole)]!;
       return PortalAuthResult.failure(errorMessageAr: msg[0], errorMessageEn: msg[1]);
     } on FirebaseFunctionsException catch (e) {
       if (e.code == 'resource-exhausted') {
@@ -549,6 +629,9 @@ class PartnerPortalAuthService {
       final customAgencyUser = (eventData?['customAgencyUsername'] ?? '').toString().trim();
       final customAgencyPass = (eventData?['customAgencyPassword'] ?? '').toString().trim();
       final customAgencyVer = (eventData?['customAgencyCredentialVersion'] as num?)?.toInt() ?? 1;
+      final repUser = (companyData?['repUploaderUsername'] ?? '').toString().trim();
+      final repHash = (companyData?['repUploaderPasswordHash'] ?? '').toString().trim();
+      final repVer = (companyData?['repUploaderCredentialVersion'] as num?)?.toInt() ?? 1;
 
       return ResolvedPortalCredentials(
         companySlug: resolvedSlug,
@@ -569,6 +652,10 @@ class PartnerPortalAuthService {
             ? customAgencyPass
             : (resolvedEventId != null ? defaultCampaignAgencyPassword(resolvedSlug, resolvedEventId) : ''),
         customAgencyCredentialVersion: customAgencyVer,
+        repUploaderUsername: repUser,
+        repUploaderPasswordHash: repHash,
+        repUploaderCredentialVersion: repVer,
+        repUploaderConfigured: repUser.isNotEmpty && repHash.isNotEmpty,
         companyLogoUrl: () {
           final l = (companyData?['logoUrl'] ?? '').toString().trim();
           return l.startsWith('https://') ? l : '';
@@ -593,6 +680,10 @@ class PartnerPortalAuthService {
       final customAgencyPass = (memEvent?['customAgencyPassword'] ?? '').toString().trim();
       final customAgencyVer = (memEvent?['customAgencyCredentialVersion'] as num?)?.toInt() ?? 1;
       final memCompanyName = (memCompany?['name'] ?? '').toString().trim();
+      final repUser = (memCompany?['repUploaderUsername'] ?? '').toString().trim();
+      final repHash = (memCompany?['repUploaderPasswordHash'] ?? '').toString().trim();
+      final repVer = (memCompany?['repUploaderCredentialVersion'] as num?)?.toInt() ?? 1;
+      final repConfigured = memCompany?['repUploaderConfigured'] == true || (repUser.isNotEmpty && repHash.isNotEmpty);
 
       return ResolvedPortalCredentials(
         companySlug: resolvedSlug,
@@ -615,6 +706,10 @@ class PartnerPortalAuthService {
             ? customAgencyPass
             : (resolvedEventId != null ? defaultCampaignAgencyPassword(resolvedSlug, resolvedEventId) : ''),
         customAgencyCredentialVersion: customAgencyVer,
+        repUploaderUsername: repUser,
+        repUploaderPasswordHash: repHash,
+        repUploaderCredentialVersion: repVer,
+        repUploaderConfigured: repConfigured,
       );
     }
 
@@ -677,10 +772,10 @@ class PartnerPortalAuthService {
     if (requiredRole == PartnerPortalRole.brandManager) {
       // Strict Role Isolation: Check if user tried entering Agency Ops credentials on Brand Manager portal
       final isAgencyCreds = (cleanUser.toLowerCase() == resolved.agencyOpsUsername.toLowerCase() &&
-              cleanPass == resolved.agencyOpsPassword) ||
+              _secretOk(resolved.agencyOpsPassword, cleanPass)) ||
           (resolved.hasCustomAgencyCredentials &&
               cleanUser.toLowerCase() == resolved.customAgencyUsername.toLowerCase() &&
-              cleanPass == resolved.customAgencyPassword);
+              _secretOk(resolved.customAgencyPassword, cleanPass));
 
       if (isAgencyCreds) {
         return PortalAuthResult.failure(
@@ -691,8 +786,12 @@ class PartnerPortalAuthService {
         );
       }
 
+      if (_isRepCredential(resolved, cleanUser, cleanPass)) {
+        return _failure('rep_creds_on_partner');
+      }
+
       if (cleanUser.toLowerCase() == resolved.brandManagerUsername.toLowerCase() &&
-          cleanPass == resolved.brandManagerPassword) {
+          _secretOk(resolved.brandManagerPassword, cleanPass)) {
         final session = PartnerPortalSession(
           companySlug: resolved.companySlug,
           role: PartnerPortalRole.brandManager,
@@ -710,10 +809,23 @@ class PartnerPortalAuthService {
       );
     }
 
+    if (requiredRole == PartnerPortalRole.repUploader) {
+      return _authenticateRepOffline(
+        resolved: resolved,
+        username: cleanUser,
+        password: cleanPass,
+        rememberMe: rememberMe,
+        eventId: eventId,
+      );
+    }
+
     // requiredRole == PartnerPortalRole.agencyOps
     // Strict Role Isolation: Reject Brand Manager credentials on Agency Ops portal to enforce role separation
+    if (_isRepCredential(resolved, cleanUser, cleanPass)) {
+      return _failure('rep_creds_on_partner');
+    }
     if (cleanUser.toLowerCase() == resolved.brandManagerUsername.toLowerCase() &&
-        cleanPass == resolved.brandManagerPassword) {
+        _secretOk(resolved.brandManagerPassword, cleanPass)) {
       return PortalAuthResult.failure(
         errorMessageAr:
             'بيانات الدخول هذه خاصة بالبوابة التنفيذية (/portal). يرجى استخدام بيانات دخول بوابة العمليات (/ops).',
@@ -725,7 +837,7 @@ class PartnerPortalAuthService {
     // Case 1: Specific campaign requested (`eventId != null`) with custom Tier-2 credentials enabled
     if (eventId != null && eventId.trim().isNotEmpty && resolved.hasCustomAgencyCredentials) {
       if (cleanUser.toLowerCase() == resolved.customAgencyUsername.toLowerCase() &&
-          cleanPass == resolved.customAgencyPassword) {
+          _secretOk(resolved.customAgencyPassword, cleanPass)) {
         final session = PartnerPortalSession(
           companySlug: resolved.companySlug,
           role: PartnerPortalRole.agencyOps,
@@ -763,7 +875,7 @@ class PartnerPortalAuthService {
               final effectivePass =
                   cPass.isNotEmpty ? cPass : defaultCampaignAgencyPassword(resolved.companySlug, doc.id);
 
-              if (cleanUser.toLowerCase() == effectiveUser.toLowerCase() && cleanPass == effectivePass) {
+              if (cleanUser.toLowerCase() == effectiveUser.toLowerCase() && _secretOk(effectivePass, cleanPass)) {
                 final session = PartnerPortalSession(
                   companySlug: resolved.companySlug,
                   role: PartnerPortalRole.agencyOps,
@@ -795,7 +907,7 @@ class PartnerPortalAuthService {
           final effectivePass =
               cPass.isNotEmpty ? cPass : defaultCampaignAgencyPassword(resolved.companySlug, entry.key);
 
-          if (cleanUser.toLowerCase() == effectiveUser.toLowerCase() && cleanPass == effectivePass) {
+          if (cleanUser.toLowerCase() == effectiveUser.toLowerCase() && _secretOk(effectivePass, cleanPass)) {
             final session = PartnerPortalSession(
               companySlug: resolved.companySlug,
               role: PartnerPortalRole.agencyOps,
@@ -814,7 +926,7 @@ class PartnerPortalAuthService {
 
     // Case 3: Tier-1 Company-Level Agency Operations credentials
     if (cleanUser.toLowerCase() == resolved.agencyOpsUsername.toLowerCase() &&
-        cleanPass == resolved.agencyOpsPassword) {
+        _secretOk(resolved.agencyOpsPassword, cleanPass)) {
       final session = PartnerPortalSession(
         companySlug: resolved.companySlug,
         role: PartnerPortalRole.agencyOps,
@@ -832,6 +944,55 @@ class PartnerPortalAuthService {
       errorMessageAr: 'اسم المستخدم أو كلمة المرور غير صحيحة لبوابة العمليات',
       errorMessageEn: 'Invalid username or password for Agency Operations Portal',
     );
+  }
+
+  Future<PortalAuthResult> _authenticateRepOffline({
+    required ResolvedPortalCredentials resolved,
+    required String username,
+    required String password,
+    required bool rememberMe,
+    String? eventId,
+  }) async {
+    final brandHit = username.toLowerCase() == resolved.brandManagerUsername.toLowerCase() &&
+        _secretOk(resolved.brandManagerPassword, password);
+    final agencyHit = username.toLowerCase() == resolved.agencyOpsUsername.toLowerCase() &&
+        _secretOk(resolved.agencyOpsPassword, password);
+    var campaignHit = false;
+    if (resolved.hasCustomAgencyCredentials &&
+        username.toLowerCase() == resolved.customAgencyUsername.toLowerCase() &&
+        _secretOk(resolved.customAgencyPassword, password)) {
+      campaignHit = true;
+    }
+    for (final entry in _memoryEventOverrides.entries) {
+      final data = entry.value;
+      if (data['hasCustomAgencyCredentials'] != true) continue;
+      final overrideSlug = (data['companySlug'] ?? '').toString().trim().toLowerCase();
+      if (overrideSlug.isNotEmpty && overrideSlug != resolved.companySlug.toLowerCase()) continue;
+      final cUser = (data['customAgencyUsername'] ?? '').toString().trim();
+      final cPass = (data['customAgencyPassword'] ?? '').toString().trim();
+      final effectiveUser = cUser.isNotEmpty ? cUser : defaultCampaignAgencyUsername(resolved.companySlug, entry.key);
+      final effectivePass = cPass.isNotEmpty ? cPass : defaultCampaignAgencyPassword(resolved.companySlug, entry.key);
+      if (username.toLowerCase() == effectiveUser.toLowerCase() && _secretOk(effectivePass, password)) {
+        campaignHit = true;
+      }
+    }
+    if (brandHit || agencyHit || campaignHit) return _failure('partner_creds_on_rep');
+    if (!resolved.repUploaderConfigured || resolved.repUploaderPasswordHash.isEmpty) {
+      return _failure('rep_not_configured');
+    }
+    if (username.toLowerCase() == resolved.repUploaderUsername.toLowerCase() &&
+        _secretOk(resolved.repUploaderPasswordHash, password)) {
+      final session = PartnerPortalSession(
+        companySlug: resolved.companySlug,
+        role: PartnerPortalRole.repUploader,
+        username: resolved.repUploaderUsername,
+        credentialVersion: resolved.repUploaderCredentialVersion,
+        authenticatedAt: DateTime.now(),
+      );
+      await _persistSession(session, rememberMe: rememberMe, eventId: eventId);
+      return PortalAuthResult.success(session);
+    }
+    return _failure('invalid_rep');
   }
 
   Future<void> _persistSession(
@@ -939,7 +1100,19 @@ class PartnerPortalAuthService {
       }
       _memorySessions[key] = candidate;
       return candidate;
-    } else {
+    }
+
+    if (requiredRole == PartnerPortalRole.repUploader) {
+      if (!resolved.repUploaderConfigured ||
+          candidate.credentialVersion != resolved.repUploaderCredentialVersion) {
+        await signOut(companySlug: resolved.companySlug, role: requiredRole, eventId: eventId);
+        return null;
+      }
+      _memorySessions[key] = candidate;
+      return candidate;
+    }
+
+    {
       // Agency Ops
       // A campaign-locked Tier-2 session must never unlock a different campaign's direct link
       if (candidate.isCampaignTier &&
@@ -1078,10 +1251,16 @@ class PartnerPortalAuthService {
       companyNameHint: companyName,
     );
 
-    final brandPassChanged =
-        incrementBrandVersion || brandManagerPassword.trim() != current.brandManagerPassword;
-    final agencyPassChanged =
-        incrementAgencyVersion || agencyOpsPassword.trim() != current.agencyOpsPassword;
+    final brandInput = brandManagerPassword.trim();
+    final agencyInput = agencyOpsPassword.trim();
+    // Empty means "keep the stored secret". Prevents a masked admin field
+    // from wiping a password or rewriting a hash back to plaintext.
+    final brandPassChanged = incrementBrandVersion ||
+        (brandInput.isNotEmpty && brandInput != current.brandManagerPassword);
+    final agencyPassChanged = incrementAgencyVersion ||
+        (agencyInput.isNotEmpty && agencyInput != current.agencyOpsPassword);
+    final brandToKeep = brandInput.isNotEmpty ? brandInput : current.brandManagerPassword;
+    final agencyToKeep = agencyInput.isNotEmpty ? agencyInput : current.agencyOpsPassword;
 
     final newBrandVersion =
         brandPassChanged ? current.brandCredentialVersion + 1 : current.brandCredentialVersion;
@@ -1091,13 +1270,14 @@ class PartnerPortalAuthService {
     final cleanSlug = _sanitizeSlug(companySlug);
     if (cleanSlug.isNotEmpty) {
       _memoryCompanyCredentials[cleanSlug] = {
+        ...(_memoryCompanyCredentials[cleanSlug] ?? const <String, dynamic>{}),
         'slug': cleanSlug,
         if (companyName.trim().isNotEmpty) 'name': companyName.trim(),
         'brandManagerUsername': brandManagerUsername.trim(),
-        'brandManagerPassword': brandManagerPassword.trim(),
+        'brandManagerPassword': brandToKeep,
         'brandCredentialVersion': newBrandVersion,
         'agencyOpsUsername': agencyOpsUsername.trim(),
-        'agencyOpsPassword': agencyOpsPassword.trim(),
+        'agencyOpsPassword': agencyToKeep,
         'agencyCredentialVersion': newAgencyVersion,
       };
     }
@@ -1106,10 +1286,10 @@ class PartnerPortalAuthService {
         'slug': cleanSlug,
         if (companyName.trim().isNotEmpty) 'name': companyName.trim(),
         'brandManagerUsername': brandManagerUsername.trim(),
-        'brandManagerPassword': brandManagerPassword.trim(),
+        if (brandInput.isNotEmpty) 'brandManagerPassword': brandInput,
         'brandCredentialVersion': newBrandVersion,
         'agencyOpsUsername': agencyOpsUsername.trim(),
-        'agencyOpsPassword': agencyOpsPassword.trim(),
+        if (agencyInput.isNotEmpty) 'agencyOpsPassword': agencyInput,
         'agencyCredentialVersion': newAgencyVersion,
         'credentialsUpdatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
@@ -1119,11 +1299,15 @@ class PartnerPortalAuthService {
       companySlug: cleanSlug,
       companyName: companyName.trim().isNotEmpty ? companyName.trim() : current.companyName,
       brandManagerUsername: brandManagerUsername.trim(),
-      brandManagerPassword: brandManagerPassword.trim(),
+      brandManagerPassword: brandToKeep,
       brandCredentialVersion: newBrandVersion,
       agencyOpsUsername: agencyOpsUsername.trim(),
-      agencyOpsPassword: agencyOpsPassword.trim(),
+      agencyOpsPassword: agencyToKeep,
       agencyCredentialVersion: newAgencyVersion,
+      repUploaderUsername: current.repUploaderUsername,
+      repUploaderPasswordHash: current.repUploaderPasswordHash,
+      repUploaderCredentialVersion: current.repUploaderCredentialVersion,
+      repUploaderConfigured: current.repUploaderConfigured,
       eventId: current.eventId,
       eventName: current.eventName,
       hasCustomAgencyCredentials: current.hasCustomAgencyCredentials,
@@ -1145,18 +1329,20 @@ class PartnerPortalAuthService {
     if (eventId.trim().isEmpty) return 1;
 
     final current = await resolveCredentials(companySlug: companySlug, eventId: eventId);
+    final passInput = customAgencyPassword.trim();
     final passChanged = forceIncrementVersion ||
-        customAgencyPassword.trim() != current.customAgencyPassword ||
-        hasCustomAgencyCredentials != current.hasCustomAgencyCredentials;
+        hasCustomAgencyCredentials != current.hasCustomAgencyCredentials ||
+        (passInput.isNotEmpty && passInput != current.customAgencyPassword);
     final nextVersion = passChanged
         ? current.customAgencyCredentialVersion + 1
         : current.customAgencyCredentialVersion;
+    final passToKeep = passInput.isNotEmpty ? passInput : current.customAgencyPassword;
 
     _memoryEventOverrides[eventId.trim()] = {
       'companySlug': _sanitizeSlug(companySlug),
       'hasCustomAgencyCredentials': hasCustomAgencyCredentials,
       'customAgencyUsername': customAgencyUsername.trim(),
-      'customAgencyPassword': customAgencyPassword.trim(),
+      'customAgencyPassword': passToKeep,
       'customAgencyCredentialVersion': nextVersion,
     };
 
@@ -1164,11 +1350,119 @@ class PartnerPortalAuthService {
       await _firestore.collection('events').doc(eventId.trim()).update({
         'hasCustomAgencyCredentials': hasCustomAgencyCredentials,
         'customAgencyUsername': customAgencyUsername.trim(),
-        'customAgencyPassword': customAgencyPassword.trim(),
+        if (passInput.isNotEmpty) 'customAgencyPassword': passInput,
         'customAgencyCredentialVersion': nextVersion,
       });
     }
     return nextVersion;
+  }
+
+  /// Creates or rotates the shared مندوب account for one company.
+  /// The returned credentials never include the password. A new password is
+  /// hashed before it is stored. Empty [password] keeps the current hash.
+  Future<PortalAuthResult> saveRepUploaderCredentials({
+    required String companySlug,
+    required String username,
+    String password = '',
+    String companyName = '',
+  }) async {
+    final cleanSlug = _sanitizeSlug(companySlug);
+    final user = username.trim();
+    final pass = password.trim();
+    if (cleanSlug.isEmpty) {
+      return _failure('username_required');
+    }
+    if (user.isEmpty) return _failure('username_required');
+
+    if (_functions != null) {
+      try {
+        final res = await _functions.httpsCallable('partnerPortalSetRepCredentials').call<dynamic>({
+          'companySlug': cleanSlug,
+          'username': user,
+          if (pass.isNotEmpty) 'password': pass,
+        }).timeout(const Duration(seconds: 20));
+        final m = Map<String, dynamic>.from(res.data as Map);
+        final version = _asInt(m['credentialVersion']);
+        final savedUser = (m['username'] ?? user).toString();
+        _memoryCompanyCredentials[cleanSlug] = {
+          ...(_memoryCompanyCredentials[cleanSlug] ?? const <String, dynamic>{}),
+          'slug': cleanSlug,
+          if (companyName.trim().isNotEmpty) 'name': companyName.trim(),
+          'repUploaderUsername': savedUser,
+          'repUploaderPasswordHash': '',
+          'repUploaderCredentialVersion': version,
+          'repUploaderConfigured': true,
+        };
+        return PortalAuthResult.success(PartnerPortalSession(
+          companySlug: cleanSlug,
+          role: PartnerPortalRole.repUploader,
+          username: savedUser,
+          credentialVersion: version,
+          authenticatedAt: DateTime.now(),
+        ));
+      } on FirebaseFunctionsException catch (e) {
+        if (e.code == 'permission-denied') {
+          return PortalAuthResult.failure(
+            errorMessageAr: 'حفظ حساب المندوبين متاح لمدير النظام فقط.',
+            errorMessageEn: 'Only an admin can save the field-rep account.',
+          );
+        }
+        if (e.code == 'failed-precondition') return _failure('password_required');
+        return PortalAuthResult.failure(
+          errorMessageAr: 'تعذر حفظ حساب المندوبين. حاول مرة أخرى.',
+          errorMessageEn: 'Could not save the field-rep account. Please try again.',
+        );
+      } catch (_) {
+        return PortalAuthResult.failure(
+          errorMessageAr: 'تعذر حفظ حساب المندوبين. حاول مرة أخرى.',
+          errorMessageEn: 'Could not save the field-rep account. Please try again.',
+        );
+      }
+    }
+
+    final current = await resolveCredentials(
+      companySlug: cleanSlug,
+      companyNameHint: companyName,
+    );
+    if (pass.isEmpty && current.repUploaderPasswordHash.isEmpty) {
+      return _failure('password_required');
+    }
+    final initial = current.repUploaderUsername.isEmpty && current.repUploaderPasswordHash.isEmpty;
+    final userChanged = user.toLowerCase() != current.repUploaderUsername.toLowerCase();
+    final passChanged = pass.isNotEmpty;
+    final nextVersion = initial
+        ? 1
+        : ((userChanged || passChanged)
+            ? current.repUploaderCredentialVersion + 1
+            : current.repUploaderCredentialVersion);
+    // Offline/tests only. Production hashing happens inside the callable.
+    final hash = passChanged ? PasswordHash.hash(pass, iterations: 1000) : current.repUploaderPasswordHash;
+    _memoryCompanyCredentials[cleanSlug] = {
+      ...(_memoryCompanyCredentials[cleanSlug] ?? const <String, dynamic>{}),
+      'slug': cleanSlug,
+      if (companyName.trim().isNotEmpty) 'name': companyName.trim(),
+      'repUploaderUsername': user,
+      'repUploaderPasswordHash': hash,
+      'repUploaderCredentialVersion': nextVersion,
+      'repUploaderConfigured': true,
+    };
+    if (_firestore != null) {
+      await _firestore.collection('companies').doc(cleanSlug).set({
+        'slug': cleanSlug,
+        if (companyName.trim().isNotEmpty) 'name': companyName.trim(),
+        'repUploaderUsername': user,
+        'repUploaderPasswordHash': hash,
+        'repUploaderCredentialVersion': nextVersion,
+        'repCredentialsUpdatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)).timeout(const Duration(seconds: 4));
+    }
+    return PortalAuthResult.success(PartnerPortalSession(
+      companySlug: cleanSlug,
+      role: PartnerPortalRole.repUploader,
+      username: user,
+      credentialVersion: nextVersion,
+      authenticatedAt: DateTime.now(),
+    ));
   }
 
   /// Formats a ready-to-share 1-Click WhatsApp Login Card.
@@ -1182,15 +1476,30 @@ class PartnerPortalAuthService {
     bool isCustomCampaignTier = false,
     bool isAr = true,
   }) {
+    final sharePassword = PasswordHash.isHash(password) ? '' : password;
+    final passwordLineAr = sharePassword.isEmpty
+        ? '🔑 *كلمة المرور:* محفوظة بشكل مشفّر ولن تُعرض. ولّد كلمة جديدة من لوحة الإدارة إذا أردت مشاركتها.'
+        : '🔑 *كلمة المرور:* `$sharePassword`';
+    final passwordLineEn = sharePassword.isEmpty
+        ? '🔑 *Password:* stored as a hash and hidden. Generate a new one in admin if you need to share it.'
+        : '🔑 *Password:* `$sharePassword`';
     if (isAr) {
-      final roleTitle = role == PartnerPortalRole.brandManager
-          ? '📊 البوابة التنفيذية لمدير العلامة التجارية (Brand Executive Portal)'
-          : (isCustomCampaignTier && campaignName != null && campaignName.isNotEmpty
-              ? '🏪 بوابة شركة الدعاية والعمليات الميدانية — حملة ($campaignName)'
-              : '🏪 بوابة شركة الدعاية والعمليات الميدانية (Agency Operations Portal)');
-      final permissionsNote = role == PartnerPortalRole.brandManager
-          ? '• متابعة مؤشرات الأداء الفورية (ROI)، المبيعات، الفواتير، وأرصدة الهدايا بالفروع (للاطلاع والتصدير).'
-          : '• إدارة وتوزيع أرصدة الهدايا بالفروع، التسويات، ومتابعة الفواتير الميدانية لحظياً.';
+      final roleTitle = switch (role) {
+        PartnerPortalRole.brandManager =>
+          '📊 البوابة التنفيذية لمدير العلامة التجارية (Brand Executive Portal)',
+        PartnerPortalRole.repUploader => '🧾 تطبيق المندوب — رفع الفواتير',
+        PartnerPortalRole.agencyOps => isCustomCampaignTier && campaignName != null && campaignName.isNotEmpty
+            ? '🏪 بوابة شركة الدعاية والعمليات الميدانية — حملة ($campaignName)'
+            : '🏪 بوابة شركة الدعاية والعمليات الميدانية (Agency Operations Portal)',
+      };
+      final permissionsNote = switch (role) {
+        PartnerPortalRole.brandManager =>
+          '• متابعة مؤشرات الأداء الفورية (ROI)، المبيعات، الفواتير، وأرصدة الهدايا بالفروع (للاطلاع والتصدير).',
+        PartnerPortalRole.repUploader =>
+          '• تصوير الفاتورة ورفعها للحملة والفرع. لا يفتح تقارير الإدارة ولا أرصدة الهدايا.',
+        PartnerPortalRole.agencyOps =>
+          '• إدارة وتوزيع أرصدة الهدايا بالفروع، التسويات، ومتابعة الفواتير الميدانية لحظياً.',
+      };
 
       return '''🔐 *بطاقة الدخول الذكية — $companyName*
 $roleTitle
@@ -1199,20 +1508,27 @@ $roleTitle
 $portalUrl
 
 👤 *اسم المستخدم:* `$username`
-🔑 *كلمة المرور:* `$password`
+$passwordLineAr`
 
 ✨ *الصلاحيات المتاحة:*
 $permissionsNote
 💡 *ملاحظة:* يمكنك تفعيل خيار *"تذكرني على هذا الجهاز"* عند أول تسجيل دخول لفتح البوابة مستقبلاً بضغطة واحدة دون إعادة كتابة كلمة المرور.''';
     } else {
-      final roleTitle = role == PartnerPortalRole.brandManager
-          ? '📊 Brand Executive Portal'
-          : (isCustomCampaignTier && campaignName != null && campaignName.isNotEmpty
-              ? '🏪 Agency Operations Portal — Campaign ($campaignName)'
-              : '🏪 Agency Operations Portal');
-      final permissionsNote = role == PartnerPortalRole.brandManager
-          ? '• Live ROI analytics, sales metrics, receipt logs, and read-only branch gift stock balances.'
-          : '• Full branch gift stock management, settlements, and live field receipt operations.';
+      final roleTitle = switch (role) {
+        PartnerPortalRole.brandManager => '📊 Brand Executive Portal',
+        PartnerPortalRole.repUploader => '🧾 Field rep app — receipt upload',
+        PartnerPortalRole.agencyOps => isCustomCampaignTier && campaignName != null && campaignName.isNotEmpty
+            ? '🏪 Agency Operations Portal — Campaign ($campaignName)'
+            : '🏪 Agency Operations Portal',
+      };
+      final permissionsNote = switch (role) {
+        PartnerPortalRole.brandManager =>
+          '• Live ROI analytics, sales metrics, receipt logs, and read-only branch gift stock balances.',
+        PartnerPortalRole.repUploader =>
+          '• Photograph and upload receipts for a campaign and branch. No admin reports or stock editing.',
+        PartnerPortalRole.agencyOps =>
+          '• Full branch gift stock management, settlements, and live field receipt operations.',
+      };
 
       return '''🔐 *Partner Access Card — $companyName*
 $roleTitle
@@ -1221,7 +1537,7 @@ $roleTitle
 $portalUrl
 
 👤 *Username:* `$username`
-🔑 *Password:* `$password`
+$passwordLineEn`
 
 ✨ *Access Scope:*
 $permissionsNote

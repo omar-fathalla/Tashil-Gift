@@ -1,12 +1,14 @@
 /// Decides which entry routes need a Firebase anonymous session.
 ///
-/// Field reps and portal users open public links without a login form, so
-/// those routes keep Anonymous Auth. Admin/staff routes (`/`, `/admin`,
-/// `/login`, `/auth`) sign in with email and must not create a throwaway
-/// anonymous user on every visit (audit item M4).
+/// Public upload links and the rep app entry keep Anonymous Auth so receipt
+/// writes stay on the current rules. The `/rep` screen adds an app-level
+/// `rep_uploader` login; it does not replace the anonymous Firebase user.
+/// Admin/staff routes (`/`, `/admin`, `/login`, `/auth`) sign in with email
+/// and must not create a throwaway anonymous user on every visit (audit item M4).
 const Set<String> kAnonymousSessionRoots = {
   'event', 'e', // direct event links
   'submit', 'c', 'client', 'promoter', // receipt upload links
+  'rep', 'mandoub', 'uploader', // store/rep entry (login gate + anonymous upload)
   'portal', 'p', 'company', // company manager portal
   'ops', 'agency', 'operations', // agency ops portal
 };

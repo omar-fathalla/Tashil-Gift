@@ -271,26 +271,35 @@ class _PartnerPortalLoginScreenState extends ConsumerState<PartnerPortalLoginScr
     final locale = ref.watch(localeProvider);
     final isAr = locale.languageCode == 'ar';
     final isBrandRole = widget.requiredRole == PartnerPortalRole.brandManager;
+    final isRepRole = widget.requiredRole == PartnerPortalRole.repUploader;
 
     final displayCompany = widget.companyName.trim().isNotEmpty
         ? widget.companyName.trim()
         : (widget.companySlug.trim().isNotEmpty ? widget.companySlug.toUpperCase() : 'Tashil Gift');
 
-    final portalTitle = isBrandRole
-        ? (isAr ? 'البوابة التنفيذية للشركة والـ ROI' : 'Brand Executive & ROI Portal')
-        : (isAr ? 'بوابة شركة الدعاية والعمليات الميدانية' : 'Agency Field Operations Portal');
+    final portalTitle = isRepRole
+        ? (isAr ? 'رفع فواتير المندوب' : 'Field rep receipt upload')
+        : isBrandRole
+            ? (isAr ? 'البوابة التنفيذية للشركة والـ ROI' : 'Brand Executive & ROI Portal')
+            : (isAr ? 'بوابة شركة الدعاية والعمليات الميدانية' : 'Agency Field Operations Portal');
 
-    final portalSubtitle = isBrandRole
+    final portalSubtitle = isRepRole
         ? (isAr
-            ? 'متابعة حية لمؤشرات المبيعات، أداء الفروع، التحليلات الذكية، وأرصدة الهدايا (للاطلاع)'
-            : 'Live sales analytics, branch performance, AI insights, and read-only stock balances')
-        : (isAr
-            ? 'إدارة وتوزيع أرصدة الهدايا بالفروع، التسويات الميدانية، ومتابعة الفواتير لحظياً'
-            : 'Manage & distribute branch gift stock, field settlements, and live receipt operations');
+            ? 'ادخل بحساب شركة الدعاية، ثم اختر الحملة والفرع وصوّر الفاتورة'
+            : 'Sign in with your agency account, then pick the campaign and branch')
+        : isBrandRole
+            ? (isAr
+                ? 'متابعة حية لمؤشرات المبيعات، أداء الفروع، التحليلات الذكية، وأرصدة الهدايا (للاطلاع)'
+                : 'Live sales analytics, branch performance, AI insights, and read-only stock balances')
+            : (isAr
+                ? 'إدارة وتوزيع أرصدة الهدايا بالفروع، التسويات الميدانية، ومتابعة الفواتير لحظياً'
+                : 'Manage & distribute branch gift stock, field settlements, and live receipt operations');
 
-    final roleBadgeText = isBrandRole
-        ? (isAr ? 'بوابة المدير العام والعلامة التجارية' : 'Brand Manager Access')
-        : (isAr ? 'بوابة مشرفي العمليات والوكالة' : 'Agency Operations Access');
+    final roleBadgeText = isRepRole
+        ? (isAr ? 'حساب المندوبين' : 'Field rep access')
+        : isBrandRole
+            ? (isAr ? 'بوابة المدير العام والعلامة التجارية' : 'Brand Manager Access')
+            : (isAr ? 'بوابة مشرفي العمليات والوكالة' : 'Agency Operations Access');
 
     return Scaffold(
       backgroundColor: colorScheme.surfaceContainerLowest,
@@ -365,22 +374,28 @@ class _PartnerPortalLoginScreenState extends ConsumerState<PartnerPortalLoginScr
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
-                            color: isBrandRole
-                                ? colorScheme.secondaryContainer
-                                : colorScheme.primaryContainer,
+                            color: isRepRole
+                                ? colorScheme.tertiaryContainer
+                                : isBrandRole
+                                    ? colorScheme.secondaryContainer
+                                    : colorScheme.primaryContainer,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                isBrandRole
-                                    ? Icons.business_center_rounded
-                                    : Icons.store_mall_directory_rounded,
+                                isRepRole
+                                    ? Icons.photo_camera_rounded
+                                    : isBrandRole
+                                        ? Icons.business_center_rounded
+                                        : Icons.store_mall_directory_rounded,
                                 size: 16,
-                                color: isBrandRole
-                                    ? colorScheme.onSecondaryContainer
-                                    : colorScheme.onPrimaryContainer,
+                                color: isRepRole
+                                    ? colorScheme.onTertiaryContainer
+                                    : isBrandRole
+                                        ? colorScheme.onSecondaryContainer
+                                        : colorScheme.onPrimaryContainer,
                               ),
                               const SizedBox(width: 8),
                               Flexible(
@@ -389,9 +404,11 @@ class _PartnerPortalLoginScreenState extends ConsumerState<PartnerPortalLoginScr
                                   style: GoogleFonts.cairo(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
-                                    color: isBrandRole
-                                        ? colorScheme.onSecondaryContainer
-                                        : colorScheme.onPrimaryContainer,
+                                    color: isRepRole
+                                        ? colorScheme.onTertiaryContainer
+                                        : isBrandRole
+                                            ? colorScheme.onSecondaryContainer
+                                            : colorScheme.onPrimaryContainer,
                                   ),
                                 ),
                               ),
@@ -479,9 +496,11 @@ class _PartnerPortalLoginScreenState extends ConsumerState<PartnerPortalLoginScr
                         onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
                         decoration: InputDecoration(
                           labelText: isAr ? 'اسم المستخدم' : 'Username',
-                          hintText: isBrandRole
-                              ? 'brand_${widget.companySlug.isNotEmpty ? widget.companySlug : 'company'}'
-                              : 'ops_${widget.companySlug.isNotEmpty ? widget.companySlug : 'company'}',
+                          hintText: isRepRole
+                              ? 'rep_${widget.companySlug.isNotEmpty ? widget.companySlug : 'company'}'
+                              : isBrandRole
+                                  ? 'brand_${widget.companySlug.isNotEmpty ? widget.companySlug : 'company'}'
+                                  : 'ops_${widget.companySlug.isNotEmpty ? widget.companySlug : 'company'}',
                           prefixIcon: const Icon(Icons.person_outline_rounded),
                           filled: true,
                           fillColor: colorScheme.surfaceContainerLow,
@@ -581,7 +600,9 @@ class _PartnerPortalLoginScreenState extends ConsumerState<PartnerPortalLoginScr
                           label: Text(
                             _isSubmitting
                                 ? (isAr ? 'جاري تسجيل الدخول...' : 'Signing in...')
-                                : (isAr ? 'تسجيل الدخول للبوابة' : 'Sign In to Portal'),
+                                : (isRepRole
+                                    ? (isAr ? 'تسجيل الدخول ورفع الفاتورة' : 'Sign in and upload')
+                                    : (isAr ? 'تسجيل الدخول للبوابة' : 'Sign In to Portal')),
                             style: GoogleFonts.cairo(
                               fontSize: 15,
                               fontWeight: FontWeight.bold,

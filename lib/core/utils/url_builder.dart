@@ -32,6 +32,26 @@ class AppUrlBuilder {
     return false;
   }
 
+  /// Store/rep entry. Always goes through the مندوب login gate.
+  static String buildRepUploaderUrl(
+    String companySlug, {
+    String? eventId,
+    bool forceProduction = false,
+    bool cleanUrl = true,
+  }) {
+    final baseUrl = getBaseUrl(forceProduction: forceProduction);
+    final cleanSlug = companySlug.trim().toLowerCase();
+    final useClean = forceProduction || (!isLocalhost && cleanUrl);
+    final prefix = useClean ? '' : '/#';
+    if (cleanSlug.isEmpty) {
+      return '$baseUrl$prefix/rep';
+    }
+    if (eventId != null && eventId.isNotEmpty) {
+      return '$baseUrl$prefix/rep/$cleanSlug?event=$eventId';
+    }
+    return '$baseUrl$prefix/rep/$cleanSlug';
+  }
+
   /// Builds a promoter / customer submission URL.
   /// In production, generates clean path without hash (e.g. https://tashil-gift.web.app/c/almarai?event=xyz).
   /// On local dev server (localhost), automatically uses hash prefix (/#/c/...) so Flutter's shelf server doesn't 404.

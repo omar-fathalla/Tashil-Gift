@@ -20,6 +20,7 @@ void main() {
     test('rep and admin routes keep the default app', () {
       for (final u in [
         'https://gift.sw-point.com/c/577',
+        'https://gift.sw-point.com/rep/577',
         'https://gift.sw-point.com/e/abc',
         'https://gift.sw-point.com/submit/x',
         'https://gift.sw-point.com/',

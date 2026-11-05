@@ -9,6 +9,8 @@ void main() {
       'https://gift.sw-point.com/e/abc',
       'https://gift.sw-point.com/portal?company=x',
       'https://gift.sw-point.com/ops?company=x',
+      'https://gift.sw-point.com/rep/512',
+      'https://gift.sw-point.com/#/rep/512',
       'https://gift.sw-point.com/#/c?company=x',
     ]) {
       expect(routeNeedsAnonymousSession(Uri.parse(u)), isTrue, reason: u);

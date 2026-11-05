@@ -12,12 +12,14 @@ import 'core/services/firebase_scope.dart';
 import 'core/theme/app_theme.dart';
 import 'core/update/app_update_checker.dart';
 import 'core/localization/locale_provider.dart';
+import 'core/security/rep_login_policy.dart';
 import 'core/services/firebase_service.dart';
 import 'core/utils/app_url_strategy.dart';
 import 'core/widgets/campaign_suspended_screen.dart';
 import 'features/auth/presentation/auth_screen.dart';
 import 'features/admin/presentation/admin_dashboard_screen.dart';
 import 'features/client_portal/presentation/client_receipt_upload_screen.dart';
+import 'features/client_portal/presentation/rep_upload_gate.dart';
 import 'features/company_portal/presentation/company_manager_portal_screen.dart';
 
 void main() async {
@@ -57,8 +59,8 @@ void main() async {
     await activateFirebaseAppCheck().timeout(const Duration(seconds: 8));
   } catch (_) {}
 
-  // Field reps never see a login form. Anonymous Auth is their only session,
-  // so it is created only on public link routes, not on admin visits (M4).
+  // Public upload links and `/rep` keep Anonymous Auth for receipt writes.
+  // The rep screen adds an app-level login on top of that session (M4).
   try {
     if (routeNeedsAnonymousSession(Uri.base)) {
       // On web the persisted session is restored asynchronously; wait for it so
@@ -164,6 +166,25 @@ class MyApp extends ConsumerWidget {
     return Uri.parse(raw);
   }
 
+  /// Public promoter links stay open until [RepLoginPolicy.requireRepLogin].
+  /// The rep app entry (`/rep`) always requires the `rep_uploader` login.
+  Widget _receiptUpload({
+    required String companySlug,
+    String? eventId,
+    required bool repEntry,
+  }) {
+    if (!RepLoginPolicy.requiresLogin(repEntry: repEntry)) {
+      return ClientReceiptUploadScreen(
+        companySlug: companySlug,
+        initialEventId: eventId,
+      );
+    }
+    return RepUploadGate(
+      companySlug: companySlug,
+      initialEventId: eventId,
+    );
+  }
+
   /// Single-resolution route builder for any given URI.
   /// Prevents Flutter Navigator from decomposing deep links into multiple intermediate routes.
   Route<dynamic> _buildRouteForUri(Uri uri, {RouteSettings? originalSettings}) {
@@ -187,9 +208,25 @@ class MyApp extends ConsumerWidget {
         );
       }
       return MaterialPageRoute(
-        builder: (context) => ClientReceiptUploadScreen(
+        builder: (context) => _receiptUpload(
           companySlug: '',
-          initialEventId: eventId,
+          eventId: eventId,
+          repEntry: false,
+        ),
+        settings: effectiveSettings,
+      );
+    }
+
+    // Rep / store entry. Login is required even while public web links stay open.
+    if (uri.pathSegments.isNotEmpty &&
+        (uri.pathSegments[0] == 'rep' || uri.pathSegments[0] == 'mandoub' || uri.pathSegments[0] == 'uploader')) {
+      final slug = uri.pathSegments.length >= 2 ? uri.pathSegments[1].trim() : '';
+      final eventId = uri.queryParameters['event'] ?? uri.queryParameters['id'];
+      return MaterialPageRoute(
+        builder: (context) => _receiptUpload(
+          companySlug: slug,
+          eventId: eventId,
+          repEntry: true,
         ),
         settings: effectiveSettings,
       );
@@ -236,9 +273,10 @@ class MyApp extends ConsumerWidget {
         );
       }
       return MaterialPageRoute(
-        builder: (context) => ClientReceiptUploadScreen(
+        builder: (context) => _receiptUpload(
           companySlug: slug,
-          initialEventId: eventId,
+          eventId: eventId,
+          repEntry: false,
         ),
         settings: effectiveSettings,
       );
@@ -373,9 +411,10 @@ class MyApp extends ConsumerWidget {
           );
         }
         return MaterialPageRoute(
-          builder: (context) => ClientReceiptUploadScreen(
+          builder: (context) => _receiptUpload(
             companySlug: slug,
-            initialEventId: eventId,
+            eventId: eventId,
+            repEntry: false,
           ),
           settings: effectiveSettings,
         );
