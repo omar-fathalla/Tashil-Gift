@@ -99,6 +99,40 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
   List<Map<String, dynamic>>? _cachedAllInvoices;
   int _invoicesRevisionCounter = 0;
 
+  List<QueryDocumentSnapshot>? _lastShownInvoiceDocs;
+  String? _lastShownInvoiceScope;
+
+  Widget _buildInvoicesLoadError(BuildContext context, Object? error, VoidCallback onRetry) {
+    final cs = Theme.of(context).colorScheme;
+    final isAr = Localizations.maybeLocaleOf(context)?.languageCode != 'en';
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cloud_off_rounded, size: 48, color: cs.error),
+            const SizedBox(height: 12),
+            Text(
+              isAr ? 'تعذّر تحميل الفواتير. تأكد من الاتصال وحاول مرة أخرى.' : 'Could not load invoices. Check your connection and try again.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 6),
+            Text('$error', textAlign: TextAlign.center, maxLines: 3, overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded),
+              label: Text(isAr ? 'إعادة المحاولة' : 'Retry'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _ensureStreams(FirebaseFirestore? firestore, {bool force = false}) {
     if (firestore == null) return;
     final lockedSlug = (widget.lockedCompanySlug ?? '').trim().toLowerCase();
@@ -2583,7 +2617,8 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
       _selectedCampaignId = widget.lockedEventId!;
     }
     final eventsKey = widget.lockedCompanySlug ?? 'all';
-    final txKey = '${widget.lockedCompanySlug ?? 'all'}_${_selectedCampaignId}_${_serverDateKey()}';
+    final txScope = '${widget.lockedCompanySlug ?? 'all'}_$_selectedCampaignId';
+    final txKey = '${txScope}_${_serverDateKey()}';
 
     // Clean M3 Scaffold with NO duplicate AppBar & 0ms instant cached rendering
     return Scaffold(
@@ -2614,25 +2649,35 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
             builder: (context, transactionsSnapshot) {
               if (transactionsSnapshot.hasData) {
                 final docs = transactionsSnapshot.data!.docs;
+                // 2.0.173: an EMPTY snapshot served from the offline cache before
+                // the server answered is not a real "0 invoices" result.
+                final emptyFromCache = docs.isEmpty && transactionsSnapshot.data!.metadata.isFromCache;
                 // Zero-wipe invariant: never clear existing cached records with empty transient data
-                if (docs.isNotEmpty || !_persistentInvoicesCache.containsKey(txKey)) {
+                if (!emptyFromCache && (docs.isNotEmpty || !_persistentInvoicesCache.containsKey(txKey))) {
                   _persistentInvoicesCache[txKey] = docs;
                 }
               }
 
-              final cachedDocs = _persistentInvoicesCache[txKey];
+              // While a new date window loads, keep showing the previous result
+              // (client-side date filter still applies) so the page does not
+              // collapse to a loader and jump back to the top.
+              final cachedDocs = _persistentInvoicesCache[txKey] ??
+                  (transactionsSnapshot.hasError || _lastShownInvoiceScope != txScope ? null : _lastShownInvoiceDocs);
 
-              if (transactionsSnapshot.hasError && cachedDocs == null) {
-                return Center(child: Text('${strings.error}: ${transactionsSnapshot.error}'));
+              if (transactionsSnapshot.hasError && _persistentInvoicesCache[txKey] == null) {
+                return _buildInvoicesLoadError(context, transactionsSnapshot.error,
+                    () => setState(() => _ensureStreams(activeFirestore, force: true)));
               }
 
-              if (transactionsSnapshot.connectionState == ConnectionState.waiting && cachedDocs == null) {
+              if (cachedDocs == null) {
                 return SlowLoadPlaceholder(
                   onRetry: () => setState(() => _ensureStreams(activeFirestore, force: true)),
                 );
               }
+              _lastShownInvoiceDocs = cachedDocs;
+              _lastShownInvoiceScope = txScope;
 
-              final unFilteredDocs = cachedDocs ?? transactionsSnapshot.data?.docs ?? [];
+              final unFilteredDocs = cachedDocs;
               final rawDocs = isCampaignLocked
                   ? unFilteredDocs.where((d) {
                       final data = d.data() as Map<String, dynamic>?;

@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../../core/localization/locale_provider.dart';
+import '../../../../core/security/password_hash.dart';
 import '../../../../core/services/partner_portal_auth_service.dart';
+import '../../../../core/utils/url_builder.dart';
 import '../../domain/event_model.dart';
 
 /// Material Design 3 Dialog for managing Two-Tier Partner Portal Credentials:
@@ -51,6 +53,8 @@ class _PortalCredentialsDialogState extends ConsumerState<PortalCredentialsDialo
   final _agencyPassCtrl = TextEditingController();
   final _customAgencyUserCtrl = TextEditingController();
   final _customAgencyPassCtrl = TextEditingController();
+  final _repUserCtrl = TextEditingController();
+  final _repPassCtrl = TextEditingController();
 
   bool _hasCustomCampaignAgency = false;
   bool _isLoading = true;
@@ -58,6 +62,13 @@ class _PortalCredentialsDialogState extends ConsumerState<PortalCredentialsDialo
   int _brandVersion = 1;
   int _agencyVersion = 1;
   int _customAgencyVersion = 1;
+  int _repVersion = 1;
+  bool _repConfigured = false;
+  String _storedRepUsername = '';
+  bool _showBrandPass = false;
+  bool _showAgencyPass = false;
+  bool _showCustomPass = false;
+  bool _showRepPass = false;
 
   @override
   void initState() {
@@ -73,6 +84,8 @@ class _PortalCredentialsDialogState extends ConsumerState<PortalCredentialsDialo
     _agencyPassCtrl.dispose();
     _customAgencyUserCtrl.dispose();
     _customAgencyPassCtrl.dispose();
+    _repUserCtrl.dispose();
+    _repPassCtrl.dispose();
     super.dispose();
   }
 
@@ -88,12 +101,14 @@ class _PortalCredentialsDialogState extends ConsumerState<PortalCredentialsDialo
     if (!mounted) return;
     setState(() {
       _brandUserCtrl.text = resolved.brandManagerUsername;
-      _brandPassCtrl.text = resolved.brandManagerPassword;
+      _brandPassCtrl.clear();
       _brandVersion = resolved.brandCredentialVersion;
+      _showBrandPass = false;
 
       _agencyUserCtrl.text = resolved.agencyOpsUsername;
-      _agencyPassCtrl.text = resolved.agencyOpsPassword;
+      _agencyPassCtrl.clear();
       _agencyVersion = resolved.agencyCredentialVersion;
+      _showAgencyPass = false;
 
       _hasCustomCampaignAgency = resolved.hasCustomAgencyCredentials;
       _customAgencyUserCtrl.text = resolved.customAgencyUsername.isNotEmpty
@@ -102,13 +117,18 @@ class _PortalCredentialsDialogState extends ConsumerState<PortalCredentialsDialo
               widget.companySlug,
               widget.event?.id ?? 'camp',
             );
-      _customAgencyPassCtrl.text = resolved.customAgencyPassword.isNotEmpty
-          ? resolved.customAgencyPassword
-          : PartnerPortalAuthService.defaultCampaignAgencyPassword(
-              widget.companySlug,
-              widget.event?.id ?? 'camp',
-            );
+      _customAgencyPassCtrl.clear();
+      _showCustomPass = false;
       _customAgencyVersion = resolved.customAgencyCredentialVersion;
+
+      _storedRepUsername = resolved.repUploaderUsername;
+      _repUserCtrl.text = resolved.repUploaderUsername.isNotEmpty
+          ? resolved.repUploaderUsername
+          : PartnerPortalAuthService.defaultRepUsername(widget.companySlug);
+      _repPassCtrl.clear();
+      _repConfigured = resolved.repUploaderConfigured;
+      _repVersion = resolved.repUploaderCredentialVersion;
+      _showRepPass = false;
       _isLoading = false;
     });
   }
@@ -135,6 +155,40 @@ class _PortalCredentialsDialogState extends ConsumerState<PortalCredentialsDialo
         agencyOpsUsername: _agencyUserCtrl.text.trim(),
         agencyOpsPassword: _agencyPassCtrl.text.trim(),
       );
+
+      final repUser = _repUserCtrl.text.trim().isNotEmpty
+          ? _repUserCtrl.text.trim()
+          : PartnerPortalAuthService.defaultRepUsername(widget.companySlug);
+      final repPass = _repPassCtrl.text.trim();
+      final repUserChanged = repUser.toLowerCase() != _storedRepUsername.trim().toLowerCase() && _storedRepUsername.trim().isNotEmpty;
+      if (repPass.isNotEmpty || repUserChanged || (!_repConfigured && repPass.isNotEmpty)) {
+        final repSaved = await service.saveRepUploaderCredentials(
+          companySlug: widget.companySlug,
+          companyName: widget.companyName,
+          username: repUser,
+          password: repPass,
+        );
+        if (!repSaved.isSuccess) {
+          if (!mounted) return;
+          final isAr = ref.read(localeProvider).languageCode == 'ar';
+          setState(() => _isSaving = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                isAr
+                    ? (repSaved.errorMessageAr ?? 'تعذر حفظ حساب المندوبين')
+                    : (repSaved.errorMessageEn ?? 'Could not save the rep account'),
+                style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+              ),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+        _repVersion = repSaved.session?.credentialVersion ?? _repVersion;
+        _repConfigured = true;
+        _storedRepUsername = repSaved.session?.username ?? repUser;
+      }
 
       int nextCustomAgencyVer = _customAgencyVersion;
       if (widget.event != null && widget.event!.id.isNotEmpty) {
@@ -190,7 +244,11 @@ class _PortalCredentialsDialogState extends ConsumerState<PortalCredentialsDialo
     final String username;
     final String password;
 
-    if (role == PartnerPortalRole.brandManager) {
+    if (role == PartnerPortalRole.repUploader) {
+      portalUrl = AppUrlBuilder.buildRepUploaderUrl(cleanSlug);
+      username = _repUserCtrl.text.trim();
+      password = _repPassCtrl.text.trim();
+    } else if (role == PartnerPortalRole.brandManager) {
       portalUrl = '$origin/#/portal/$cleanSlug';
       username = _brandUserCtrl.text.trim();
       password = _brandPassCtrl.text.trim();
@@ -202,6 +260,21 @@ class _PortalCredentialsDialogState extends ConsumerState<PortalCredentialsDialo
       portalUrl = '$origin/#/ops/$cleanSlug';
       username = _agencyUserCtrl.text.trim();
       password = _agencyPassCtrl.text.trim();
+    }
+
+    if (password.isEmpty || PasswordHash.isHash(password)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isAr
+                ? 'كلمة المرور المحفوظة لن تُعرض. ولّد كلمة جديدة ثم انسخ البطاقة.'
+                : 'The stored password stays hidden. Generate a new one, then copy the card.',
+            style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
     }
 
     final cardText = PartnerPortalAuthService.buildWhatsAppLoginCard(
@@ -341,14 +414,58 @@ class _PortalCredentialsDialogState extends ConsumerState<PortalCredentialsDialo
                             userController: _brandUserCtrl,
                             passController: _brandPassCtrl,
                             isSecondaryContainer: true,
+                            obscurePassword: !_showBrandPass,
+                            onToggleObscure: () => setState(() => _showBrandPass = !_showBrandPass),
+                            passwordHint: isAr
+                                ? 'محفوظة — ولّد كلمة جديدة لعرضها'
+                                : 'Stored — generate a new one to view it',
                             onRegeneratePassword: () {
                               setState(() {
                                 _brandPassCtrl.text =
                                     PartnerPortalAuthService.generateRandomPassword(prefix: 'Bm');
+                                _showBrandPass = true;
                               });
                             },
                             onCopyWhatsAppCard: () => _copyWhatsAppCard(
                               role: PartnerPortalRole.brandManager,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          _buildCredentialSectionCard(
+                            colorScheme: colorScheme,
+                            isAr: isAr,
+                            icon: Icons.photo_camera_rounded,
+                            badgeText: isAr
+                                ? 'مندوب الرفع — حساب واحد لكل شركة دعاية'
+                                : 'Field rep — one shared account per agency',
+                            title: isAr
+                                ? 'دخول المندوبين (/rep/$cleanSlug)'
+                                : 'Rep uploader credentials (/rep/$cleanSlug)',
+                            subtitle: isAr
+                                ? (_repConfigured
+                                    ? 'كلمة المرور محفوظة بشكل مشفّر ولن تُعرض بعد الحفظ. التوليد يلغي جلسات المندوبين فورًا.'
+                                    : 'أنشئ اسم مستخدم وكلمة مرور منفصلين عن بوابة العمليات. لا يوجد باسورد افتراضي.')
+                                : (_repConfigured
+                                    ? 'The password is stored as a hash and stays hidden. Generating a new one signs every rep out.'
+                                    : 'Separate from Agency Operations. There is no default password.'),
+                            version: _repVersion,
+                            userController: _repUserCtrl,
+                            passController: _repPassCtrl,
+                            isSecondaryContainer: false,
+                            obscurePassword: !_showRepPass,
+                            onToggleObscure: () => setState(() => _showRepPass = !_showRepPass),
+                            passwordHint: _repConfigured
+                                ? (isAr ? 'مشفّرة — ولّد كلمة جديدة لعرضها' : 'Hashed — generate a new one to view it')
+                                : (isAr ? 'ولّد كلمة المرور أول مرة' : 'Generate the first password'),
+                            onRegeneratePassword: () {
+                              setState(() {
+                                _repPassCtrl.text = PartnerPortalAuthService.generateRandomPassword(prefix: 'Rp');
+                                _showRepPass = true;
+                              });
+                            },
+                            onCopyWhatsAppCard: () => _copyWhatsAppCard(
+                              role: PartnerPortalRole.repUploader,
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -371,10 +488,16 @@ class _PortalCredentialsDialogState extends ConsumerState<PortalCredentialsDialo
                             userController: _agencyUserCtrl,
                             passController: _agencyPassCtrl,
                             isSecondaryContainer: false,
+                            obscurePassword: !_showAgencyPass,
+                            onToggleObscure: () => setState(() => _showAgencyPass = !_showAgencyPass),
+                            passwordHint: isAr
+                                ? 'محفوظة — ولّد كلمة جديدة لعرضها'
+                                : 'Stored — generate a new one to view it',
                             onRegeneratePassword: () {
                               setState(() {
                                 _agencyPassCtrl.text =
                                     PartnerPortalAuthService.generateRandomPassword(prefix: 'Op');
+                                _showAgencyPass = true;
                               });
                             },
                             onCopyWhatsAppCard: () => _copyWhatsAppCard(
@@ -464,21 +587,43 @@ class _PortalCredentialsDialogState extends ConsumerState<PortalCredentialsDialo
                                         Expanded(
                                           child: TextField(
                                             controller: _customAgencyPassCtrl,
+                                            obscureText: !_showCustomPass,
                                             decoration: InputDecoration(
                                               labelText: isAr
                                                   ? 'كلمة مرور وكالة الحملة'
                                                   : 'Campaign Agency Password',
+                                              hintText: _customAgencyPassCtrl.text.isEmpty
+                                                  ? (isAr ? 'محفوظة — ولّد كلمة جديدة' : 'Stored — generate a new one')
+                                                  : null,
                                               prefixIcon: const Icon(Icons.key_rounded, size: 18),
-                                              suffixIcon: IconButton(
-                                                tooltip: isAr ? 'توليد كلمة مرور جديدة' : 'Generate new password',
-                                                icon: const Icon(Icons.autorenew_rounded, size: 18),
-                                                onPressed: () {
-                                                  setState(() {
-                                                    _customAgencyPassCtrl.text =
-                                                        PartnerPortalAuthService.generateRandomPassword(
-                                                            prefix: 'Cp');
-                                                  });
-                                                },
+                                              suffixIcon: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  if (_customAgencyPassCtrl.text.isNotEmpty)
+                                                    IconButton(
+                                                      tooltip: isAr
+                                                          ? (_showCustomPass ? 'إخفاء' : 'إظهار')
+                                                          : (_showCustomPass ? 'Hide' : 'Show'),
+                                                      icon: Icon(
+                                                        _showCustomPass
+                                                            ? Icons.visibility_off_outlined
+                                                            : Icons.visibility_outlined,
+                                                        size: 18,
+                                                      ),
+                                                      onPressed: () => setState(() => _showCustomPass = !_showCustomPass),
+                                                    ),
+                                                  IconButton(
+                                                    tooltip: isAr ? 'توليد كلمة مرور جديدة' : 'Generate new password',
+                                                    icon: const Icon(Icons.autorenew_rounded, size: 18),
+                                                    onPressed: () {
+                                                      setState(() {
+                                                        _customAgencyPassCtrl.text =
+                                                            PartnerPortalAuthService.generateRandomPassword(prefix: 'Cp');
+                                                        _showCustomPass = true;
+                                                      });
+                                                    },
+                                                  ),
+                                                ],
                                               ),
                                               isDense: true,
                                               border: OutlineInputBorder(
@@ -579,6 +724,9 @@ class _PortalCredentialsDialogState extends ConsumerState<PortalCredentialsDialo
     required bool isSecondaryContainer,
     required VoidCallback onRegeneratePassword,
     required VoidCallback onCopyWhatsAppCard,
+    bool obscurePassword = true,
+    VoidCallback? onToggleObscure,
+    String? passwordHint,
   }) {
     final badgeBg = isSecondaryContainer ? colorScheme.secondaryContainer : colorScheme.primaryContainer;
     final badgeFg =
@@ -671,16 +819,33 @@ class _PortalCredentialsDialogState extends ConsumerState<PortalCredentialsDialo
               Expanded(
                 child: TextField(
                   controller: passController,
-                  obscureText: true,
+                  obscureText: obscurePassword,
                   decoration: InputDecoration(
                     labelText: isAr ? 'كلمة المرور' : 'Password',
+                    hintText: passController.text.isEmpty ? passwordHint : null,
                     prefixIcon: const Icon(Icons.key_rounded, size: 18),
-                    suffixIcon: IconButton(
-                      tooltip: isAr
-                          ? 'توليد كلمة مرور جديدة (يلغي الجلسات السابقة فوراً)'
-                          : 'Regenerate password (revokes old sessions)',
-                      icon: const Icon(Icons.autorenew_rounded, size: 18),
-                      onPressed: onRegeneratePassword,
+                    suffixIcon: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (onToggleObscure != null && passController.text.isNotEmpty)
+                          IconButton(
+                            tooltip: isAr
+                                ? (obscurePassword ? 'إظهار كلمة المرور' : 'إخفاء كلمة المرور')
+                                : (obscurePassword ? 'Show password' : 'Hide password'),
+                            icon: Icon(
+                              obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                              size: 18,
+                            ),
+                            onPressed: onToggleObscure,
+                          ),
+                        IconButton(
+                          tooltip: isAr
+                              ? 'توليد كلمة مرور جديدة (يلغي الجلسات السابقة فوراً)'
+                              : 'Regenerate password (revokes old sessions)',
+                          icon: const Icon(Icons.autorenew_rounded, size: 18),
+                          onPressed: onRegeneratePassword,
+                        ),
+                      ],
                     ),
                     isDense: true,
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),

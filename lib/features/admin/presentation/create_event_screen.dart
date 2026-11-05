@@ -63,6 +63,7 @@ class RuleConflictIssue {
 }
 
 class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
+  bool _showTier2Password = false;
   ColorScheme get colorScheme => Theme.of(context).colorScheme;
 
   final _formKey = GlobalKey<FormState>();
@@ -6631,8 +6632,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                               ? 'تعمل هذه الحملة باسم مستخدم وكلمة مرور مستقلين لشركة الدعاية والعمليات (لتعديل المخزون والهدايا في هذه الحملة فقط).'
                               : 'This campaign uses isolated Agency Operations credentials for stock & gifts management.')
                           : (isAr
-                              ? 'الوضع الافتراضي (Tier 1): ترث الحملة تلقائياً بيانات دخول شركة الدعاية الموحدة للشركة ($defaultOpsUser / $defaultOpsPass) دون الحاجة لإعداد يدوي.'
-                              : 'Default (Tier 1): Automatically inherits the company-wide Agency Operations credentials ($defaultOpsUser / $defaultOpsPass).'),
+                              ? 'الوضع الافتراضي (Tier 1): ترث الحملة تلقائياً بيانات دخول شركة الدعاية الموحدة للشركة ($defaultOpsUser) دون الحاجة لإعداد يدوي.'
+                              : 'Default (Tier 1): Automatically inherits the company-wide Agency Operations credentials ($defaultOpsUser).'),
                       style: GoogleFonts.cairo(
                         fontSize: 12,
                         color: colorScheme.onSurfaceVariant,
@@ -6702,14 +6703,25 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                 if (isMobile) const SizedBox(height: 12) else const SizedBox(width: 14),
                 Expanded(
                   flex: isMobile ? 0 : 1,
-                  child: TextFormField(
-                    controller: _customAgencyPasswordController,
-                    style: GoogleFonts.sourceCodePro(fontSize: 13, fontWeight: FontWeight.w600),
-                    decoration: _m3InputDecoration(
-                      context: context,
-                      labelText: isAr ? 'كلمة المرور المخصصة للحملة' : 'Custom Campaign Agency Password',
-                      hintText: defaultOpsPass,
-                      prefixIcon: Icons.lock_outline_rounded,
+                  child: StatefulBuilder(
+                    builder: (context, setLocal) => TextFormField(
+                      controller: _customAgencyPasswordController,
+                      obscureText: !_showTier2Password,
+                      style: GoogleFonts.sourceCodePro(fontSize: 13, fontWeight: FontWeight.w600),
+                      decoration: _m3InputDecoration(
+                        context: context,
+                        labelText: isAr ? 'كلمة المرور المخصصة للحملة' : 'Custom Campaign Agency Password',
+                        hintText: '••••••••',
+                        prefixIcon: Icons.lock_outline_rounded,
+                      ).copyWith(
+                        suffixIcon: IconButton(
+                          tooltip: _showTier2Password
+                              ? (isAr ? 'إخفاء كلمة المرور' : 'Hide password')
+                              : (isAr ? 'إظهار كلمة المرور' : 'Show password'),
+                          icon: Icon(_showTier2Password ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                          onPressed: () => setLocal(() => _showTier2Password = !_showTier2Password),
+                        ),
+                      ),
                     ),
                   ),
                 ),

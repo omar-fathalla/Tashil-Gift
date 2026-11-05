@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:al_mraay/core/security/rep_login_policy.dart';
 import 'package:al_mraay/main.dart';
 import 'package:al_mraay/features/company_portal/presentation/company_manager_portal_screen.dart';
 import 'package:al_mraay/features/client_portal/presentation/client_receipt_upload_screen.dart';
+import 'package:al_mraay/features/client_portal/presentation/rep_upload_gate.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  tearDown(() => RepLoginPolicy.setRuntimeOverride(null));
 
   group('Route Resolution & Portal Dispatch Tests', () {
     testWidgets('onGenerateInitialRoutes resolves single-resolution portal and promoter routes without decomposing', (tester) async {
@@ -89,6 +93,26 @@ void main() {
       ) as MaterialPageRoute;
       final built3 = route3.builder(element);
       expect(built3, isA<ClientReceiptUploadScreen>());
+
+      final repRoute = materialApp.onGenerateRoute!(
+        const RouteSettings(name: '/rep/1434?event=y5ujNVYJxsYIEgK1xmQL'),
+      ) as MaterialPageRoute;
+      final builtRep = repRoute.builder(element);
+      expect(builtRep, isA<RepUploadGate>());
+      final gate = builtRep as RepUploadGate;
+      expect(gate.companySlug, '1434');
+      expect(gate.initialEventId, 'y5ujNVYJxsYIEgK1xmQL');
+
+      RepLoginPolicy.setRuntimeOverride(true);
+      final gatedPublic = materialApp.onGenerateRoute!(
+        const RouteSettings(name: '/c/1434'),
+      ) as MaterialPageRoute;
+      expect(gatedPublic.builder(element), isA<RepUploadGate>());
+      RepLoginPolicy.setRuntimeOverride(false);
+      final openPublic = materialApp.onGenerateRoute!(
+        const RouteSettings(name: '/promoter/1434'),
+      ) as MaterialPageRoute;
+      expect(openPublic.builder(element), isA<ClientReceiptUploadScreen>());
     });
   });
 }

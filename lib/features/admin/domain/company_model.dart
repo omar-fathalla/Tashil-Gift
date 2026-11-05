@@ -16,6 +16,9 @@ class CompanyModel {
   final String agencyOpsUsername;
   final String agencyOpsPassword;
   final int agencyCredentialVersion;
+  final String repUploaderUsername;
+  final String repUploaderPasswordHash;
+  final int repUploaderCredentialVersion;
 
   CompanyModel({
     required this.id,
@@ -30,6 +33,9 @@ class CompanyModel {
     this.agencyOpsUsername = '',
     this.agencyOpsPassword = '',
     this.agencyCredentialVersion = 1,
+    this.repUploaderUsername = '',
+    this.repUploaderPasswordHash = '',
+    this.repUploaderCredentialVersion = 1,
   });
 
   String get effectiveBrandUsername => brandManagerUsername.trim().isNotEmpty
@@ -70,6 +76,9 @@ class CompanyModel {
       agencyOpsUsername: (data['agencyOpsUsername'] ?? '').toString(),
       agencyOpsPassword: (data['agencyOpsPassword'] ?? '').toString(),
       agencyCredentialVersion: (data['agencyCredentialVersion'] as num?)?.toInt() ?? 1,
+      repUploaderUsername: (data['repUploaderUsername'] ?? '').toString(),
+      repUploaderPasswordHash: (data['repUploaderPasswordHash'] ?? '').toString(),
+      repUploaderCredentialVersion: (data['repUploaderCredentialVersion'] as num?)?.toInt() ?? 1,
     );
   }
 
@@ -86,6 +95,9 @@ class CompanyModel {
       if (agencyOpsUsername.isNotEmpty) 'agencyOpsUsername': agencyOpsUsername,
       if (agencyOpsPassword.isNotEmpty) 'agencyOpsPassword': agencyOpsPassword,
       'agencyCredentialVersion': agencyCredentialVersion,
+      if (repUploaderUsername.isNotEmpty) 'repUploaderUsername': repUploaderUsername,
+      if (repUploaderPasswordHash.isNotEmpty) 'repUploaderPasswordHash': repUploaderPasswordHash,
+      if (repUploaderPasswordHash.isNotEmpty) 'repUploaderCredentialVersion': repUploaderCredentialVersion,
     };
   }
 }

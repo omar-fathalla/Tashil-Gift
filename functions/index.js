@@ -665,6 +665,7 @@ Object.assign(exports, require("./security_functions"));
 const partnerPortal = require("./partner_portal");
 exports.partnerPortalInfo = partnerPortal.partnerPortalInfo;
 exports.partnerPortalLogin = partnerPortal.partnerPortalLogin;
+exports.partnerPortalSetRepCredentials = partnerPortal.partnerPortalSetRepCredentials;
 
 /**
  * Cloud Function: wahaWebhook

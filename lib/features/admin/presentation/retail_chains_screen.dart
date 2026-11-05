@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/widgets/slow_load_placeholder.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1744,9 +1745,9 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
         ],
       ),
       padding: const EdgeInsets.all(20),
-      child: Row(
-        children: [
-          Container(
+      child: LayoutBuilder(builder: (context, constraints) {
+        final narrow = constraints.maxWidth < 560;
+        final iconW =           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: colorScheme.surface,
@@ -1764,22 +1765,20 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
               color: colorScheme.primary,
               size: 32,
             ),
-          ),
-          const SizedBox(width: 18),
-          Expanded(
-            child: Column(
+          );
+        final textsW = Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Text(
+Flexible(child: Text(
                       strings.aiScanReceiptTemplate,
                       style: GoogleFonts.cairo(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: colorScheme.onPrimaryContainer,
                       ),
-                    ),
+                    )),
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -1807,10 +1806,8 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                   ),
                 ),
               ],
-            ),
-          ),
-          const SizedBox(width: 16),
-          FilledButton.icon(
+            );
+        final btnW =           FilledButton.icon(
             onPressed: _isScanningReceipt ? null : () => _scanReceiptWithAi(chains),
             style: FilledButton.styleFrom(
               backgroundColor: colorScheme.primary,
@@ -1832,9 +1829,23 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-          ),
-        ],
-      ),
+          );
+        if (narrow) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [textsW, const SizedBox(height: 12), btnW],
+          );
+        }
+        return Row(
+          children: [
+            iconW,
+            const SizedBox(width: 18),
+            Expanded(child: textsW),
+            const SizedBox(width: 16),
+            btnW,
+          ],
+        );
+      }),
     );
   }
 
@@ -1853,6 +1864,13 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
       stream: chainsStream,
       builder: (context, chainsSnap) {
         final chains = chainsSnap.data ?? [];
+        if (!chainsSnap.hasData && !chainsSnap.hasError) {
+          // 2.0.173: avoid flashing "(0)" / empty state before the first snapshot.
+          return Scaffold(
+            backgroundColor: colorScheme.surface,
+            body: const SlowLoadPlaceholder(),
+          );
+        }
 
         // Auto select first chain if none selected
         if (_selectedChainIdForBranch == null && chains.isNotEmpty) {
@@ -1942,8 +1960,8 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                                   ],
                                 ),
                               ),
-                              // AI Scan Header Action Button
-                              FilledButton.icon(
+                              // AI Scan Header Action Button (hidden on narrow screens: the hero card below has the same action)
+                              if (screenWidth >= 700) FilledButton.icon(
                                 onPressed: _isScanningReceipt ? null : () => _scanReceiptWithAi(chains),
                                 style: FilledButton.styleFrom(
                                   backgroundColor: colorScheme.primary,
