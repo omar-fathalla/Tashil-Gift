@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'firebase_options.dart';
 import 'core/services/app_check_bootstrap.dart';
+import 'core/services/firebase_emulator_config.dart';
 import 'core/services/firebase_scope.dart';
 import 'core/theme/app_theme.dart';
 import 'core/update/app_update_checker.dart';
@@ -42,10 +43,14 @@ void main() async {
 
   // 2.0.172: never hang the splash. Firebase init gets a timeout + one retry,
   // App Check activation and the device id are bounded (they are optional).
+  // FIREBASE_EMULATOR uses a demo- project and localhost ports only.
+  final FirebaseOptions firebaseOptions = kFirebaseEmulator
+      ? kFirebaseEmulatorOptions
+      : DefaultFirebaseOptions.currentPlatform;
   for (var attempt = 0; attempt < 2; attempt++) {
     try {
       await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
+        options: firebaseOptions,
       ).timeout(const Duration(seconds: 12));
       break;
     } catch (e) {
@@ -53,9 +58,13 @@ void main() async {
       if (Firebase.apps.isNotEmpty) break;
     }
   }
-  try {
-    await activateFirebaseAppCheck().timeout(const Duration(seconds: 8));
-  } catch (_) {}
+  if (kFirebaseEmulator) {
+    await attachFirebaseEmulators();
+  } else {
+    try {
+      await activateFirebaseAppCheck().timeout(const Duration(seconds: 8));
+    } catch (_) {}
+  }
 
   // Field reps never see a login form. Anonymous Auth is their only session,
   // so it is created only on public link routes, not on admin visits (M4).
@@ -74,7 +83,7 @@ void main() async {
   try {
     await FirebaseScope.init(
       entryUri: Uri.base,
-      options: DefaultFirebaseOptions.currentPlatform,
+      options: firebaseOptions,
     );
     if (FirebaseScope.isPartnerPortal) {
       try {
