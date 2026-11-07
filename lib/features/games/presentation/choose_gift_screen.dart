@@ -30,6 +30,7 @@ class ChooseGiftScreen extends ConsumerStatefulWidget {
   final List<List<String>> roundGiftIds;
   final List<List<double>> roundUnitValues;
   final List<String> roundRuleIds;
+  final List<double> roundTierMinSpends;
   final int totalChances;
   final bool isDemo;
   final String? branchId;
@@ -48,6 +49,7 @@ class ChooseGiftScreen extends ConsumerStatefulWidget {
     this.roundGiftIds = const [],
     this.roundUnitValues = const [],
     this.roundRuleIds = const [],
+    this.roundTierMinSpends = const [],
     this.totalChances = 1,
     this.isDemo = false,
     this.branchId,
@@ -188,6 +190,49 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
         });
       }
     } catch (_) {}
+  }
+
+  String _currentTierSuffix(bool arabic) {
+    final index = _currentRound - 1;
+    if (index < 0 || index >= widget.roundTierMinSpends.length) return '';
+    final tier = widget.roundTierMinSpends[index];
+    if (tier <= 0) return '';
+    final label = tier.toStringAsFixed(0);
+    return arabic ? ' — شريحة $label' : ' — tier $label';
+  }
+
+  String _roundChipLabel({
+    required int roundNum,
+    required bool arabic,
+    required bool completed,
+    required bool current,
+    required String? wonGift,
+  }) {
+    final index = roundNum - 1;
+    final names = index >= 0 && index < widget.roundPrizeNames.length
+        ? widget.roundPrizeNames[index].map((name) => name.trim()).where((name) => name.isNotEmpty).join(' / ')
+        : '';
+    if (names.isEmpty) {
+      if (completed) {
+        return wonGift != null
+            ? (arabic ? 'الهدية $roundNum: $wonGift ✓' : 'Gift $roundNum: $wonGift ✓')
+            : (arabic ? 'الهدية $roundNum: تم الاختيار ✓' : 'Gift $roundNum: Picked ✓');
+      }
+      if (current) return arabic ? 'الهدية $roundNum: اختر الآن 👈' : 'Gift $roundNum: Pick now 👈';
+      return arabic ? 'الهدية $roundNum: في الانتظار ⏳' : 'Gift $roundNum: Waiting ⏳';
+    }
+    final tier = index < widget.roundTierMinSpends.length && widget.roundTierMinSpends[index] > 0
+        ? widget.roundTierMinSpends[index].toStringAsFixed(0)
+        : '';
+    final tierLabel = tier.isEmpty ? '' : (arabic ? 'شريحة $tier: ' : 'tier $tier: ');
+    if (completed) {
+      final picked = wonGift != null && wonGift.isNotEmpty ? wonGift : names;
+      return arabic ? 'الجولة $roundNum — $tierLabel$picked ✓' : 'Round $roundNum — $tierLabel$picked ✓';
+    }
+    if (current) {
+      return arabic ? 'الجولة $roundNum — $tierLabel$names — اختر الآن' : 'Round $roundNum — $tierLabel$names — pick now';
+    }
+    return arabic ? 'الجولة $roundNum — $tierLabel$names' : 'Round $roundNum — $tierLabel$names';
   }
 
   String? _resolvePrizeImage(String prizeName) {
@@ -882,8 +927,8 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                           Text(
                                             totalChances > 1
                                                 ? (isAr
-                                                    ? 'الفرصة الحالية: اختيار الهدية رقم ($_currentRound) من إجمالي ($totalChances) هدايا'
-                                                    : 'Current Round: Choosing gift #$_currentRound of $totalChances')
+                                                    ? 'الفرصة الحالية: اختيار الهدية رقم ($_currentRound) من إجمالي ($totalChances) هدايا${_currentTierSuffix(true)}'
+                                                    : 'Current Round: Choosing gift #$_currentRound of $totalChances${_currentTierSuffix(false)}')
                                                 : (isAr
                                                     ? 'انقر على هديتك المفضلة للاختيار'
                                                     : strings.chooseYourGiftPrompt),
@@ -959,13 +1004,13 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                             ),
                                             const SizedBox(width: 5),
                                             Text(
-                                              isCompleted
-                                                  ? (wonGift != null
-                                                      ? (isAr ? 'الهدية $roundNum: $wonGift ✓' : 'Gift $roundNum: $wonGift ✓')
-                                                      : (isAr ? 'الهدية $roundNum: تم الاختيار ✓' : 'Gift $roundNum: Picked ✓'))
-                                                  : isCurrent
-                                                      ? (isAr ? 'الهدية $roundNum: اختر الآن 👈' : 'Gift $roundNum: Pick now 👈')
-                                                      : (isAr ? 'الهدية $roundNum: في الانتظار ⏳' : 'Gift $roundNum: Waiting ⏳'),
+                                              _roundChipLabel(
+                                                roundNum: roundNum,
+                                                arabic: isAr,
+                                                completed: isCompleted,
+                                                current: isCurrent,
+                                                wonGift: wonGift,
+                                              ),
                                               style: GoogleFonts.cairo(
                                                 fontSize: isMobile ? 10 : 11.5,
                                                 fontWeight: FontWeight.bold,

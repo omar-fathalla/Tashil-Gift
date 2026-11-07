@@ -5587,6 +5587,15 @@ class SpendAwardRound {
     required this.unitValues,
   });
 
+  /// Visible label for one round. The gifts are this tier's gifts only.
+  String roundLine(int index, int total, {required bool arabic}) {
+    final gifts = prizeNames.map((name) => name.trim()).where((name) => name.isNotEmpty).join(' / ');
+    final tier = tierMinSpend.toStringAsFixed(0);
+    final number = index + 1;
+    if (arabic) return 'الجولة $number من $total — شريحة $tier: $gifts';
+    return 'Round $number of $total — tier $tier: $gifts';
+  }
+
   static List<SpendAwardRound> expand(List<MatchedPromotionalRuleResult> rules) {
     final ordered = List<MatchedPromotionalRuleResult>.from(rules)
       ..sort((a, b) => b.rule.effectiveMinSpend.compareTo(a.rule.effectiveMinSpend));

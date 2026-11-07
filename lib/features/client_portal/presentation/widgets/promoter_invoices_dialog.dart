@@ -3320,7 +3320,11 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
 
     // Clean display title for choice campaigns
     String effectiveTitle = prizeTitle ?? '';
-    if (isChooseGift) {
+    if (isChooseGift && consumingLadder && effectiveRounds.isNotEmpty) {
+      effectiveTitle = isAr
+          ? 'سلم الإنفاق: ${effectiveRounds.length} جولات، وكل جولة تعرض هدايا شريحتها فقط'
+          : 'Spend ladder: ${effectiveRounds.length} rounds, each with its own gifts';
+    } else if (isChooseGift) {
       effectiveTitle = isAr
           ? 'عرض ترويجي بنظام اختيار الهدية (${candidatePrizes.length} خيارات متاحة)'
           : 'Promotional Choice Reward (${candidatePrizes.length} Options)';
@@ -3400,7 +3404,16 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                           ),
                         ],
                       ),
-                      if (candidatePrizes.isNotEmpty) ...[
+                      if (consumingLadder && effectiveRounds.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        ...effectiveRounds.asMap().entries.map((entry) => Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Text(
+                            entry.value.roundLine(entry.key, effectiveRounds.length, arabic: isAr),
+                            style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.onSecondaryContainer),
+                          ),
+                        )),
+                      ] else if (candidatePrizes.isNotEmpty) ...[
                         const SizedBox(height: 10),
                         Wrap(
                           spacing: 6,
@@ -3534,6 +3547,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                         roundGiftIds: [for (final round in effectiveRounds) round.giftIds],
                         roundUnitValues: [for (final round in effectiveRounds) round.unitValues],
                         roundRuleIds: [for (final round in effectiveRounds) round.ruleId],
+                        roundTierMinSpends: [for (final round in effectiveRounds) round.tierMinSpend],
                         totalChances: effectiveRounds.isNotEmpty
                             ? effectiveRounds.length
                             : (totalChances > 0 ? totalChances : 1),

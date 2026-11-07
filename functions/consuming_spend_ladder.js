@@ -162,15 +162,29 @@ function canonicalIds(round) {
   return (round.giftIds || []).map((id) => String(id || "").trim()).filter(Boolean);
 }
 
-// The caller's unit value and label are not authorization. A gift id is
-// accepted only when that id is one of this round's canonical gift ids.
-function roundAllows(round, claim) {
+// Authorization is the gift id on this round. The caller's unit value, label,
+// and claimed_gifts array are not consulted.
+function canonicalGift(round, claim) {
   const ids = canonicalIds(round);
   const explicitId = String(claim.giftId || "").trim();
-  if (explicitId) return ids.includes(explicitId);
   const identifier = String(claim.prizeIdentifier || "").trim();
-  if (!identifier) return false;
-  return ids.includes(identifier);
+  const id = explicitId || (ids.includes(identifier) ? identifier : "");
+  if (!id || !ids.includes(id)) return null;
+  const index = round.giftIds.findIndex((giftId) => String(giftId || "").trim() === id);
+  return {
+    giftId: id,
+    giftName: String(round.prizeNames[index] || ""),
+    quantity: 1,
+    unitValue: Number(round.unitValues[index]) || 0,
+    ruleId: round.ruleId,
+    tierMinSpend: round.tierMinSpend,
+    isVoucher: (Number(round.unitValues[index]) || 0) > 0,
+    branchId: claim.branchId || "",
+  };
+}
+
+function roundAllows(round, claim) {
+  return canonicalGift(round, claim) != null;
 }
 
 function claimedEntryUnits(gift) {
@@ -179,29 +193,66 @@ function claimedEntryUnits(gift) {
   return Number.isFinite(count) && count > 0 ? count : 1;
 }
 
-function verifyConsumingDecrements(event, receipt, decrements) {
-  if (!event || event.spendLadderMode !== "consuming") return null;
-  if (!Array.isArray(decrements) || decrements.length === 0) return null;
+function keptLedgerEntry(gift) {
+  return {
+    giftId: String((gift && gift.giftId) || ""),
+    giftName: String((gift && gift.giftName) || ""),
+    quantity: claimedEntryUnits(gift),
+    unitValue: Number(gift && gift.unitValue) || 0,
+    ruleId: String((gift && gift.ruleId) || ""),
+    tierMinSpend: Number(gift && gift.tierMinSpend) || 0,
+    isVoucher: !!(gift && gift.isVoucher),
+  };
+}
+
+function planConsumingClaim(event, receipt, decrements) {
+  if (!event || event.spendLadderMode !== "consuming") return { skip: true };
+  if (!Array.isArray(decrements) || decrements.length === 0) return { skip: true };
   const played = receipt && receipt.game_played === true;
   const remaining = Number(receipt && receipt.remaining_chances != null ? receipt.remaining_chances : 0);
-  if (played && remaining <= 0) return "already_claimed";
+  if (played && remaining <= 0) return { reason: "already_claimed" };
   const products = receipt && receipt.extracted_products;
-  if (!Array.isArray(products) || products.length === 0) return "missing_lines";
+  if (!Array.isArray(products) || products.length === 0) return { reason: "missing_lines" };
   const allow = event.allowMultipleChances === true;
   const computed = roundsFromRules(event.promotionalRules || [], products, allow);
   const rounds = applyCap(computed.rounds, allow ? event.maxChancesPerReceipt : 1);
-  const gifts = Array.isArray(receipt.claimed_gifts) ? receipt.claimed_gifts : [];
-  let index = gifts.reduce((sum, gift) => sum + claimedEntryUnits(gift), 0);
+  const existing = (Array.isArray(receipt.claimed_gifts) ? receipt.claimed_gifts : []).map(keptLedgerEntry);
+  let index = existing.reduce((sum, gift) => sum + claimedEntryUnits(gift), 0);
+  const added = [];
+  const stockDecrements = [];
   for (const decrement of decrements) {
     const count = Number(decrement.count || decrement.quantity || 1);
     for (let n = 0; n < count; n++) {
       const round = rounds[index];
-      if (!round) return "extra_quantity";
-      if (!roundAllows(round, decrement)) return "tier_mismatch";
+      if (!round) return { reason: "extra_quantity" };
+      const gift = canonicalGift(round, decrement);
+      if (!gift) return { reason: "tier_mismatch" };
+      added.push(gift);
+      stockDecrements.push({
+        prizeIdentifier: gift.giftId,
+        count: 1,
+        unitValue: gift.unitValue,
+        isVoucher: gift.isVoucher,
+        branchId: decrement.branchId || "",
+        gameType: decrement.gameType || "chooseGift",
+      });
       index += 1;
     }
   }
-  return null;
+  const claimed = existing.concat(added);
+  return {
+    reason: null,
+    claimed_gifts: claimed,
+    prizes_won: claimed.map((gift) => gift.giftName).filter(Boolean),
+    remaining_chances: Math.max(0, rounds.length - index),
+    decrements: stockDecrements,
+  };
+}
+
+function verifyConsumingDecrements(event, receipt, decrements) {
+  const plan = planConsumingClaim(event, receipt, decrements);
+  if (!plan || plan.skip) return null;
+  return plan.reason || null;
 }
 
 module.exports = {
@@ -210,5 +261,6 @@ module.exports = {
   roundsFromRules,
   applyCap,
   verifyConsumingDecrements,
+  planConsumingClaim,
   claimedEntryUnits,
 };

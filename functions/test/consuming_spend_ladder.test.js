@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { roundsFromRules, verifyConsumingDecrements, netLine } = require("../consuming_spend_ladder");
+const { roundsFromRules, verifyConsumingDecrements, planConsumingClaim, netLine } = require("../consuming_spend_ladder");
 
 const gift500 = "4QDy4H8psECEP4AnJSON";
 const gift350 = "beGiYXcMAsW78OGevW5d";
@@ -107,6 +107,26 @@ test("canonical gift id is the only authorization", () => {
     unitValue: 150,
     giftName: "قسيمة شراء 150 جنيه",
   }]), null);
+  const stored = planConsumingClaim(event(), base, [{
+    prizeIdentifier: gift350,
+    count: 1,
+    unitValue: 150,
+    giftName: "قسيمة شراء 150 جنيه",
+  }]);
+  assert.equal(stored.reason, null);
+  assert.equal(stored.claimed_gifts.length, 3);
+  assert.equal(stored.claimed_gifts[2].giftId, gift350);
+  assert.equal(stored.claimed_gifts[2].unitValue, 100);
+  assert.equal(stored.claimed_gifts[2].giftName, "قسيمة شراء 100 جنيه");
+  assert.equal(stored.decrements[0].unitValue, 100);
+  assert.equal(stored.decrements[0].prizeIdentifier, gift350);
+  assert.equal(stored.remaining_chances, 0);
+  const wiped = planConsumingClaim(event(), base, [{
+    prizeIdentifier: gift350,
+    count: 1,
+    unitValue: 100,
+  }]);
+  assert.deepEqual(wiped.claimed_gifts.slice(0, 2).map((gift) => gift.giftId), [gift500, gift500]);
 });
 
 test("partial retry uses persisted gifts, and a missing quantity still counts as one", () => {

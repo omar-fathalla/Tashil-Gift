@@ -173,6 +173,18 @@ void main() {
     expect(SpendAwardRound.expand(matched).every((round) => round.giftIds.single == gift350), isTrue);
   });
 
+  test('each consuming round names its own tier before a claim', () {
+    const round = SpendAwardRound(
+      ruleId: 'tier-350',
+      ruleTitle: '350',
+      tierMinSpend: 350,
+      prizeNames: ['قسيمة شراء 100 جنيه'],
+      giftIds: [gift350],
+      unitValues: [100],
+    );
+    expect(round.roundLine(2, 3, arabic: true), 'الجولة 3 من 3 — شريحة 350: قسيمة شراء 100 جنيه');
+  });
+
   test('default mode stays exclusive for an unrelated ladder', () {
     expect(EventModel.normalizeSpendLadderMode(null), 'exclusive');
     expect(EventModel.normalizeSpendLadderMode('consuming'), 'consuming');

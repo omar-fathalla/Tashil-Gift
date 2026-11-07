@@ -1021,11 +1021,14 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
               transactionId: transactionRef.id,
               eventId: activeEvent.id,
               companySlug: activeEvent.companySlug,
-              prizes: candidateGifts.isNotEmpty ? candidateGifts : prizeNames,
+              prizes: awardRounds.isNotEmpty
+                  ? awardRounds.first.prizeNames
+                  : (candidateGifts.isNotEmpty ? candidateGifts : prizeNames),
               roundPrizeNames: [for (final round in awardRounds) round.prizeNames],
               roundGiftIds: [for (final round in awardRounds) round.giftIds],
               roundUnitValues: [for (final round in awardRounds) round.unitValues],
               roundRuleIds: [for (final round in awardRounds) round.ruleId],
+              roundTierMinSpends: [for (final round in awardRounds) round.tierMinSpend],
               totalChances: awardRounds.isNotEmpty ? awardRounds.length : totalChances,
               branchId: resolvedBranchId,
             ),

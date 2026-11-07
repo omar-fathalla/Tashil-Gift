@@ -7,7 +7,7 @@
  * cannot write stock counters directly.
  */
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
-const { verifyConsumingDecrements } = require("./consuming_spend_ladder");
+const { planConsumingClaim } = require("./consuming_spend_ladder");
 const admin = require("./admin_sdk");
 
 const callableOptions = {
@@ -615,8 +615,10 @@ async function applyCampaignPrizeClaim(db, input) {
       }
     }
 
+    let consumingLedger = false;
     if (receipt && decrements.length > 0 && event.spendLadderMode === "consuming") {
-      const reason = verifyConsumingDecrements(event, receipt, decrements);
+      const plan = planConsumingClaim(event, receipt, decrements);
+      const reason = plan && plan.reason;
       if (reason === "already_claimed") {
         throw new HttpsError("failed-precondition", "This receipt was already claimed.", { reason });
       }
@@ -629,12 +631,28 @@ async function applyCampaignPrizeClaim(db, input) {
       if (reason === "extra_quantity") {
         throw new HttpsError("failed-precondition", "الكمية أكبر من الجولات المستحقة.", { reason });
       }
+      if (reason) {
+        throw new HttpsError("failed-precondition", "تعذر اعتماد هذه الجولة.", { reason });
+      }
+      if (plan && !plan.skip && !reason) {
+        // The stored ledger is the previous transaction snapshot plus this
+        // round's canonical gift. The client array is discarded, and the
+        // generic trimmer must not rebuild that array from the request.
+        consumingLedger = true;
+        decrements = plan.decrements;
+        patch.claimed_gifts = plan.claimed_gifts;
+        patch.prizes_won = plan.prizes_won;
+        patch.prize_won = plan.prizes_won.join(" + ");
+        patch.remaining_chances = plan.remaining_chances;
+      }
     }
 
     // 2.0.163: max gift UNITS per receipt = min(campaign cap, receipt chances).
     // 2.0.164: over-limit requests are trimmed, highest value first, no error.
+    // A consuming ladder already accepted an exact round list, so this trim
+    // does not run for it and cannot replace claimed_gifts.
     let trim = null;
-    if (receipt && decrements.length > 0) {
+    if (receipt && decrements.length > 0 && !consumingLedger) {
       const limit = receiptUnitLimit(event, receipt, patch);
       const already = createdReceipt ? 0 : claimedUnits(receipt.claimed_gifts);
       const requested = decrements.reduce((s, d) => s + Number(d.count || 0), 0);
@@ -840,6 +858,6 @@ async function decrementCampaignPrizeImpl(request) {
 // Non-enumerable so index.js Object.assign does not expose it as a function group.
 Object.defineProperty(exports, "_testing", {
   value: { NO_BRANCH_STOCK_MESSAGE, findBestPrizeMatchIndex, resolvePrizeIndexForDecrement, storeCodeFromReceiptNumber, branchIdFromStoreCode, findSharedPoolRow, sharedPoolEnabled, applyCampaignPrizeClaim, receiptUnitLimit,
-    piecesPerOffer, claimedUnits, recordClaimFailure, trimDecrementsToLimit, trimPatchToDecrements, verifyConsumingDecrements },
+    piecesPerOffer, claimedUnits, recordClaimFailure, trimDecrementsToLimit, trimPatchToDecrements, planConsumingClaim },
   enumerable: false,
 });
