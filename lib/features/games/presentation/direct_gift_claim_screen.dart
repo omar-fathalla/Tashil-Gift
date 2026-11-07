@@ -487,10 +487,19 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
         if (matchIdx != -1) {
           foundRemaining = (prizes[matchIdx]['remainingQuantity'] as num?)?.toInt() ?? 0;
           final pBranch = (prizes[matchIdx]['branchName'] ?? '').toString().trim();
-          if (pBranch.isNotEmpty && (branchNameFound == null || CompanyGiftsService.matchesBranchName(pBranch, branchNameFound))) {
+          // Keep the name already taken from the stored id. Do not replace it
+          // with a shorter sibling that only shares a token.
+          if (pBranch.isNotEmpty && (branchNameFound == null || pBranch == branchNameFound)) {
             branchNameFound = pBranch;
           }
         } else {
+          final prizeBranchNames = prizes
+              .map((p) => (p['branchName'] ?? '').toString().trim())
+              .where((name) => name.isNotEmpty)
+              .toList();
+          final pickedPrizeBranch = (targetBranch == null || targetBranch.isEmpty)
+              ? null
+              : CanonicalBranchResolver.pickCampaignName(targetBranch, prizeBranchNames);
           for (final p in prizes) {
             final matches = p['giftId'] == widget.prizeName ||
                 p['name'] == widget.prizeName ||
@@ -502,7 +511,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                   targetBranch.isNotEmpty &&
                   (pBranchId == targetBranch ||
                       pBranchName == targetBranch ||
-                      CompanyGiftsService.matchesBranchName(pBranchName, targetBranch)));
+                      (pickedPrizeBranch != null && pBranchName == pickedPrizeBranch)));
 
               if (isBranchMatch) {
                 foundRemaining = (p['remainingQuantity'] as num?)?.toInt() ?? 0;

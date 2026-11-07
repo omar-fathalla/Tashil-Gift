@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'firebase_options.dart';
 import 'core/services/app_check_bootstrap.dart';
+import 'core/services/emulator_auth_persistence.dart'
+    if (dart.library.html) 'core/services/emulator_auth_persistence_web.dart';
 import 'core/services/firebase_emulator_config.dart';
 import 'core/services/firebase_scope.dart';
 import 'core/theme/app_theme.dart';
@@ -17,6 +19,7 @@ import 'core/services/firebase_service.dart';
 import 'core/utils/app_url_strategy.dart';
 import 'core/widgets/campaign_suspended_screen.dart';
 import 'features/auth/presentation/auth_screen.dart';
+import 'features/games/presentation/emulator_fixture_gift_claim_screen.dart';
 import 'features/admin/presentation/admin_dashboard_screen.dart';
 import 'features/client_portal/presentation/client_receipt_upload_screen.dart';
 import 'features/company_portal/presentation/company_manager_portal_screen.dart';
@@ -47,6 +50,9 @@ void main() async {
   final FirebaseOptions firebaseOptions = kFirebaseEmulator
       ? kFirebaseEmulatorOptions
       : DefaultFirebaseOptions.currentPlatform;
+  if (kFirebaseEmulator) {
+    await clearEmulatorAuthPersistence();
+  }
   for (var attempt = 0; attempt < 2; attempt++) {
     try {
       await Firebase.initializeApp(
@@ -386,6 +392,11 @@ class MyApp extends ConsumerWidget {
             companySlug: slug,
             initialEventId: eventId,
           ),
+          settings: effectiveSettings,
+        );
+      case EmulatorFixtureGiftClaimScreen.route:
+        return MaterialPageRoute(
+          builder: (context) => const EmulatorFixtureGiftClaimScreen(),
           settings: effectiveSettings,
         );
       case '/login':

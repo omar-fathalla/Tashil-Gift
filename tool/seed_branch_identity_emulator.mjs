@@ -55,7 +55,45 @@ async function putDoc(collection, id, fields) {
   if (!res.ok) throw new Error(`${res.status} ${collection}/${id}\n${text.slice(0, 500)}`);
 }
 
-function eventDoc(ids, names) {
+function integer(value) {
+  return { integerValue: String(value) };
+}
+
+function prize(entry) {
+  return {
+    mapValue: {
+      fields: {
+        giftId: str(entry.giftId),
+        name: str(entry.name),
+        allocatedQuantity: integer(entry.allocated),
+        remainingQuantity: integer(entry.remaining),
+        branchId: str(entry.branchId),
+        branchName: str(entry.branchName),
+        giftType: str('product'),
+        unitValue: num(0),
+      },
+    },
+  };
+}
+
+const outletGift = {
+  giftId: 'gift-outlet-243',
+  name: 'هدية أوتليت طنطا',
+  allocated: 7,
+  remaining: 7,
+  branchId: 'fathalla_243',
+  branchName: outletName,
+};
+const shortGift = {
+  giftId: 'gift-short-231',
+  name: 'هدية طنطا القصيرة',
+  allocated: 3,
+  remaining: 3,
+  branchId: 'fathalla_231',
+  branchName: shortName,
+};
+
+function eventDoc(ids, names, { withGifts = false } = {}) {
   return {
     eventName: str('Synthetic branch fixture'),
     targetCompany: str('Fixture Company'),
@@ -66,7 +104,14 @@ function eventDoc(ids, names) {
     branchIds: strings(ids),
     branchNames: strings(names),
     retailChainName: str('Synthetic chain'),
+    gameType: str(withGifts ? 'directGift' : ''),
+    enableWhatsAppWinnerNotification: bool(false),
+    enable_whatsapp_winner_notification: bool(false),
+    requireVoucherSerials: bool(false),
     createdAt: ts(new Date()),
+    ...(withGifts
+      ? { allocatedPrizes: { arrayValue: { values: [prize(outletGift), prize(shortGift)] } } }
+      : {}),
   };
 }
 
@@ -86,17 +131,30 @@ function receiptDoc({ id, campaignId, branchId, branchDetected, receiptNumber })
     timestamp: ts(new Date()),
     customerName: str('Synthetic Customer'),
     customerPhone: str('01000000000'),
+    game_played: bool(false),
   });
 }
 
-const signedUp = await json(
-  `${authHost}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo`,
-  { email, password, returnSecureToken: true },
-);
+let localId;
+try {
+  const signedUp = await json(
+    `${authHost}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo`,
+    { email, password, returnSecureToken: true },
+  );
+  localId = signedUp.localId;
+} catch (error) {
+  const message = String(error);
+  if (!message.includes('EMAIL_EXISTS')) throw error;
+  const signedIn = await json(
+    `${authHost}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo`,
+    { email, password, returnSecureToken: true },
+  );
+  localId = signedIn.localId;
+}
 await json(
   `${authHost}/identitytoolkit.googleapis.com/v1/accounts:update?key=demo`,
   {
-    localId: signedUp.localId,
+    localId,
     customAttributes: JSON.stringify({ role: 'super_admin' }),
   },
   { authorization: 'Bearer owner' },
@@ -105,7 +163,7 @@ await json(
 await putDoc(
   'events',
   'fixture-order-a',
-  eventDoc(['fathalla_231', 'fathalla_243'], [shortName, outletName]),
+  eventDoc(['fathalla_231', 'fathalla_243'], [shortName, outletName], { withGifts: true }),
 );
 await putDoc(
   'events',
@@ -133,4 +191,42 @@ for (const [id, campaignId, branchId, branchDetected, receiptNumber] of rows) {
   await receiptDoc({ id, campaignId, branchId, branchDetected, receiptNumber });
 }
 
+async function readDoc(collection, id) {
+  const url =
+    `${firestoreHost}/v1/projects/${projectId}/databases/(default)/documents/` +
+    `${collection}/${id}`;
+  const res = await fetch(url, { headers: { authorization: 'Bearer owner' } });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`${res.status} ${collection}/${id}\n${text.slice(0, 500)}`);
+  return JSON.parse(text);
+}
+
+const event = await readDoc('events', 'fixture-order-a');
+const prizes = event.fields.allocatedPrizes.arrayValue.values;
+const outlet = prizes[0].mapValue.fields;
+const shortPrize = prizes[1].mapValue.fields;
+if (outlet.giftId.stringValue !== outletGift.giftId) {
+  throw new Error('outlet gift id was not stored');
+}
+if (outlet.branchId.stringValue !== 'fathalla_243' || outlet.remainingQuantity.integerValue !== '7') {
+  throw new Error(`outlet stock is not 7 on fathalla_243: ${JSON.stringify(outlet)}`);
+}
+if (shortPrize.giftId.stringValue !== shortGift.giftId || shortPrize.remainingQuantity.integerValue !== '3') {
+  throw new Error('short-branch gift was not stored at remaining 3');
+}
+if (shortPrize.branchId.stringValue !== 'fathalla_231') {
+  throw new Error('short gift is not on fathalla_231');
+}
+
+const foreign = await readDoc('receipts_transactions', 'a-foreign-id');
+if (foreign.fields.branch_id.stringValue !== 'gomla_418') {
+  throw new Error('gomla_418 was rewritten');
+}
+if (foreign.fields.branch_detected.stringValue !== shortName) {
+  throw new Error('foreign-id receipt lost its stored name');
+}
+
 console.log(`Seeded demo-tashil-branch. Sign in as ${email}`);
+console.log('Gift route: http://127.0.0.1:7357/fixture-gift');
+console.log('Before claim: gift-outlet-243 remaining 7, gift-short-231 remaining 3');
+console.log('After one claim: outlet remaining 6, short remaining 3, a-foreign-id branch_id stays gomla_418');
