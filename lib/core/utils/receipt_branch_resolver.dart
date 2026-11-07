@@ -34,9 +34,12 @@ class ReceiptBranchResolver {
       return ReceiptBranchResolution(match.id, match.name, certain: true);
     }
 
-    // Prize rows can name a branch the campaign list missed. Same rule:
-    // store code, then exact / longest name. Never the first shorter sibling.
-    if (event.allocatedPrizes.isNotEmpty) {
+    // Prize rows are consulted only when the detected text does not overlap
+    // the campaign names. An ambiguous sibling (طنطا inside طنطا اوت ليت)
+    // must not fall through to a prize list that contains only the short name.
+    // A campaign with one branch is not a reason to assign that branch.
+    if (event.allocatedPrizes.isNotEmpty &&
+        !CanonicalBranchResolver.hasAnyNameOverlap(detectedRaw, event.branchNames)) {
       final ids = <String>[];
       final names = <String>[];
       for (final p in event.allocatedPrizes) {
@@ -56,10 +59,6 @@ class ReceiptBranchResolver {
       }
     }
 
-    if (event.branchIds.length == 1) {
-      final name = event.branchNames.isNotEmpty ? event.branchNames.first : detectedRaw;
-      return ReceiptBranchResolution(event.branchIds.first, name, certain: true);
-    }
     return ReceiptBranchResolution(null, detectedRaw);
   }
 

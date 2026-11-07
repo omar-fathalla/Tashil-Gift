@@ -152,6 +152,144 @@ void main() {
     expect(match.name, outletName);
   });
 
+  test('stored id wins over a conflicting store code and is not rewritten', () {
+    final match = CanonicalBranchResolver.resolve(
+      branchIds: ids231First,
+      branchNames: names231First,
+      branchId: 'fathalla_231',
+      detectedName: outletName,
+      receiptNumber: receipt243,
+    );
+    expect(match.certain, isTrue);
+    expect(match.id, 'fathalla_231');
+    expect(match.name, shortName);
+
+    final fields = ReceiptBranchResolver.firestoreFields(
+      _event(ids: ids231First, names: names231First),
+      detectedName: shortName,
+      receiptNumber: receipt243,
+    );
+    expect(fields['branch_id'], 'fathalla_243');
+    expect(fields['branch_detected'], outletName);
+  });
+
+  test('unknown code does not assign either Tanta sibling', () {
+    final fields = ReceiptBranchResolver.firestoreFields(
+      _event(ids: ids231First, names: names231First),
+      detectedName: 'فرع غير معروف',
+      receiptNumber: '10/1/999/061126',
+    );
+    expect(fields['branch_id'], isEmpty);
+    expect(fields['branch_detected'], 'فرع غير معروف');
+    expect(fields['canonical_branch'], 'فرع غير معروف');
+  });
+
+  test('one campaign branch is not a fallback for an unknown code', () {
+    final saved = ReceiptBranchResolver.resolve(
+      _event(ids: const ['fathalla_231'], names: const [shortName]),
+      'فرع الإسكندرية',
+      receiptNumber: '10/1/999/061126',
+    );
+    expect(saved.certain, isFalse);
+    expect(saved.id, isNull);
+    expect(saved.name, 'فرع الإسكندرية');
+  });
+
+  test('same code on two chains does not pick a name from the code alone', () {
+    final codeOnly = CanonicalBranchResolver.resolve(
+      branchIds: const ['fathalla_243', 'gomla_243'],
+      branchNames: const [outletName, 'جملة ماركت 243'],
+      detectedName: 'فرع غير محدد',
+      receiptNumber: receipt243,
+    );
+    expect(codeOnly.certain, isFalse);
+    expect(codeOnly.id, isNull);
+
+    final exactOutlet = CanonicalBranchResolver.resolve(
+      branchIds: const ['fathalla_243', 'gomla_243'],
+      branchNames: const [outletName, 'جملة ماركت 243'],
+      detectedName: outletName,
+      receiptNumber: receipt243,
+    );
+    expect(exactOutlet.certain, isTrue);
+    expect(exactOutlet.id, 'fathalla_243');
+    expect(exactOutlet.name, outletName);
+  });
+
+  test('legacy id outside this event is not reassigned from the receipt code', () {
+    final match = CanonicalBranchResolver.resolve(
+      branchIds: ids231First,
+      branchNames: names231First,
+      branchId: 'gomla_418',
+      detectedName: shortName,
+      receiptNumber: receipt243,
+    );
+    expect(match.certain, isFalse);
+    expect(match.id, 'gomla_418');
+    expect(match.name, shortName);
+    final shown = match.certain ? match.name : shortName;
+    expect(shown, shortName);
+    expect(shown, isNot(outletName));
+  });
+
+  test('a prize list that only has the short branch does not claim a partial outlet name', () {
+    final event = _event(ids: ids231First, names: names231First);
+    final withPrize = EventModel(
+      id: event.id,
+      eventName: event.eventName,
+      targetCompany: event.targetCompany,
+      minimumSpend: event.minimumSpend,
+      branchIds: event.branchIds,
+      branchNames: event.branchNames,
+      isAllBranches: false,
+      allocatedPrizes: [
+        AllocatedPrize(
+          giftId: 'g1',
+          name: 'هدية',
+          allocatedQuantity: 1,
+          remainingQuantity: 1,
+          branchId: 'fathalla_231',
+          branchName: shortName,
+        ),
+      ],
+    );
+    final saved = ReceiptBranchResolver.resolve(withPrize, 'طنطا اوت');
+    expect(saved.certain, isFalse);
+    expect(saved.id, isNull);
+    expect(saved.name, 'طنطا اوت');
+  });
+
+  test('invoice label and gift key follow the certain identity', () {
+    String label({
+      required String raw,
+      String id = '',
+      String receipt = '',
+      List<String> ids = ids231First,
+      List<String> names = names231First,
+    }) {
+      final identity = CanonicalBranchResolver.resolve(
+        branchIds: ids,
+        branchNames: names,
+        branchId: id,
+        detectedName: raw,
+        receiptNumber: receipt,
+      );
+      return identity.certain && identity.name.trim().isNotEmpty ? identity.name.trim() : raw;
+    }
+
+    String giftKey(String storedId, String resolvedName) =>
+        storedId.isNotEmpty ? storedId : resolvedName;
+
+    expect(label(raw: shortName, id: 'fathalla_243', receipt: receipt243), outletName);
+    expect(label(raw: shortName, receipt: receipt243, ids: ids243First, names: names243First), outletName);
+    expect(label(raw: shortName), shortName);
+    expect(label(raw: 'طنطا اوت', receipt: receipt243), outletName);
+    expect(label(raw: 'طنطا اوت'), 'طنطا اوت');
+    expect(label(raw: shortName, id: 'gomla_418', receipt: receipt243), shortName);
+    expect(giftKey('fathalla_243', shortName), 'fathalla_243');
+    expect(giftKey('', 'طنطا اوت'), 'طنطا اوت');
+  });
+
   test('legacy row without an id uses a unique receipt code and otherwise keeps the text', () {
     final byCode = CanonicalBranchResolver.resolve(
       branchIds: ids243First,
