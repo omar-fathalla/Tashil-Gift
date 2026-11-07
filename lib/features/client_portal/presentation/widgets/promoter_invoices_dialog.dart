@@ -2862,7 +2862,15 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
       }
 
       final canonical = winningEval.resolvedBranchName ?? _normalizeBranchName(rawBranch, winningCampaign.branchNames, isAr);
-      final double promoSpend = winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : targetTotal;
+      final spend = PromotionalRuleMatcher.spendTotals(
+        products: products,
+        rules: winningCampaign.promotionalRules,
+        spendLadderMode: winningCampaign.spendLadderMode,
+      );
+      final double promoSpend = winningCampaign.spendLadderMode == 'consuming'
+          ? spend.eligibleNet
+          : (winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : targetTotal);
+      final double invoiceSpend = winningCampaign.spendLadderMode == 'consuming' ? spend.invoiceNet : promoSpend;
 
       await firestore.collection('receipts_transactions').doc(docId).update({
         'is_valid': true,
@@ -2877,6 +2885,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
         'rechecked_by': currentUser?.email ?? 'promoter',
         'recheck_type': winningCampaign.id == activeEvent.id ? 'quick_rule_match' : 'quick_multi_campaign_match',
         'target_company_total': promoSpend,
+        'total_value': invoiceSpend,
         'chances_earned': chances,
         'canonical_branch': canonical,
         'branch_detected': canonical,

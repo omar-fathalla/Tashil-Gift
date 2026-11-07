@@ -1549,14 +1549,22 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
       }
 
       final canonical = winningEval.resolvedBranchName ?? _normalizeBranchName(rawBranch, winningCampaign.branchNames, isAr);
-      final double promoSpend = winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : targetTotal;
+      final spend = PromotionalRuleMatcher.spendTotals(
+        products: products,
+        rules: winningCampaign.promotionalRules,
+        spendLadderMode: winningCampaign.spendLadderMode,
+      );
+      final double promoSpend = winningCampaign.spendLadderMode == 'consuming'
+          ? spend.eligibleNet
+          : (winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : targetTotal);
+      final double invoiceSpend = winningCampaign.spendLadderMode == 'consuming' ? spend.invoiceNet : promoSpend;
 
       inv['is_valid'] = true;
       inv['status'] = 'accepted';
       inv['unfulfilled_conditions'] = <String>[];
       inv['rejection_reason'] = null;
       inv['target_company_total'] = promoSpend;
-      inv['total_value'] = promoSpend;
+      inv['total_value'] = invoiceSpend;
       inv['campaignId'] = winningCampaign.id;
       inv['campaign_name'] = winningCampaign.eventName;
       inv['eventName'] = winningCampaign.eventName;
@@ -1578,6 +1586,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
         'rechecked_by': currentUser?.email ?? 'admin',
         'recheck_type': winningCampaign.id == activeEvent.id ? 'quick_rule_match' : 'quick_multi_campaign_match',
         'target_company_total': promoSpend,
+        'total_value': invoiceSpend,
         'chances_earned': chances,
         'canonical_branch': canonical,
         'branch_detected': canonical,
@@ -1863,15 +1872,25 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
         }
       }
 
+      final fullTotals = PromotionalRuleMatcher.spendTotals(
+        products: result.extractedProducts,
+        rules: winningCampaign.promotionalRules,
+        spendLadderMode: winningCampaign.spendLadderMode,
+      );
       final double computedTotal = result.extractedProducts.fold<double>(0.0, (acc, p) => acc + p.actualLineSpend);
-      final double totalSpend = computedTotal > 0 ? computedTotal : result.targetCompanyTotal;
+      final double totalSpend = winningCampaign.spendLadderMode == 'consuming'
+          ? fullTotals.invoiceNet
+          : (computedTotal > 0 ? computedTotal : result.targetCompanyTotal);
+      final double eligibleSpend = winningCampaign.spendLadderMode == 'consuming'
+          ? fullTotals.eligibleNet
+          : (winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : result.targetCompanyTotal);
       final canonical = winningEval.resolvedBranchName ?? _normalizeBranchName(result.branchDetected, winningCampaign.branchNames, isAr);
 
       inv['is_valid'] = true;
       inv['status'] = 'accepted';
       inv['unfulfilled_conditions'] = <String>[];
       inv['rejection_reason'] = null;
-      inv['target_company_total'] = winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : result.targetCompanyTotal;
+      inv['target_company_total'] = eligibleSpend;
       inv['total_value'] = totalSpend;
       inv['campaignId'] = winningCampaign.id;
       inv['campaign_name'] = winningCampaign.eventName;
@@ -1897,7 +1916,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
         'rechecked_by': currentUser?.email ?? 'admin',
         'recheck_type': winningCampaign.id == activeEvent.id ? 'full_ai_scan' : 'full_ai_multi_campaign_match',
         'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
-        'target_company_total': winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : result.targetCompanyTotal,
+        'target_company_total': eligibleSpend,
         'total_value': totalSpend,
         if (result.receiptNumber.isNotEmpty) 'receipt_number': result.receiptNumber,
         if (result.storeChainDetected.isNotEmpty) 'store_chain_detected': result.storeChainDetected,
@@ -5218,9 +5237,21 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                                                     overflow: TextOverflow.ellipsis,
                                                   ),
                                                 ),
-                                                Text(
-                                                  '$totalValue ج.م',
-                                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.primary),
+                                                Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                                  children: [
+                                                    Text(
+                                                      '$totalValue ج.م',
+                                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.primary),
+                                                    ),
+                                                    if (inv['total_value'] is num &&
+                                                        inv['target_company_total'] is num &&
+                                                        ((inv['total_value'] as num) - (inv['target_company_total'] as num)).abs() > 0.49)
+                                                      Text(
+                                                        isAr ? 'صافي الفاتورة ${inv['total_value']}' : 'Invoice net ${inv['total_value']}',
+                                                        style: TextStyle(fontSize: 9, color: colorScheme.outline),
+                                                      ),
+                                                  ],
                                                 ),
                                               ],
                                             ),
@@ -6562,6 +6593,13 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
             color: isSelected ? colorScheme.primary : colorScheme.onSurface,
           ),
         ),
+        if (inv['total_value'] is num &&
+            inv['target_company_total'] is num &&
+            ((inv['total_value'] as num) - (inv['target_company_total'] as num)).abs() > 0.49)
+          Text(
+            isAr ? 'صافي الفاتورة ${inv['total_value']}' : 'Invoice net ${inv['total_value']}',
+            style: TextStyle(fontSize: 9, color: colorScheme.outline),
+          ),
         const SizedBox(height: 3),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

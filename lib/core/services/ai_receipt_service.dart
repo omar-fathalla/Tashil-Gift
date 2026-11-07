@@ -2160,14 +2160,33 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           }
         }
 
-        // Auto-heal targetCompanyTotal if sum of extracted target products exceeds it (AIR-58)
+        if (spendLadderMode == 'consuming') {
+          final cleared = PromotionalRuleMatcher.clearUnprovenCompanyFlags(
+            products: result.extractedProducts,
+            rules: promotionalRules,
+          );
+          final totals = PromotionalRuleMatcher.spendTotals(
+            products: cleared,
+            rules: promotionalRules,
+            spendLadderMode: spendLadderMode,
+          );
+          result = result.copyWith(
+            extractedProducts: cleared,
+            targetCompanyTotal: totals.eligibleNet,
+          );
+        }
+
+        // Auto-heal targetCompanyTotal if sum of extracted target products exceeds it (AIR-58).
+        // A consuming ladder already stored the net of explicit members. This gross
+        // sum stays on the exclusive path.
         final double sumOfExtractedTarget = result.extractedProducts
             .where((p) => p.isTargetCompany)
             .fold<double>(0.0, (sum, p) => sum + (p.price * p.quantity));
-        if (sumOfExtractedTarget > result.targetCompanyTotal ||
+        if (spendLadderMode != 'consuming' &&
+            (sumOfExtractedTarget > result.targetCompanyTotal ||
             (isMondelezTenant && sumOfExtractedTarget != result.targetCompanyTotal) ||
             (isAdcoTenant && sumOfExtractedTarget != result.targetCompanyTotal) ||
-            ((isShomanTenant || isDorraTenant) && sumOfExtractedTarget != result.targetCompanyTotal)) {
+            ((isShomanTenant || isDorraTenant) && sumOfExtractedTarget != result.targetCompanyTotal))) {
           result = result.copyWith(targetCompanyTotal: sumOfExtractedTarget);
         }
 
@@ -3584,6 +3603,40 @@ class PromotionalRuleMatcher {
       if (normalized.length >= 3 && name.contains(normalized)) return true;
     }
     return false;
+  }
+
+  /// Eligible net counts only explicit members. Invoice net counts every line
+  /// after that line's own discount. Exclusive mode still uses the company flag.
+  static ({double eligibleNet, double invoiceNet}) spendTotals({
+    required List<ExtractedProductItem> products,
+    required List<PromotionalRuleItem> rules,
+    required String spendLadderMode,
+  }) {
+    final invoiceNet = products.fold<double>(0, (sum, product) => sum + product.netEligibleLineSpend);
+    final spendRules = rules.where((rule) => rule.isSpendBased).toList();
+    var eligible = 0.0;
+    for (final product in products) {
+      final member = spendLadderMode == 'consuming' && spendRules.isNotEmpty
+          ? spendRules.any((rule) => hasExplicitSpendMembership(product, rule))
+          : product.isTargetCompany;
+      if (member) eligible += product.netEligibleLineSpend;
+    }
+    return (eligibleNet: eligible, invoiceNet: invoiceNet);
+  }
+
+  static List<ExtractedProductItem> clearUnprovenCompanyFlags({
+    required List<ExtractedProductItem> products,
+    required List<PromotionalRuleItem> rules,
+  }) {
+    final spendRules = rules.where((rule) => rule.isSpendBased).toList();
+    if (spendRules.isEmpty) return products;
+    return [
+      for (final product in products)
+        if (product.isTargetCompany && !spendRules.any((rule) => hasExplicitSpendMembership(product, rule)))
+          product.copyWith(isTargetCompany: false)
+        else
+          product,
+    ];
   }
 
   static String _prizeSummary(PromotionalRuleItem rule, int count, double baseAmount) {

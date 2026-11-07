@@ -1872,6 +1872,7 @@ class _ClientReceiptUploadScreenState
           chancesEarned: calculatedChances,
           allowMultipleChances: _activeEvent!.allowMultipleChances,
           submittedByUid: ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
+          spendLadderMode: _activeEvent!.spendLadderMode,
           branchFields: ReceiptBranchResolver.firestoreFields(
             _activeEvent ?? widget.event,
             detectedName: result.branchDetected,

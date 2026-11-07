@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../../core/services/claim_ledger_resume.dart';
 import '../../../core/services/firebase_service.dart';
 import '../../../core/services/company_gifts_service.dart';
 import '../../../core/services/game_audio_service.dart';
@@ -85,6 +86,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
   late int _remainingChances;
   int _currentRound = 1;
   final List<String> _wonPrizes = [];
+  bool _ledgerReady = true;
   Map<String, String> _prizeImages = {};
   bool _whatsappSent = false;
   bool? _enableWhatsAppWinnerNotification;
@@ -107,6 +109,10 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
     _loadEventPrizeImages();
     _preloadMetadataForWhatsApp();
     _remainingChances = widget.totalChances > 0 ? widget.totalChances : 1;
+    if (!widget.isDemo && widget.transactionId.trim().isNotEmpty) {
+      _ledgerReady = false;
+      _resumeFromAuthoritativeLedger();
+    }
     final rawPrizes = widget.prizes.isNotEmpty
         ? widget.prizes
         : [
@@ -134,6 +140,35 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
   void dispose() {
     _pulseController.dispose();
     super.dispose();
+  }
+
+  int get _roundCount => widget.roundPrizeNames.isNotEmpty
+      ? widget.roundPrizeNames.length
+      : (widget.totalChances > 0 ? widget.totalChances : 1);
+
+  Future<void> _resumeFromAuthoritativeLedger() async {
+    try {
+      final snap = await ref
+          .read(firestoreProvider)
+          .collection('receipts_transactions')
+          .doc(widget.transactionId)
+          .get();
+      final resume = resumeFromLedger(
+        claimedGifts: snap.data()?['claimed_gifts'],
+        totalRounds: _roundCount,
+      );
+      if (!mounted) return;
+      setState(() {
+        _currentRound = resume.currentRound;
+        _remainingChances = resume.remaining;
+        _wonPrizes
+          ..clear()
+          ..addAll(resume.wonNames);
+        _ledgerReady = true;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _ledgerReady = true);
+    }
   }
 
   Future<void> _preloadMetadataForWhatsApp() async {
@@ -302,7 +337,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
   }
 
   Future<void> _handleConfirmSelection() async {
-    if (_selectedGiftIndex == null || _isConfirming) return;
+    if (_selectedGiftIndex == null || _isConfirming || !_ledgerReady || _remainingChances <= 0) return;
 
     final selectedPrize = _items[_selectedGiftIndex!.clamp(0, _items.length - 1)];
     final roundIndex = _currentRound - 1;
@@ -713,7 +748,9 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                           padding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 24, vertical: isMobile ? 10 : 14),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         ),
-                        onPressed: _isConfirming ? null : _handleConfirmSelection,
+                        onPressed: (_isConfirming || !_ledgerReady || _remainingChances <= 0)
+                            ? null
+                            : _handleConfirmSelection,
                       ),
                     ],
                   ),
@@ -966,7 +1003,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                     runSpacing: 6,
                                     children: List.generate(totalChances, (i) {
                                       final roundNum = i + 1;
-                                      final isCompleted = roundNum < _currentRound;
+                                      final isCompleted = _remainingChances == 0 || roundNum < _currentRound;
                                       final isCurrent = roundNum == _currentRound;
                                       final wonGift = isCompleted && i < _wonPrizes.length ? _wonPrizes[i] : null;
 

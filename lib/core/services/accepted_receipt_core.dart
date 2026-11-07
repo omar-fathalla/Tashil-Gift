@@ -12,15 +12,25 @@ Map<String, dynamic> acceptedReceiptCore({
   required bool allowMultipleChances,
   required String submittedByUid,
   required Map<String, dynamic> branchFields,
+  String spendLadderMode = 'exclusive',
 }) {
+  final totals = PromotionalRuleMatcher.spendTotals(
+    products: result.extractedProducts,
+    rules: const [],
+    spendLadderMode: spendLadderMode,
+  );
+  // target_company_total is the brand-eligible net. total_value on a consuming
+  // receipt is the net of every printed line, including lines that do not qualify.
+  final eligible = spendLadderMode == 'consuming' ? totals.eligibleNet : result.targetCompanyTotal;
+  final invoiceNet = spendLadderMode == 'consuming' ? totals.invoiceNet : result.targetCompanyTotal;
   return {
     'receipt_number': result.receiptNumber.trim(),
     'is_valid': true,
     'status': 'accepted',
     'rejection_reason': null,
     'unfulfilled_conditions': const <String>[],
-    'total_value': result.targetCompanyTotal,
-    'target_company_total': result.targetCompanyTotal,
+    'total_value': invoiceNet,
+    'target_company_total': eligible,
     'receipt_date': result.receiptDate,
     'extracted_products': result.extractedProducts.map((item) => item.toJson()).toList(),
     'store_chain_detected': result.storeChainDetected,
