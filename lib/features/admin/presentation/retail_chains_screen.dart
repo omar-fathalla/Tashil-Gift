@@ -20,6 +20,10 @@ class RetailChainsScreen extends ConsumerStatefulWidget {
 }
 
 class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
+  Map<String, int> _liveBranchCounts = const {};
+  int _branchCountFor(RetailChainModel chain) =>
+      _liveBranchCounts.isEmpty ? chain.branchesCount : (_liveBranchCounts[chain.id] ?? 0);
+
   ColorScheme get colorScheme => Theme.of(context).colorScheme;
 
   // Card 1: Chain Form Controllers
@@ -799,7 +803,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                                     items: existingChains.map((c) {
                                       return DropdownMenuItem<String>(
                                         value: c.id,
-                                        child: Text('${c.name} (${c.branchesCount} فرع)', style: GoogleFonts.cairo(fontSize: 13)),
+                                        child: Text('${c.name} (${_branchCountFor(c)} فرع)', style: GoogleFonts.cairo(fontSize: 13)),
                                       );
                                     }).toList(),
                                     onChanged: (val) {
@@ -1861,6 +1865,13 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
             final allBranches = branchesSnap.data ?? [];
 
             // Filter branches based on search query and chain filter
+            // 2.0.172: branch counts per chain come from the loaded branch docs
+            // (single source of truth); the stored chain.branchesCount is a
+            // denormalized field that drifts (was 48 vs 98 actual branches).
+            _liveBranchCounts = <String, int>{};
+            for (final b in allBranches) {
+              _liveBranchCounts[b.retailChainId] = (_liveBranchCounts[b.retailChainId] ?? 0) + 1;
+            }
             final filteredBranches = allBranches.where((b) {
               final query = _searchQuery.trim().toLowerCase().toEnglishDigits();
               final matchesChain = _activeFilterChainId == null || b.retailChainId == _activeFilterChainId;
@@ -2761,7 +2772,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                 child: Row(
                   children: [
                     ChoiceChip(
-                      label: Text('جميع السلاسل ($totalBranchesCount)', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
+                      label: Text('كل الفروع ($totalBranchesCount)', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
                       selected: _activeFilterChainId == null,
                       onSelected: (selected) {
                         if (selected) setState(() => _activeFilterChainId = null);
@@ -2787,7 +2798,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Text(
-                                  '${chain.branchesCount}',
+                                  '${_branchCountFor(chain)}',
                                   style: GoogleFonts.cairo(
                                     fontSize: 11,
                                     color: isSelected ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
@@ -2870,7 +2881,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
   // --- CHAIN CARD WIDGET WITH CLEAR EDIT & DELETE ACTIONS ---
 
   Widget _buildChainCard(ColorScheme colorScheme, RetailChainModel chain) {
-    final hasBranches = chain.branchesCount > 0;
+    final hasBranches = _branchCountFor(chain) > 0;
     final isEditingThis = _editingChainId == chain.id;
 
     return Container(
@@ -2990,7 +3001,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      hasBranches ? '${chain.branchesCount} فروع' : '0 فرع (سلسلة فارغة)',
+                      hasBranches ? '${_branchCountFor(chain)} فروع' : '0 فرع (سلسلة فارغة)',
                       style: GoogleFonts.cairo(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
@@ -3019,7 +3030,7 @@ class _RetailChainsScreenState extends ConsumerState<RetailChainsScreen> {
                 },
                 icon: const Icon(Icons.visibility_outlined, size: 16),
                 label: Text(
-                  'استعراض الفروع (${chain.branchesCount})',
+                  'استعراض الفروع (${_branchCountFor(chain)})',
                   style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
                 ),
                 style: OutlinedButton.styleFrom(

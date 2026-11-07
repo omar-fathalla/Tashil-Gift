@@ -16,7 +16,9 @@ void main() {
         targetCompany: 'Unilever',
         companySlug: 'unilever',
         minimumSpend: 0,
-        startDate: DateTime.now().subtract(const Duration(days: 10)),
+        // 2.0.162: window must cover the receipt date (11/09/2026); the
+        // evaluator now checks the receipt date per campaign.
+        startDate: DateTime.utc(2026, 9, 1),
         endDate: DateTime.now().add(const Duration(days: 30)),
         branchNames: ['جملة ماركت - المنتزه (الإسكندرية)', 'فرع سموحة'],
         promotionalRules: [
@@ -47,7 +49,9 @@ void main() {
         targetCompany: 'Unilever',
         companySlug: 'unilever',
         minimumSpend: 0,
-        startDate: DateTime.now().subtract(const Duration(days: 10)),
+        // 2.0.162: window must cover the receipt date (11/09/2026); the
+        // evaluator now checks the receipt date per campaign.
+        startDate: DateTime.utc(2026, 9, 1),
         endDate: DateTime.now().add(const Duration(days: 30)),
         branchNames: ['جملة ماركت - المنتزه (الإسكندرية)', 'فرع سموحة'],
         promotionalRules: [

@@ -1,3 +1,5 @@
+import 'package:al_mraay/core/services/rep_device_id.dart';
+import 'package:al_mraay/core/constants/app_version_config.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -269,14 +271,14 @@ class _UnifiedMultiCampaignClaimScreenState
 
         await txRef.set({
           'bundle_group_id': widget.bundleGroupId,
+          'app_version': AppVersionConfig.appVersion,
+          if (RepDeviceId.value.isNotEmpty) 'rep_device_id': RepDeviceId.value,
           'receipt_number': widget.receiptNumber,
           'campaignId': campaign.id,
+          'submittedByUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
           'companySlug': campaign.companySlug,
           'targetCompany': campaign.targetCompany,
           'retail_chain_name': campaign.retailChainName,
-          'branch_detected': q.resolvedBranchName ?? '',
-          'canonical_branch': q.resolvedBranchName ?? '',
-          'branch_id': q.resolvedBranchId ?? '',
           'customerPhone': widget.customerPhone,
           'customerName': widget.customerName,
           'prize_won': q.designatedPrize,
@@ -300,6 +302,10 @@ class _UnifiedMultiCampaignClaimScreenState
           if (widget.imageUrls.isNotEmpty) 'image_url': widget.imageUrls.first,
           if (widget.imageUrls.length > 1) 'image_urls': widget.imageUrls,
           if (widget.initialAiMetadata != null) ...widget.initialAiMetadata!,
+          // After AI metadata so a short sibling name cannot overwrite the id.
+          'branch_detected': q.resolvedBranchName ?? '',
+          'canonical_branch': q.resolvedBranchName ?? '',
+          'branch_id': q.resolvedBranchId ?? '',
         });
 
         // Decrement branch inventory
@@ -372,7 +378,7 @@ class _UnifiedMultiCampaignClaimScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            AppErrorHandler.getFriendlyMessage(e, defaultMessage: 'حدث خطأ أثناء تسليم الجوائز.'),
+            AppErrorHandler.claimFailureMessage(e),
             style: GoogleFonts.cairo(),
           ),
           backgroundColor: Theme.of(context).colorScheme.error,

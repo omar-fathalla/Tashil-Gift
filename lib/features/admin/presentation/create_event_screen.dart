@@ -14,6 +14,7 @@ import '../../../core/utils/error_handler.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
 import '../../../core/utils/slug_utils.dart';
 import '../../../core/utils/url_builder.dart';
+import '../../../core/utils/receipt_date_window.dart';
 import '../../../core/constants/country_currency_config.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
@@ -83,7 +84,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   late final TextEditingController _maxChancesController;
   bool _allowMultipleChances = false;
   String _multiplierBasis = 'both';
-  bool _requireVoucherSerials = false;
+  String _voucherSerialMode = 'optional';
   bool _allowComplementaryReceipts = false;
   bool _enableWhatsAppWinnerNotification = true;
   bool _hasCustomAgencyCredentials = false;
@@ -207,7 +208,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     _requiredProductsController = TextEditingController(text: e?.requiredProducts.join(', ') ?? '');
     _allowMultipleChances = e?.allowMultipleChances ?? false;
     _multiplierBasis = e?.multiplierBasis ?? 'both';
-    _requireVoucherSerials = e?.requireVoucherSerials ?? false;
+    _voucherSerialMode = e?.voucherSerialMode ?? 'optional';
     _allowComplementaryReceipts = e?.allowComplementaryReceipts ?? false;
     _enableWhatsAppWinnerNotification = e?.enableWhatsAppWinnerNotification ?? true;
     _hasCustomAgencyCredentials = e?.hasCustomAgencyCredentials ?? false;
@@ -1800,6 +1801,22 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     }
   }
 
+  static final RegExp _generatedPromptCompanyRe =
+      RegExp(r'^أنت مدقق فواتير فائق الدقة ومسؤول عن فحص وتدقيق فواتير عروض ومهرجانات شركة "([^"]*)"');
+
+  /// True when the current prompt was produced by the rules generator for a
+  /// different company than the one now selected (or is empty). Hand-written
+  /// prompts are never touched.
+  bool _promptNeedsCompanyRefresh() {
+    final company = _targetCompanyController.text.trim();
+    if (company.isEmpty) return false;
+    final prompt = _customPromptController.text.trim();
+    if (prompt.isEmpty) return true;
+    final m = _generatedPromptCompanyRe.firstMatch(prompt);
+    if (m == null) return false;
+    return m.group(1)!.trim() != company;
+  }
+
   void _syncPromptFromRules({bool showSnackbar = true}) {
     final targetCompany = _targetCompanyController.text.trim().isNotEmpty
         ? _targetCompanyController.text.trim()
@@ -1865,7 +1882,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'free_product',
         rewardValue: matchedGift.giftName,
         rewardAmount: 0.0,
-        allowMultipliers: true,
         linkedGiftId: matchedGift.id,
         linkedGiftName: matchedGift.giftName,
         linkedGifts: [
@@ -1896,7 +1912,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'free_product',
         rewardValue: matchedGift.giftName,
         rewardAmount: 0.0,
-        allowMultipliers: true,
         linkedGiftId: matchedGift.id,
         linkedGiftName: matchedGift.giftName,
         linkedGifts: [
@@ -1927,7 +1942,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'free_product',
         rewardValue: matchedGift.giftName,
         rewardAmount: 0.0,
-        allowMultipliers: true,
         linkedGiftId: matchedGift.id,
         linkedGiftName: matchedGift.giftName,
         linkedGifts: [
@@ -1946,7 +1960,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 50 ج.م',
         rewardAmount: 50.0,
-        allowMultipliers: true,
         linkedGifts: decomposed,
         linkedGiftId: decomposed.firstOrNull?.giftId,
         linkedGiftName: decomposed.firstOrNull?.giftName,
@@ -1963,7 +1976,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 125 ج.م',
         rewardAmount: 125.0,
-        allowMultipliers: true,
         linkedGifts: decomposed,
         linkedGiftId: decomposed.firstOrNull?.giftId,
         linkedGiftName: decomposed.firstOrNull?.giftName,
@@ -1980,7 +1992,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 50 ج.م',
         rewardAmount: 50.0,
-        allowMultipliers: true,
         linkedGifts: decomposed,
         linkedGiftId: decomposed.firstOrNull?.giftId,
         linkedGiftName: decomposed.firstOrNull?.giftName,
@@ -1997,7 +2008,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 50 ج.م',
         rewardAmount: 50.0,
-        allowMultipliers: true,
         linkedGifts: decomposed,
         linkedGiftId: decomposed.firstOrNull?.giftId,
         linkedGiftName: decomposed.firstOrNull?.giftName,
@@ -2014,7 +2024,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 125 ج.م',
         rewardAmount: 125.0,
-        allowMultipliers: true,
         linkedGifts: decomposed,
         linkedGiftId: decomposed.firstOrNull?.giftId,
         linkedGiftName: decomposed.firstOrNull?.giftName,
@@ -2041,7 +2050,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 25 ج.م',
         rewardAmount: 25.0,
-        allowMultipliers: true,
         linkedGifts: decomposed,
         linkedGiftId: decomposed.firstOrNull?.giftId,
         linkedGiftName: decomposed.firstOrNull?.giftName,
@@ -2068,7 +2076,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 50 ج.م',
         rewardAmount: 50.0,
-        allowMultipliers: true,
         linkedGifts: decomposed,
         linkedGiftId: decomposed.firstOrNull?.giftId,
         linkedGiftName: decomposed.firstOrNull?.giftName,
@@ -2095,7 +2102,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 75 ج.م',
         rewardAmount: 75.0,
-        allowMultipliers: true,
         linkedGifts: decomposed,
         linkedGiftId: decomposed.firstOrNull?.giftId,
         linkedGiftName: decomposed.firstOrNull?.giftName,
@@ -2128,7 +2134,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 25 ج.م',
         rewardAmount: 25.0,
-        allowMultipliers: false,
         linkedGifts: decomposed25,
         linkedGiftId: decomposed25.firstOrNull?.giftId,
         linkedGiftName: decomposed25.firstOrNull?.giftName,
@@ -2150,7 +2155,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 50 ج.م',
         rewardAmount: 50.0,
-        allowMultipliers: false,
         linkedGifts: decomposed50,
         linkedGiftId: decomposed50.firstOrNull?.giftId,
         linkedGiftName: decomposed50.firstOrNull?.giftName,
@@ -2171,7 +2175,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         rewardType: 'voucher',
         rewardValue: 'قسيمة مشتريات بقيمة 75 ج.م',
         rewardAmount: 75.0,
-        allowMultipliers: true,
         linkedGifts: decomposed75,
         linkedGiftId: decomposed75.firstOrNull?.giftId,
         linkedGiftName: decomposed75.firstOrNull?.giftName,
@@ -2804,7 +2807,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     String conditionType = existingRule?.conditionType ?? 'by_quantity';
     String rewardType = existingRule?.rewardType ?? 'free_product';
     String? selectedRuleGameType = existingRule?.gameType;
-    bool allowMultipliers = existingRule?.allowMultipliers ?? true;
     List<String> selectedProductIds = List<String>.from(existingRule?.selectedProductIds ?? []);
     List<String> selectedBarcodes = List<String>.from(existingRule?.selectedBarcodes ?? []);
     List<String> selectedProductNames = List<String>.from(existingRule?.selectedProductNames ?? []);
@@ -2815,6 +2817,10 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         ? _companyGifts.where((g) => g.id == existingRule!.linkedGiftId).firstOrNull
         : null;
     List<LinkedGiftAllocation> dialogLinkedGifts = List<LinkedGiftAllocation>.from(existingRule?.linkedGifts ?? []);
+    // "خيارات المكافأة": optional list; customer picks exactly one at handover.
+    final List<RewardOption> dialogRewardOptions = List<RewardOption>.from(existingRule?.rewardOptions ?? const []);
+    final optionVoucherCtrl = TextEditingController();
+    final optionLabelCtrl = TextEditingController();
     if (dialogLinkedGifts.isEmpty && selectedGift != null) {
       dialogLinkedGifts.add(LinkedGiftAllocation(
         giftId: selectedGift.id,
@@ -3345,59 +3351,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                 '💡 تتيح السماحية قبول الفواتير حتى لو انخفض الصافي بعد الخصومات (مثال: 95 ج.م بدلاً من 100 ج.م)',
                                 style: GoogleFonts.cairo(fontSize: 10.5, color: colorScheme.onSecondaryFixedVariant),
                               ),
-                              const SizedBox(height: 8),
-                              // Quick range suggestion chips
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 4,
-                                children: [
-                                  ActionChip(
-                                    backgroundColor: Colors.white,
-                                    label: Text('🏷️ نطاق 95 - 139 ج.م (فواتشر 25)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorScheme.onTertiaryFixedVariant)),
-                                    onPressed: () {
-                                      setDialogState(() {
-                                        minSpendController.text = '95';
-                                        maxSpendController.text = '139';
-                                        discountToleranceController.text = '5';
-                                        rewardAmtController.text = '25';
-                                        rewardValController.text = 'قسيمة مشتريات بقيمة 25 ج.م';
-                                        rewardType = 'voucher';
-                                        dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(25.0, _companyGifts);
-                                      });
-                                    },
-                                  ),
-                                  ActionChip(
-                                    backgroundColor: Colors.white,
-                                    label: Text('🏷️ نطاق 140 - 189 ج.م (فواتشر 50)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorScheme.onSecondaryFixedVariant)),
-                                    onPressed: () {
-                                      setDialogState(() {
-                                        minSpendController.text = '140';
-                                        maxSpendController.text = '189';
-                                        discountToleranceController.text = '5';
-                                        rewardAmtController.text = '50';
-                                        rewardValController.text = 'قسيمة مشتريات بقيمة 50 ج.م';
-                                        rewardType = 'voucher';
-                                        dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(50.0, _companyGifts);
-                                      });
-                                    },
-                                  ),
-                                  ActionChip(
-                                    backgroundColor: Colors.white,
-                                    label: Text('🏷️ نطاق 190+ ج.م (فواتشر 75)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorScheme.onPrimaryFixedVariant)),
-                                    onPressed: () {
-                                      setDialogState(() {
-                                        minSpendController.text = '190';
-                                        maxSpendController.text = '';
-                                        discountToleranceController.text = '10';
-                                        rewardAmtController.text = '75';
-                                        rewardValController.text = 'قسيمة مشتريات بقيمة 75 ج.م';
-                                        rewardType = 'voucher';
-                                        dialogLinkedGifts = CampaignAiAssistantService.decomposeVoucherAmount(75.0, _companyGifts);
-                                      });
-                                    },
-                                  ),
-                                ],
-                              ),
                             ],
                           ),
                         ),
@@ -3785,16 +3738,187 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         const SizedBox(height: 12),
                       ],
 
-                      SwitchListTile(
-                        title: Text(
-                          strings.multipliersAllowedLabel,
-                          style: GoogleFonts.cairo(fontSize: 13),
+                      // ── خيارات المكافأة (customer picks one) ──
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: colorScheme.outlineVariant),
                         ),
-                        value: allowMultipliers,
-                        contentPadding: EdgeInsets.zero,
-                        dense: true,
-                        onChanged: (v) => setDialogState(() => allowMultipliers = v),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.alt_route_rounded, size: 18, color: colorScheme.primary),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    'خيارات المكافأة (العميل يختار واحدة)',
+                                    style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              dialogRewardOptions.length > 1
+                                  ? 'العميل هيختار خيار واحد من ${dialogRewardOptions.length} وقت التسليم، وهيتخصم من المخزون الخيار اللي اختاره بس.'
+                                  : 'اختياري: ضيف خيارين أو أكتر (مثلاً قسيمة 50 جنيه أو إزازة). لو أقل من خيارين، القاعدة بتشتغل بالمكافأة العادية.',
+                              style: GoogleFonts.cairo(fontSize: 11.5, color: colorScheme.onSurfaceVariant),
+                            ),
+                            const SizedBox(height: 8),
+                            ...dialogRewardOptions.asMap().entries.map((entry) {
+                              final opt = entry.value;
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 6),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: InputChip(
+                                  key: ValueKey('rule_reward_option_${entry.key}'),
+                                  avatar: Icon(
+                                    opt.isVoucher ? Icons.local_activity_rounded : Icons.card_giftcard_rounded,
+                                    size: 18,
+                                  ),
+                                  label: Text(
+                                    '${entry.key + 1}. ${opt.displayLabel}',
+                                    style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  onDeleted: () => setDialogState(() => dialogRewardOptions.removeAt(entry.key)),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text('الكمية', style: GoogleFonts.cairo(fontSize: 11)),
+                                    IconButton(
+                                      key: ValueKey('rule_reward_option_qty_minus_${entry.key}'),
+                                      visualDensity: VisualDensity.compact,
+                                      tooltip: 'تقليل الكمية',
+                                      icon: const Icon(Icons.remove_circle_outline_rounded, size: 18),
+                                      onPressed: opt.unitsPerChoice <= 1
+                                          ? null
+                                          : () => setDialogState(() => dialogRewardOptions[entry.key] =
+                                              opt.withQuantity(opt.unitsPerChoice - 1)),
+                                    ),
+                                    Text('${opt.unitsPerChoice}',
+                                        key: ValueKey('rule_reward_option_qty_${entry.key}'),
+                                        style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w700)),
+                                    IconButton(
+                                      key: ValueKey('rule_reward_option_qty_plus_${entry.key}'),
+                                      visualDensity: VisualDensity.compact,
+                                      tooltip: 'زيادة الكمية',
+                                      icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
+                                      onPressed: opt.unitsPerChoice >= 100
+                                          ? null
+                                          : () => setDialogState(() => dialogRewardOptions[entry.key] =
+                                              opt.withQuantity(opt.unitsPerChoice + 1)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: optionVoucherCtrl,
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    decoration: InputDecoration(
+                                      labelText: 'قيمة القسيمة (ج.م)',
+                                      labelStyle: GoogleFonts.cairo(fontSize: 12),
+                                      isDense: true,
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextField(
+                                    controller: optionLabelCtrl,
+                                    decoration: InputDecoration(
+                                      labelText: 'اسم الخيار (اختياري)',
+                                      labelStyle: GoogleFonts.cairo(fontSize: 12),
+                                      isDense: true,
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                IconButton.filledTonal(
+                                  tooltip: 'إضافة قسيمة كخيار',
+                                  icon: const Icon(Icons.add_rounded),
+                                  onPressed: () {
+                                    final amt = double.tryParse(optionVoucherCtrl.text.toEnglishDigits().trim()) ?? 0.0;
+                                    if (amt <= 0) return;
+                                    // Link to a matching voucher card in inventory when one exists (for stock tracking).
+                                    final match = _companyGifts
+                                        .where((g) => g.isVoucher && (g.unitValue - amt).abs() < 0.01)
+                                        .firstOrNull;
+                                    setDialogState(() {
+                                      dialogRewardOptions.add(RewardOption(
+                                        id: 'opt_${DateTime.now().microsecondsSinceEpoch}',
+                                        kind: 'voucher',
+                                        label: optionLabelCtrl.text.trim(),
+                                        voucherAmount: amt,
+                                        giftId: match?.id ?? '',
+                                        giftName: match?.giftName ?? '',
+                                        giftType: 'voucher',
+                                        unitValue: amt,
+                                        imageUrl: match?.imageUrl,
+                                      ));
+                                      optionVoucherCtrl.clear();
+                                      optionLabelCtrl.clear();
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                            if (_companyGifts.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              DropdownButtonFormField<CompanyGiftModel>(
+                                key: ValueKey('reward_option_gift_picker_${dialogRewardOptions.length}'),
+                                isExpanded: true,
+                                decoration: InputDecoration(
+                                  hintText: '+ إضافة هدية من المخزون كخيار',
+                                  hintStyle: GoogleFonts.cairo(fontSize: 12),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  isDense: true,
+                                ),
+                                items: _companyGifts.map((g) {
+                                  final typeDesc = g.isVoucher ? 'فواتشر (${g.formattedUnitValue})' : 'هدية عينية';
+                                  return DropdownMenuItem(
+                                    value: g,
+                                    child: Text('${g.giftName} - $typeDesc',
+                                        overflow: TextOverflow.ellipsis, style: GoogleFonts.cairo(fontSize: 12)),
+                                  );
+                                }).toList(),
+                                onChanged: (gift) {
+                                  if (gift == null) return;
+                                  if (dialogRewardOptions.any((o) => o.giftId.isNotEmpty && o.giftId == gift.id)) return;
+                                  setDialogState(() {
+                                    dialogRewardOptions.add(RewardOption(
+                                      id: 'opt_${DateTime.now().microsecondsSinceEpoch}',
+                                      kind: 'gift',
+                                      label: gift.giftName,
+                                      giftId: gift.id,
+                                      giftName: gift.giftName,
+                                      giftType: gift.giftType,
+                                      unitValue: gift.unitValue,
+                                      imageUrl: gift.imageUrl,
+                                    ));
+                                  });
+                                },
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
+                      const SizedBox(height: 12),
+
                     ],
                   ),
                 ),
@@ -3849,13 +3973,13 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       rewardType: rewardType,
                       rewardValue: rewardVal.isNotEmpty ? rewardVal : title,
                       rewardAmount: rewardAmt,
-                      allowMultipliers: allowMultipliers,
                       linkedGiftId: finalLinkedGifts.isNotEmpty ? finalLinkedGifts.first.giftId : selectedGift?.id,
                       linkedGiftName: finalLinkedGifts.isNotEmpty
                           ? finalLinkedGifts.map((d) => d.quantity > 1 ? '${d.quantity}x ${d.giftName}' : d.giftName).join(' + ')
                           : selectedGift?.giftName,
                       linkedGifts: finalLinkedGifts,
                       gameType: selectedRuleGameType,
+                      rewardOptions: List<RewardOption>.from(dialogRewardOptions),
                     );
 
                     setState(() {
@@ -3879,10 +4003,12 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   }
 
   Future<void> _pickDate(bool isStart) async {
-    final initialDate = isStart 
-        ? (_startDate ?? DateTime.now()) 
-        : (_endDate ?? DateTime.now().add(const Duration(days: 30)));
-        
+    // 2.0.162: show and store Cairo calendar days.
+    final initialDate = isStart
+        ? (campaignFirstDay(_startDate) ?? cairoCalendarDay(DateTime.now()))
+        : (campaignLastDay(_endDate) ??
+            cairoCalendarDay(DateTime.now()).add(const Duration(days: 30)));
+
     final picked = await showDatePicker(
       context: context,
       initialDate: initialDate,
@@ -3893,10 +4019,11 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
     if (picked != null) {
       setState(() {
+        // Stored as Cairo 00:00 of the picked day; the end day is inclusive.
         if (isStart) {
-          _startDate = picked;
+          _startDate = pickedDayToCairoInstant(picked);
         } else {
-          _endDate = picked;
+          _endDate = pickedDayToCairoInstant(picked);
         }
       });
     }
@@ -3904,6 +4031,49 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
   Future<void> _saveEvent() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // 2.0.162 (issue #3): block an end day before the start day.
+    final datesError = campaignDatesError(_startDate, _endDate);
+    if (datesError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(datesError, style: GoogleFonts.cairo()),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+      return;
+    }
+    // Warn when an active campaign has no start or end date.
+    final willBeActive = widget.eventToEdit?.isActive ?? true;
+    if (willBeActive && (_startDate == null || _endDate == null)) {
+      final missing = [
+        if (_startDate == null) 'تاريخ البداية',
+        if (_endDate == null) 'آخر يوم في الحملة',
+      ].join(' و');
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('تواريخ الحملة غير مكتملة',
+              style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+          content: Text(
+            'لم يتم تحديد $missing. الحملة مفعّلة، لذلك ستبقى مفتوحة بلا حد '
+            'زمني وتُقبل الفواتير بأي تاريخ. هل تريد الحفظ على أي حال؟',
+            style: GoogleFonts.cairo(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text('رجوع وتحديد التاريخ', style: GoogleFonts.cairo()),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text('حفظ على أي حال', style: GoogleFonts.cairo()),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true || !mounted) return;
+    }
     
     setState(() => _isLoading = true);
     
@@ -3914,6 +4084,11 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       final productsList = productsText.isNotEmpty 
           ? productsText.split(',').map((e) => e.trim()).toList() 
           : <String>[];
+
+      // Never persist an auto-generated prompt that names another company.
+      if (_promptNeedsCompanyRefresh()) {
+        _syncPromptFromRules(showSnackbar: false);
+      }
 
       final rawSlug = _companySlugController.text.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '-');
 
@@ -4108,7 +4283,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           }
           return rule;
         }).toList(),
-        requireVoucherSerials: _requireVoucherSerials,
+        requireVoucherSerials: _voucherSerialMode == 'required',
+        voucherSerialMode: _voucherSerialMode,
         allowComplementaryReceipts: _allowComplementaryReceipts,
         enableWhatsAppWinnerNotification: _enableWhatsAppWinnerNotification,
       );
@@ -4414,7 +4590,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${isAr ? 'المستخدم:' : 'User:'} ${resolvedCreds.effectiveAgencyUsername}  |  ${isAr ? 'كلمة المرور:' : 'Pass:'} ${resolvedCreds.effectiveAgencyPassword}',
+                        '${isAr ? 'المستخدم:' : 'User:'} ${resolvedCreds.effectiveAgencyUsername}  |  ${isAr ? 'كلمة المرور: مخفية (انسخ كارت الواتساب)' : 'Pass: hidden'}',
                         style: GoogleFonts.sourceCodePro(fontSize: 11, color: colorScheme.onSecondaryContainer, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
@@ -4487,7 +4663,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${isAr ? 'المستخدم:' : 'User:'} ${resolvedCreds.brandManagerUsername}  |  ${isAr ? 'كلمة المرور:' : 'Pass:'} ${resolvedCreds.brandManagerPassword}',
+                        '${isAr ? 'المستخدم:' : 'User:'} ${resolvedCreds.brandManagerUsername}  |  ${isAr ? 'كلمة المرور: مخفية (انسخ كارت الواتساب)' : 'Pass: hidden'}',
                         style: GoogleFonts.sourceCodePro(fontSize: 11, color: colorScheme.onPrimaryContainer, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
@@ -4796,11 +4972,24 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                           _companyLogoUrl = comp.logoUrl;
                                         }
                                       });
+                                      if (_promptNeedsCompanyRefresh()) {
+                                        _syncPromptFromRules(showSnackbar: false);
+                                      }
                                       _loadCompanyProducts(comp.slug);
                                       _loadCompanyGifts(comp.slug);
                                       _loadCompanyLogo(comp.slug);
                                     }
                                   },
+                                )
+                              // 2.0.172: while the companies stream is still loading
+                              // (typical on the edit page) show progress, not the
+                              // misleading "no companies" empty state.
+                              else if (!snapshot.hasData && !snapshot.hasError)
+                                const LinearProgressIndicator()
+                              else if (snapshot.hasError)
+                                Text(
+                                  'تعذّر تحميل الشركات. أعد فتح الصفحة.',
+                                  style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.error),
                                 )
                               else
                                 Text(
@@ -5041,7 +5230,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             label: Text(
                               _startDate == null 
                                   ? 'تاريخ البداية: غير محدد' 
-                                  : 'البداية: ${_startDate!.day}/${_startDate!.month}/${_startDate!.year}',
+                                  : 'البداية: ${campaignFirstDayLabel(_startDate)}',
                               style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
                             ),
                             style: OutlinedButton.styleFrom(
@@ -5060,9 +5249,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             onPressed: () => _pickDate(false),
                             icon: Icon(Icons.event_busy_rounded, color: colorScheme.primary),
                             label: Text(
-                              _endDate == null 
-                                  ? 'تاريخ النهاية: غير محدد' 
-                                  : 'النهاية: ${_endDate!.day}/${_endDate!.month}/${_endDate!.year}',
+                              _endDate == null
+                                  ? 'آخر يوم في الحملة: غير محدد'
+                                  : 'آخر يوم في الحملة: ${campaignLastDay(_endDate)!.day}/${campaignLastDay(_endDate)!.month} (شامل)',
                               style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
                             ),
                             style: OutlinedButton.styleFrom(
@@ -6045,103 +6234,84 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     ColorScheme colorScheme,
     bool isMobile,
   ) {
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
+    final mode = _voucherSerialMode;
+    final active = mode != 'hidden';
+    String desc;
+    switch (mode) {
+      case 'required':
+        desc = isAr
+            ? 'يلزم البروموتر بإدخال أرقام كروت الفواتشرات قبل تأكيد تسليم الهدية.'
+            : 'The promoter must enter voucher card numbers before confirming the handover.';
+        break;
+      case 'hidden':
+        desc = isAr
+            ? 'حقل أرقام الكروت لا يظهر إطلاقاً في شاشة تسليم الهدية.'
+            : 'The card number field is not shown at all on the gift handover screen.';
+        break;
+      default:
+        desc = isAr
+            ? 'إدخال أرقام الكروت اختياري، ويمكن تأكيد التسليم بدونها.'
+            : 'Entering card numbers is optional; handover can be confirmed without them.';
+    }
     return Container(
+      key: const ValueKey('voucherSerialModeSection'),
       margin: const EdgeInsets.only(top: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _requireVoucherSerials
+        color: active
             ? colorScheme.secondaryContainer.withValues(alpha: 0.55)
             : colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: _requireVoucherSerials
-              ? colorScheme.primaryFixedDim
-              : colorScheme.outlineVariant.withValues(alpha: 0.4),
-          width: _requireVoucherSerials ? 1.5 : 1,
+          color: mode == 'required' ? colorScheme.primaryFixedDim : colorScheme.outlineVariant.withValues(alpha: 0.4),
+          width: mode == 'required' ? 1.5 : 1,
         ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: _requireVoucherSerials
-                  ? colorScheme.secondary
-                  : colorScheme.surfaceContainerHighest,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.confirmation_number_rounded,
-              size: 20,
-              color: _requireVoucherSerials
-                  ? Colors.white
-                  : colorScheme.onSurfaceVariant,
-            ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: active ? colorScheme.secondary : colorScheme.surfaceContainerHighest,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  active ? Icons.confirmation_number_rounded : Icons.visibility_off_rounded,
+                  size: 20,
+                  color: active ? colorScheme.onSecondary : colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  isAr ? 'أرقام كروت الفواتشرات' : 'Voucher card numbers',
+                  style: GoogleFonts.cairo(fontSize: 14.5, fontWeight: FontWeight.w700, color: colorScheme.onSurface),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    Text(
-                      'تسجيل أرقام كروت الفواتشرات',
-                      style: GoogleFonts.cairo(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w700,
-                        color: colorScheme.onSurface,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: _requireVoucherSerials
-                            ? colorScheme.errorContainer
-                            : colorScheme.tertiaryContainer,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        _requireVoucherSerials ? 'إلزامي للبروموتر' : 'اختياري (الافتراضي)',
-                        style: GoogleFonts.cairo(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: _requireVoucherSerials
-                              ? colorScheme.onErrorContainer
-                              : colorScheme.onTertiaryContainer,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  _requireVoucherSerials
-                      ? 'يلزم البروموتر بإدخال الأرقام التسلسلية لكروت الفواتشرات المسلمة للعميل قبل تأكيد تسليم الهدية.'
-                      : 'إدخال أرقام الفواتشرات اختياري للبروموتر، ويمكنه تأكيد تسليم الهدية مباشرة دون إدخالها.',
-                  style: GoogleFonts.cairo(
-                    fontSize: 12,
-                    color: colorScheme.onSurfaceVariant,
-                    height: 1.35,
-                  ),
-                ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<String>(
+              showSelectedIcon: !isMobile,
+              segments: [
+                ButtonSegment(value: 'required', icon: const Icon(Icons.lock_rounded, size: 18), label: Text(isAr ? 'إجباري' : 'Required', style: GoogleFonts.cairo(fontSize: 13))),
+                ButtonSegment(value: 'optional', icon: const Icon(Icons.edit_note_rounded, size: 18), label: Text(isAr ? 'اختياري' : 'Optional', style: GoogleFonts.cairo(fontSize: 13))),
+                ButtonSegment(value: 'hidden', icon: const Icon(Icons.visibility_off_rounded, size: 18), label: Text(isAr ? 'مخفي' : 'Hidden', style: GoogleFonts.cairo(fontSize: 13))),
               ],
+              selected: {mode},
+              onSelectionChanged: (v) => setState(() {
+                _voucherSerialMode = v.first;
+              }),
             ),
           ),
-          const SizedBox(width: 8),
-          Switch.adaptive(
-            value: _requireVoucherSerials,
-            activeTrackColor: colorScheme.secondary,
-            onChanged: (val) {
-              setState(() {
-                _requireVoucherSerials = val;
-              });
-            },
-          ),
+          const SizedBox(height: 8),
+          Text(desc, style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.onSurfaceVariant, height: 1.35)),
         ],
       ),
     );
@@ -7606,23 +7776,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   ],
                 ),
               ),
-            ),
-          ],
-          if (rule.allowMultipliers) ...[
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Icon(Icons.all_inclusive_rounded, size: 14, color: colorScheme.primary),
-                const SizedBox(width: 4),
-                Text(
-                  strings.multipliersAllowedLabel,
-                  style: GoogleFonts.cairo(
-                    fontSize: 11,
-                    color: colorScheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
             ),
           ],
           const SizedBox(height: 10),

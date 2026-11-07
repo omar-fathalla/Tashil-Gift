@@ -1,8 +1,11 @@
+import 'package:al_mraay/core/config/ai_config.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,6 +18,7 @@ import '../../../../core/services/retail_chains_service.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/constants/country_currency_config.dart';
 import '../../../../core/utils/arabic_numbers_utils.dart';
+import '../../../../core/utils/canonical_branch_resolver.dart';
 import '../../../../core/utils/error_handler.dart';
 import '../../../../core/widgets/interactive_receipt_viewer_dialog.dart';
 import '../../../../core/services/multi_campaign_receipt_evaluator.dart';
@@ -24,6 +28,7 @@ import '../../../games/presentation/choose_gift_screen.dart';
 import '../../../games/presentation/spin_the_wheel_screen.dart';
 import '../../../games/presentation/scratch_card_screen.dart';
 import '../../../games/presentation/direct_gift_claim_screen.dart';
+import '../../../../core/services/firebase_scope.dart';
 
 enum PromoterDateFilter { today, custom, all }
 enum PromoterStatusFilter { all, accepted, rejected }
@@ -90,12 +95,74 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
   static final Map<String, List<Map<String, dynamic>>> _cachedCampaignInvoices = {};
   Stream<QuerySnapshot<Map<String, dynamic>>>? _invoicesStream;
 
+  // Branch history from the listBranchReceipts callable (anonymous reps only).
+  // The rep's anonymous uid changes with a new device / private tab / cleared
+  // storage, so the uid-scoped stream alone can show 0 for a branch that has
+  // receipts; these rows fill that gap (read-only projection).
+  List<Map<String, dynamic>> _branchRemoteInvoices = const [];
+  String? _branchRemoteKey;
+  String? _branchRemoteLoadingKey;
+  int _otherSessionCount = 0;
+  Timer? _branchRefreshTimer;
+
+  bool get _isAnonymousRep {
+    final user = ref.read(firebaseAuthProvider).currentUser;
+    return user != null && user.isAnonymous;
+  }
+
+  Future<void> _fetchBranchReceipts(String branchName, {bool force = false}) async {
+    if (!_isAnonymousRep || widget.event.id.isEmpty || branchName.isEmpty) return;
+    if (!force && (_branchRemoteKey == branchName || _branchRemoteLoadingKey == branchName)) return;
+    _branchRemoteLoadingKey = branchName;
+    try {
+      final res = await scopedFunctions()
+          .httpsCallable('listBranchReceipts',
+              options: HttpsCallableOptions(timeout: const Duration(seconds: 20)))
+          .call<dynamic>({'campaignId': widget.event.id, 'branchName': branchName});
+      final data = res.data;
+      final list = <Map<String, dynamic>>[];
+      if (data is Map && data['receipts'] is List) {
+        for (final r in data['receipts'] as List) {
+          if (r is! Map) continue;
+          final m = Map<String, dynamic>.from(r.map((k, v) => MapEntry(k.toString(), v)));
+          final ts = DateTime.tryParse((m['timestamp'] ?? '').toString());
+          m['timestamp'] = ts?.toLocal();
+          m['from_branch_history'] = true;
+          list.add(m);
+        }
+      }
+      if (!mounted || _selectedBranch != branchName) return;
+      setState(() {
+        _branchRemoteInvoices = list;
+        _branchRemoteKey = branchName;
+        _otherSessionCount = list.where((m) => m['same_session'] != true).length;
+      });
+    } catch (e) {
+      debugPrint('listBranchReceipts unavailable: $e');
+    } finally {
+      if (_branchRemoteLoadingKey == branchName) _branchRemoteLoadingKey = null;
+    }
+  }
+
+  void _ensureBranchHistory() {
+    final b = _selectedBranch;
+    if (b == null || b.isEmpty || !_isAnonymousRep) return;
+    if (_branchRemoteKey == b || _branchRemoteLoadingKey == b) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _fetchBranchReceipts(b);
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     _loadPinnedBranch();
     _scrollController.addListener(_onScroll);
     _initStream();
+    _branchRefreshTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      final b = _selectedBranch;
+      if (mounted && b != null && b.isNotEmpty) _fetchBranchReceipts(b, force: true);
+    });
   }
 
   @override
@@ -116,11 +183,18 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     } else if (widget.event.companySlug.isNotEmpty) {
       query = query.where('companySlug', isEqualTo: widget.event.companySlug.trim());
     }
+    // Anonymous field reps may only read receipts they submitted
+    // (firestore.rules: submittedByUid == request.auth.uid).
+    final user = ref.read(firebaseAuthProvider).currentUser;
+    if (user != null && user.isAnonymous) {
+      query = query.where('submittedByUid', isEqualTo: user.uid);
+    }
     _invoicesStream = query.snapshots();
   }
 
   @override
   void dispose() {
+    _branchRefreshTimer?.cancel();
     _searchController.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
@@ -261,16 +335,9 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
       }
     }
 
-    // 5. Containment match
-    for (final canonical in canonicalBranches) {
-      final canonComp = _cleanBranchForComparison(canonical);
-      if (canonComp.isNotEmpty && (cleanComp.contains(canonComp) || canonComp.contains(cleanComp))) {
-        return canonical;
-      }
-    }
-
-    // Default to first canonical branch
-    return canonicalBranches.first;
+    // Exact, then one longest contained name. Never the first shorter sibling
+    // and never the first campaign branch when the text is still uncertain.
+    return CanonicalBranchResolver.pickCampaignName(clean, canonicalBranches) ?? clean;
   }
 
   Future<void> _loadPinnedBranch() async {
@@ -457,6 +524,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     final isMobile = screenWidth < 650;
 
     _initStream();
+    _ensureBranchHistory();
 
     return Directionality(
       textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
@@ -500,8 +568,16 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
               if (snapshot.hasData && snapshot.data != null) {
                 final allDocs = snapshot.data!.docs;
                 final List<Map<String, dynamic>> parsedInvoices = [];
-                for (final doc in allDocs) {
-                  final data = doc.data();
+                final ownIds = allDocs.map((d) => d.id).toSet();
+                final rows = <MapEntry<String, Map<String, dynamic>>>[
+                  for (final doc in allDocs) MapEntry(doc.id, doc.data()),
+                  for (final r in _branchRemoteInvoices)
+                    if (!ownIds.contains((r['id'] ?? '').toString()))
+                      MapEntry((r['id'] ?? '').toString(), r),
+                ];
+                for (final row in rows) {
+                  final doc = (id: row.key);
+                  final data = row.value;
                   final cId = (data['campaignId'] ?? data['event_id'] ?? data['eventId'] ?? '').toString().trim();
                   final cSlug = (data['companySlug'] ?? data['company_slug'] ?? '').toString().trim().toLowerCase();
                   final targetComp = (data['targetCompany'] ?? data['target_company'] ?? '').toString().trim().toLowerCase();
@@ -520,7 +596,16 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((data['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
 
                   final rawBranch = (data['branch_detected'] ?? data['branch_name'] ?? data['branch'] ?? '').toString().trim();
-                  final canonicalBranch = _normalizeBranchName(rawBranch, canonicalBranches, isAr);
+                  final identity = CanonicalBranchResolver.resolve(
+                    branchIds: widget.event.branchIds,
+                    branchNames: canonicalBranches,
+                    branchId: (data['branch_id'] ?? '').toString(),
+                    detectedName: rawBranch,
+                    receiptNumber: (data['receipt_number'] ?? '').toString(),
+                  );
+                  final canonicalBranch = identity.certain && identity.name.trim().isNotEmpty
+                      ? identity.name.trim()
+                      : rawBranch;
 
                   parsedInvoices.add({
                     'docId': doc.id,
@@ -661,6 +746,11 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
 
                   const Divider(height: 1, thickness: 1),
 
+                  if (_otherSessionCount > 0 &&
+                      _branchRemoteKey != null &&
+                      _branchRemoteKey == _selectedBranch)
+                    _buildOtherSessionsNote(colorScheme, isAr),
+
                   // 3. Invoices List View
                   Expanded(
                     child: snapshot.connectionState == ConnectionState.waiting && campaignInvoices.isEmpty
@@ -782,6 +872,16 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                     ],
                   ],
                 ),
+                if (ref.read(firebaseAuthProvider).currentUser?.isAnonymous ?? false)
+                  Text(
+                    Directionality.of(context) == TextDirection.rtl
+                        ? 'تظهر فواتيرك المرفوعة من هذا الجهاز فقط (السجل محفوظ على هذا الجهاز)'
+                        : 'Showing receipts uploaded from this device (history saved on this device)',
+                    key: const Key('promoter_invoices_device_note'),
+                    style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 Text(
                   '${widget.event.eventName} — ${widget.event.targetCompany}',
                   style: GoogleFonts.cairo(
@@ -2423,7 +2523,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
 
             const SizedBox(height: 10),
 
-            // Option 2: Full AI Re-Scan (Gemini 3.7 Flash)
+            // Option 2: Full AI Re-Scan (AiConfig.fastTierModel)
             InkWell(
               onTap: hasImage
                   ? () {
@@ -2484,7 +2584,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Text(
-                                    'Gemini 3.7',
+                                    AiConfig.fastTierModel,
                                     style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: colorScheme.primary),
                                   ),
                                 ),
@@ -2997,9 +3097,9 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
       startDate: null,
       endDate: null,
       customPrompt: activeEvent.customPrompt,
-      allowMultipleChances: true,
-      multiplierBasis: 'both',
-      maxChancesPerReceipt: 0,
+      allowMultipleChances: activeEvent.allowMultipleChances,
+      multiplierBasis: activeEvent.multiplierBasis,
+      maxChancesPerReceipt: activeEvent.maxChancesPerReceipt,
       promotionalRules: combinedPromotionalRules,
       allowComplementaryReceipts: activeEvent.allowComplementaryReceipts,
     );
@@ -3500,7 +3600,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                         unitValue: resolvedUnitValue,
                         isVoucher: resolvedIsVoucher,
                         linkedGifts: resolvedLinkedGifts,
-                        requireVoucherSerials: winningCampaign.requireVoucherSerials,
+                        requireVoucherSerials: winningCampaign.requireVoucherSerials, voucherSerialMode: winningCampaign.voucherSerialMode,
                       ),
                     ),
                   );
@@ -3629,6 +3729,32 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
       imageUrl: imageUrl,
       imageUrls: imageUrls,
       receiptNumber: receiptNumber,
+    );
+  }
+
+  Widget _buildOtherSessionsNote(ColorScheme colorScheme, bool isAr) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: colorScheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.devices_other_rounded, size: 18, color: colorScheme.onTertiaryContainer),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              isAr
+                  ? 'يتضمن السجل $_otherSessionCount فاتورة لهذا الفرع مسجلة من جلسة/جهاز آخر.'
+                  : 'Includes $_otherSessionCount receipt(s) for this branch from another session/device.',
+              style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600, color: colorScheme.onTertiaryContainer),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

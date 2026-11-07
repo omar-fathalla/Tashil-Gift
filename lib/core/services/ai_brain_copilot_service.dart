@@ -3,13 +3,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import '../config/ai_config.dart';
+import 'gemini_cloud_model.dart';
 import '../../features/admin/domain/ai_directive_model.dart';
 import 'ai_directives_service.dart';
 import 'ai_model_config_service.dart';
 
 final aiBrainCoPilotServiceProvider = Provider<AiBrainCoPilotService>((ref) {
   final directivesService = ref.watch(aiDirectivesServiceProvider);
-  final config = ref.watch(aiModelConfigStreamProvider).value;
+  final config = ref.watch(aiModelConfigStreamProvider).valueOrNull;
   return AiBrainCoPilotService(
     directivesService,
     modelName: config?.effectivePrimaryModel ?? AiConfig.primaryModel,
@@ -58,12 +59,12 @@ class AiBrainChatMessage {
 }
 
 /// Autonomous AI Brain Co-Pilot & Directives Teaching Engine
-/// Dynamically powered by Gemini 3.7 / Gemini 3.8 / Custom Model
+/// Dynamically powered by the model in AiConfig / AiModels (or a custom model)
 class AiBrainCoPilotService {
   final AiDirectivesService _directivesService;
   final String modelName;
-  late final GenerativeModel _model;
-  late final GenerativeModel _fallbackModel;
+  late final CloudGenerativeModel _model;
+  late final CloudGenerativeModel _fallbackModel;
 
   AiBrainCoPilotService(this._directivesService, {String? modelName})
       : modelName = (modelName != null && modelName.isNotEmpty) ? modelName : AiConfig.primaryModel {
@@ -71,10 +72,9 @@ class AiBrainCoPilotService {
     _fallbackModel = _createModel(AiConfig.fallbackModel);
   }
 
-  static GenerativeModel _createModel(String modelName) {
-    return GenerativeModel(
+  static CloudGenerativeModel _createModel(String modelName) {
+    return CloudGenerativeModel(
       model: modelName,
-      apiKey: AiConfig.geminiApiKey,
       systemInstruction: Content.system(
         'أنت "المستشار العلمي ورئيس مهندسي عقل الذكاء الاصطناعي" لنظام تساهيل جفت (Switch Point Smart Systems).\n'
         'مهمتك المحورية هي العمل جنباً إلى جنب مع مسؤولي النظام ومديري الحملات في بيئة تدريب تفاعلية (Human-in-the-Loop AI Brain Studio).\n\n'
@@ -109,7 +109,7 @@ class AiBrainCoPilotService {
     );
   }
 
-  /// Fast speech-to-text transcription powered by Gemini 3.7 Flash
+  /// Fast speech-to-text transcription powered by [AiModels.helperServices]
   Future<String> transcribeAudioOnly({
     required Uint8List audioBytes,
     String? audioMimeType,

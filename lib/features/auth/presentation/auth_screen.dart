@@ -46,7 +46,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           if (savedEmail != null && savedEmail.isNotEmpty) {
             _emailController.text = savedEmail;
           } else {
-            _emailController.text = kPrimaryAdminEmail;
+            _emailController.text = kBootstrapSuperAdminEmail;
           }
         });
       }
@@ -76,14 +76,13 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       try {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('remember_admin_me', _rememberMe);
+        await prefs.remove('active_admin_session');
+        await prefs.remove('saved_admin_password');
         if (_rememberMe) {
           await prefs.setString('saved_admin_email', email);
-          await prefs.setString('active_admin_session', email);
         } else {
           await prefs.remove('saved_admin_email');
-          await prefs.remove('active_admin_session');
         }
-        await prefs.remove('saved_admin_password');
       } catch (_) {}
 
       // On success, navigate to the Admin Dashboard
@@ -496,12 +495,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
                 const SizedBox(height: 18),
 
-                // 6. Badges Row: Gemini 3.8 Flash & 100% Anti-Fraud Single-Resolution
+                // 6. Badges Row: AI model & 100% Anti-Fraud Single-Resolution
                 Wrap(
                   spacing: 10,
                   runSpacing: 10,
                   children: [
-                    // Gemini 3.8 Flash AI Badge
+                    // AI model badge (AppStrings.heroGeminiModelBadge)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                       decoration: BoxDecoration(

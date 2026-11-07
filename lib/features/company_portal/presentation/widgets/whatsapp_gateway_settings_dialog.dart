@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/constants/ai_models.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -63,10 +64,12 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
       text: widget.currentConfig.instanceId.isNotEmpty ? widget.currentConfig.instanceId : 'default',
     );
     _apiTokenController = TextEditingController(
-      text: widget.currentConfig.apiToken.isNotEmpty ? widget.currentConfig.apiToken : 'tashil_secret_token_2026',
+      text: widget.currentConfig.apiToken,
     );
     _customEndpointController = TextEditingController(
-      text: widget.currentConfig.customEndpointUrl.isNotEmpty ? widget.currentConfig.customEndpointUrl : 'http://76.13.14.23:3000',
+      text: widget.currentConfig.customEndpointUrl.isNotEmpty
+          ? widget.currentConfig.customEndpointUrl
+          : WhatsAppGatewayService.kDefaultWahaProxyBase,
     );
     _delaySeconds = widget.currentConfig.delayBetweenMessagesSeconds.clamp(1, 15);
     _isEnabled = widget.currentConfig.isEnabled;
@@ -284,7 +287,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                 Icon(Icons.smart_toy_rounded, color: cs.tertiary),
                 const SizedBox(width: 8),
                 Text(
-                  widget.isAr ? 'محاكاة الرد الآلي الذكي (Gemini 3.7 Flash)' : 'AI Auto-Reply Simulator',
+                  widget.isAr ? 'محاكاة الرد الآلي الذكي (${AiModels.helperServicesLabel})' : 'AI Auto-Reply Simulator',
                   style: GoogleFonts.cairo(fontSize: 15, fontWeight: FontWeight.bold),
                 ),
               ],
@@ -455,6 +458,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
       campaignName: 'مهرجان التوفير والجوائز',
       voucherSerials: ['TEST-VCH-2026'],
       receiptNumber: 'REC-99401',
+      customerPhone: '01000000000',
     );
 
     final res = await _service.sendSingleMessage(
@@ -623,7 +627,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                   controller: _customEndpointController,
                   decoration: InputDecoration(
                     labelText: widget.isAr ? 'عنوان سيرفر WAHA (Endpoint URL)' : 'WAHA Server URL',
-                    hintText: 'http://76.13.14.23:3000',
+                    hintText: WhatsAppGatewayService.kDefaultWahaProxyBase,
                     prefixIcon: const Icon(Icons.dns_rounded, size: 20),
                     filled: true,
                     fillColor: cs.surfaceContainerLow,
@@ -639,7 +643,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                   obscureText: true,
                   decoration: InputDecoration(
                     labelText: widget.isAr ? 'مفتاح الـ API الخاص بالسيرفر (X-Api-Key)' : 'Server API Key',
-                    hintText: 'tashil_secret_token_2026',
+                    hintText: widget.isAr ? 'اتركه فارغًا — السيرفر يحقن المفتاح' : 'Leave empty — server injects the key',
                     prefixIcon: const Icon(Icons.key_rounded, size: 20),
                     filled: true,
                     fillColor: cs.surfaceContainerLow,
@@ -906,7 +910,7 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: Text(
-                                      'Gemini 3.7 Flash',
+                                      AiModels.helperServicesConstLabel,
                                       style: GoogleFonts.robotoMono(fontSize: 9, fontWeight: FontWeight.bold, color: cs.onTertiaryContainer),
                                     ),
                                   ),
@@ -1039,11 +1043,11 @@ class _WhatsAppGatewaySettingsDialogState extends State<WhatsAppGatewaySettingsD
                         runSpacing: 4,
                         children: [
                           '{customer_name}',
+                          '{phone}',
                           '{retail_chain}',
                           '{branch_name}',
                           '{company_name}',
                           '{campaign_name}',
-                          '{prize_name}',
                           '{voucher_details}',
                           '{receipt_number}',
                           '{claim_date}',

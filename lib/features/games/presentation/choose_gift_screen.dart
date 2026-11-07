@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/utils/claim_retry.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -244,40 +245,44 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
       _isConfirming = true;
     });
 
+    bool claimApplied = false;
+    bool claimSaved = false;
     try {
       audioService.playWinFanfare();
 
       _remainingChances = (_remainingChances - 1).clamp(0, 999);
       _wonPrizes.add(selectedPrize);
+      claimApplied = true;
       Future<WhatsAppGatewayResult?>? whatsappFuture;
 
       if (!widget.isDemo && widget.transactionId.isNotEmpty) {
-        final firestore = ref.read(firestoreProvider);
-        await firestore.collection('receipts_transactions').doc(widget.transactionId).update({
-          'game_played': true,
-          'game_type': 'chooseGift',
-          'prize_won': _wonPrizes.join(' + '),
-          'prizes_won': _wonPrizes,
-          'remaining_chances': _remainingChances,
-          'event_id': widget.eventId,
-          'claimed_gifts': _wonPrizes.map((p) => {
-            'giftId': '',
-            'giftName': p,
-            'quantity': 1,
-            'unitValue': 0.0,
-            'isVoucher': p.contains('فواتشر') || p.contains('قسيمة') || p.toLowerCase().contains('voucher'),
-          }).toList(),
-        });
-
-        if (widget.eventId.isNotEmpty) {
-          final giftsService = ref.read(companyGiftsServiceProvider);
-          await giftsService.decrementCampaignPrize(
-            widget.eventId,
-            selectedPrize,
-            branchId: widget.branchId,
-            gameType: 'chooseGift',
-          );
-        }
+        final giftsService = ref.read(companyGiftsServiceProvider);
+        await runGameClaim(
+          () => giftsService.decrementCampaignPrize(
+          widget.eventId,
+          selectedPrize,
+          branchId: widget.branchId,
+          gameType: 'chooseGift',
+          receiptId: widget.transactionId,
+          receiptPatch: {
+            'game_played': true,
+            'game_type': 'chooseGift',
+            'prize_won': _wonPrizes.join(' + '),
+            'prizes_won': _wonPrizes,
+            'remaining_chances': _remainingChances,
+            'event_id': widget.eventId,
+            'claimed_gifts': _wonPrizes.map((p) => {
+              'giftId': '',
+              'giftName': p,
+              'quantity': 1,
+              'unitValue': 0.0,
+              'isVoucher': p.contains('فواتشر') || p.contains('قسيمة') || p.toLowerCase().contains('voucher'),
+            }).toList(),
+          },
+        ),
+          isFinalChance: _remainingChances <= 0,
+        );
+        claimSaved = true;
 
         if (_remainingChances == 0 && !_whatsappSent) {
           _whatsappSent = true;
@@ -326,10 +331,16 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
         });
       }
     } catch (e) {
+      // The claim was not saved: undo the local pick so the counters stay in
+      // step with the server (otherwise "remaining" drops on every failed try).
+      if (claimApplied && !claimSaved) {
+        if (_wonPrizes.isNotEmpty) _wonPrizes.removeLast();
+        _remainingChances = (_remainingChances + 1).clamp(0, 999);
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(AppErrorHandler.getFriendlyMessage(e, defaultMessage: 'حدث خطأ أثناء تسجيل الهدية')),
+          content: Text(AppErrorHandler.claimFailureMessage(e)),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );

@@ -1,3 +1,4 @@
+import '../../../core/services/shared_prize_pool.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -2178,6 +2179,37 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                 ),
               ],
             ),
+            // 2.0.148+206: a campaign without its own rows draws from the
+            // company's shared stock (sibling active campaigns), server-side.
+            Builder(builder: (context) {
+              final sel = _selectedEventId;
+              if (sel == null) return const SizedBox.shrink();
+              final sources = sharedPoolSourceEventIds(
+                eventId: sel,
+                companyEvents: allEvents
+                    .map((e) => (id: e.id, isActive: e.isActive, rowCount: e.allocatedPrizes.length))
+                    .toList(),
+              );
+              if (sources.isEmpty) return const SizedBox.shrink();
+              final names = allEvents.where((e) => sources.contains(e.id)).map((e) => e.eventName).join('، ');
+              return Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.share_rounded, size: 16, color: colorScheme.primary),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        isAr
+                            ? 'هذه الحملة ليس لها أرصدة خاصة، وتصرف من الرصيد المشترك للشركة في نفس الفرع: $names. للتغذية اختر إحدى هذه الحملات.'
+                            : 'This campaign has no own stock and draws from the company shared pool for the same branch: $names. Feed stock on one of these campaigns.',
+                        style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.primary),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
           ],
         ],
       ),

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
+import 'web_image_resizer.dart';
 
 /// Holds the output metadata of client-side receipt image calibration.
 class CalibratedImageResult {
@@ -98,6 +99,34 @@ class CalibrationParams {
 /// 4. High-efficiency JPEG compression (quality: 78).
 /// 5. Off-main-thread execution via [compute] on Mobile/Desktop, with
 ///    seamless synchronous fallback on Web.
+/// 2.0.148+209: real MIME type from magic bytes, so raw (uncalibrated) bytes
+/// such as iPhone HEIC are not mislabelled `image/jpeg` for Gemini.
+String sniffImageMimeType(Uint8List b) {
+  if (b.length >= 3 && b[0] == 0xFF && b[1] == 0xD8 && b[2] == 0xFF) {
+    return 'image/jpeg';
+  }
+  if (b.length >= 8 && b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47) {
+    return 'image/png';
+  }
+  if (b.length >= 12 &&
+      b[0] == 0x52 && b[1] == 0x49 && b[2] == 0x46 && b[3] == 0x46 &&
+      b[8] == 0x57 && b[9] == 0x45 && b[10] == 0x42 && b[11] == 0x50) {
+    return 'image/webp';
+  }
+  if (b.length >= 12 && b[4] == 0x66 && b[5] == 0x74 && b[6] == 0x79 && b[7] == 0x70) {
+    final brand = String.fromCharCodes(b.sublist(8, 12)).toLowerCase();
+    if (brand.startsWith('heic') || brand.startsWith('heix') ||
+        brand.startsWith('hevc') || brand.startsWith('heim') ||
+        brand.startsWith('heis')) {
+      return 'image/heic';
+    }
+    if (brand.startsWith('mif1') || brand.startsWith('msf1') || brand.startsWith('heif')) {
+      return 'image/heif';
+    }
+  }
+  return 'image/jpeg';
+}
+
 class ReceiptImageCalibrator {
   /// Calibrate and compress receipt bytes asynchronously.
   ///
@@ -119,8 +148,31 @@ class ReceiptImageCalibrator {
       brightness: brightness,
     );
 
-    // On Web, Isolates via compute are handled gracefully or run synchronously.
+    // 2.0.148+209: on Web, decode/resize/contrast with the browser first
+    // (HEIC on iOS Safari, EXIF orientation, no multi-second Dart decode on
+    // the UI thread). Same size limits, brightness/contrast math and JPEG
+    // quality as the Dart path; falls back to it if the browser path fails.
     if (kIsWeb) {
+      final sw = Stopwatch()..start();
+      final web = await resizeReceiptInBrowser(
+        rawBytes,
+        maxWidth: maxWidth,
+        maxHeight: maxHeight,
+        quality: quality,
+        contrast: contrast,
+        brightness: brightness,
+      );
+      if (web != null) {
+        sw.stop();
+        return CalibratedImageResult(
+          bytes: web.bytes,
+          originalSize: rawBytes.lengthInBytes,
+          calibratedSize: web.bytes.lengthInBytes,
+          width: web.width,
+          height: web.height,
+          duration: sw.elapsed,
+        );
+      }
       return calibrateReceiptBytesSync(params);
     }
 
@@ -150,6 +202,7 @@ class ReceiptImageCalibrator {
           width: 0,
           height: 0,
           duration: stopwatch.elapsed,
+          mimeType: sniffImageMimeType(rawBytes),
         );
       }
 
@@ -204,6 +257,7 @@ class ReceiptImageCalibrator {
         width: decoded.width,
         height: decoded.height,
         duration: stopwatch.elapsed,
+        mimeType: isSmaller ? 'image/jpeg' : sniffImageMimeType(rawBytes),
       );
     } catch (e) {
       stopwatch.stop();
@@ -215,6 +269,7 @@ class ReceiptImageCalibrator {
         width: 0,
         height: 0,
         duration: stopwatch.elapsed,
+        mimeType: sniffImageMimeType(rawBytes),
       );
     }
   }

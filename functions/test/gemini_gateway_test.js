@@ -4,7 +4,6 @@ const {
   campaignProductsCache,
   receiptAnalysisCache,
   computeSha256,
-  geminiRateLimiter,
   acquireRateLimitToken,
   executeWithExponentialBackoff,
   analyzeReceiptWithGateway,
@@ -38,9 +37,9 @@ async function runTests() {
   console.log("✅ Test 2: LRU caching for campaign metadata works.");
 
   // Test 3: Rate Limiter Token Acquisition
-  const remainingTokens = await acquireRateLimitToken();
-  assert(remainingTokens >= 0, "Token acquisition must succeed with non-negative tokens");
-  console.log("✅ Test 3: RateLimiter successfully consumed token. Remaining:", remainingTokens);
+  const skipped = await acquireRateLimitToken(null, null);
+  assert.strictEqual(skipped, null, "No client key (server caller) must skip the per-client limit");
+  console.log("✅ Test 3: per-client limiter is skipped for server-side callers without a client key.");
 
   // Test 4: Exponential Backoff Retry on 429 Error
   let attempts = 0;

@@ -167,11 +167,11 @@ void main() {
       expect(find.byType(M3SupportingPaneLayout), findsOneWidget);
 
       // Verify supporting pane content: Campaign Guide & Quick actions
-      expect(find.text('دليل وقواعد الحملة'), findsOneWidget);
-      expect(find.text('مرجع سريع للبروموتر والمبيعات'), findsOneWidget);
-      expect(find.text('الشروط'), findsOneWidget);
-      expect(find.text('الهدايا'), findsOneWidget);
-      expect(find.text('الفواتير'), findsOneWidget);
+      expect(find.text('دليل وقواعد الحملة'), findsNothing); // merged into brief dialog
+      expect(find.text('مرجع سريع للبروموتر والمبيعات'), findsNothing);
+      expect(find.text('الشروط'), findsNothing);
+      expect(find.text('الهدايا'), findsNothing);
+      expect(find.text('الفواتير'), findsNothing);
 
       // Verify Minimum Spend in supporting pane
       expect(find.text('الحد الأدنى للشراء:'), findsOneWidget);
@@ -191,11 +191,11 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify English supporting pane headers
-      expect(find.text('Campaign Guide'), findsOneWidget);
-      expect(find.text('Promoter Quick Reference'), findsOneWidget);
-      expect(find.text('Rules'), findsOneWidget);
-      expect(find.text('Prizes'), findsOneWidget);
-      expect(find.text('Invoices'), findsOneWidget);
+      expect(find.text('Campaign Guide'), findsNothing); // merged into brief dialog
+      expect(find.text('Promoter Quick Reference'), findsNothing);
+      expect(find.text('Rules'), findsNothing);
+      expect(find.text('Prizes'), findsNothing);
+      expect(find.text('Invoices'), findsNothing);
       expect(find.text('Minimum Spend:'), findsOneWidget);
     });
   });

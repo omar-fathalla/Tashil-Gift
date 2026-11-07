@@ -8,6 +8,12 @@ import '../../../../core/services/firebase_service.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/constants/country_currency_config.dart';
 import '../../../admin/domain/event_model.dart';
+import '../../../admin/domain/retail_chain_model.dart';
+import '../../../../core/services/retail_chains_service.dart';
+import '../../../../core/utils/branch_chain_resolver.dart';
+import 'campaign_gift_balance_dialog.dart';
+import 'promoter_invoices_dialog.dart';
+import 'package:al_mraay/core/utils/receipt_date_window.dart';
 
 /// Interactive Material Design 3 Dialog displaying the Campaign Concept, Brief, and Structured Promotional Rules
 class CampaignBriefDialog extends ConsumerStatefulWidget {
@@ -51,6 +57,22 @@ class CampaignBriefDialog extends ConsumerStatefulWidget {
 class _CampaignBriefDialogState extends ConsumerState<CampaignBriefDialog> {
   Stream<DocumentSnapshot<Map<String, dynamic>>>? _eventDocStream;
   String? _lastEventId;
+  List<BranchModel> _dbBranches = const [];
+  bool _branchesRequested = false;
+
+  /// Loads branch docs once (only for multi-chain campaigns) so chain
+  /// membership is resolved by branch ID instead of by name.
+  void _ensureDbBranches(EventModel event) {
+    if (_branchesRequested) return;
+    if (BranchChainResolver.splitChainNames(event.retailChainName).length < 2) return;
+    _branchesRequested = true;
+    Future(() async {
+      try {
+        final list = await ref.read(retailChainsServiceProvider).getAllBranches();
+        if (mounted) setState(() => _dbBranches = list);
+      } catch (_) {}
+    });
+  }
 
   Stream<DocumentSnapshot<Map<String, dynamic>>>? _ensureEventDocStream() {
     if (_eventDocStream == null || _lastEventId != widget.event.id) {
@@ -145,6 +167,16 @@ class _CampaignBriefDialogState extends ConsumerState<CampaignBriefDialog> {
                             event: liveEvent,
                             currencySymbol: currencySymbol,
                             isMobile: isMobile,
+                          ),
+
+                          const SizedBox(height: 14),
+
+                          // Campaign Guide (merged from the former side-pane card)
+                          _buildCampaignGuideSection(
+                            context: context,
+                            colorScheme: colorScheme,
+                            event: liveEvent,
+                            isAr: isAr,
                           ),
 
                           const SizedBox(height: 18),
@@ -338,6 +370,69 @@ class _CampaignBriefDialogState extends ConsumerState<CampaignBriefDialog> {
     );
   }
 
+  /// "دليل وقواعد الحملة" quick reference, merged into the brief so the promoter
+  /// page no longer needs a separate guide card.
+  Widget _buildCampaignGuideSection({
+    required BuildContext context,
+    required ColorScheme colorScheme,
+    required EventModel event,
+    required bool isAr,
+  }) {
+    Widget btn(IconData icon, String label, VoidCallback onTap) => Expanded(
+          child: OutlinedButton.icon(
+            onPressed: onTap,
+            icon: Icon(icon, size: 16),
+            label: Text(
+              label,
+              style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        );
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.menu_book_rounded, color: colorScheme.primary, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  isAr ? 'دليل وقواعد الحملة' : 'Campaign Guide',
+                  style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          Text(
+            isAr ? 'مرجع سريع للبروموتر والمبيعات' : 'Promoter quick reference',
+            style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              btn(Icons.card_giftcard_rounded, isAr ? 'الهدايا' : 'Prizes',
+                  () => CampaignGiftBalanceDialog.show(context, event)),
+              const SizedBox(width: 8),
+              btn(Icons.receipt_long_rounded, isAr ? 'الفواتير' : 'Invoices',
+                  () => PromoterInvoicesDialog.show(context, event)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCampaignOverviewCard({
     required BuildContext context,
     required ColorScheme colorScheme,
@@ -346,9 +441,10 @@ class _CampaignBriefDialogState extends ConsumerState<CampaignBriefDialog> {
     required String currencySymbol,
     required bool isMobile,
   }) {
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
     final dateFormat = DateFormat('yyyy/MM/dd');
-    final startDateStr = event.startDate != null ? dateFormat.format(event.startDate!) : '—';
-    final endDateStr = event.endDate != null ? dateFormat.format(event.endDate!) : '—';
+    final startDateStr = event.startDate != null ? dateFormat.format(campaignFirstDay(event.startDate)!) : '—';
+    final endDateStr = event.endDate != null ? dateFormat.format(campaignLastDay(event.endDate)!) : '—';
 
     return Container(
       padding: EdgeInsets.all(isMobile ? 12 : 16),
@@ -371,17 +467,23 @@ class _CampaignBriefDialogState extends ConsumerState<CampaignBriefDialog> {
         children: [
           Row(
             children: [
-              Icon(Icons.business_rounded, color: colorScheme.primary, size: 18),
+              Icon(Icons.storefront_rounded, color: colorScheme.primary, size: 18),
               const SizedBox(width: 8),
-              Text(
-                event.targetCompany,
-                style: GoogleFonts.cairo(
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.primary,
+              Expanded(
+                child: Text(
+                  isAr
+                      ? 'الجهات والفروع المشاركة'
+                      : 'Participating organizations & branches',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.cairo(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.primary,
+                  ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
@@ -429,17 +531,106 @@ class _CampaignBriefDialogState extends ConsumerState<CampaignBriefDialog> {
                 ),
               _buildInfoBadge(
                 icon: Icons.calendar_month_outlined,
-                label: 'ساري: $startDateStr إلى $endDateStr',
+                label: 'ساري: $startDateStr إلى $endDateStr (آخر يوم شامل)',
                 colorScheme: colorScheme,
               ),
-              if (event.retailChainName.isNotEmpty)
-                _buildInfoBadge(
-                  icon: Icons.storefront_outlined,
-                  label: event.retailChainName,
-                  colorScheme: colorScheme,
-                ),
             ],
           ),
+          const SizedBox(height: 10),
+          ..._organizationGroups(event, isAr).map(
+            (g) => _buildOrganizationTile(
+              orgName: g.key,
+              branches: g.value,
+              isAr: isAr,
+              colorScheme: colorScheme,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Groups the campaign's participating branches by organization (retail chain).
+  /// Chain membership is resolved ID-first (branchIds[i] -> branch doc ->
+  /// retailChainId); name matching is only a fallback for legacy events.
+  List<MapEntry<String, List<String>>> _organizationGroups(EventModel event, bool isAr) {
+    _ensureDbBranches(event);
+    final orgs = BranchChainResolver.splitChainNames(event.retailChainName);
+    final branches = <String>[];
+    for (var i = 0; i < event.branchIds.length || i < event.branchNames.length; i++) {
+      final n = i < event.branchNames.length ? event.branchNames[i].trim() : '';
+      final id = i < event.branchIds.length ? event.branchIds[i].trim() : '';
+      final label = n.isNotEmpty ? n : id;
+      if (label.isNotEmpty && !branches.contains(label)) branches.add(label);
+    }
+    if (orgs.isEmpty) {
+      if (branches.isEmpty) return const [];
+      return [MapEntry(isAr ? 'الفروع المشاركة' : 'Participating branches', branches)];
+    }
+    if (orgs.length == 1) return [MapEntry(orgs.first, branches)];
+    return BranchChainResolver.groupBranchesByChain(
+      retailChainId: event.retailChainId,
+      retailChainName: event.retailChainName,
+      branchIds: event.branchIds,
+      branchNames: event.branchNames,
+      dbBranches: _dbBranches,
+      unknownToAllChains: false,
+    ).entries.toList();
+  }
+
+  Widget _buildOrganizationTile({
+    required String orgName,
+    required List<String> branches,
+    required bool isAr,
+    required ColorScheme colorScheme,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLowest.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.business_rounded, size: 16, color: colorScheme.primary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  orgName,
+                  style: GoogleFonts.cairo(fontSize: 13.5, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+                ),
+              ),
+              Text(
+                branches.isEmpty
+                    ? (isAr ? 'كل الفروع' : 'All branches')
+                    : (isAr ? '${branches.length} فرع' : '${branches.length} branches'),
+                style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+          if (branches.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: branches
+                  .map((b) => Chip(
+                        avatar: Icon(Icons.location_on_outlined, size: 14, color: colorScheme.onSecondaryContainer),
+                        label: Text(b, style: GoogleFonts.cairo(fontSize: 11, color: colorScheme.onSecondaryContainer)),
+                        backgroundColor: colorScheme.secondaryContainer.withValues(alpha: 0.7),
+                        side: BorderSide.none,
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                      ))
+                  .toList(),
+            ),
+          ],
         ],
       ),
     );
@@ -571,23 +762,6 @@ class _CampaignBriefDialogState extends ConsumerState<CampaignBriefDialog> {
                             ),
                           ),
                         ),
-                        if (rule.allowMultipliers)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
-                            decoration: BoxDecoration(
-                              color: colorScheme.primaryContainer,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: colorScheme.primaryFixedDim),
-                            ),
-                            child: Text(
-                              'مضاعفة الهدايا مع زيادة الكمية',
-                              style: GoogleFonts.cairo(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: colorScheme.onPrimaryContainer,
-                              ),
-                            ),
-                          ),
                       ],
                     ),
                   ],

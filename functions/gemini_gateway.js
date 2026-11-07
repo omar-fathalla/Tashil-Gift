@@ -1,5 +1,5 @@
 const LRU = require("lru-cache");
-const { RateLimiter } = require("limiter");
+const { consumeRateLimit } = require("./rate_limit");
 const crypto = require("node:crypto");
 
 /**
@@ -24,29 +24,15 @@ const receiptAnalysisCache = new LRU({
 });
 
 /**
- * 2. Rate Limiting via Token Bucket (limiter)
- * 60 requests per minute with a burst allowance of 10 requests.
+ * 2. Per-client rate limiting (M3). Replaces the old shared in-memory
+ * 60/min token bucket, which was global and per-instance. Uses the shared
+ * "gemini" budget (20/min, 200/day per client) in Firestore.
+ * @param {object} db Firestore
+ * @param {string} rateLimitKey client key from rate_limit.clientKey()
  */
-const geminiRateLimiter = new RateLimiter(60, "minute", true);
-
-/**
- * Acquires a token from the rate limiter.
- * @returns {Promise<number>} Remaining tokens
- */
-function acquireRateLimitToken() {
-  return new Promise((resolve, reject) => {
-    geminiRateLimiter.removeTokens(1, (err, remaining) => {
-      if (err) {
-        return reject(err instanceof Error ? err : new Error(String(err)));
-      }
-      if (remaining < 0) {
-        const error = new Error("Rate limit exceeded. Please retry after a brief pause.");
-        error.code = 429;
-        return reject(error);
-      }
-      resolve(remaining);
-    });
-  });
+async function acquireRateLimitToken(db, rateLimitKey) {
+  if (!db || !rateLimitKey) return null; // server-side callers without a client (webhook)
+  return consumeRateLimit({ db, scope: "gemini", key: rateLimitKey });
 }
 
 /**
@@ -138,6 +124,7 @@ async function analyzeReceiptWithGateway({
   campaignId,
   imagePayload, // Base64 string or image buffer
   forceRefresh = false,
+  rateLimitKey,
   callGeminiModelFn, // Callback function executing the Gemini model
 }) {
   const startTime = Date.now();
@@ -159,7 +146,7 @@ async function analyzeReceiptWithGateway({
   }
 
   // 3. Acquire Token from Rate Limiter
-  await acquireRateLimitToken();
+  await acquireRateLimitToken(db, rateLimitKey);
 
   // 4. Resolve Cached Campaign Metadata
   let branches = [];
@@ -197,7 +184,6 @@ module.exports = {
   campaignBranchesCache,
   campaignProductsCache,
   receiptAnalysisCache,
-  geminiRateLimiter,
   acquireRateLimitToken,
   computeSha256,
   executeWithExponentialBackoff,

@@ -29,7 +29,9 @@ void main() {
       expect(message, contains('فرع الإقبال'));
       expect(message, contains('شركة ادكو للتجارة والصناعة'));
       expect(message, contains('مهرجان التوفير والجوائز'));
-      expect(message, contains('فواتشر بقيمة 50 جنيه'));
+      // 2.0.157: the gift name is never sent to the customer.
+      expect(message, isNot(contains('فواتشر بقيمة 50 جنيه')));
+      expect(message, contains('كسبت معانا'));
       expect(message, contains('VCH-123456'));
       expect(message, contains('REC-99401'));
     });
@@ -50,7 +52,7 @@ void main() {
       expect(message, contains('عميلنا العزيز'));
       expect(message, contains('المتجر'));
       expect(message, contains('إدارة العروض الترويجية'));
-      expect(message, contains('هدية فورية معتمدة'));
+      expect(message, isNot(contains('هدية فورية معتمدة')));
     });
 
     test('WhatsAppGatewayConfigModel correctly serializes winner notification settings', () {

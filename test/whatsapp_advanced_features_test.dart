@@ -13,7 +13,7 @@ void main() {
     const baseConfig = WhatsAppGatewayConfigModel(
       provider: WhatsAppGatewayProvider.waha,
       instanceId: 'default',
-      apiToken: 'tashil_secret_token_2026',
+      apiToken: 'test-waha-token',
       customEndpointUrl: 'http://76.13.14.23:3000',
       delayBetweenMessagesSeconds: 2,
       isEnabled: true,
@@ -41,10 +41,17 @@ void main() {
 
     // Feature 1: Media Messaging
     test('Feature 1: sendMediaMessage posts image URL with caption to /api/sendImage', () async {
-      final service = WhatsAppGatewayService();
+      final service = WhatsAppGatewayService(
+      wahaAuthHeadersBuilder: () async => {
+        'Authorization': 'Bearer test-id-token',
+        'X-Firebase-AppCheck': 'test-app-check',
+      },
+    );
       final mockClient = MockClient((request) async {
         expect(request.url.path, equals('/api/sendImage'));
-        expect(request.headers['X-Api-Key'], equals('tashil_secret_token_2026'));
+        expect(request.headers['Authorization'], equals('Bearer test-id-token'));
+          expect(request.headers['X-Firebase-AppCheck'], equals('test-app-check'));
+          expect(request.headers.containsKey('X-Api-Key'), isFalse);
         expect(request.headers['Content-Type'], contains('application/json'));
 
         final body = json.decode(request.body) as Map<String, dynamic>;
@@ -70,10 +77,17 @@ void main() {
 
     // Feature 2: Interactive Polls
     test('Feature 2: sendPollMessage posts poll question and options to /api/sendPoll', () async {
-      final service = WhatsAppGatewayService();
+      final service = WhatsAppGatewayService(
+      wahaAuthHeadersBuilder: () async => {
+        'Authorization': 'Bearer test-id-token',
+        'X-Firebase-AppCheck': 'test-app-check',
+      },
+    );
       final mockClient = MockClient((request) async {
         expect(request.url.path, equals('/api/sendPoll'));
-        expect(request.headers['X-Api-Key'], equals('tashil_secret_token_2026'));
+        expect(request.headers['Authorization'], equals('Bearer test-id-token'));
+          expect(request.headers['X-Firebase-AppCheck'], equals('test-app-check'));
+          expect(request.headers.containsKey('X-Api-Key'), isFalse);
 
         final body = json.decode(request.body) as Map<String, dynamic>;
         expect(body['chatId'], equals('201211857725@c.us'));
@@ -101,7 +115,12 @@ void main() {
 
     // Feature 3: Typing Simulator
     test('Feature 3: startTyping and stopTyping send correct chat presence to WAHA', () async {
-      final service = WhatsAppGatewayService();
+      final service = WhatsAppGatewayService(
+      wahaAuthHeadersBuilder: () async => {
+        'Authorization': 'Bearer test-id-token',
+        'X-Firebase-AppCheck': 'test-app-check',
+      },
+    );
       bool started = false;
       bool stopped = false;
 
@@ -129,7 +148,12 @@ void main() {
 
     // Feature 4: Filter Active WhatsApp Numbers
     test('Feature 4: checkNumberExists queries /api/contacts/check-exists correctly', () async {
-      final service = WhatsAppGatewayService();
+      final service = WhatsAppGatewayService(
+      wahaAuthHeadersBuilder: () async => {
+        'Authorization': 'Bearer test-id-token',
+        'X-Firebase-AppCheck': 'test-app-check',
+      },
+    );
       final mockClient = MockClient((request) async {
         expect(request.url.path, equals('/api/contacts/check-exists'));
         final phone = request.url.queryParameters['phone'];
@@ -177,12 +201,19 @@ void main() {
 
     // Feature 6: Live Screenshot Button
     test('Feature 6: fetchLiveScreenshot retrieves screenshot bytes or base64 from /api/screenshot', () async {
-      final service = WhatsAppGatewayService();
+      final service = WhatsAppGatewayService(
+      wahaAuthHeadersBuilder: () async => {
+        'Authorization': 'Bearer test-id-token',
+        'X-Firebase-AppCheck': 'test-app-check',
+      },
+    );
       final dummyPngBytes = Uint8List.fromList([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13]);
 
       final mockClient = MockClient((request) async {
         expect(request.url.path, equals('/api/screenshot'));
-        expect(request.headers['X-Api-Key'], equals('tashil_secret_token_2026'));
+        expect(request.headers['Authorization'], equals('Bearer test-id-token'));
+          expect(request.headers['X-Firebase-AppCheck'], equals('test-app-check'));
+          expect(request.headers.containsKey('X-Api-Key'), isFalse);
         return http.Response.bytes(dummyPngBytes, 200, headers: {'content-type': 'image/png'});
       });
 
@@ -200,7 +231,12 @@ void main() {
     });
 
     test('Feature 6b: fetchLiveScreenshotDetailed diagnoses NOWEB engine error', () async {
-      final service = WhatsAppGatewayService();
+      final service = WhatsAppGatewayService(
+      wahaAuthHeadersBuilder: () async => {
+        'Authorization': 'Bearer test-id-token',
+        'X-Firebase-AppCheck': 'test-app-check',
+      },
+    );
       final mockClient = MockClient((request) async {
         return http.Response(
           '{"statusCode": 400, "message": "The screenshot is not available for NOWEB engine", "error": "Bad Request"}',
@@ -222,7 +258,12 @@ void main() {
     });
 
     test('Feature 6c: fetchLiveScreenshotDetailed diagnoses 401 Unauthorized', () async {
-      final service = WhatsAppGatewayService();
+      final service = WhatsAppGatewayService(
+      wahaAuthHeadersBuilder: () async => {
+        'Authorization': 'Bearer test-id-token',
+        'X-Firebase-AppCheck': 'test-app-check',
+      },
+    );
       final mockClient = MockClient((request) async {
         return http.Response('{"message": "Unauthorized"}', 401);
       });

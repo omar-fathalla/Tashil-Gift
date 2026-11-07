@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
@@ -10,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
 import '../presentation/widgets/whatsapp_campaign_dispatcher_dialog.dart';
 import 'whatsapp_gateway_config_model.dart';
+import '../../../core/services/firebase_scope.dart';
 
 /// Global Riverpod Provider for WhatsAppGatewayService
 final whatsappGatewayServiceProvider = Provider<WhatsAppGatewayService>((ref) => WhatsAppGatewayService());
@@ -117,6 +119,45 @@ class WhatsAppScreenshotResult {
 class WhatsAppGatewayService {
   static const String _prefsKeyPrefix = 'whatsapp_gateway_config_';
 
+  /// Optional override for tests. Production builds Firebase ID + App Check tokens.
+  final Future<Map<String, String>> Function()? wahaAuthHeadersBuilder;
+
+  WhatsAppGatewayService({this.wahaAuthHeadersBuilder});
+
+  /// Auth headers required by the secured `wahaProxy` Cloud Function.
+  /// Never includes WAHA's own x-api-key — that stays server-side only.
+  Future<Map<String, String>> buildWahaProxyHeaders([
+    Map<String, String>? extra,
+  ]) async {
+    if (wahaAuthHeadersBuilder != null) {
+      final custom = await wahaAuthHeadersBuilder!();
+      return <String, String>{...?extra, ...custom};
+    }
+
+    final headers = <String, String>{...?extra};
+    final user = scopedAuth().currentUser;
+    if (user == null || user.isAnonymous) {
+      throw StateError(
+        'WhatsApp proxy requires a signed-in super_admin, admin, or partner account.',
+      );
+    }
+    final idToken = await user.getIdToken();
+    if (idToken == null || idToken.isEmpty) {
+      throw StateError('Failed to obtain Firebase ID token for WhatsApp proxy.');
+    }
+    headers['Authorization'] = 'Bearer $idToken';
+
+    try {
+      final appCheckToken = await FirebaseAppCheck.instanceFor(app: FirebaseScope.app).getToken();
+      if (appCheckToken != null && appCheckToken.isNotEmpty) {
+        headers['X-Firebase-AppCheck'] = appCheckToken;
+      }
+    } catch (e) {
+      debugPrint('App Check token unavailable for WAHA proxy: $e');
+    }
+    return headers;
+  }
+
   /// Normalizes and formats raw phone numbers into standard international digits without '+'
   /// (e.g. Egypt 01012345678 -> 201012345678, +2011... -> 2011...)
   static String formatInternationalPhone(String rawPhone) {
@@ -143,10 +184,13 @@ class WhatsAppGatewayService {
     return clean;
   }
 
+  /// Hosted HTTPS reverse proxy (Firebase Hosting → wahaProxy Function).
+  /// The Function injects WAHA_API_KEY from Firebase Secrets; the client never needs it.
+  static const String kDefaultWahaProxyBase = 'https://tashil-gift.web.app/waha';
+
   /// Resolves the effective API endpoint for WAHA / Gateway requests.
-  /// When running on Web over HTTPS, direct HTTP requests to IPs (e.g. http://76.13.14.23:3000)
-  /// are blocked by browser Mixed Content policies.
-  /// In that case, this automatically routes through the same-origin HTTPS proxy (/waha).
+  /// Prefers the HTTPS Cloud proxy so the browser/app never talks to the raw HTTP WAHA host
+  /// and never needs a baked-in API token.
   static String resolveEndpoint(WhatsAppGatewayConfigModel config) {
     final raw = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
     if (kIsWeb) {
@@ -155,7 +199,10 @@ class WhatsAppGatewayService {
         return '${Uri.base.origin}/waha';
       }
     }
-    return raw.isNotEmpty ? raw : 'http://76.13.14.23:3000';
+    if (raw.isEmpty || raw.startsWith('http://')) {
+      return kDefaultWahaProxyBase;
+    }
+    return raw;
   }
 
   /// Loads configuration from Local Storage with Firestore fallback
@@ -171,7 +218,7 @@ class WhatsAppGatewayService {
 
       // Fallback: Check Firestore company document
       if (companySlug != null && companySlug.isNotEmpty) {
-        final doc = await FirebaseFirestore.instance.collection('companies').doc(companySlug).get();
+        final doc = await scopedFirestore().collection('companies').doc(companySlug).get();
         if (doc.exists && doc.data() != null && doc.data()!.containsKey('whatsappGatewayConfig')) {
           final configMap = doc.data()!['whatsappGatewayConfig'] as Map<String, dynamic>?;
           if (configMap != null) {
@@ -188,12 +235,11 @@ class WhatsAppGatewayService {
     return const WhatsAppGatewayConfigModel(
       provider: WhatsAppGatewayProvider.waha,
       instanceId: 'default',
-      apiToken: 'tashil_secret_token_2026',
-      customEndpointUrl: 'http://76.13.14.23:3000',
+      apiToken: '',
+      customEndpointUrl: '',
       delayBetweenMessagesSeconds: 3,
       isEnabled: true,
-      isConnected: true,
-      connectedPhoneNumber: '+201508899965',
+      isConnected: false,
     );
   }
 
@@ -206,7 +252,7 @@ class WhatsAppGatewayService {
 
       // Save to Firestore company document for persistence across team members
       if (companySlug != null && companySlug.isNotEmpty) {
-        await FirebaseFirestore.instance.collection('companies').doc(companySlug).set({
+        await scopedFirestore().collection('companies').doc(companySlug).set({
           'whatsappGatewayConfig': config.toMap(),
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
@@ -277,10 +323,7 @@ class WhatsAppGatewayService {
           final endpoint = resolveEndpoint(config);
           final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
           final url = Uri.parse('$endpoint/api/sessions/$session');
-          final headers = <String, String>{};
-          if (config.apiToken.trim().isNotEmpty) {
-            headers['X-Api-Key'] = config.apiToken.trim();
-          }
+          final headers = await buildWahaProxyHeaders();
           final response = await httpClient.get(url, headers: headers).timeout(const Duration(seconds: 12));
           if (response.statusCode == 200) {
             final data = json.decode(response.body) as Map<String, dynamic>? ?? {};
@@ -345,10 +388,7 @@ class WhatsAppGatewayService {
       final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
       final url = Uri.parse('$endpoint/api/$session/chats?limit=100');
-      final headers = <String, String>{};
-      if (config.apiToken.trim().isNotEmpty) {
-        headers['X-Api-Key'] = config.apiToken.trim();
-      }
+      final headers = await buildWahaProxyHeaders();
       final response = await httpClient.get(url, headers: headers).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         final list = json.decode(utf8.decode(response.bodyBytes)) as List? ?? [];
@@ -407,10 +447,7 @@ class WhatsAppGatewayService {
       final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
       final url = Uri.parse('$endpoint/api/$session/chats?limit=$limit');
-      final headers = <String, String>{};
-      if (config.apiToken.trim().isNotEmpty) {
-        headers['X-Api-Key'] = config.apiToken.trim();
-      }
+      final headers = await buildWahaProxyHeaders();
       final response = await httpClient.get(url, headers: headers).timeout(const Duration(seconds: 12));
       if (response.statusCode == 200) {
         final list = json.decode(utf8.decode(response.bodyBytes)) as List? ?? [];
@@ -567,10 +604,7 @@ class WhatsAppGatewayService {
       final endpoint = resolveEndpoint(config);
         final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
         final url = Uri.parse('$endpoint/api/sessions/$session/restart');
-        final headers = <String, String>{};
-        if (config.apiToken.trim().isNotEmpty) {
-          headers['X-Api-Key'] = config.apiToken.trim();
-        }
+        final headers = await buildWahaProxyHeaders();
         final response = await httpClient.post(url, headers: headers).timeout(const Duration(seconds: 15));
         return response.statusCode >= 200 && response.statusCode < 300;
       }
@@ -594,10 +628,7 @@ class WhatsAppGatewayService {
       final endpoint = resolveEndpoint(config);
         final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
         final url = Uri.parse('$endpoint/api/sessions/$session/logout');
-        final headers = <String, String>{};
-        if (config.apiToken.trim().isNotEmpty) {
-          headers['X-Api-Key'] = config.apiToken.trim();
-        }
+        final headers = await buildWahaProxyHeaders();
         final response = await httpClient.post(url, headers: headers).timeout(const Duration(seconds: 15));
         return response.statusCode >= 200 && response.statusCode < 300;
       }
@@ -631,10 +662,12 @@ class WhatsAppGatewayService {
       final checkUrl = Uri.parse(
         '$endpoint/api/contacts/check-exists?phone=${Uri.encodeQueryComponent(cleanPhone)}&session=${Uri.encodeQueryComponent(session)}',
       );
-      final checkHeaders = <String, String>{};
-      if (headers['X-Api-Key'] != null) {
-        checkHeaders['X-Api-Key'] = headers['X-Api-Key']!;
-      }
+      // Forward Firebase auth headers only (never a WAHA x-api-key from the client).
+      final checkHeaders = <String, String>{
+        if (headers['Authorization'] != null) 'Authorization': headers['Authorization']!,
+        if (headers['X-Firebase-AppCheck'] != null)
+          'X-Firebase-AppCheck': headers['X-Firebase-AppCheck']!,
+      };
       final resp = await httpClient.get(checkUrl, headers: checkHeaders).timeout(const Duration(seconds: 10));
       if (resp.statusCode == 200) {
         final data = json.decode(resp.body);
@@ -679,12 +712,9 @@ class WhatsAppGatewayService {
           final endpoint = resolveEndpoint(config);
           final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
           final url = Uri.parse('$endpoint/api/sendText');
-          final headers = <String, String>{
+          final headers = await buildWahaProxyHeaders({
             'Content-Type': 'application/json',
-          };
-          if (config.apiToken.trim().isNotEmpty) {
-            headers['X-Api-Key'] = config.apiToken.trim();
-          }
+          });
 
           final resolved = await _resolveWahaChatId(
             httpClient: httpClient,
@@ -820,12 +850,9 @@ class WhatsAppGatewayService {
         final endpoint = resolveEndpoint(config);
         final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
         final url = Uri.parse('$endpoint/api/sendImage');
-        final headers = <String, String>{
+        final headers = await buildWahaProxyHeaders({
           'Content-Type': 'application/json',
-        };
-        if (config.apiToken.trim().isNotEmpty) {
-          headers['X-Api-Key'] = config.apiToken.trim();
-        }
+        });
         final resolved = await _resolveWahaChatId(
           httpClient: httpClient,
           endpoint: endpoint,
@@ -867,7 +894,7 @@ class WhatsAppGatewayService {
           statusCode: response.statusCode,
         );
       }
-      return sendSingleMessage(
+      return await sendSingleMessage(
         config: config,
         toPhone: toPhone,
         messageText: caption != null && caption.isNotEmpty ? '$caption\n\n$mediaUrl' : mediaUrl,
@@ -913,12 +940,9 @@ class WhatsAppGatewayService {
         final endpoint = resolveEndpoint(config);
         final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
         final url = Uri.parse('$endpoint/api/sendPoll');
-        final headers = <String, String>{
+        final headers = await buildWahaProxyHeaders({
           'Content-Type': 'application/json',
-        };
-        if (config.apiToken.trim().isNotEmpty) {
-          headers['X-Api-Key'] = config.apiToken.trim();
-        }
+        });
         final resolved = await _resolveWahaChatId(
           httpClient: httpClient,
           endpoint: endpoint,
@@ -980,8 +1004,7 @@ class WhatsAppGatewayService {
       final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
       final url = Uri.parse('$endpoint/api/startTyping');
-      final headers = <String, String>{'Content-Type': 'application/json'};
-      if (config.apiToken.trim().isNotEmpty) headers['X-Api-Key'] = config.apiToken.trim();
+      final headers = await buildWahaProxyHeaders({'Content-Type': 'application/json'});
       final response = await httpClient.post(
         url,
         headers: headers,
@@ -1008,8 +1031,7 @@ class WhatsAppGatewayService {
       final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
       final url = Uri.parse('$endpoint/api/stopTyping');
-      final headers = <String, String>{'Content-Type': 'application/json'};
-      if (config.apiToken.trim().isNotEmpty) headers['X-Api-Key'] = config.apiToken.trim();
+      final headers = await buildWahaProxyHeaders({'Content-Type': 'application/json'});
       final response = await httpClient.post(
         url,
         headers: headers,
@@ -1036,8 +1058,7 @@ class WhatsAppGatewayService {
       final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
       final url = Uri.parse('$endpoint/api/contacts/check-exists?session=$session&phone=$cleanPhone');
-      final headers = <String, String>{};
-      if (config.apiToken.trim().isNotEmpty) headers['X-Api-Key'] = config.apiToken.trim();
+      final headers = await buildWahaProxyHeaders();
       final response = await httpClient.get(url, headers: headers).timeout(const Duration(seconds: 8));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -1072,8 +1093,7 @@ class WhatsAppGatewayService {
       final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
       final url = Uri.parse('$endpoint/api/screenshot?session=$session');
-      final headers = <String, String>{};
-      if (config.apiToken.trim().isNotEmpty) headers['X-Api-Key'] = config.apiToken.trim();
+      final headers = await buildWahaProxyHeaders();
       final response = await httpClient.get(url, headers: headers).timeout(const Duration(seconds: 15));
       if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
         return WhatsAppScreenshotResult.success(response.bodyBytes);
@@ -1151,10 +1171,7 @@ class WhatsAppGatewayService {
       final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
       final url = Uri.parse('$endpoint/api/$session/auth/qr');
-      final headers = <String, String>{};
-      if (config.apiToken.trim().isNotEmpty) {
-        headers['X-Api-Key'] = config.apiToken.trim();
-      }
+      final headers = await buildWahaProxyHeaders();
       final response = await httpClient.get(url, headers: headers).timeout(const Duration(seconds: 12));
       if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
         return response.bodyBytes;
@@ -1183,12 +1200,9 @@ class WhatsAppGatewayService {
       final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
       final url = Uri.parse('$endpoint/api/$session/auth/request-code');
-      final headers = <String, String>{
+      final headers = await buildWahaProxyHeaders({
         'Content-Type': 'application/json',
-      };
-      if (config.apiToken.trim().isNotEmpty) {
-        headers['X-Api-Key'] = config.apiToken.trim();
-      }
+      });
       final body = json.encode({'phoneNumber': cleanPhone});
       final response = await httpClient.post(url, headers: headers, body: body).timeout(const Duration(seconds: 15));
       if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -1214,10 +1228,7 @@ class WhatsAppGatewayService {
       final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
       final url = Uri.parse('$endpoint/api/sessions/$session');
-      final headers = <String, String>{};
-      if (config.apiToken.trim().isNotEmpty) {
-        headers['X-Api-Key'] = config.apiToken.trim();
-      }
+      final headers = await buildWahaProxyHeaders();
       final response = await httpClient.get(url, headers: headers).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         return json.decode(response.body) as Map<String, dynamic>?;
@@ -1239,8 +1250,7 @@ class WhatsAppGatewayService {
       final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
       final url = Uri.parse('$endpoint/api/sessions/$session/start');
-      final headers = <String, String>{};
-      if (config.apiToken.trim().isNotEmpty) headers['X-Api-Key'] = config.apiToken.trim();
+      final headers = await buildWahaProxyHeaders();
       final response = await httpClient.post(url, headers: headers).timeout(const Duration(seconds: 15));
       return response.statusCode >= 200 && response.statusCode < 300;
     } catch (e) {
@@ -1260,7 +1270,8 @@ class WhatsAppGatewayService {
   }) {
     final customerName = contact.name.isNotEmpty ? contact.name : 'عميلنا العزيز';
     final branchName = contact.lastBranch.isNotEmpty ? contact.lastBranch : (contact.branches.isNotEmpty ? contact.branches.first : 'أقرب فرع');
-    final giftsText = contact.isWinner ? contact.prizesWon.join(', ') : 'هدايا وقسائم تسوق فورية';
+    // 2.0.158: never send the prize/gift name to customers on WhatsApp.
+    const giftsText = 'هدايا وقسائم تسوق فورية';
 
     return template
         .replaceAll('{اسم_العميل}', customerName)

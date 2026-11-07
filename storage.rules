@@ -2,29 +2,67 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    function isValidImageUpload() {
-      return request.resource != null &&
-             request.resource.size < 15 * 1024 * 1024 &&
-             request.resource.contentType.matches('image/.*');
+    function isSignedIn() {
+      return request.auth != null;
     }
 
+    function isAnonymous() {
+      return isSignedIn()
+        && request.auth.token.firebase.sign_in_provider == 'anonymous';
+    }
+
+    function role() {
+      return isSignedIn() ? request.auth.token.get('role', '') : '';
+    }
+
+    function isStaff() {
+      return isSignedIn()
+        && !isAnonymous()
+        && (role() == 'super_admin' || role() == 'admin');
+    }
+
+    function isImageUpload() {
+      return request.resource != null
+        && request.resource.size < 15 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp|gif|heic|heif)');
+      // SVG is blocked: logos/gifts are publicly readable and SVG can carry script.
+    }
+
+    function uploaderMatches() {
+      return isSignedIn()
+        && request.resource.metadata.uploaderUid == request.auth.uid;
+    }
+
+    function readerIsUploader() {
+      return isSignedIn()
+        && resource.metadata.uploaderUid == request.auth.uid;
+    }
+
+    // Receipt images: any signed-in user (including anonymous field reps) may
+    // upload under receipts/, but only staff or the uploader may read them back.
     match /receipts/{companySlug}/{allPaths=**} {
-      allow read: if true;
-      allow write: if isValidImageUpload();
+      allow read: if isStaff() || readerIsUploader();
+      allow create: if isImageUpload() && uploaderMatches();
+      allow update: if isStaff() && isImageUpload();
+      allow delete: if isStaff();
     }
 
+    // Campaign logos are shown on public links. Writes stay with staff.
     match /company_logos/{allPaths=**} {
       allow read: if true;
-      allow write: if isValidImageUpload();
+      allow create, update: if isStaff() && isImageUpload();
+      allow delete: if isStaff();
     }
 
+    // Gift photos are shown on the claim screen. Writes stay with staff.
     match /company_gifts/{allPaths=**} {
       allow read: if true;
-      allow write: if isValidImageUpload();
+      allow create, update: if isStaff() && isImageUpload();
+      allow delete: if isStaff();
     }
 
     match /{allPaths=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }

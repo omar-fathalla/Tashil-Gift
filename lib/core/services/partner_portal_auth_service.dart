@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_service.dart';
@@ -83,6 +85,14 @@ class ResolvedPortalCredentials {
   final String customAgencyPassword;
   final int customAgencyCredentialVersion;
 
+  /// Public company logo (https) for portal branding; may be empty.
+  final String companyLogoUrl;
+
+  /// True when resolved through the partnerPortalInfo callable (non-admin
+  /// visitor). Usernames/passwords are then empty and login must go through
+  /// partnerPortalLogin.
+  final bool serverResolved;
+
   const ResolvedPortalCredentials({
     required this.companySlug,
     required this.companyName,
@@ -98,6 +108,8 @@ class ResolvedPortalCredentials {
     this.customAgencyUsername = '',
     this.customAgencyPassword = '',
     this.customAgencyCredentialVersion = 1,
+    this.companyLogoUrl = '',
+    this.serverResolved = false,
   });
 
   String get effectiveAgencyUsername =>
@@ -145,7 +157,11 @@ class PortalAuthResult {
 final partnerPortalAuthServiceProvider = Provider<PartnerPortalAuthService>((ref) {
   try {
     final firestore = ref.watch(firestoreProvider);
-    return PartnerPortalAuthService(firestore: firestore);
+    return PartnerPortalAuthService(
+      firestore: firestore,
+      functions: ref.watch(firebaseFunctionsProvider),
+      auth: ref.watch(firebaseAuthProvider),
+    );
   } catch (_) {
     return PartnerPortalAuthService(firestore: null);
   }
@@ -172,7 +188,201 @@ class PartnerPortalAuthService {
     _memoryEventOverrides.clear();
   }
 
-  PartnerPortalAuthService({FirebaseFirestore? firestore}) : _firestore = firestore;
+  PartnerPortalAuthService({FirebaseFirestore? firestore, FirebaseFunctions? functions, FirebaseAuth? auth})
+      : _firestore = firestore,
+        _functions = functions,
+        _auth = auth;
+
+  final FirebaseFunctions? _functions;
+  final FirebaseAuth? _auth;
+
+  static const Set<String> _staffRoles = {'admin', 'super_admin'};
+
+  /// Signs this browser into Firebase as the portal partner (custom token with
+  /// role/companySlug claims) so Firestore rules grant company-scoped reads.
+  /// Never replaces a signed-in admin session.
+  Future<bool> _adoptPortalIdentity(String? customToken) async {
+    final auth = _auth;
+    if (auth == null) return true;
+    final current = auth.currentUser;
+    if (current != null && !current.isAnonymous) {
+      try {
+        final claims = (await current.getIdTokenResult()).claims ?? const {};
+        if (_staffRoles.contains(claims['role'])) return true;
+      } catch (_) {}
+    }
+    if (customToken == null || customToken.isEmpty) return false;
+    try {
+      await auth.signInWithCustomToken(customToken);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// True when the Firebase user can read this portal's data: a staff admin,
+  /// or a partner token for the same company, portal role and credential version.
+  Future<bool> _firebaseIdentityMatches(PartnerPortalSession session) async {
+    final auth = _auth;
+    if (auth == null || _functions == null) return true;
+    final user = auth.currentUser;
+    if (user == null || user.isAnonymous) return false;
+    try {
+      final claims = (await user.getIdTokenResult()).claims ?? const {};
+      final role = claims['role'];
+      if (_staffRoles.contains(role)) return true;
+      return role == 'partner' &&
+          (claims['companySlug'] ?? '').toString().toLowerCase() == session.companySlug.toLowerCase() &&
+          claims['portalRole'] == session.role.value &&
+          _asInt(claims['credVersion'], -1) == session.credentialVersion;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Signs the partner identity out and returns the browser to an anonymous
+  /// session (needed by public routes). Admin sessions are handled elsewhere.
+  Future<void> signOutPortalIdentity({bool restoreAnonymous = true}) async {
+    final auth = _auth;
+    if (auth == null) return;
+    try {
+      final user = auth.currentUser;
+      if (user != null && !user.isAnonymous) {
+        final claims = (await user.getIdTokenResult()).claims ?? const {};
+        if (claims['role'] == 'partner') await auth.signOut();
+      }
+      if (restoreAnonymous && auth.currentUser == null) await auth.signInAnonymously();
+    } catch (_) {}
+  }
+
+  static int _asInt(dynamic v, [int fallback = 1]) => v is num ? v.toInt() : (int.tryParse('${v ?? ''}') ?? fallback);
+
+  /// Branding + credential versions from the server (no secrets). Used when the
+  /// caller cannot read `companies/*` (everyone except admins).
+  Future<ResolvedPortalCredentials> _resolveViaServer({
+    required String companySlug,
+    String? eventId,
+    String companyNameHint = '',
+  }) async {
+    final res = await _functions!.httpsCallable('partnerPortalInfo').call<dynamic>({
+      'companySlug': companySlug,
+      if (eventId != null && eventId.trim().isNotEmpty) 'eventId': eventId.trim(),
+    }).timeout(const Duration(seconds: 20));
+    final m = Map<String, dynamic>.from(res.data as Map);
+    return _fromServerInfo(m, companySlug: companySlug, companyNameHint: companyNameHint);
+  }
+
+  static ResolvedPortalCredentials _fromServerInfo(
+    Map<String, dynamic> m, {
+    String companySlug = '',
+    String companyNameHint = '',
+  }) {
+    final slug = (m['companySlug'] ?? companySlug).toString().trim().toLowerCase();
+    final name = (m['companyName'] ?? '').toString().trim();
+    final hint = companyNameHint.trim();
+    return ResolvedPortalCredentials(
+      companySlug: slug,
+      companyName: name.isNotEmpty ? name : (hint.isNotEmpty ? hint : slug.toUpperCase()),
+      companyLogoUrl: (m['logoUrl'] ?? '').toString().trim(),
+      brandManagerUsername: '',
+      brandManagerPassword: '',
+      brandCredentialVersion: _asInt(m['brandCredentialVersion']),
+      agencyOpsUsername: '',
+      agencyOpsPassword: '',
+      agencyCredentialVersion: _asInt(m['agencyCredentialVersion']),
+      eventId: m['eventId']?.toString(),
+      eventName: m['eventName']?.toString(),
+      hasCustomAgencyCredentials: m['hasCustomAgencyCredentials'] == true,
+      customAgencyCredentialVersion: _asInt(m['customAgencyCredentialVersion']),
+      serverResolved: true,
+    );
+  }
+
+  static const Map<String, List<String>> _serverReasonMessages = {
+    'agency_creds_on_brand': [
+      'بيانات الدخول هذه مخصصة لبوابة شركة الدعاية والعمليات (/ops) ولا تملك صلاحية فتح البوابة التنفيذية للمدير العام.',
+      'These credentials belong to Agency Operations (/ops) and cannot access the Brand Executive Portal.',
+    ],
+    'invalid_brand': [
+      'اسم المستخدم أو كلمة المرور غير صحيحة للبوابة التنفيذية',
+      'Invalid username or password for Brand Executive Portal',
+    ],
+    'brand_creds_on_agency': [
+      'بيانات الدخول هذه خاصة بالبوابة التنفيذية (/portal). يرجى استخدام بيانات دخول بوابة العمليات (/ops).',
+      'These are Brand Executive credentials (/portal). Please use Agency Operations (/ops) credentials.',
+    ],
+    'campaign_requires_custom': [
+      'هذه الحملة محمية ببيانات دخول مخصصة لشركة الدعاية المسؤولة عنها.',
+      'This campaign requires its dedicated campaign agency credentials.',
+    ],
+    'invalid_agency': [
+      'اسم المستخدم أو كلمة المرور غير صحيحة لبوابة العمليات',
+      'Invalid username or password for Agency Operations Portal',
+    ],
+  };
+
+  Future<PortalAuthResult> _authenticateViaServer({
+    required String companySlug,
+    required PartnerPortalRole requiredRole,
+    required String username,
+    required String password,
+    required bool rememberMe,
+    String? eventId,
+  }) async {
+    try {
+      final res = await _functions!.httpsCallable('partnerPortalLogin').call<dynamic>({
+        'companySlug': companySlug,
+        if (eventId != null && eventId.trim().isNotEmpty) 'eventId': eventId.trim(),
+        'role': requiredRole.value,
+        'username': username,
+        'password': password,
+      }).timeout(const Duration(seconds: 20));
+      final m = Map<String, dynamic>.from(res.data as Map);
+      if (m['ok'] == true && m['session'] is Map) {
+        final sm = Map<String, dynamic>.from(m['session'] as Map);
+        final locked = sm['lockedEventId']?.toString();
+        final session = PartnerPortalSession(
+          companySlug: (sm['companySlug'] ?? companySlug).toString(),
+          role: PartnerPortalRole.fromString(sm['role']?.toString()),
+          username: (sm['username'] ?? '').toString(),
+          credentialVersion: _asInt(sm['credentialVersion']),
+          lockedEventId: (locked != null && locked.isNotEmpty) ? locked : null,
+          isCampaignTier: sm['isCampaignTier'] == true,
+          authenticatedAt: DateTime.now(),
+        );
+        final adopted = await _adoptPortalIdentity(m['customToken']?.toString());
+        if (!adopted) {
+          return PortalAuthResult.failure(
+            errorMessageAr: 'تم التحقق من البيانات لكن تعذر فتح جلسة البوابة. حاول مرة أخرى.',
+            errorMessageEn: 'Credentials verified, but the portal session could not be opened. Please try again.',
+          );
+        }
+        await _persistSession(session, rememberMe: rememberMe, eventId: eventId);
+        return PortalAuthResult.success(session);
+      }
+      final msg = _serverReasonMessages[m['reason']?.toString()] ??
+          (requiredRole == PartnerPortalRole.brandManager
+              ? _serverReasonMessages['invalid_brand']!
+              : _serverReasonMessages['invalid_agency']!);
+      return PortalAuthResult.failure(errorMessageAr: msg[0], errorMessageEn: msg[1]);
+    } on FirebaseFunctionsException catch (e) {
+      if (e.code == 'resource-exhausted') {
+        return PortalAuthResult.failure(
+          errorMessageAr: 'محاولات كثيرة. يرجى الانتظار قليلاً ثم المحاولة مرة أخرى.',
+          errorMessageEn: 'Too many attempts. Please wait and try again.',
+        );
+      }
+      return PortalAuthResult.failure(
+        errorMessageAr: 'تعذر الاتصال بخادم التحقق. حاول مرة أخرى.',
+        errorMessageEn: 'Could not reach the verification server. Please try again.',
+      );
+    } catch (_) {
+      return PortalAuthResult.failure(
+        errorMessageAr: 'تعذر الاتصال بخادم التحقق. حاول مرة أخرى.',
+        errorMessageEn: 'Could not reach the verification server. Please try again.',
+      );
+    }
+  }
 
   static const String _prefsKeyPrefix = 'tashil_portal_auth_v2_';
 
@@ -286,6 +496,7 @@ class PartnerPortalAuthService {
       }
 
       Map<String, dynamic>? companyData;
+      bool companyReadFailed = false;
       if (resolvedSlug.isNotEmpty) {
         try {
           final companyDoc = await firestore.collection('companies').doc(resolvedSlug).get();
@@ -295,7 +506,20 @@ class PartnerPortalAuthService {
               resolvedCompanyName = (companyData?['name'] ?? '').toString().trim();
             }
           }
-        } catch (_) {}
+        } catch (_) {
+          companyReadFailed = true;
+        }
+      }
+
+      // Non-admin visitors cannot read companies/* (credentials live there).
+      // Never fall back to default credentials in that case: ask the server
+      // for branding + versions instead. Errors propagate to the caller.
+      if (_functions != null && (companyReadFailed || (resolvedSlug.isEmpty && resolvedEventId != null))) {
+        return _resolveViaServer(
+          companySlug: resolvedSlug,
+          eventId: resolvedEventId,
+          companyNameHint: companyNameHint ?? '',
+        );
       }
 
       // If company name is still empty, check any event with this companySlug
@@ -345,6 +569,10 @@ class PartnerPortalAuthService {
             ? customAgencyPass
             : (resolvedEventId != null ? defaultCampaignAgencyPassword(resolvedSlug, resolvedEventId) : ''),
         customAgencyCredentialVersion: customAgencyVer,
+        companyLogoUrl: () {
+          final l = (companyData?['logoUrl'] ?? '').toString().trim();
+          return l.startsWith('https://') ? l : '';
+        }(),
       );
     }
 
@@ -427,6 +655,17 @@ class PartnerPortalAuthService {
       return PortalAuthResult.failure(
         errorMessageAr: 'يرجى إدخال اسم المستخدم وكلمة المرور',
         errorMessageEn: 'Please enter both username and password',
+      );
+    }
+
+    if (_functions != null) {
+      return _authenticateViaServer(
+        companySlug: companySlug,
+        requiredRole: requiredRole,
+        username: cleanUser,
+        password: cleanPass,
+        rememberMe: rememberMe,
+        eventId: eventId,
       );
     }
 
@@ -631,6 +870,22 @@ class PartnerPortalAuthService {
   /// Validates an existing session (from memory or SharedPreferences) against Firestore's live `credentialVersion`.
   /// Returns `null` and clears storage if the password was rotated (`credentialVersion` mismatch) or role mismatches.
   Future<PartnerPortalSession?> getValidSession({
+    required String companySlug,
+    required PartnerPortalRole requiredRole,
+    String? eventId,
+  }) async {
+    final session = await _getValidStoredSession(
+      companySlug: companySlug,
+      requiredRole: requiredRole,
+      eventId: eventId,
+    );
+    if (session == null) return null;
+    // Data access needs the matching Firebase identity; otherwise re-login.
+    if (!await _firebaseIdentityMatches(session)) return null;
+    return session;
+  }
+
+  Future<PartnerPortalSession?> _getValidStoredSession({
     required String companySlug,
     required PartnerPortalRole requiredRole,
     String? eventId,

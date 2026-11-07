@@ -1,8 +1,11 @@
+import 'package:al_mraay/core/services/rep_device_id.dart';
+import 'package:al_mraay/core/constants/app_version_config.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../../core/utils/receipt_branch_resolver.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -331,7 +334,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
             branchIds: activeEvent.branchIds,
             branchNames: activeEvent.branchNames,
           ).catchError((_) => <BranchModel>[]),
-        ]);
+        ]).timeout(AiReceiptService.preScanLookupTimeout); // 2.0.150+211
 
         final catalogItems = results[0] as List<CompanyProductItem>;
         chainBranches = results[1] as List<BranchModel>;
@@ -379,7 +382,10 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         multiplierBasis: activeEvent.multiplierBasis,
         maxChancesPerReceipt: activeEvent.maxChancesPerReceipt,
         promotionalRules: activeEvent.promotionalRules,
-      );
+      ).timeout(AiReceiptService.stage2Ceiling,
+          onTimeout: () => throw TimeoutException(
+              AiReceiptService.stage2TimeoutMessage,
+              AiReceiptService.stage2Ceiling));
 
       if (mounted) {
         setState(() {
@@ -619,6 +625,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
                 'partIndex': '$partNum',
                 'totalParts': '${allBytesList.length}',
                 'uploadedAt': DateTime.now().toIso8601String(),
+                'uploaderUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
               },
             );
 
@@ -647,6 +654,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         result: result,
         promotionalRules: activeEvent.promotionalRules,
         allowCampaignMultipliers: activeEvent.allowMultipleChances,
+        maxUnitsPerReceipt: activeEvent.maxChancesPerReceipt,
       );
 
       // Strict Zero-Fallback Rule: If campaign has promotional rules and none are met, reject receipt
@@ -720,9 +728,13 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       );
 
       // Save or Update in Firestore (Upsert) - Composite bundle chances govern (AIR-83)
-      final int totalChances = compositeBundle.matchedRules.isNotEmpty
-          ? compositeBundle.totalChances
-          : (result.chancesEarned > 0 ? result.chancesEarned : 1);
+      final int totalChances = clampCampaignChances(
+        compositeBundle.matchedRules.isNotEmpty
+            ? compositeBundle.totalChances
+            : (result.chancesEarned > 0 ? result.chancesEarned : 1),
+        allowMultipleChances: activeEvent.allowMultipleChances,
+        maxChancesPerReceipt: activeEvent.maxChancesPerReceipt,
+      );
       final DocumentReference<Map<String, dynamic>> transactionRef =
           existingDoc != null ? existingDoc.reference : firestore.collection('receipts_transactions').doc(deterministicDocId);
       final bool isExistingRecord = existingDoc != null;
@@ -730,6 +742,8 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       final bool wasGamePlayed = existingData['game_played'] == true;
 
       final Map<String, dynamic> transactionData = {
+        'app_version': AppVersionConfig.appVersion,
+        if (RepDeviceId.value.isNotEmpty) 'rep_device_id': RepDeviceId.value,
         'receipt_number': receiptNumber,
         'is_valid': true,
         'status': 'accepted',
@@ -740,7 +754,11 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         'receipt_date': result.receiptDate,
         'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
         'store_chain_detected': result.storeChainDetected,
-        'branch_detected': result.branchDetected,
+        ...ReceiptBranchResolver.firestoreFields(
+          activeEvent,
+          detectedName: result.branchDetected,
+          receiptNumber: result.receiptNumber,
+        ),
         'is_branch_matched': result.isBranchMatched,
         'is_handwritten': result.isHandwritten,
         'is_thermal_pos_receipt': result.isThermalPosReceipt,
@@ -755,6 +773,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         if (uploadedStoragePaths.length > 1) 'storage_paths': uploadedStoragePaths,
         'parts_count': allBytesList.length,
         'promoter_id': ref.read(firebaseAuthProvider).currentUser?.uid,
+        'submittedByUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
         'campaignId': activeEvent.id,
         'companySlug': activeEvent.companySlug,
         'targetCompany': activeEvent.targetCompany,
@@ -977,7 +996,9 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
               unitValue: resolvedUnitValue,
               isVoucher: resolvedIsVoucher,
               linkedGifts: resolvedLinkedGifts,
-              requireVoucherSerials: activeEvent.requireVoucherSerials,
+              rewardChoiceGroups: compositeBundle.rewardChoiceGroups,
+              baseLinkedGifts: compositeBundle.baseLinkedGifts,
+              requireVoucherSerials: activeEvent.requireVoucherSerials, voucherSerialMode: activeEvent.voucherSerialMode,
             ),
           ),
         );
@@ -988,12 +1009,8 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           });
         }
       } else if (gameType == 'chooseGift') {
-        final candidateGifts = compositeBundle.combinedLinkedGifts.isNotEmpty
-            ? compositeBundle.combinedLinkedGifts
-                .map((g) => g.giftName.trim())
-                .where((n) => n.isNotEmpty)
-                .toSet()
-                .toList()
+        final candidateGifts = compositeBundle.candidateGiftNames.isNotEmpty
+            ? compositeBundle.candidateGiftNames
             : prizeNames;
         await Navigator.of(context).push(
           MaterialPageRoute(
@@ -1014,12 +1031,8 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           });
         }
       } else if (gameType == 'scratch') {
-        final candidateGifts = compositeBundle.combinedLinkedGifts.isNotEmpty
-            ? compositeBundle.combinedLinkedGifts
-                .map((g) => g.giftName.trim())
-                .where((n) => n.isNotEmpty)
-                .toSet()
-                .toList()
+        final candidateGifts = compositeBundle.candidateGiftNames.isNotEmpty
+            ? compositeBundle.candidateGiftNames
             : prizeNames;
         await Navigator.of(context).push(
           MaterialPageRoute(
@@ -1039,12 +1052,8 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         }
       } else {
         // Default: wheel (AIR-85: filter prizes strictly by detected branch stock)
-        final candidateGifts = compositeBundle.combinedLinkedGifts.isNotEmpty
-            ? compositeBundle.combinedLinkedGifts
-                .map((g) => g.giftName.trim())
-                .where((n) => n.isNotEmpty)
-                .toSet()
-                .toList()
+        final candidateGifts = compositeBundle.candidateGiftNames.isNotEmpty
+            ? compositeBundle.candidateGiftNames
             : prizeNames;
         final branchFilteredPrizes = (activeEvent.allocatedPrizes.isNotEmpty)
             ? activeEvent.filterGiftsByBranchStock(
@@ -2051,6 +2060,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
                 'partIndex': '$partNum',
                 'totalParts': '${allBytesList.length}',
                 'uploadedAt': DateTime.now().toIso8601String(),
+                'uploaderUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
               },
             );
 
@@ -2089,6 +2099,8 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
 
       final docRef = existingDoc != null ? existingDoc.reference : firestore.collection('receipts_transactions').doc();
       final Map<String, dynamic> transactionData = {
+        'app_version': AppVersionConfig.appVersion,
+        if (RepDeviceId.value.isNotEmpty) 'rep_device_id': RepDeviceId.value,
         'receipt_number': receiptNumber.isNotEmpty ? receiptNumber : cleanReceiptNumber,
         'is_valid': false,
         'status': 'rejected',
@@ -2099,7 +2111,11 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         'receipt_date': result.receiptDate,
         'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
         'store_chain_detected': result.storeChainDetected,
-        'branch_detected': result.branchDetected,
+        ...ReceiptBranchResolver.firestoreFields(
+          activeEvent,
+          detectedName: result.branchDetected,
+          receiptNumber: result.receiptNumber,
+        ),
         'is_branch_matched': result.isBranchMatched,
         'is_handwritten': result.isHandwritten,
         'is_thermal_pos_receipt': result.isThermalPosReceipt,
@@ -2114,6 +2130,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         if (uploadedStoragePaths.length > 1) 'storage_paths': uploadedStoragePaths,
         'parts_count': allBytesList.length,
         'promoter_id': ref.read(firebaseAuthProvider).currentUser?.uid,
+        'submittedByUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
         'campaignId': activeEvent.id,
         'companySlug': activeEvent.companySlug,
         'targetCompany': activeEvent.targetCompany,

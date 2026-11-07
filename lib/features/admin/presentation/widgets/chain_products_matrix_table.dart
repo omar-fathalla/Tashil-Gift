@@ -38,7 +38,11 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
   int _rowsPerPage = 25;
   bool _isDenseMode = true; // High-Density mode by default for sleek, low-height rows
   bool _showAllRegisteredChains = true; // Show all 16 canonical chains by default
-  int? _hoveredRowIndex; // Synchronized hover state between pinned and scrollable panes
+  // 2.0.172: hover lives in a notifier so moving the mouse repaints one
+  // overlay instead of rebuilding the whole matrix (was a main page-freeze cause).
+  final ValueNotifier<int?> _hoveredRow = ValueNotifier<int?>(null);
+  bool _lastCanStart = false;
+  bool _lastCanEnd = false;
   final ScrollController _horizontalScrollController = ScrollController();
 
   @override
@@ -51,7 +55,13 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
   }
 
   void _onHorizontalScrollChanged() {
-    if (mounted) {
+    // 2.0.172: rebuild the table only when the edge state flips; the scroll
+    // bar itself listens to the controller (ListenableBuilder).
+    if (!mounted) return;
+    final s = _canScrollTowardsStart, e = _canScrollTowardsEnd;
+    if (s != _lastCanStart || e != _lastCanEnd) {
+      _lastCanStart = s;
+      _lastCanEnd = e;
       setState(() {});
     }
   }
@@ -60,6 +70,7 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
   void dispose() {
     _horizontalScrollController.removeListener(_onHorizontalScrollChanged);
     _horizontalScrollController.dispose();
+    _hoveredRow.dispose();
     super.dispose();
   }
 
@@ -72,9 +83,13 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
         _currentPage = maxPages - 1;
       });
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) setState(() {});
-    });
+    // 2.0.172: re-measure scroll extents only when the data shape changed
+    // (was an unconditional post-frame setState on every parent rebuild).
+    if (oldWidget.products.length != widget.products.length) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+    }
   }
 
   bool get _canScrollTowardsStart {
@@ -424,11 +439,14 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
           // -------------------------------------------------------------------
           // 2. Top Scroll Control Bar (Always visible at top of matrix table)
           // -------------------------------------------------------------------
-          _buildTopScrollControlBar(
-            cs: cs,
-            isAr: isAr,
-            totalPinnedWidth: totalPinnedWidth,
-            competitorChains: competitorChains,
+          ListenableBuilder(
+            listenable: _horizontalScrollController,
+            builder: (context, _) => _buildTopScrollControlBar(
+              cs: cs,
+              isAr: isAr,
+              totalPinnedWidth: totalPinnedWidth,
+              competitorChains: competitorChains,
+            ),
           ),
 
           // -------------------------------------------------------------------
@@ -460,19 +478,20 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                     ...pageProducts.asMap().entries.map((entry) {
                       final rowIndex = entry.key;
                       final item = entry.value;
-                      final isHovered = _hoveredRowIndex == rowIndex;
                       final isEven = rowIndex % 2 == 0;
-                      final rowColor = isHovered
-                          ? cs.primary.withValues(alpha: 0.08)
-                          : (isEven ? Colors.transparent : cs.surfaceContainerHighest.withValues(alpha: 0.22));
+                      final baseRowColor = isEven ? Colors.transparent : cs.surfaceContainerHighest.withValues(alpha: 0.22);
 
                       return MouseRegion(
-                        onEnter: (_) => setState(() => _hoveredRowIndex = rowIndex),
-                        onExit: (_) => setState(() => _hoveredRowIndex = null),
-                        child: Container(
+                        onEnter: (_) => _hoveredRow.value = rowIndex,
+                        onExit: (_) {
+  if (_hoveredRow.value == rowIndex) _hoveredRow.value = null;
+},
+                        child: Stack(
+  children: [
+Container(
                           height: rowHeight,
                           decoration: BoxDecoration(
-                            color: rowColor,
+                            color: baseRowColor,
                             border: Border(
                               bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.25), width: 0.8),
                             ),
@@ -507,6 +526,18 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                             ],
                           ),
                         ),
+  Positioned.fill(
+    child: IgnorePointer(
+      child: ValueListenableBuilder<int?>(
+        valueListenable: _hoveredRow,
+        builder: (_, h, __) => h == rowIndex
+            ? ColoredBox(color: cs.primary.withValues(alpha: 0.08))
+            : const SizedBox.shrink(),
+      ),
+    ),
+  ),
+  ],
+),
                       );
                     }),
                   ],
@@ -594,20 +625,21 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                                     ...pageProducts.asMap().entries.map((entry) {
                                       final rowIndex = entry.key;
                                       final item = entry.value;
-                                      final isHovered = _hoveredRowIndex == rowIndex;
                                       final isEven = rowIndex % 2 == 0;
-                                      final rowColor = isHovered
-                                          ? cs.primary.withValues(alpha: 0.08)
-                                          : (isEven ? Colors.transparent : cs.surfaceContainerHighest.withValues(alpha: 0.22));
+                                      final baseRowColor = isEven ? Colors.transparent : cs.surfaceContainerHighest.withValues(alpha: 0.22);
 
                                       return MouseRegion(
-                                        onEnter: (_) => setState(() => _hoveredRowIndex = rowIndex),
-                                        onExit: (_) => setState(() => _hoveredRowIndex = null),
-                                        child: Container(
+                                        onEnter: (_) => _hoveredRow.value = rowIndex,
+                                        onExit: (_) {
+  if (_hoveredRow.value == rowIndex) _hoveredRow.value = null;
+},
+                                        child: Stack(
+  children: [
+Container(
                                           height: rowHeight,
                                           width: totalPaneWidth,
                                           decoration: BoxDecoration(
-                                            color: rowColor,
+                                            color: baseRowColor,
                                             border: Border(
                                               bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.25), width: 0.8),
                                             ),
@@ -660,6 +692,18 @@ class _ChainProductsMatrixTableState extends ConsumerState<ChainProductsMatrixTa
                                             ],
                                           ),
                                         ),
+  Positioned.fill(
+    child: IgnorePointer(
+      child: ValueListenableBuilder<int?>(
+        valueListenable: _hoveredRow,
+        builder: (_, h, __) => h == rowIndex
+            ? ColoredBox(color: cs.primary.withValues(alpha: 0.08))
+            : const SizedBox.shrink(),
+      ),
+    ),
+  ),
+  ],
+),
                                       );
                                     }),
                                   ],

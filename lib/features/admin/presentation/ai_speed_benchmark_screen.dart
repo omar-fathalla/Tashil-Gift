@@ -1,3 +1,5 @@
+import 'package:al_mraay/core/config/ai_config.dart';
+import 'package:al_mraay/core/constants/ai_models.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
@@ -288,7 +290,7 @@ class _AiSpeedBenchmarkScreenState extends ConsumerState<AiSpeedBenchmarkScreen>
         setState(() {
           _currentPhaseText = isDeepAudit
               ? '2/3 استدعاء مسار الاستدلال والتدقيق العميق (Deep Tier)...'
-              : '2/3 استدعاء مسار Gemini 3.7 Flash الفائق السرعة (Fast Tier)...';
+              : '2/3 استدعاء مسار ${AiModels.displayName(AiConfig.fastTierModel)} الفائق السرعة (Fast Tier)...';
         });
 
         final result = await aiService.analyzeReceiptImage(

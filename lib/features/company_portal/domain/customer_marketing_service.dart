@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import '../../../../core/utils/arabic_numbers_utils.dart';
 import 'marketing_contact_model.dart';
 import 'whatsapp_gateway_service.dart';
+import '../../../core/services/firebase_scope.dart';
 
 /// Result of parsing an Excel or CSV file for customer marketing contacts
 class CustomerImportParseResult {
@@ -36,7 +37,7 @@ class CustomerMarketingService {
   CustomerMarketingService({FirebaseFirestore? firestore})
       : _firestore = firestore;
 
-  FirebaseFirestore get _db => _firestore ?? FirebaseFirestore.instance;
+  FirebaseFirestore get _db => _firestore ?? scopedFirestore();
 
   static const String collectionName = 'marketing_contacts';
 

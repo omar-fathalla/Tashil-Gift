@@ -17,7 +17,12 @@ enum AppLanguage {
 
 /// Global provider for the active locale.
 /// Default is Arabic ('ar') as required.
-final localeProvider = StateProvider<Locale>((ref) => const Locale('ar', ''));
+final localeProvider = StateProvider<Locale>((ref) {
+  // Optional ?lang=en|hi on the URL (e.g. links shared with English-speaking reps).
+  final lang = Uri.base.queryParameters['lang'];
+  if (lang == 'en' || lang == 'hi') return Locale(lang!, '');
+  return const Locale('ar', '');
+});
 
 /// Helper extension on WidgetRef to easily query and toggle language
 extension LocaleRefExtensions on WidgetRef {

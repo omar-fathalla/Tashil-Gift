@@ -8,8 +8,9 @@ import 'package:excel/excel.dart' as xl;
 import '../../../core/services/firebase_service.dart';
 import '../../../core/services/daily_sales_aggregation_service.dart';
 import '../../../core/services/company_gifts_service.dart';
-import '../../../core/services/chain_products_intelligence_service.dart';
 import '../../../core/utils/error_handler.dart';
+import '../../../core/utils/branch_chain_resolver.dart';
+import '../../../core/services/retail_chains_service.dart';
 import '../../../core/utils/file_download_helper.dart';
 import '../../../core/utils/slug_utils.dart';
 import '../../../core/localization/locale_provider.dart';
@@ -62,7 +63,27 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
   Stream<List<CompanyGiftModel>>? _giftsStream;
   Stream<QuerySnapshot>? _transactionsStream;
 
+  /// branch id (lower-case) -> retail chain name from the branch doc.
+  Map<String, String> _branchChainById = const {};
+  bool _branchChainsRequested = false;
+
+  void _ensureBranchChains() {
+    if (_branchChainsRequested) return;
+    _branchChainsRequested = true;
+    ref.read(retailChainsServiceProvider).getAllBranches().then((branches) {
+      if (!mounted) return;
+      setState(() {
+        _branchChainById = {
+          for (final b in branches)
+            if (b.id.trim().isNotEmpty && b.retailChainName.trim().isNotEmpty)
+              b.id.trim().toLowerCase(): b.retailChainName.trim(),
+        };
+      });
+    }).catchError((_) {});
+  }
+
   void _ensureStreams(FirebaseFirestore activeDb, String effectiveSlug, {bool force = false}) {
+    _ensureBranchChains();
     final streamKey = effectiveSlug;
 
     if (_lastStreamsKey != streamKey || force || _transactionsStream == null) {
@@ -744,8 +765,8 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
           colorScheme: colorScheme,
           strings: strings,
           isAr: isAr,
-          totalBranchesCount: records.length,
-          matchingBranchesCount: filteredRecords.length,
+          totalBranchesCount: BranchChainResolver.countMergedBranches(records.map((r) => r.branchName)),
+          matchingBranchesCount: BranchChainResolver.countMergedBranches(filteredRecords.map((r) => r.branchName)),
         ),
 
         const SizedBox(height: 14),
@@ -1813,7 +1834,7 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
                           colorScheme: colorScheme,
                         ),
                         _buildHeaderCell(
-                          title: isAr ? 'النسبة' : 'Share',
+                          title: isAr ? 'حصة المبيعات' : 'Sales Share',
                           icon: Icons.pie_chart_rounded,
                           colorScheme: colorScheme,
                         ),
@@ -1938,19 +1959,11 @@ class _DailyBranchSalesScreenState extends ConsumerState<DailyBranchSalesScreen>
       }
     }
 
-    String chain = '';
-    final rawChain = record.retailChain.trim();
-    if (rawChain.isNotEmpty && rawChain != '-' && rawChain != 'غير محدد') {
-      final normalized = ChainProductsIntelligenceService.normalizeRetailChain(rawChain);
-      if (normalized != 'سلسلة تجارية عامة') {
-        chain = normalized;
-      }
-    } else if (currentEvent != null && currentEvent.retailChainName.trim().isNotEmpty) {
-      final normalized = ChainProductsIntelligenceService.normalizeRetailChain(currentEvent.retailChainName);
-      if (normalized != 'سلسلة تجارية عامة') {
-        chain = normalized;
-      }
-    }
+    final chain = BranchChainResolver.resolveBranchDisplayChain(
+      branchDocChain: _branchChainById[record.branchId.trim().toLowerCase()] ?? '',
+      receiptChain: record.retailChain,
+      campaignChain: currentEvent?.retailChainName ?? '',
+    );
 
     final subtitleParts = <String>[];
     if (area.isNotEmpty) subtitleParts.add(area);

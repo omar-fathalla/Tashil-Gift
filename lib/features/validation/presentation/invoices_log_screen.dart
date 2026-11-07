@@ -1,3 +1,5 @@
+import 'package:al_mraay/core/widgets/slow_load_placeholder.dart';
+import 'package:al_mraay/core/config/ai_config.dart';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
@@ -11,6 +13,7 @@ import 'package:csv/csv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
 
+import '../../../core/utils/canonical_branch_resolver.dart';
 import '../../../core/services/firebase_service.dart';
 import '../../../core/services/company_gifts_service.dart';
 import '../../../core/services/ai_receipt_service.dart';
@@ -99,10 +102,11 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
 
   void _ensureStreams(FirebaseFirestore? firestore, {bool force = false}) {
     if (firestore == null) return;
-    final isLocked = widget.lockedCompanySlug != null && widget.lockedCompanySlug!.isNotEmpty;
+    final lockedSlug = (widget.lockedCompanySlug ?? '').trim().toLowerCase();
+    final isLocked = lockedSlug.isNotEmpty;
     final isCampaignLocked = widget.lockedEventId != null && widget.lockedEventId!.isNotEmpty;
     final effectiveCampaignId = isCampaignLocked ? widget.lockedEventId! : _selectedCampaignId;
-    final effectiveKey = '${widget.lockedCompanySlug ?? 'all'}_$effectiveCampaignId';
+    final effectiveKey = '${widget.lockedCompanySlug ?? 'all'}_${effectiveCampaignId}_${_serverDateKey()}';
 
     if (_lastStreamsKey != effectiveKey || force || _transactionsStream == null) {
       _lastStreamsKey = effectiveKey;
@@ -110,16 +114,31 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       if (_eventsStream == null || force) {
         Query eventsQuery = firestore.collection('events');
         if (isLocked) {
-          eventsQuery = eventsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug);
+          eventsQuery = eventsQuery.where('companySlug', isEqualTo: lockedSlug);
         }
         _eventsStream = eventsQuery.snapshots();
       }
 
+      // Company users may only list receipts of their own company, so the
+      // query must always carry the companySlug filter when locked; the
+      // campaign filter is added on top of it.
       Query transactionsQuery = firestore.collection('receipts_transactions');
+      if (isLocked) {
+        transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: lockedSlug);
+      }
       if (effectiveCampaignId != 'ALL' && effectiveCampaignId != 'all' && effectiveCampaignId.isNotEmpty) {
         transactionsQuery = transactionsQuery.where('campaignId', isEqualTo: effectiveCampaignId);
-      } else if (isLocked) {
-        transactionsQuery = transactionsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug);
+      }
+      // 2.0.172: the unscoped super-admin view used to stream the WHOLE
+      // receipts collection and filter dates client-side (>90s). Push the
+      // date window to Firestore. Single-field range => no composite index.
+      // Scoped (company/campaign) queries keep the old shape until the
+      // companySlug/campaignId+timestamp indexes are deployed.
+      final range = _serverDateRange();
+      if (range != null && !isLocked && (effectiveCampaignId == 'all' || effectiveCampaignId == 'ALL' || effectiveCampaignId.isEmpty)) {
+        transactionsQuery = transactionsQuery
+            .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(range.start))
+            .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(range.end));
       }
       _transactionsStream = transactionsQuery.snapshots();
     }
@@ -401,15 +420,37 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       }
     }
 
-    // 5. Fallback containment matching
-    for (final canonical in canonicalBranches) {
-      final canonComp = _cleanBranchForComparison(canonical);
-      if (canonComp.isNotEmpty && (cleanComp.contains(canonComp) || canonComp.contains(cleanComp))) {
-        return canonical;
-      }
-    }
+    // 5. Exact, then the one longest name fully contained in the detected
+    // text. A shorter sibling is not selected just because it is listed first.
+    return CanonicalBranchResolver.pickCampaignName(clean, canonicalBranches) ?? clean;
+  }
 
-    return clean;
+  /// Server-side window for the current date filter (null = no bound).
+  DateTimeRange? _serverDateRange() {
+    final now = DateTime.now();
+    switch (_dateFilter) {
+      case DateFilterType.all:
+        return null;
+      case DateFilterType.today:
+        return DateTimeRange(
+            start: DateTime(now.year, now.month, now.day),
+            end: DateTime(now.year, now.month, now.day, 23, 59, 59, 999));
+      case DateFilterType.thisMonth:
+        return DateTimeRange(
+            start: DateTime(now.year, now.month, 1),
+            end: DateTime(now.year, now.month + 1, 1).subtract(const Duration(milliseconds: 1)));
+      case DateFilterType.custom:
+        if (_customDateRange == null) return null;
+        final st = _customDateRange!.start, en = _customDateRange!.end;
+        return DateTimeRange(
+            start: DateTime(st.year, st.month, st.day),
+            end: DateTime(en.year, en.month, en.day, 23, 59, 59, 999));
+    }
+  }
+
+  String _serverDateKey() {
+    final r = _serverDateRange();
+    return r == null ? 'any' : '${r.start.millisecondsSinceEpoch}-${r.end.millisecondsSinceEpoch}';
   }
 
   bool _passesDateFilter(DateTime? date) {
@@ -1087,7 +1128,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Text(
-                                    'Gemini 3.7',
+                                    AiConfig.fastTierModel,
                                     style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: colorScheme.primary),
                                   ),
                                 ),
@@ -1097,7 +1138,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                             Text(
                               hasImage
                                   ? (isAr
-                                      ? 'إعادة قراءة صورة الفاتورة بالكامل بذكاء Gemini 3.7 والتحقق الشامل من كافة عروض الشركة'
+                                      ? 'إعادة قراءة صورة الفاتورة بالكامل بذكاء ${AiConfig.fastTierModel} والتحقق الشامل من كافة عروض الشركة'
                                       : strings.fullAiRecheckSubtitle)
                                   : (isAr ? 'غير متاح: لا توجد صورة مرفقة لهذه الفاتورة' : 'Not available: No image attached'),
                               style: TextStyle(
@@ -1182,8 +1223,8 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
                             const SizedBox(height: 3),
                             Text(
                               isAr
-                                  ? 'فتح شات تفاعلي مباشر مع Gemini 3.7 Flash لتشخيص سبب الرفض وتدريب الذكاء فوراً واعتماد المعيار'
-                                  : 'Interactive chat with Gemini 3.7 Flash to diagnose rejections and deploy new directives',
+                                  ? 'فتح شات تفاعلي مباشر مع ${AiConfig.fastTierModel} لتشخيص سبب الرفض وتدريب الذكاء فوراً واعتماد المعيار'
+                                  : 'Interactive chat with ${AiConfig.fastTierModel} to diagnose rejections and deploy new directives',
                               style: TextStyle(fontSize: 11, color: colorScheme.onPrimaryFixedVariant, height: 1.3),
                             ),
                           ],
@@ -1773,9 +1814,9 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
       startDate: null,
       endDate: null,
       customPrompt: activeEvent.customPrompt,
-      allowMultipleChances: true,
-      multiplierBasis: 'both',
-      maxChancesPerReceipt: 0,
+      allowMultipleChances: activeEvent.allowMultipleChances,
+      multiplierBasis: activeEvent.multiplierBasis,
+      maxChancesPerReceipt: activeEvent.maxChancesPerReceipt,
       promotionalRules: combinedPromotionalRules,
       allowComplementaryReceipts: activeEvent.allowComplementaryReceipts,
     );
@@ -1856,7 +1897,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
         'total_value': totalSpend,
         if (result.receiptNumber.isNotEmpty) 'receipt_number': result.receiptNumber,
         if (result.storeChainDetected.isNotEmpty) 'store_chain_detected': result.storeChainDetected,
-        if (result.branchDetected.isNotEmpty) 'branch_detected': result.branchDetected,
+        if (canonical.trim().isNotEmpty) 'branch_detected': canonical,
         'canonical_branch': canonical,
         'analysis_duration_seconds': result.durationSeconds,
         'ai_kpi_rating': result.kpiRating,
@@ -2307,7 +2348,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                         unitValue: resolvedUnitValue,
                         isVoucher: resolvedIsVoucher,
                         linkedGifts: resolvedLinkedGifts,
-                        requireVoucherSerials: winningCampaign.requireVoucherSerials,
+                        requireVoucherSerials: winningCampaign.requireVoucherSerials, voucherSerialMode: winningCampaign.voucherSerialMode,
                       ),
                     ),
                   );
@@ -2537,7 +2578,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
       _selectedCampaignId = widget.lockedEventId!;
     }
     final eventsKey = widget.lockedCompanySlug ?? 'all';
-    final txKey = '${widget.lockedCompanySlug ?? 'all'}_$_selectedCampaignId';
+    final txKey = '${widget.lockedCompanySlug ?? 'all'}_${_selectedCampaignId}_${_serverDateKey()}';
 
     // Clean M3 Scaffold with NO duplicate AppBar & 0ms instant cached rendering
     return Scaffold(
@@ -2581,7 +2622,9 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
               }
 
               if (transactionsSnapshot.connectionState == ConnectionState.waiting && cachedDocs == null) {
-                return const Center(child: CircularProgressIndicator());
+                return SlowLoadPlaceholder(
+                  onRetry: () => setState(() => _ensureStreams(activeFirestore, force: true)),
+                );
               }
 
               final unFilteredDocs = cachedDocs ?? transactionsSnapshot.data?.docs ?? [];
@@ -2670,7 +2713,20 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
             : canonicalBranches;
 
         final rawBranch = (data['branch_detected'] ?? data['branch'] ?? '').toString().trim();
-        final canonicalBranch = _normalizeBranchName(rawBranch, eventBranches, isAr);
+        final storedBranchId = (data['branch_id'] ?? '').toString().trim();
+        final receiptNo = (data['receipt_number'] ?? '').toString();
+        final identity = CanonicalBranchResolver.resolve(
+          branchIds: event?.branchIds ?? const [],
+          branchNames: eventBranches,
+          branchId: storedBranchId,
+          detectedName: rawBranch,
+          receiptNumber: receiptNo,
+        );
+        // A known id or a unique store code corrects a stored short sibling.
+        // An uncertain row keeps the text it already has.
+        final canonicalBranch = identity.certain && identity.name.trim().isNotEmpty
+            ? identity.name.trim()
+            : (rawBranch.isNotEmpty ? rawBranch : _normalizeBranchName(rawBranch, eventBranches, isAr));
 
         DateTime? date;
         if (data['timestamp'] is Timestamp) {
@@ -3919,6 +3975,55 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
       );
     }
 
+    // 2.0.165: one-tap اليوم / الكل toggle next to the date menu. Stays in sync
+    // with the menu: shows no selection for هذا الشهر / مخصص.
+    Widget buildQuickDateToggle({bool isMobile = false}) {
+      Widget lbl(String t) => Text(
+            t,
+            style: GoogleFonts.cairo(fontSize: isMobile ? 11.5 : 12, fontWeight: FontWeight.bold),
+          );
+      final selected = <String>{
+        if (_dateFilter == DateFilterType.today) 'today',
+        if (_dateFilter == DateFilterType.all) 'all',
+      };
+      return SegmentedButton<String>(
+        key: const ValueKey('invoices_quick_date_toggle'),
+        segments: [
+          ButtonSegment<String>(
+            value: 'today',
+            label: lbl(isAr ? 'اليوم' : (isHi ? 'आज' : 'Today')),
+            icon: isMobile ? null : const Icon(Icons.today_rounded, size: 16),
+          ),
+          ButtonSegment<String>(
+            value: 'all',
+            label: lbl(isAr ? 'الكل' : (isHi ? 'सभी' : 'All')),
+            icon: isMobile ? null : const Icon(Icons.calendar_today_rounded, size: 16),
+          ),
+        ],
+        selected: selected,
+        emptySelectionAllowed: true,
+        onSelectionChanged: (set) {
+          if (set.isEmpty) return; // tapping the selected one keeps it
+          setState(() {
+            _dateFilter = set.first == 'all' ? DateFilterType.all : DateFilterType.today;
+            _customDateRange = null;
+          });
+          _resetPagination();
+        },
+        showSelectedIcon: !isMobile,
+        style: SegmentedButton.styleFrom(
+          selectedBackgroundColor: colorScheme.primaryContainer,
+          selectedForegroundColor: colorScheme.onPrimaryContainer,
+          backgroundColor: colorScheme.surfaceContainerLow,
+          foregroundColor: colorScheme.onSurfaceVariant,
+          side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.7)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          visualDensity: VisualDensity.compact,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+      );
+    }
+
     Widget buildDatePickerWidget({bool isMobile = false}) {
       final String dateLabel = _getDateFilterLabel(strings);
 
@@ -4202,6 +4307,8 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                       const SizedBox(width: 10),
                       buildBranchPickerWidget(isMobile: false),
                       const SizedBox(width: 10),
+                      buildQuickDateToggle(isMobile: false),
+                      const SizedBox(width: 6),
                       buildDatePickerWidget(isMobile: false),
                       const SizedBox(width: 10),
                       exportCsvButton,
@@ -4248,6 +4355,12 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                 ),
                 const SizedBox(height: 8),
 
+                // 2.0.165: quick اليوم / الكل toggle on its own row (fits 360px).
+                SizedBox(
+                  width: double.infinity,
+                  child: buildQuickDateToggle(isMobile: true),
+                ),
+                const SizedBox(height: 8),
                 // Row 4: (التاريخ + مجموعة أزرار الإجراءات CSV/فلترة/مسح)
                 Row(
                   children: [

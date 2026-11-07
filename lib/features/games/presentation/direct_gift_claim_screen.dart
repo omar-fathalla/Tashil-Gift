@@ -1,3 +1,5 @@
+import 'package:al_mraay/core/utils/receipt_unit_clamp.dart';
+import 'package:al_mraay/core/utils/claim_retry.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,12 +12,14 @@ import '../../../core/services/game_audio_service.dart';
 import '../../../core/widgets/game_sound_controls.dart';
 import '../../../core/utils/error_handler.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
+import '../../../core/utils/canonical_branch_resolver.dart';
 import '../../../core/animations/m3_motion.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../core/widgets/switch_point_branding.dart';
 import '../../../core/widgets/m3_list_tile.dart';
 import '../../admin/domain/event_model.dart';
+import '../../../core/services/ai_receipt_service.dart' show RewardChoiceGroup, consolidateLinkedGifts, chosenRewardReceiptFields;
 import 'winner_celebration_dialog.dart';
 import 'game_demo_banner.dart';
 import '../../company_portal/domain/whatsapp_gateway_service.dart';
@@ -54,6 +58,7 @@ class DirectGiftClaimScreen extends ConsumerStatefulWidget {
   final bool? isVoucher;
   final List<LinkedGiftAllocation> linkedGifts;
   final bool? requireVoucherSerials;
+  final String? voucherSerialMode;
   final String? customerPhone;
   final String? customerName;
   final String? retailChainName;
@@ -62,6 +67,10 @@ class DirectGiftClaimScreen extends ConsumerStatefulWidget {
   final String? receiptNumber;
   final String? companySlug;
   final bool? enableWhatsAppWinnerNotification;
+  /// Rules where the customer picks one reward option ("خيارات المكافأة").
+  final List<RewardChoiceGroup> rewardChoiceGroups;
+  /// Gifts from matched rules without a choice (handed over regardless of the pick).
+  final List<LinkedGiftAllocation> baseLinkedGifts;
 
   const DirectGiftClaimScreen({
     super.key,
@@ -75,6 +84,7 @@ class DirectGiftClaimScreen extends ConsumerStatefulWidget {
     this.isVoucher,
     this.linkedGifts = const [],
     this.requireVoucherSerials,
+    this.voucherSerialMode,
     this.customerPhone,
     this.customerName,
     this.retailChainName,
@@ -83,6 +93,8 @@ class DirectGiftClaimScreen extends ConsumerStatefulWidget {
     this.receiptNumber,
     this.companySlug,
     this.enableWhatsAppWinnerNotification,
+    this.rewardChoiceGroups = const [],
+    this.baseLinkedGifts = const [],
   });
 
   @override
@@ -97,6 +109,11 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
 
   bool _isClaiming = false;
   bool _isClaimed = false;
+  bool _isHandoverConfirmed = false;
+  bool _autoClaimAttempted = false;
+  String? _claimError;
+  String? _claimedDisplayPrize;
+  Future<WhatsAppGatewayResult?>? _whatsappFuture;
   int? _remainingStock;
   String? _resolvedBranchName;
 
@@ -105,21 +122,88 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
   bool? _resolvedIsVoucher;
   List<LinkedGiftAllocation>? _resolvedLinkedGifts;
   bool? _requireVoucherSerials;
+  String? _voucherSerialMode;
   bool? _enableWhatsAppWinnerNotification;
   String? _resolvedCustomerPhone;
+  /// 2.0.164: max pieces this receipt may receive (null = no cap).
+  int? _pieceLimit;
 
-  bool get _isVoucherSerialsRequired => _requireVoucherSerials ?? widget.requireVoucherSerials ?? false;
+  String get _effectiveVoucherSerialMode {
+    final m = _voucherSerialMode ?? widget.voucherSerialMode;
+    if (m == 'required' || m == 'optional' || m == 'hidden') return m!;
+    return (_requireVoucherSerials ?? widget.requireVoucherSerials ?? false) ? 'required' : 'optional';
+  }
+  bool get _isVoucherSerialsHidden => _effectiveVoucherSerialMode == 'hidden';
+  bool get _isVoucherSerialsRequired => _effectiveVoucherSerialMode == 'required';
   bool get _isWhatsAppWinnerNotificationEnabled =>
       _enableWhatsAppWinnerNotification ?? widget.enableWhatsAppWinnerNotification ?? true;
 
   final List<VoucherSerialSlot> _voucherSlots = [];
 
+  // ── Reward options ("خيارات المكافأة") ──
+  List<RewardChoiceGroup>? _discoveredChoiceGroups;
+  final Map<int, int> _chosenOptionIdx = {};
+
+  List<RewardChoiceGroup> get _choiceGroups =>
+      widget.rewardChoiceGroups.isNotEmpty ? widget.rewardChoiceGroups : (_discoveredChoiceGroups ?? const []);
+  bool get _hasRewardChoice => _choiceGroups.isNotEmpty;
+  bool get _allChoicesMade =>
+      _hasRewardChoice && List.generate(_choiceGroups.length, (i) => _chosenOptionIdx.containsKey(i)).every((b) => b);
+
+  List<LinkedGiftAllocation> get _chosenAllocations => [
+        for (int i = 0; i < _choiceGroups.length; i++)
+          if (_chosenOptionIdx[i] != null)
+            _choiceGroups[i].options[_chosenOptionIdx[i]!].toAllocation(multiplier: _choiceGroups[i].multiplier),
+      ];
+
+  List<LinkedGiftAllocation> get _choiceLinkedGifts => consolidateLinkedGifts([
+        ...(widget.rewardChoiceGroups.isNotEmpty ? widget.baseLinkedGifts : const <LinkedGiftAllocation>[]),
+        ..._chosenAllocations,
+      ]);
+
+  List<Map<String, dynamic>> get _chosenRecords => [
+        for (int i = 0; i < _choiceGroups.length; i++)
+          if (_chosenOptionIdx[i] != null)
+            _choiceGroups[i].options[_chosenOptionIdx[i]!].toChosenRecord(
+              ruleId: _choiceGroups[i].ruleId,
+              ruleTitle: _choiceGroups[i].ruleTitle,
+              quantity: _choiceGroups[i].multiplier,
+            ),
+      ];
+
+  void _selectRewardOption(int groupIdx, int optionIdx) {
+    if (_isClaiming || _isClaimed) return;
+    setState(() {
+      _chosenOptionIdx[groupIdx] = optionIdx;
+      _syncVoucherSlots();
+    });
+    if (_allChoicesMade) _maybeAutoClaim();
+  }
+
+  List<LinkedGiftAllocation> get _rawEffectiveLinkedGifts {
+    if (_hasRewardChoice && _allChoicesMade) return _choiceLinkedGifts;
+    return (_resolvedLinkedGifts != null && _resolvedLinkedGifts!.isNotEmpty)
+        ? _resolvedLinkedGifts!
+        : widget.linkedGifts;
+  }
+
+  /// 2.0.164: never show or claim more pieces than the receipt's cap
+  /// (highest value first), so the server never has to trim.
   List<LinkedGiftAllocation> get _effectiveLinkedGifts =>
-      (_resolvedLinkedGifts != null && _resolvedLinkedGifts!.isNotEmpty)
-          ? _resolvedLinkedGifts!
-          : widget.linkedGifts;
+      clampLinkedGiftsToPieces(_rawEffectiveLinkedGifts, _pieceLimit);
+
+  bool get _giftsWereClamped =>
+      _pieceLimit != null && totalPieces(_rawEffectiveLinkedGifts) > _pieceLimit!;
+
+  /// Quantity used when the rule has no linked gifts, clamped to the cap.
+  int get _effectiveQuantity {
+    final q = widget.quantity > 0 ? widget.quantity : 1;
+    if (_pieceLimit != null && _pieceLimit! > 0 && q > _pieceLimit!) return _pieceLimit!;
+    return q;
+  }
 
   bool get _effectiveIsVoucher {
+    if (_hasRewardChoice && _allChoicesMade) return _choiceLinkedGifts.any((g) => g.isVoucher);
     if (_resolvedIsVoucher != null) return _resolvedIsVoucher!;
     if (widget.isVoucher != null) return widget.isVoucher!;
     if (_effectiveLinkedGifts.isNotEmpty) {
@@ -144,6 +228,10 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
 
   double? get _effectiveUnitValue {
     if (!_effectiveIsVoucher) return null;
+    if (_hasRewardChoice && _allChoicesMade) {
+      final total = _choiceLinkedGifts.fold<double>(0.0, (acc, g) => acc + g.totalMonetaryValue);
+      return total > 0 ? total : null;
+    }
     if (_resolvedUnitValue != null && _resolvedUnitValue! > 0) {
       return _resolvedUnitValue;
     }
@@ -162,6 +250,12 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
   }
 
   String get _effectivePrizeName {
+    if (_giftsWereClamped && _effectiveLinkedGifts.isNotEmpty) {
+      return linkedGiftsSummary(_effectiveLinkedGifts);
+    }
+    if (_hasRewardChoice && _allChoicesMade) {
+      return linkedGiftsSummary(_choiceLinkedGifts);
+    }
     if (_resolvedPrizeName != null &&
         _resolvedPrizeName!.isNotEmpty &&
         _resolvedPrizeName != 'هدية ترويجية مميزة' &&
@@ -206,7 +300,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
     );
     _animController.forward();
     _syncVoucherSlots();
-    _fetchRemainingStock();
+    _fetchRemainingStock().whenComplete(_maybeAutoClaim);
   }
 
   @override
@@ -236,7 +330,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
         }
       }
     } else if (_effectiveIsVoucher) {
-      final effectiveQty = widget.quantity > 0 ? widget.quantity : 1;
+      final effectiveQty = _effectiveQuantity;
       for (int i = 0; i < effectiveQty; i++) {
         requiredCards.add((
           giftId: '',
@@ -325,6 +419,13 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
           }
         }
 
+        if (matchedRuleItem != null && widget.rewardChoiceGroups.isEmpty) {
+          final g = RewardChoiceGroup.fromRule(matchedRuleItem, multiplier: widget.quantity > 0 ? widget.quantity : 1);
+          if (g != null && mounted) {
+            setState(() => _discoveredChoiceGroups = [g]);
+          }
+        }
+
         if (matchedRuleItem != null) {
           discoveredName = matchedRuleItem.rewardValue.isNotEmpty
               ? matchedRuleItem.rewardValue
@@ -349,34 +450,30 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
         final branchNamesList = (data['branchNames'] as List?)?.map((e) => e.toString()).toList() ?? [];
         final branchIdsList = (data['branchIds'] as List?)?.map((e) => e.toString()).toList() ?? [];
         final explicitWidgetBranch = (widget.branchName ?? '').trim();
+        final storedBranchId = (widget.branchId ?? '').trim();
 
-        if (explicitWidgetBranch.isNotEmpty) {
-          // Try to find exact canonical branch name matching explicitWidgetBranch
-          for (final bn in branchNamesList) {
-            if (CompanyGiftsService.matchesBranchName(bn, explicitWidgetBranch)) {
-              branchNameFound = bn;
-              break;
-            }
-          }
-          branchNameFound ??= explicitWidgetBranch;
-        } else if (widget.branchId != null && widget.branchId!.isNotEmpty) {
-          final idx = branchIdsList.indexOf(widget.branchId!);
+        // The id already chosen at save wins. Do not remap it through a
+        // shorter name that shares a token.
+        if (storedBranchId.isNotEmpty) {
+          final idx = branchIdsList.indexOf(storedBranchId);
           if (idx != -1 && idx < branchNamesList.length) {
             branchNameFound = branchNamesList[idx];
-          } else {
-            for (final bn in branchNamesList) {
-              if (bn == widget.branchId || CompanyGiftsService.matchesBranchName(bn, widget.branchId!)) {
-                branchNameFound = bn;
-                break;
-              }
-            }
           }
+        }
+        if (branchNameFound == null && explicitWidgetBranch.isNotEmpty) {
+          branchNameFound = CanonicalBranchResolver.pickCampaignName(
+                explicitWidgetBranch,
+                branchNamesList,
+              ) ??
+              explicitWidgetBranch;
         }
 
         final targetPrizeName = (discoveredName != null && discoveredName.isNotEmpty)
             ? discoveredName
             : widget.prizeName;
-        final targetBranch = _resolvedBranchName ?? branchNameFound ?? widget.branchId;
+        final targetBranch = storedBranchId.isNotEmpty
+            ? storedBranchId
+            : (_resolvedBranchName ?? branchNameFound ?? widget.branchId);
 
         final matchIdx = CompanyGiftsService.findBestPrizeMatchIndex(
           prizes,
@@ -390,10 +487,19 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
         if (matchIdx != -1) {
           foundRemaining = (prizes[matchIdx]['remainingQuantity'] as num?)?.toInt() ?? 0;
           final pBranch = (prizes[matchIdx]['branchName'] ?? '').toString().trim();
-          if (pBranch.isNotEmpty && (branchNameFound == null || CompanyGiftsService.matchesBranchName(pBranch, branchNameFound))) {
+          // Keep the name already taken from the stored id. Do not replace it
+          // with a shorter sibling that only shares a token.
+          if (pBranch.isNotEmpty && (branchNameFound == null || pBranch == branchNameFound)) {
             branchNameFound = pBranch;
           }
         } else {
+          final prizeBranchNames = prizes
+              .map((p) => (p['branchName'] ?? '').toString().trim())
+              .where((name) => name.isNotEmpty)
+              .toList();
+          final pickedPrizeBranch = (targetBranch == null || targetBranch.isEmpty)
+              ? null
+              : CanonicalBranchResolver.pickCampaignName(targetBranch, prizeBranchNames);
           for (final p in prizes) {
             final matches = p['giftId'] == widget.prizeName ||
                 p['name'] == widget.prizeName ||
@@ -405,7 +511,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                   targetBranch.isNotEmpty &&
                   (pBranchId == targetBranch ||
                       pBranchName == targetBranch ||
-                      CompanyGiftsService.matchesBranchName(pBranchName, targetBranch)));
+                      (pickedPrizeBranch != null && pBranchName == pickedPrizeBranch)));
 
               if (isBranchMatch) {
                 foundRemaining = (p['remainingQuantity'] as num?)?.toInt() ?? 0;
@@ -424,8 +530,10 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
         if (mounted) {
           setState(() {
             _requireVoucherSerials = data['requireVoucherSerials'] == true || data['require_voucher_serials'] == true;
+            _voucherSerialMode = EventModel.resolveVoucherSerialMode(Map<String, dynamic>.from(data));
             _enableWhatsAppWinnerNotification = data['enableWhatsAppWinnerNotification'] != false && data['enable_whatsapp_winner_notification'] != false;
             _remainingStock = foundRemaining >= 0 ? foundRemaining : null;
+            _pieceLimit = receiptPieceLimitFromEvent(Map<String, dynamic>.from(data));
             _resolvedBranchName = branchNameFound;
             final isPlaceholder = widget.prizeName.isEmpty ||
                 widget.prizeName == 'هدية ترويجية مميزة' ||
@@ -459,35 +567,28 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
     setState(() {
       _isClaiming = false;
       _isClaimed = false;
+      _isHandoverConfirmed = false;
+      _claimError = null;
     });
     _animController.reset();
     _animController.forward();
     ref.read(gameAudioServiceProvider).playGiftUnlock();
   }
 
+  /// 2.0.163: the gift is claimed AUTOMATICALLY as soon as the win shows
+  /// (stock decremented once, server blocks a second claim). The rep's button
+  /// only confirms the physical handover, or retries a failed auto-claim.
   Future<void> _claimAndHandoverGift() async {
-    if (_isClaiming || _isClaimed) return;
-
-    if (_remainingStock != null && _remainingStock! <= 0 && !widget.isDemo) {
-      final strings = AppStrings.of(ref);
-      final branch = _resolvedBranchName ?? widget.branchId ?? '';
-      final msg = branch.isNotEmpty
-          ? strings.directGiftOutOfStockAtBranch(branch)
-          : strings.directGiftOutOfStock;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(msg),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
+    if (_isClaiming || _isHandoverConfirmed) return;
+    if (!_isClaimed) {
+      await _autoClaim(fromTap: true);
+      // Demo mode has no auto-claim: simulate the whole flow in one tap.
+      if (!widget.isDemo || !_isClaimed || !mounted) return;
     }
-
     _syncVoucherSlots();
 
     // 1. Validate physical voucher serial numbers (mandatory if _isVoucherSerialsRequired, or optional)
-    if (_voucherSlots.isNotEmpty) {
+    if (_voucherSlots.isNotEmpty && !_isVoucherSerialsHidden) {
       final strings = AppStrings.of(ref);
       final List<String> enteredSerials = [];
 
@@ -583,10 +684,58 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
       }
     }
 
-    setState(() => _isClaiming = true);
+    await _confirmHandover();
+  }
+
+  void _maybeAutoClaim() {
+    if (!mounted || widget.isDemo || _autoClaimAttempted) return;
+    if (_isClaimed || _isClaiming) return;
+    if (_hasRewardChoice && !_allChoicesMade) return;
+    _autoClaimAttempted = true;
+    _autoClaim();
+  }
+
+  Future<void> _autoClaim({bool fromTap = false}) async {
+    if (_isClaiming || _isClaimed || !mounted) return;
+
+    if (_hasRewardChoice && !_allChoicesMade) {
+      if (!fromTap) return;
+      final isAr = ref.isArabic;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(isAr ? 'اختار المكافأة اللي العميل عايزها الأول' : 'Please choose the customer\'s reward first'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    if (!_hasRewardChoice && _remainingStock != null && _remainingStock! <= 0 && !widget.isDemo) {
+      final strings = AppStrings.of(ref);
+      final branch = _resolvedBranchName ?? widget.branchId ?? '';
+      final msg = branch.isNotEmpty
+          ? strings.directGiftOutOfStockAtBranch(branch)
+          : strings.directGiftOutOfStock;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      if (!fromTap) setState(() => _claimError = msg);
+      return;
+    }
+
+    _syncVoucherSlots();
+    setState(() {
+      _isClaiming = true;
+      _claimError = null;
+    });
 
     try {
-      final effectiveQuantity = widget.quantity > 0 ? widget.quantity : 1;
+      final effectiveQuantity = _effectiveQuantity;
       final finalPrizeName = _effectivePrizeName;
       final finalUnitValue = _effectiveUnitValue;
       final finalIsVoucher = _effectiveIsVoucher;
@@ -595,103 +744,80 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
       final displayPrize = effectiveQuantity > 1
           ? '$finalPrizeName (عدد $effectiveQuantity)'
           : finalPrizeName;
-
-      Future<WhatsAppGatewayResult?>? whatsappFuture;
+      _claimedDisplayPrize = displayPrize;
 
       if (!widget.isDemo && widget.transactionId.isNotEmpty) {
-        final firestore = ref.read(firestoreProvider);
         final claimedGiftsList = finalLinkedGifts.isNotEmpty
-            ? finalLinkedGifts.map((g) {
-                final gSerials = g.isVoucher
-                    ? _voucherSlots
-                        .where((s) => (s.giftId.isNotEmpty && s.giftId == g.giftId) || s.giftName == g.giftName)
-                        .map((s) => s.controller.text.toEnglishDigits(convertDecimal: false).trim())
-                        .where((t) => t.isNotEmpty)
-                        .toList()
-                    : <String>[];
-
-                return {
+            ? finalLinkedGifts.map((g) => {
                   'giftId': g.giftId,
                   'giftName': g.giftName,
                   'quantity': g.quantity,
                   'unitValue': g.unitValue,
                   'isVoucher': g.isVoucher,
-                  if (gSerials.isNotEmpty) 'serials': gSerials,
-                };
-              }).toList()
+                }).toList()
             : [{
                 'giftId': '',
                 'giftName': finalPrizeName,
                 'quantity': effectiveQuantity,
                 'unitValue': finalUnitValue ?? 0.0,
                 'isVoucher': finalIsVoucher,
-                if (_voucherSlots.isNotEmpty)
-                  'serials': _voucherSlots
-                      .map((s) => s.controller.text.toEnglishDigits(convertDecimal: false).trim())
-                      .where((t) => t.isNotEmpty)
-                      .toList(),
               }];
 
-        final allVoucherSerials = _voucherSlots
-            .map((s) => s.controller.text.toEnglishDigits(convertDecimal: false).trim())
-            .where((t) => t.isNotEmpty)
-            .toList();
-
-        // 1. Update receipts_transactions record
-        await firestore.collection('receipts_transactions').doc(widget.transactionId).update({
-          'game_played': true,
-          'game_type': 'directGift',
-          'prize_won': displayPrize,
-          'prizes_won': List.filled(effectiveQuantity, finalPrizeName),
-          'claimed_gifts': claimedGiftsList,
-          if (allVoucherSerials.isNotEmpty) 'voucher_serials': allVoucherSerials,
-          'event_id': widget.eventId,
-          'branch_id': widget.branchId ?? '',
-          'remaining_chances': 0,
-          'claim_status': 'handed_over',
-          'claimed_at': DateTime.now().toIso8601String(),
-        });
-
-        // 2. Decrement inventory from campaign/branch
-        if (widget.eventId.isNotEmpty) {
-          final giftsService = ref.read(companyGiftsServiceProvider);
-          if (finalLinkedGifts.isNotEmpty) {
-            for (final giftAlloc in finalLinkedGifts) {
-              await giftsService.decrementCampaignPrize(
-                widget.eventId,
-                giftAlloc.giftId.isNotEmpty ? giftAlloc.giftId : giftAlloc.giftName,
-                branchId: widget.branchId,
-                count: giftAlloc.quantity,
-                unitValue: giftAlloc.unitValue,
-                isVoucher: giftAlloc.isVoucher,
-                gameType: 'directGift',
-              );
-            }
-          } else {
-            await giftsService.decrementCampaignPrize(
-              widget.eventId,
-              finalPrizeName,
-              branchId: widget.branchId,
-              count: effectiveQuantity,
-              unitValue: finalUnitValue,
-              isVoucher: finalIsVoucher,
-              gameType: 'directGift',
-            );
+        final giftsService = ref.read(companyGiftsServiceProvider);
+        final decrements = <Map<String, dynamic>>[];
+        if (finalLinkedGifts.isNotEmpty) {
+          for (final giftAlloc in finalLinkedGifts) {
+            decrements.add({
+              'prizeIdentifier': giftAlloc.giftId.isNotEmpty ? giftAlloc.giftId : giftAlloc.giftName,
+              'branchId': widget.branchId,
+              'count': giftAlloc.quantity,
+              'unitValue': giftAlloc.unitValue,
+              'isVoucher': giftAlloc.isVoucher,
+              'gameType': 'directGift',
+            });
           }
+        } else {
+          decrements.add({
+            'prizeIdentifier': finalPrizeName,
+            'branchId': widget.branchId,
+            'count': effectiveQuantity,
+            'unitValue': finalUnitValue,
+            'isVoucher': finalIsVoucher,
+            'gameType': 'directGift',
+          });
         }
+        Future<void> callOnce() => giftsService.claimCampaignPrizes(
+              eventId: widget.eventId,
+              receiptId: widget.transactionId,
+              receiptPatch: {
+                'game_played': true,
+                'game_type': 'directGift',
+                'prize_won': displayPrize,
+                'prizes_won': List.filled(effectiveQuantity, finalPrizeName),
+                'claimed_gifts': claimedGiftsList,
+                if (_hasRewardChoice && _chosenRecords.isNotEmpty) 'chosen_reward_option': _chosenRecords.first,
+                if (_hasRewardChoice && _chosenRecords.isNotEmpty) 'chosen_reward_options': _chosenRecords,
+                if (_hasRewardChoice && _allChoicesMade) ...chosenRewardReceiptFields(finalLinkedGifts),
+                'event_id': widget.eventId,
+                'branch_id': widget.branchId ?? '',
+                'remaining_chances': 0,
+                'claim_status': 'handed_over',
+                'claimed_at': DateTime.now().toIso8601String(),
+              },
+              decrements: decrements,
+            );
+        await runClaimWithSingleRetry(callOnce);
 
-        // 3. Dispatch automated celebratory WhatsApp message to winner
-        whatsappFuture = _dispatchWhatsAppWinnerNotification(
+        // Celebratory WhatsApp message goes out as soon as the gift is claimed.
+        _whatsappFuture = _dispatchWhatsAppWinnerNotification(
           displayPrize: displayPrize,
-          voucherSerials: allVoucherSerials,
+          voucherSerials: const [],
         );
       } else {
-        // Demo simulation pause
         await Future.delayed(const Duration(milliseconds: 600));
       }
 
       if (!mounted) return;
-
       setState(() {
         _isClaiming = false;
         _isClaimed = true;
@@ -699,35 +825,67 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
           _remainingStock = (_remainingStock! - effectiveQuantity).clamp(0, double.infinity).toInt();
         }
       });
-
-      final effectivePhone = (_resolvedCustomerPhone ?? widget.customerPhone ?? '').trim();
-
-      // 4. Trigger celebration modal
-      await showWinnerCelebrationDialog(
-        context: context,
-        prizeName: displayPrize,
-        unitValue: finalUnitValue,
-        isVoucher: finalIsVoucher,
-        linkedGifts: finalLinkedGifts,
-        remainingChances: 0,
-        recipientPhone: effectivePhone.isNotEmpty ? effectivePhone : null,
-        whatsappDispatchFuture: _isWhatsAppWinnerNotificationEnabled ? whatsappFuture : null,
-        onNextChance: null,
-        onNextCustomer: () {
-          Navigator.of(context).pop();
-        },
-      );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isClaiming = false);
+      final msg = AppErrorHandler.claimFailureMessage(e);
+      setState(() {
+        _isClaiming = false;
+        _claimError = msg;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(AppErrorHandler.getFriendlyMessage(e, defaultMessage: 'حدث خطأ أثناء تسجيل تسليم الهدية')),
+          content: Text(msg),
           backgroundColor: Theme.of(context).colorScheme.error,
           behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 6),
         ),
       );
     }
+  }
+
+  /// Cosmetic handover confirmation: no stock effect (the claim already ran).
+  Future<void> _confirmHandover() async {
+    setState(() => _isClaiming = true);
+    final allVoucherSerials = _voucherSlots
+        .map((s) => s.controller.text.toEnglishDigits(convertDecimal: false).trim())
+        .where((t) => t.isNotEmpty)
+        .toList();
+    if (!widget.isDemo && widget.transactionId.isNotEmpty) {
+      try {
+        await ref.read(companyGiftsServiceProvider).claimCampaignPrizes(
+          eventId: widget.eventId,
+          receiptId: widget.transactionId,
+          receiptPatch: {
+            'handed_over_confirmed': true,
+            if (allVoucherSerials.isNotEmpty) 'voucher_serials': allVoucherSerials,
+          },
+          decrements: const [],
+        );
+      } catch (e) {
+        // The gift is already claimed; a failed confirmation must not block the rep.
+        debugPrint('Handover confirmation not saved: $e');
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _isClaiming = false;
+      _isHandoverConfirmed = true;
+    });
+    final effectivePhone = (_resolvedCustomerPhone ?? widget.customerPhone ?? '').trim();
+    await showWinnerCelebrationDialog(
+      context: context,
+      prizeName: _claimedDisplayPrize ?? _effectivePrizeName,
+      unitValue: _effectiveUnitValue,
+      isVoucher: _effectiveIsVoucher,
+      linkedGifts: _effectiveLinkedGifts,
+      remainingChances: 0,
+      recipientPhone: effectivePhone.isNotEmpty ? effectivePhone : null,
+      whatsappDispatchFuture: _isWhatsAppWinnerNotificationEnabled ? _whatsappFuture : null,
+      onNextChance: null,
+      onNextCustomer: () {
+        Navigator.of(context).pop();
+      },
+    );
   }
 
   /// Dispatches celebratory WhatsApp message to winner upon gift handover
@@ -766,8 +924,8 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
     final colorScheme = theme.colorScheme;
     final isAr = ref.isArabic;
     final strings = AppStrings.of(ref);
-    final effectiveQuantity = widget.quantity > 0 ? widget.quantity : 1;
-    final isOutOfStock = _remainingStock != null && _remainingStock! <= 0 && !widget.isDemo;
+    final effectiveQuantity = _effectiveQuantity;
+    final isOutOfStock = !_hasRewardChoice && _remainingStock != null && _remainingStock! <= 0 && !widget.isDemo;
 
     _syncVoucherSlots();
 
@@ -1340,6 +1498,9 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
                               ),
                             ),
 
+                            // Reward options picker (customer chooses exactly one per rule)
+                            if (_hasRewardChoice) _buildRewardChoiceCard(context, colorScheme, isAr),
+
                             // Mandatory Physical Voucher Serial Numbers Input Card
                             _buildVoucherSerialsCard(context, colorScheme, strings, isAr),
 
@@ -1413,30 +1574,66 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
 
                             const SizedBox(height: 28),
 
-                            // Action Button (Handover & Claim)
-                            M3ActionButton(
-                              onPressed: (_isClaiming || _isClaimed || isOutOfStock) ? null : _claimAndHandoverGift,
-                              label: _isClaimed
-                                  ? (isAr ? 'تم تسليم الهدية بنجاح' : 'Gift Handed Over')
-                                  : (isOutOfStock ? (isAr ? 'المخزون نافد' : 'Out of Stock') : strings.claimDirectGift),
-                              icon: _isClaimed
-                                  ? Icons.done_all_rounded
-                                  : (isOutOfStock ? Icons.block_rounded : Icons.check_circle_rounded),
-                              isLoading: _isClaiming,
-                            ),
-                            const SizedBox(height: 12),
-
-                            // Back / Cancel text button
-                            TextButton.icon(
-                              onPressed: _isClaiming ? null : () => Navigator.of(context).pop(),
-                              icon: Icon(Icons.arrow_back_rounded, size: 18, color: colorScheme.onSurfaceVariant),
-                              label: Text(
-                                isAr ? 'العودة لشاشة الفحص' : 'Back to Validation',
-                                style: GoogleFonts.cairo(
-                                  fontSize: 14,
-                                  color: colorScheme.onSurfaceVariant,
+                            // 2.0.163: claim status (auto-claimed on win).
+                            if (!widget.isDemo)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: Column(
+                                  children: [
+                                    Chip(
+                                      avatar: Icon(
+                                        _isClaimed ? Icons.verified_rounded : Icons.hourglass_top_rounded,
+                                        size: 18,
+                                        color: _isClaimed ? colorScheme.primary : colorScheme.tertiary,
+                                      ),
+                                      label: Text(
+                                        _isClaimed
+                                            ? (isAr ? 'تم الصرف' : 'Dispensed')
+                                            : (isAr ? 'مستحق' : 'Due'),
+                                        style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                    if (_claimError != null && !_isClaimed)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 8),
+                                        child: Text(
+                                          _claimError!,
+                                          textAlign: TextAlign.center,
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: colorScheme.error,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               ),
+
+                            // Action Button: retries a failed auto-claim, or
+                            // confirms the physical handover (no stock effect).
+                            M3ActionButton(
+                              onPressed: (_isClaiming ||
+                                      _isHandoverConfirmed ||
+                                      (isOutOfStock && !_isClaimed) ||
+                                      (_hasRewardChoice && !_allChoicesMade))
+                                  ? null
+                                  : _claimAndHandoverGift,
+                              label: _isHandoverConfirmed
+                                  ? (isAr ? 'تم الصرف وتأكيد التسليم' : 'Dispensed & handed over')
+                                  : _isClaimed
+                                      ? (isAr ? 'تأكيد تسليم الهدية للعميل' : 'Confirm handover')
+                                      : (isOutOfStock
+                                          ? (isAr ? 'المخزون نافد' : 'Out of Stock')
+                                          : (_claimError != null
+                                              ? (isAr ? 'إعادة محاولة الصرف' : 'Retry dispensing')
+                                              : strings.claimDirectGift)),
+                              icon: _isHandoverConfirmed
+                                  ? Icons.done_all_rounded
+                                  : _isClaimed
+                                      ? Icons.handshake_rounded
+                                      : (isOutOfStock ? Icons.block_rounded : Icons.check_circle_rounded),
+                              isLoading: _isClaiming,
                             ),
                           ],
                         ),
@@ -1452,6 +1649,83 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
     );
   }
 
+  /// Builds the M3 reward options card ("اختار مكافأتك").
+  Widget _buildRewardChoiceCard(BuildContext context, ColorScheme colorScheme, bool isAr) {
+    final groups = _choiceGroups;
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Card(
+        elevation: 0,
+        color: colorScheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: colorScheme.outlineVariant),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.touch_app_rounded, color: colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      isAr ? 'اختار مكافأتك (اختيار واحد)' : 'Choose your reward (pick one)',
+                      style: GoogleFonts.cairo(fontSize: 15, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+                    ),
+                  ),
+                ],
+              ),
+              for (int gi = 0; gi < groups.length; gi++) ...[
+                const SizedBox(height: 12),
+                if (groups.length > 1 || groups[gi].ruleTitle.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      groups[gi].multiplier > 1
+                          ? '${groups[gi].ruleTitle} (× ${groups[gi].multiplier})'
+                          : groups[gi].ruleTitle,
+                      style: GoogleFonts.cairo(fontSize: 12.5, color: colorScheme.onSurfaceVariant),
+                    ),
+                  ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (int oi = 0; oi < groups[gi].options.length; oi++)
+                      ChoiceChip(
+                        key: ValueKey('reward_option_${gi}_$oi'),
+                        avatar: Icon(
+                          groups[gi].options[oi].isVoucher ? Icons.local_activity_rounded : Icons.card_giftcard_rounded,
+                          size: 18,
+                        ),
+                        label: Text(
+                          groups[gi].options[oi].displayLabel,
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+                        ),
+                        selected: _chosenOptionIdx[gi] == oi,
+                        onSelected: (_isClaiming || _isClaimed) ? null : (_) => _selectRewardOption(gi, oi),
+                      ),
+                  ],
+                ),
+              ],
+              if (!_allChoicesMade)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(
+                    isAr ? 'لازم العميل يختار مكافأة قبل التسليم' : 'The customer must pick a reward before handover',
+                    style: GoogleFonts.cairo(fontSize: 12, color: colorScheme.error),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Builds the M3 Physical Voucher Serial Numbers Card
   Widget _buildVoucherSerialsCard(
     BuildContext context,
@@ -1459,7 +1733,7 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
     AppStrings strings,
     bool isAr,
   ) {
-    if (_voucherSlots.isEmpty) return const SizedBox.shrink();
+    if (_voucherSlots.isEmpty || _isVoucherSerialsHidden) return const SizedBox.shrink();
 
     final isMandatory = _isVoucherSerialsRequired;
     final sectionTitle = isMandatory

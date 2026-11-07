@@ -10,13 +10,13 @@ class AppVersionConfig {
   static const int minor = 0;
 
   /// Patch / Iteration version (Feature additions, enhancements, bugfixes)
-  static const int patch = 116;
+  static const int patch = 173;
 
   /// Global sequential build counter (Increments on every deployment)
-  static const int buildNumber = 171;
+  static const int buildNumber = 234;
 
   /// Release date of the current build
-  static const String releaseDate = '2026-10-24';
+  static const String releaseDate = '2026-11-07';
 
   /// Environment tag
   static const String environment = 'Production (Firebase)';
@@ -25,6 +25,9 @@ class AppVersionConfig {
   static const String versionDisplay = 'v$major.$minor.$patch';
 
   /// Full technical build identifier (e.g. "v2.0.1 (Build #56)")
+  /// Stored on receipts (app_version), e.g. 2.0.145+200.
+  static const String appVersion = '$major.$minor.$patch+$buildNumber';
+
   static const String fullBuildDisplay = '$versionDisplay (Build #$buildNumber)';
 
   /// SemVer build string for pubspec compatibility (e.g. "2.0.1+56")

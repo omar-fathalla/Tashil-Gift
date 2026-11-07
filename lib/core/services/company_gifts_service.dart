@@ -1,10 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'firebase_emulator_config.dart';
 import 'firebase_service.dart';
 import 'distributed_counter_service.dart';
 import '../../features/admin/domain/company_gift_model.dart';
 import '../../features/admin/domain/event_model.dart';
+import 'firebase_scope.dart';
 
 final companyGiftsServiceProvider = Provider<CompanyGiftsService>((ref) {
   final firestore = ref.watch(firestoreProvider);
@@ -575,7 +578,10 @@ class CompanyGiftsService {
     if (slug.isEmpty || events.isEmpty) return 0;
 
     int totalUpdated = 0;
-    final batch = _firestore.batch();
+    // Writes go through the updateBranchAllocations callable (Admin SDK):
+    // company users cannot write events / gift_stock_movements directly.
+    final eventPayloads = <Map<String, dynamic>>[];
+    final movementPayloads = <Map<String, dynamic>>[];
 
     for (final event in events) {
       final eventRef = _firestore.collection('events').doc(event.id);
@@ -633,10 +639,6 @@ class CompanyGiftsService {
 
           final claimed = claimedCache[cellKey] ?? claimedCache['${event.id}_${branchName}_${gift.giftName}'] ?? 0;
 
-          if (newAllocatedQuantity < claimed) {
-            throw Exception('لا يمكن تعيين رصيد فرع ($branchName) لصنف (${gift.giftName}) أقل من المنصرف ($claimed قطعة)');
-          }
-
           final targetBranchNorm = branchName.trim().toLowerCase();
 
           // Find existing prize in event
@@ -686,6 +688,12 @@ class CompanyGiftsService {
             continue;
           }
 
+          // Only rows the user changed are checked; untouched rows with old
+          // inconsistent data must not block saving the others.
+          if (newAllocatedQuantity < claimed) {
+            throw Exception('لا يمكن تعيين رصيد فرع ($branchName) لصنف (${gift.giftName}) أقل من المنصرف ($claimed قطعة)');
+          }
+
           final delta = newAllocatedQuantity - oldAllocated;
           final newRemaining = (oldRemaining + delta).clamp(0, newAllocatedQuantity);
 
@@ -722,10 +730,9 @@ class CompanyGiftsService {
           totalUpdated++;
 
           if (delta != 0) {
-            final movementRef = _firestore.collection('gift_stock_movements').doc();
             final isIncrease = delta > 0;
             final movement = GiftStockMovement(
-              id: movementRef.id,
+              id: '',
               companySlug: slug,
               giftId: finalGiftId,
               giftName: finalGiftName,
@@ -744,7 +751,7 @@ class CompanyGiftsService {
               performedBy: performedBy.trim().isNotEmpty ? performedBy.trim() : 'مدير الشركة',
               timestamp: DateTime.now(),
             );
-            batch.set(movementRef, movement.toFirestore());
+            movementPayloads.add(Map<String, dynamic>.from(movement.toFirestore())..remove('timestamp'));
           }
         }
 
@@ -806,16 +813,21 @@ class CompanyGiftsService {
             updatedBranches.add(b);
           }
         }
-        batch.update(eventRef, {
+        eventPayloads.add({
+          'eventId': event.id,
           'allocatedPrizes': prizes.map((p) => p.toMap()).toList(),
           if (updatedBranches.isNotEmpty) 'branchNames': updatedBranches.toList(),
         });
       }
     }
 
-    if (totalUpdated > 0) {
-      await batch.commit();
-      await syncCompanyGiftsAvailableQuantities(slug);
+    if (totalUpdated > 0 && eventPayloads.isNotEmpty) {
+      await _callUpdateBranchAllocations({
+        'action': 'bulk',
+        'companySlug': slug,
+        'events': eventPayloads,
+        'movements': movementPayloads,
+      });
     }
 
     return totalUpdated;
@@ -1376,6 +1388,75 @@ class CompanyGiftsService {
     return match != null ? double.tryParse(match.group(1)!) ?? 0.0 : 0.0;
   }
 
+  /// A branch key matches one prize row by id or by the full branch name.
+  /// A shorter sibling token, a partial name, an unknown code, or a foreign
+  /// id does not match a different row.
+  static bool _prizeBranchAccepted(
+    Map<String, dynamic> prize,
+    String branchId,
+    String? pickedBranchName,
+  ) {
+    if (branchId.isEmpty) return true;
+    final id = (prize['branchId'] ?? '').toString().trim();
+    final name = (prize['branchName'] ?? '').toString().trim();
+    if (id.isEmpty && name.isEmpty) return true;
+    if (id == branchId || name == branchId) return true;
+    if (pickedBranchName != null && name == pickedBranchName) return true;
+    if (name.isNotEmpty &&
+        _normalizePrizeText(name) == _normalizePrizeText(branchId)) {
+      return true;
+    }
+    return false;
+  }
+
+  static bool _prizeIdentityMatches(
+    Map<String, dynamic> prize,
+    String prizeIdentifier,
+  ) {
+    final id = prizeIdentifier.trim();
+    if (id.isEmpty) return true;
+    final pGiftId = (prize['giftId'] ?? '').toString().trim();
+    final pName = (prize['name'] ?? '').toString().trim();
+    final cleanTarget = _normalizePrizeText(id);
+    final cleanName = _normalizePrizeText(pName);
+    if (pGiftId.isNotEmpty && (pGiftId == id || pGiftId == cleanTarget)) {
+      return true;
+    }
+    if (pName == id) return true;
+    if (cleanName.isNotEmpty && cleanName == cleanTarget) return true;
+    if (cleanTarget.isNotEmpty &&
+        (cleanName.contains(cleanTarget) || cleanTarget.contains(cleanName))) {
+      return true;
+    }
+    final targetVal = _extractNumericValue(id);
+    final pUnit = (prize['unitValue'] as num?)?.toDouble() ?? 0.0;
+    if (targetVal > 0 && pUnit > 0 && (targetVal - pUnit).abs() < 0.01) {
+      return true;
+    }
+    return false;
+  }
+
+  static String? _pickedPrizeBranchName(
+    List<Map<String, dynamic>> prizes,
+    String branchId,
+  ) {
+    if (branchId.isEmpty) return null;
+    final names = <String>[];
+    for (final prize in prizes) {
+      final name = (prize['branchName'] ?? '').toString().trim();
+      if (name.isNotEmpty) names.add(name);
+    }
+    if (names.isEmpty) return null;
+    final exact = names.where((name) => name == branchId).toList();
+    if (exact.length == 1) return exact.first;
+    final normalized = _normalizePrizeText(branchId);
+    if (normalized.isEmpty) return null;
+    final normalizedHits =
+        names.where((name) => _normalizePrizeText(name) == normalized).toList();
+    if (normalizedHits.length == 1) return normalizedHits.first;
+    return null;
+  }
+
   static int findBestPrizeMatchIndex(
     List<Map<String, dynamic>> prizes,
     String prizeIdentifier, {
@@ -1385,6 +1466,8 @@ class CompanyGiftsService {
     bool preferWithRemaining = true,
   }) {
     if (prizes.isEmpty || prizeIdentifier.trim().isEmpty) return -1;
+    final queriedBranch = (branchId ?? '').trim();
+    final pickedBranchName = _pickedPrizeBranchName(prizes, queriedBranch);
 
     final cleanTarget = _normalizePrizeText(prizeIdentifier);
     final targetVal = unitValue ?? _extractNumericValue(prizeIdentifier);
@@ -1416,22 +1499,18 @@ class CompanyGiftsService {
 
       int score = 0;
 
-      // 1. Branch match weighting (support branchId, branchName, and normalized branch name)
+      // 1. Branch match weighting. Exact id or the full branch name only.
+      // A token inside a longer sibling ("طنطا" inside "طنطا اوت ليت") is not a match.
       final pBranchName = (p['branchName'] ?? '').toString().trim();
-      final isExactBranch = branchId != null &&
-          branchId.isNotEmpty &&
-          (pBranchId == branchId ||
-              pBranchName == branchId ||
-              matchesBranchName(pBranchName, branchId) ||
-              matchesBranchName(pBranchId, branchId) ||
-              _normalizePrizeText(pBranchName) == _normalizePrizeText(branchId) ||
-              (_normalizePrizeText(branchId).isNotEmpty && _normalizePrizeText(pBranchName).contains(_normalizePrizeText(branchId))));
+      final isExactBranch = _prizeBranchAccepted(p, queriedBranch, pickedBranchName) &&
+          queriedBranch.isNotEmpty &&
+          !(pBranchId.isEmpty && pBranchName.isEmpty);
       final isGeneralBranch = pBranchId.isEmpty && pBranchName.isEmpty;
       if (isExactBranch) {
         score += 120;
       } else if (isGeneralBranch) {
         score += 60;
-      } else if (branchId != null && branchId.isNotEmpty && (pBranchId.isNotEmpty || pBranchName.isNotEmpty) && !isExactBranch) {
+      } else if (queriedBranch.isNotEmpty && (pBranchId.isNotEmpty || pBranchName.isNotEmpty) && !isExactBranch) {
         // Different specific branch penalty
         score -= 80;
       }
@@ -1475,14 +1554,58 @@ class CompanyGiftsService {
       }
     }
 
+    if (bestIndex == -1) return -1;
+    final winner = prizes[bestIndex];
+    if (!_prizeBranchAccepted(winner, queriedBranch, pickedBranchName)) {
+      return -1;
+    }
+    if (!_prizeIdentityMatches(winner, prizeIdentifier)) return -1;
     return bestIndex;
   }
 
-  /// Decrements the remaining quantity of a prize in a specific campaign after a win.
-  /// [prizeIdentifier] can be a giftId or a prize name.
-  /// If [branchId] is provided, prioritizes matching the specific branch prize.
-  /// [count] is the quantity to decrement (defaults to 1).
-  Future<void> decrementCampaignPrize(
+  bool _isAnonymousCaller() {
+    try {
+      final user = scopedAuth().currentUser;
+      return user == null || user.isAnonymous;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Sends the claim to `decrementCampaignPrize`. Returns true when the function
+  /// accepted the call. Staff may fall back to a direct write only when the
+  /// function is not deployed yet. Anonymous callers never write stock locally.
+  Future<bool> _claimViaCallable({
+    required String eventId,
+    String? receiptId,
+    Map<String, dynamic>? receiptPatch,
+    required List<Map<String, dynamic>> decrements,
+  }) async {
+    try {
+      final callable = scopedFunctions().httpsCallable('decrementCampaignPrize');
+      await callable.call({
+        'eventId': eventId,
+        if (receiptId != null && receiptId.isNotEmpty) 'receiptId': receiptId,
+        if (receiptPatch != null && receiptPatch.isNotEmpty) 'receiptPatch': receiptPatch,
+        'decrements': decrements,
+      });
+      return true;
+    } on FirebaseFunctionsException catch (e) {
+      final missing = e.code == 'not-found' || e.code == 'unavailable' || e.code == 'unimplemented';
+      // A demo build pins Functions to 127.0.0.1:5001. Connection refused
+      // arrives as `internal` and must stay on the Firestore emulator.
+      // A production internal error is not a missing function.
+      final localRefusal = kFirebaseEmulator && !_isAnonymousCaller();
+      if ((missing || localRefusal) && !_isAnonymousCaller()) return false;
+      rethrow;
+    } catch (e) {
+      if (_isAnonymousCaller()) rethrow;
+      debugPrint('⚠️ decrementCampaignPrize callable unavailable, staff fallback: $e');
+      return false;
+    }
+  }
+
+  Future<void> _decrementCampaignPrizeLocal(
     String eventId,
     String prizeIdentifier, {
     String? branchId,
@@ -1493,7 +1616,6 @@ class CompanyGiftsService {
   }) async {
     if (eventId.isEmpty || prizeIdentifier.isEmpty || count <= 0) return;
 
-    // 1. Sharded Lock-Free Increment (always guaranteed, zero lock contention)
     try {
       await _counterService?.recordClaimEvent(
         eventId: eventId,
@@ -1506,7 +1628,6 @@ class CompanyGiftsService {
       debugPrint('⚠️ CompanyGiftsService.decrementCampaignPrize sharded record error: $e');
     }
 
-    // 2. Decrement on root event document with optimistic safety
     try {
       final doc = await _firestore.collection('events').doc(eventId).get();
       if (!doc.exists) return;
@@ -1533,10 +1654,84 @@ class CompanyGiftsService {
         });
       }
     } catch (e) {
-      // If root document update encounters lock contention (Firestore 1 write/sec limit),
-      // the sharded counter recorded in step 1 guarantees exact claim auditability!
       debugPrint('⚠️ CompanyGiftsService.decrementCampaignPrize root update contention fallback: $e');
     }
+  }
+
+  /// Records a gift claim and decrements campaign stock on the server.
+  ///
+  /// Anonymous field reps cannot update the receipt or the prize counters
+  /// themselves. The callable writes both with the Admin SDK.
+  Future<void> claimCampaignPrizes({
+    required String eventId,
+    String? receiptId,
+    Map<String, dynamic>? receiptPatch,
+    required List<Map<String, dynamic>> decrements,
+  }) async {
+    final cleanDecrements = decrements.where((item) {
+      final id = (item['prizeIdentifier'] ?? '').toString().trim();
+      final count = (item['count'] as num?)?.toInt() ?? 0;
+      return eventId.isNotEmpty && id.isNotEmpty && count > 0;
+    }).toList();
+    final patch = receiptPatch ?? const <String, dynamic>{};
+    if (cleanDecrements.isEmpty && patch.isEmpty) return;
+
+    if (eventId.isNotEmpty) {
+      final handled = await _claimViaCallable(
+        eventId: eventId,
+        receiptId: receiptId,
+        receiptPatch: patch,
+        decrements: cleanDecrements,
+      );
+      if (handled) return;
+    }
+
+    if (receiptId != null && receiptId.isNotEmpty && patch.isNotEmpty) {
+      await _firestore.collection('receipts_transactions').doc(receiptId).update(patch);
+    }
+    for (final item in cleanDecrements) {
+      await _decrementCampaignPrizeLocal(
+        eventId,
+        item['prizeIdentifier'].toString(),
+        branchId: item['branchId']?.toString(),
+        count: (item['count'] as num?)?.toInt() ?? 1,
+        unitValue: (item['unitValue'] as num?)?.toDouble(),
+        isVoucher: item['isVoucher'] as bool?,
+        gameType: (item['gameType'] ?? 'claim').toString(),
+      );
+    }
+  }
+
+  /// Decrements the remaining quantity of a prize in a specific campaign after a win.
+  /// [prizeIdentifier] can be a giftId or a prize name.
+  /// If [branchId] is provided, prioritizes matching the specific branch prize.
+  /// [count] is the quantity to decrement (defaults to 1).
+  Future<void> decrementCampaignPrize(
+    String eventId,
+    String prizeIdentifier, {
+    String? branchId,
+    int count = 1,
+    double? unitValue,
+    bool? isVoucher,
+    String gameType = 'claim',
+    String? receiptId,
+    Map<String, dynamic>? receiptPatch,
+  }) {
+    return claimCampaignPrizes(
+      eventId: eventId,
+      receiptId: receiptId,
+      receiptPatch: receiptPatch,
+      decrements: [
+        {
+          'prizeIdentifier': prizeIdentifier,
+          'branchId': branchId,
+          'count': count,
+          'unitValue': unitValue,
+          'isVoucher': isVoucher,
+          'gameType': gameType,
+        },
+      ],
+    );
   }
 
   /// Restores / Replenishes the remaining quantity of a prize in a campaign (e.g. when an invoice is deleted).
@@ -1673,14 +1868,10 @@ class CompanyGiftsService {
       };
     }
 
-    // 1. Create settlement snapshot document in Firestore
-    final settlementRef = _firestore.collection('campaign_stock_settlements').doc();
+    // 1. Settlement snapshot (written server-side by updateBranchAllocations)
     final settlementData = {
-      'campaignId': event.id,
       'campaignName': event.eventName,
-      'companySlug': slug,
       'cycleTitle': cycleTitle.trim().isNotEmpty ? cycleTitle.trim() : 'تسوية دورة الويك إند',
-      'settledAt': FieldValue.serverTimestamp(),
       'settledBy': performedBy,
       'totalAllocatedBefore': totalAllocatedBefore,
       'totalClaimed': totalClaimed,
@@ -1688,7 +1879,6 @@ class CompanyGiftsService {
       'newAllocatedStock': newAllocatedQuota,
       'branchSnapshots': branchSnapshots,
     };
-    await settlementRef.set(settlementData);
 
     // 2. Update the event with the new wave quotas
     final List<AllocatedPrize> newPrizes = [];
@@ -1699,16 +1889,9 @@ class CompanyGiftsService {
       ));
     }
 
-    await eventRef.update({
-      'allocatedPrizes': newPrizes.map((p) => p.toMap()).toList(),
-      'lastSettlementId': settlementRef.id,
-      'lastSettledAt': FieldValue.serverTimestamp(),
-    });
-
-    // 3. Log audit entry in gift_stock_movements
-    final movementRef = _firestore.collection('gift_stock_movements').doc();
+    // 3. Audit entry in gift_stock_movements (reference = settlement id, set by server)
     final movement = GiftStockMovement(
-      id: movementRef.id,
+      id: '',
       companySlug: slug,
       giftId: event.id,
       giftName: cycleTitle,
@@ -1718,13 +1901,32 @@ class CompanyGiftsService {
       newTotal: newAllocatedQuota * branches.length * masterGifts.length,
       previousAvailable: totalReturned,
       newAvailable: newAllocatedQuota * branches.length * masterGifts.length,
-      reference: settlementRef.id,
+      reference: '',
       notes: 'تم اعتماد وإغلاق $cycleTitle (منصرف: $totalClaimed, مرتجع: $totalReturned, جديد: $newAllocatedQuota)',
       performedBy: performedBy,
       timestamp: DateTime.now(),
     );
-    await movementRef.set(movement.toFirestore());
+    final result = await _callUpdateBranchAllocations({
+      'action': 'settlement',
+      'companySlug': slug,
+      'eventId': event.id,
+      'allocatedPrizes': newPrizes.map((p) => p.toMap()).toList(),
+      'settlement': settlementData,
+      'movement': Map<String, dynamic>.from(movement.toFirestore())..remove('timestamp'),
+    });
+    return (result['settlementId'] ?? '').toString();
+  }
 
-    return settlementRef.id;
+  Future<Map<String, dynamic>> _callUpdateBranchAllocations(Map<String, dynamic> payload) async {
+    try {
+      final res = await scopedFunctions()
+          .httpsCallable('updateBranchAllocations')
+          .call(payload);
+      final data = res.data;
+      return data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+    } on FirebaseFunctionsException catch (e) {
+      final msg = (e.message ?? '').trim();
+      throw Exception(msg.isNotEmpty ? msg : e.code);
+    }
   }
 }

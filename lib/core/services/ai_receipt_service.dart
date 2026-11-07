@@ -1,3 +1,5 @@
+import 'package:al_mraay/core/constants/ai_models.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
@@ -6,13 +8,17 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:al_mraay/features/admin/domain/event_model.dart';
 import 'package:al_mraay/features/admin/domain/retail_chain_model.dart';
 import '../config/ai_config.dart';
+import 'gemini_cloud_model.dart';
 import '../utils/arabic_numbers_utils.dart';
+import '../utils/receipt_date_window.dart';
+import '../utils/canonical_branch_resolver.dart';
+import '../utils/store_code_branch_resolver.dart';
 import 'campaign_ai_assistant_service.dart';
 import 'company_gifts_service.dart';
 import 'ai_model_config_service.dart';
 
 final aiReceiptServiceProvider = Provider<AiReceiptService>((ref) {
-  final config = ref.watch(aiModelConfigStreamProvider).value;
+  final config = ref.watch(aiModelConfigStreamProvider).valueOrNull;
   return AiReceiptService(
     modelName: config?.effectivePrimaryModel ?? AiConfig.primaryModel,
     fastTierModelName: config?.fastTierModel ?? AiConfig.fastTierModel,
@@ -686,11 +692,15 @@ class AiReceiptAnalysisResult {
 }
 
 class AiReceiptService {
-  late final GenerativeModel _model;
-  late final GenerativeModel _fastModel;
-  late final GenerativeModel _deepAuditModel;
-  late final GenerativeModel _fallbackModel1;
-  late final GenerativeModel _fallbackModel2;
+  /// 2.0.153+214: one-line branch source rule appended to every prompt.
+  static const String branchSourceRule =
+      '- مصدر الفرع (branchDetected): خذ الفرع من كود المتجر المطبوع (ضمن رقم الفاتورة أو Store/POS) أو من رأس الفاتورة فقط، ولا تأخذه أبداً من الإعلانات أو السطور الدعائية في تذييل الفاتورة (مثل "تم افتتاح فرع ...").';
+
+  late final CloudGenerativeModel _model;
+  late final CloudGenerativeModel _fastModel;
+  late final CloudGenerativeModel _deepAuditModel;
+  late final CloudGenerativeModel _fallbackModel1;
+  late final CloudGenerativeModel _fallbackModel2;
   final String modelName;
   final String fastTierModelName;
   final String deepAuditModelName;
@@ -706,13 +716,12 @@ class AiReceiptService {
     _fastModel = _createFastTierModel(this.fastTierModelName);
     _deepAuditModel = _createDeepAuditModel(this.deepAuditModelName);
     _fallbackModel1 = _createFastTierModel(AiConfig.fallbackModel);
-    _fallbackModel2 = _createFastTierModel('gemini-3.6-flash');
+    _fallbackModel2 = _createFastTierModel(AiModels.defaultFallback);
   }
 
-  static GenerativeModel _createModel(String name) {
-    return GenerativeModel(
+  static CloudGenerativeModel _createModel(String name) {
+    return CloudGenerativeModel(
       model: name,
-      apiKey: AiConfig.geminiApiKey,
       systemInstruction: Content.system(
         'أنت مدقق مالي وأمني فائق السرعة والدقة والصرامة في فحص وتدقيق فواتير السوبر ماركت وكشف التزوير لعروض الشركات الاستهلاكية (FMCG). '
         'مهمتك فحص صور الفواتير فورياً واستخراج البيانات الأساسية: اسم السلسلة، الفرع، رقم الفاتورة، تاريخ الشراء، '
@@ -757,7 +766,8 @@ class AiReceiptService {
         '🛑 معيار الحظر الصارم لاحتساب أصناف الشوكولاتة والمالتي باك العامة دون علامة تجارية صريحة (AIR-71):\n'
         '- يُمنع منعاً باتاً افتراض أو تخمين تبعية أي صنف عام مطبوع على بون الكاشير تحت مسمى مبهم أو عام مثل: "مالتي باك شوكولات" أو "مالتي باك شوكولاتة" أو "شوكولاتة مشكلة" أو "بسكويت ويفر" لشركة كادبوري (Cadbury) أو مونديليز (Mondelez) ما لم يُذكر في سطر البون صراحة اسم العلامة المعتمدة التابعة للشركة (مثل: كادبوري، ديري ميلك، مورو، بابلي، أوريو، ماندولين، فليك، سي دي ام، CDM).\n'
         '- يُحظر كلياً الاستناد إلى وجود أصناف كادبوري أخرى بالفاتورة لاعتبار الصنف العام تابعاً لكادبري.\n'
-        '- أي صنف عام يخلو من اسم العلامة الصريح يجب فوراً تعيينه: isTargetCompany = false واستبعاده كلياً من targetCompanyTotal ومن أي احتساب للجوائز أو مضاعفات الفواتشر.',
+        '- أي صنف عام يخلو من اسم العلامة الصريح يجب فوراً تعيينه: isTargetCompany = false واستبعاده كلياً من targetCompanyTotal ومن أي احتساب للجوائز أو مضاعفات الفواتشر.\n'
+        '- نطاق AIR-71: هذا المعيار خاص بحملات كادبوري/مونديليز فقط ولا ينطبق على أي شركة راعية أخرى. وفي كل الحالات، أي سطر يكون باركوده ضمن قائمة منتجات الشركة الراعية المسجلة يُعد تابعاً لها، ويجب دائماً إدراج كل سطر منتج مطبوع (بما فيها المالتي باك والباندل) في extractedProducts.',
       ),
       generationConfig: GenerationConfig(
         responseMimeType: 'application/json',
@@ -1099,10 +1109,9 @@ class AiReceiptService {
     ],
   );
 
-  static GenerativeModel _createFastTierModel(String name) {
-    return GenerativeModel(
+  static CloudGenerativeModel _createFastTierModel(String name) {
+    return CloudGenerativeModel(
       model: name,
-      apiKey: AiConfig.geminiApiKey,
       systemInstruction: Content.system(
         'أنت فاحص ومستخرج بيانات فواتير التجزئة والسوبرماركت فائق السرعة والدقة (Gemini Ultra-Fast POS Scanner Tier).\n'
         'مهمتك: فحص صورة بون الكاشير المطبوع واستخراج البيانات الأساسية بأقصى سرعة ممكنة وبأعلى دقة OCR وبصيغة JSON نقية وموجزة.\n\n'
@@ -1124,13 +1133,53 @@ class AiReceiptService {
         maxOutputTokens: 8192,
         responseSchema: _fastTierSchema,
       ),
+      thinkingConfig: fastTierThinkingConfig(name),
     );
   }
 
-  static GenerativeModel _createDeepAuditModel(String name) {
-    return GenerativeModel(
+  /// 2.0.148+208: bounded reasoning for the fast OCR tier. Gemini 3.x models
+  /// take `thinkingLevel`; 2.x models take a token `thinkingBudget`. Output
+  /// schema and maxOutputTokens are unchanged. The deep-audit tier keeps the
+  /// model's default thinking.
+  @visibleForTesting
+  static Map<String, dynamic> fastTierThinkingConfig(String modelName) {
+    final n = modelName.toLowerCase();
+    if (n.contains('gemini-2')) return {'thinkingBudget': 1024};
+    return {'thinkingLevel': 'low'};
+  }
+
+  /// 2.0.150+211: strict client wait for one Gemini call (was 90s). Server
+  /// aborts upstream at 38s, callable cap 45s.
+  static const Duration geminiCallTimeout = Duration(seconds: 40);
+
+  /// 2.0.150+211: total cap for the first check incl. 429 back-offs and
+  /// fallback models. Worst case AI stage = 60s (no second check).
+  static const Duration firstCheckBudget = Duration(seconds: 60);
+
+  /// 2.0.150+211: overall ceiling for stage 2 (lookups 8s + first check 60s
+  /// + parsing). On expiry the rep sees [stage2TimeoutMessage] and can retry.
+  static const Duration stage2Ceiling = Duration(seconds: 75);
+  static const String stage2TimeoutMessage =
+      'الفحص أخد وقت أطول من المعتاد (timeout). اضغط "حاول تاني" لإعادة الفحص.';
+
+  /// Catalog/branch lookups before the AI call (were unbounded).
+  static const Duration preScanLookupTimeout = Duration(seconds: 8);
+
+  /// Per-attempt wait given a deadline: min(perCall, remaining). Throws
+  /// [TimeoutException] when under 3s remain so timeouts never stack.
+  @visibleForTesting
+  static Duration attemptTimeout(DateTime? deadline, Duration perCall, {DateTime? now}) {
+    if (deadline == null) return perCall;
+    final remaining = deadline.difference(now ?? DateTime.now());
+    if (remaining < const Duration(seconds: 3)) {
+      throw TimeoutException('Gemini scan budget exhausted', remaining);
+    }
+    return remaining < perCall ? remaining : perCall;
+  }
+
+  static CloudGenerativeModel _createDeepAuditModel(String name) {
+    return CloudGenerativeModel(
       model: name,
-      apiKey: AiConfig.geminiApiKey,
       systemInstruction: Content.system(
         'أنت كبير المدققين الجنائيين والماليين لفواتير السوبرماركت المعقدة (Gemini Deep Forensic Audit Tier).\n'
         'تُستدعى مهامك في حالات الاشتباه الأمني، وتضارب أرقام الكاشير، وفحص الفواتير المركبة أو المشكوك في تلاعبها.\n'
@@ -1204,19 +1253,87 @@ class AiReceiptService {
     _lastAiCallTimestamp = DateTime.now();
   }
 
+  // 2.0.148+209: in-flight / recent scan dedupe (see analyzeReceiptImage).
+  static final Map<String, Future<CloudGenerateContentResponse>> _inflightScans = {};
+
+  @visibleForTesting
+  static String scanCacheKeyForTest(String model, String prompt, List<Uint8List> images) =>
+      _scanCacheKey(model, prompt, [for (final b in images) DataPart('image/jpeg', b)]);
+
+  static String _scanCacheKey(String model, String prompt, List<Part> parts) {
+    int h = 0x811c9dc5;
+    void add(List<int> data) {
+      for (final v in data) {
+        h ^= v & 0xff;
+        h = (h * 0x01000193) & 0xffffffff;
+      }
+    }
+    add(utf8.encode(model));
+    add(utf8.encode(prompt));
+    int total = 0;
+    for (final p in parts) {
+      if (p is DataPart) {
+        add(utf8.encode(p.mimeType));
+        add(p.bytes);
+        total += p.bytes.length;
+      }
+    }
+    return '${h.toRadixString(16)}_$total';
+  }
+
+  static Future<CloudGenerateContentResponse> _dedupedGenerate(
+    String? key,
+    Future<CloudGenerateContentResponse> Function() run,
+  ) {
+    if (key == null) return run();
+    // 2.0.171+232: only an IN-FLIGHT call is shared (double tap / app switch
+    // during the same submit = one Gemini call, no double billing). A finished
+    // answer is never reused: every new upload gets a fresh read.
+    final pending = _inflightScans[key];
+    if (pending != null) return pending;
+    // 2.0.150+211: hard cap so a stuck call can never pin the in-flight entry
+    // (a re-tap would otherwise join it forever). Entry is removed on success,
+    // failure, timeout or cancel (whenComplete); failures are never cached.
+    late final Future<CloudGenerateContentResponse> f;
+    f = run().timeout(firstCheckBudget + const Duration(seconds: 5)).then((r) {
+      return r;
+    // 2.0.151+212: block body on purpose. The arrow form returned the removed
+    // map value (this very future) to whenComplete, which then awaited itself:
+    // f could never complete, so every rep scan hung after the AI answered
+    // until the stage-2 ceiling fired (forever on 2.0.149).
+    }).whenComplete(() {
+      if (identical(_inflightScans[key], f)) _inflightScans.remove(key);
+    });
+    _inflightScans[key] = f;
+    return f;
+  }
+
+  @visibleForTesting
+  static Future<CloudGenerateContentResponse> dedupedGenerateForTest(
+    String? key,
+    Future<CloudGenerateContentResponse> Function() run,
+  ) => _dedupedGenerate(key, run);
+
+  @visibleForTesting
+  static void clearScanDedupeForTest() {
+    _inflightScans.clear();
+  }
+
   /// Executes Gemini generateContent with automatic exponential backoff retry on HTTP 429 quota errors.
-  Future<GenerateContentResponse> _executeWithExponentialBackoff(
-    GenerativeModel model,
+  Future<CloudGenerateContentResponse> _executeWithExponentialBackoff(
+    CloudGenerativeModel model,
     List<Content> contents, {
     int maxRetries = 3,
     int initialBackoffMs = 1500,
+    DateTime? deadline,
   }) async {
     int attempt = 0;
     while (true) {
       attempt++;
+      final wait = attemptTimeout(deadline, geminiCallTimeout);
       try {
         await _throttleClientRequest();
-        return await model.generateContent(contents).timeout(const Duration(seconds: 30));
+        return await model.generateContent(contents).timeout(wait);
       } catch (e) {
         final errStr = e.toString().toLowerCase();
         final isQuotaExhausted = errStr.contains('429') ||
@@ -1249,6 +1366,8 @@ class AiReceiptService {
     List<String> allowedBranches = const [],
     bool isAllBranches = true,
     List<BranchModel> registeredBranches = const [],
+    List<String> campaignBranchIds = const [],
+    List<String> campaignBranchNames = const [],
     DateTime? startDate,
     DateTime? endDate,
     String customPrompt = '',
@@ -1259,14 +1378,18 @@ class AiReceiptService {
     bool allowComplementaryReceipts = false,
     bool forceDeepAudit = false,
     bool forceRefresh = false,
+    bool reuseStoredAnalysis = false,
   }) async {
     final stopwatch = Stopwatch()..start();
     try {
       final allImagesBytesList = [imageBytes, ...additionalImagesBytes];
       final String fingerprint = computeBytesFingerprint(allImagesBytesList);
 
-      // Check LRU In-Memory Cache for identical receipt image submissions
-      if (!forceRefresh && fingerprint.isNotEmpty) {
+      // 2.0.171+232: a new scan/upload is ALWAYS a fresh AI read. Serving a
+      // stored result here meant a re-upload of the same photo could never
+      // correct a misread (rep saw the same wrong total every time). The LRU
+      // is only consulted when a caller explicitly opts in.
+      if (reuseStoredAnalysis && !forceRefresh && fingerprint.isNotEmpty) {
         final cached = getCachedReceiptAnalysis(fingerprint);
         if (cached != null) {
           debugPrint('⚡ [AiReceiptService] In-Memory Cache Hit for fingerprint $fingerprint (0ms)');
@@ -1352,6 +1475,13 @@ class AiReceiptService {
         targetCompany,
         productNames: resolvedRequiredProducts,
       );
+      // AIR-71 is a Cadbury/Mondelez-only rule. For every other company a
+      // multipack/bundle line is a regular product; a line whose barcode is in
+      // the company's registered product list always belongs to the company.
+      final bool isMondelezPromptTenant = isMondelezTargetCompany(targetCompany);
+      final String multipackRuleCondition = isMondelezPromptTenant
+          ? '- 🛑 قاعدة أصناف المالتي باك والشوكولاتة العامة (AIR-71 - خاصة بكادبوري/مونديليز): إذا كان الصنف يحمل اسماً عاماً مثل "مالتي باك شوكولات" أو "مالتي باك شوكولاتة" دون ذكر صريح لماركة معتمدة تابعة لـ "$targetCompany" ولم يكن باركوده ضمن قائمة منتجات الشركة المسجلة، يُحظر اعتباره تابعاً للشركة الراعية ويجب تعيين isTargetCompany = false. أي سطر باركوده ضمن قائمة منتجات الشركة المسجلة يُعد تابعاً لها (isTargetCompany = true).'
+          : '- 🛑 أصناف المالتي باك / الباندل / العروض المجمعة: هي منتجات عادية. يجب إدراج كل سطر منتج مطبوع في الفاتورة في extractedProducts دون حذف أو دمج. أي سطر يكون باركوده أو اسمه ضمن قائمة منتجات "$targetCompany" المسجلة يُعد تابعاً للشركة (isTargetCompany = true) ويُحتسب سعره × الكمية ضمن targetCompanyTotal، حتى لو كان اسمه عاماً مثل "مالتي باك شوكولات". قاعدة AIR-71 خاصة بحملات كادبوري/مونديليز فقط ولا تنطبق هنا.';
       String subBrandsCondition = '';
       if (resolvedSubBrands.isNotEmpty) {
         subBrandsCondition = '''
@@ -1372,9 +1502,6 @@ class AiReceiptService {
               final idx = entry.key + 1;
               final r = entry.value;
               final id = r.id.isNotEmpty ? r.id : 'rule_$idx';
-              final multText = r.allowMultipliers
-                  ? ' (تتضاعف الهدايا مع زيادة الكمية)'
-                  : '';
               final voucherVal = r.totalVoucherValue > 0
                   ? ' [قيمة نقدية: ${r.totalVoucherValue.toInt()} ج.م]'
                   : (r.rewardAmount > 0
@@ -1404,7 +1531,7 @@ class AiReceiptService {
                 conditionDetails =
                     'شراء (${r.minQuantity}) أو أكثر من [${r.triggerProduct}]';
               }
-              return '$idx. [معرف ID: "$id"] "${r.ruleTitle}" ➔ الشرط: $conditionDetails ➔ الجائزة المستحقة: [${r.rewardValue}$voucherVal] (نوع: ${r.rewardType})$multText';
+              return '$idx. [معرف ID: "$id"] "${r.ruleTitle}" ➔ الشرط: $conditionDetails ➔ الجائزة المستحقة: [${r.rewardValue}$voucherVal] (نوع: ${r.rewardType})';
             })
             .join('\n');
 
@@ -1452,8 +1579,8 @@ $rulesListFormatted
 $categoryPackagingGuard
 2. افحص بدقة أسماء الأصناف في الفاتورة مع مراعاة كافة الاختلافات الإملائية والطباعية في بونات الكاشير.
 3. [تجميع العروض المتزامنة (Multi-Offer Bundling)]: إذا اشترى العميل أصنافاً تحقق أكثر من عرض ترويجي مختلف في نفس الفاتورة، قم بتضمين كافة معرفات القواعد المطابقة في حقل (matchedRuleIds) كقائمة (مثل: ["rule_3", "rule_5"])، وجمع إجمالي قيمة المكافآت المستحقة في (matchedRewardAmount)، وكتابة ملخص الجوائز في (matchedRewardValue).
-4. في حال وجود أكثر من قاعدة لنفس المنتج بمستويات كميات أو إنفاق مختلفة، اختر دائماً القاعدة ذات المستوى المشروط الأعلى التي حققها العميل.
-5. [مضاعفة الجوائز والفرص]: إذا كانت القاعدة تتيح المضاعفة، وكان العميل قد اشترى مضاعفات الكمية أو الإنفاق المشروط، احسب عدد مرات تكرار العرض واضرب قيمة المكافأة بعدد المرات.
+4. [الهدية الأعلى قيمة أولاً]: إذا انطبقت أكثر من قاعدة على نفس المنتجات أو نفس مبلغ الإنفاق، ابدأ بالقاعدة ذات الهدية الأعلى قيمة (الفواتشر بقيمته النقدية، والهدية العينية بقيمتها في الكتالوج، والهدية بدون قيمة تأتي بعدها مرتبة بالمستوى الأعلى). امنحها ثم اخصم المبلغ الذي استخدمته، ولا تُمنح القاعدة الأقل إلا من المبلغ المتبقي فقط. لا تجمع أبداً هدية أقل على نفس المبلغ (مثال: 627 ج.م مع قواعد 450 و350 و150 = فواتشر قاعدة 450 مرة واحدة + هدية قاعدة 150 مرة واحدة من الباقي 177، وليس 4 × هدية قاعدة 150).
+5. [مضاعفة الجوائز والفرص]: إذا كانت القاعدة تتيح المضاعفة، احسب عدد مرات تكرار العرض من المبلغ أو الكمية المتاحة لها فقط (بعد خصم ما استخدمته القواعد الأعلى قيمة) واضرب المكافأة بعدد المرات.
 6. قم بتعبئة حقل (matchedRuleId) بمعرف القاعدة المطابقة الأولى، و(matchedRuleTitle) بعنوان القاعدة، و(matchedRewardType) بنوع المكافأة.
 7. [العزل الصارم للأصناف واستهلاك الكميات]: كل صنف يطابق قاعدة علامته التجارية والشركة الراعية فقط، وتُخصم الكمية المستهلكة فوراً من السلة لمنع احتساب نفس القطعة في أكثر من عرض.
 8. إذا لم تنطبق أي من هذه القواعد، اترك حقل (matchedRuleId) فارغاً "" وحقل (matchedRuleIds) كقائمة فارغة [].
@@ -1524,6 +1651,8 @@ $branchSignaturesText
       } else if (branchSignaturesText.isNotEmpty) {
         branchCondition = branchSignaturesText;
       }
+      // 2.0.153: branch source rule (store code / header only, never footer ads).
+      branchCondition = '$branchCondition\n${AiReceiptService.branchSourceRule}\n';
 
       String chancesCondition = '';
       if (allowMultipleChances) {
@@ -1602,7 +1731,7 @@ $subBrandsCondition
 - 🛑 استبعاد الحبوب الزراعية والعطارة والفشار وأرز الشركات المستقلة (AIR-87):
   * شركة "الدرة" (Al-Durra / Dorra) هي شركة منتجات غذائية معبأة (صلصة، كاتشب، مايونيز، صصوصات، خل، مخلل، مربى، طحينة). يُحظر تماماً وبصرامة احتساب أي حبوب زراعية أو بهارات أو عطارة تحمل كلمة "ذرة" أو "درة" (مثل: "درة أم شوشة"، "ذرة أم شوشة"، "ذرة فشار"، "درة فشار"، "ذرة حب"، "فشار"، "بهارات"، "عطارة") كمنتج للدرة، ويجب تعيين isTargetCompany = false واستبعادها كلياً.
   * يُحظر تماماً على الذكاء الاصطناعي تخمين أو استبدال ماركات الأرز المطبوعة على الفاتورة (Zero-Hallucination)؛ فإذا كان الصنف المطبوع هو "الفراعنة ارز" أو "أرز الفراعنة" أو "أرز الساعة" أو "أرز ريحانة"، يجب نقله كما هو باسمه الحقيقي مع تعيين isTargetCompany = false لعدم تبعيته للدرة، ويُمنع منعاً باتاً تسميته "الدرة ارز".
-- 🛑 قاعدة أصناف المالتي باك والشوكولاتة العامة (AIR-71): إذا كان الصنف يحمل اسماً عاماً مثل "مالتي باك شوكولات" أو "مالتي باك شوكولاتة" دون ذكر صريح لماركة معتمدة تابعة لـ "$targetCompany"، يُحظر كلياً اعتباره تابعاً للشركة الراعية ويجب تعيين isTargetCompany = false.
+$multipackRuleCondition
 - الأصناف المشروعة في (extractedProducts) مع (isTargetCompany = true) هي فقط الأصناف التابعة لشركة "$targetCompany".
 
 🛑 استراتيجية الفلترة الموجهة والمسح السريع الفائق (Targeted Fast-Scan Strategy):
@@ -1693,24 +1822,43 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
       final prompt = TextPart(finalPromptText);
 
       final aiStopwatch = Stopwatch()..start();
-      GenerateContentResponse response;
+      CloudGenerateContentResponse response;
       final targetModel = forceDeepAudit ? _deepAuditModel : _fastModel;
       final primaryFallback = forceDeepAudit ? _model : _fallbackModel1;
       final contentParts = [
         Content.multi([prompt, ...allImageParts]),
       ];
 
-      try {
-        response = await _executeWithExponentialBackoff(targetModel, contentParts);
-      } catch (e1) {
-        debugPrint('⚠️ [AiReceiptService] Primary model failed: $e1. Escalating to primary fallback...');
+      // 2.0.148+209 / 2.0.171+232: a re-tap while the same call is still
+      // running joins it; once it has finished, the next upload re-reads.
+      // Fast tier only; forensic unchanged.
+      // Admin forced deep re-scan always runs fresh.
+      final scanKey = forceDeepAudit
+          ? null
+          : _scanCacheKey(targetModel.model, finalPromptText, allImageParts);
+      final firstDeadline = DateTime.now().add(firstCheckBudget);
+      response = await _dedupedGenerate(scanKey, () async {
+        CloudGenerateContentResponse r;
         try {
-          response = await _executeWithExponentialBackoff(primaryFallback, contentParts);
-        } catch (e2) {
-          debugPrint('⚠️ [AiReceiptService] Primary fallback failed: $e2. Escalating to secondary fallback...');
-          response = await _executeWithExponentialBackoff(_fallbackModel2, contentParts);
+          r = await _executeWithExponentialBackoff(targetModel, contentParts,
+              deadline: firstDeadline);
+        } catch (e1) {
+          // 2.0.148+208: a timeout after 90s is not a model fault; re-running the
+          // same images on a fallback model only doubles the wait.
+          if (e1 is TimeoutException) rethrow;
+          debugPrint('⚠️ [AiReceiptService] Primary model failed: $e1. Escalating to primary fallback...');
+          try {
+            r = await _executeWithExponentialBackoff(primaryFallback, contentParts,
+                deadline: firstDeadline);
+          } catch (e2) {
+            if (e2 is TimeoutException) rethrow;
+            debugPrint('⚠️ [AiReceiptService] Primary fallback failed: $e2. Escalating to secondary fallback...');
+            r = await _executeWithExponentialBackoff(_fallbackModel2, contentParts,
+                deadline: firstDeadline);
+          }
         }
-      }
+        return r;
+      });
       aiStopwatch.stop();
       int aiDurationMs = aiStopwatch.elapsedMilliseconds;
       String pipelineTier = forceDeepAudit ? 'deep_reasoning_tier' : 'fast_tier';
@@ -1822,11 +1970,11 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         // AIR-71: Generic Multipack Brand Isolation Guard
         // If target company is Cadbury / Mondelez, generic multipacks (like "مالتي باك شوكولات")
         // without an explicit brand token must be disqualified (isTargetCompany = false).
-        final isMondelezTenant = targetCompany.contains('كادبري') ||
-            targetCompany.contains('كدبري') ||
-            targetCompany.toLowerCase().contains('cadbury') ||
-            targetCompany.contains('مونديليز') ||
-            targetCompany.toLowerCase().contains('mondelez');
+        final isMondelezTenant = isMondelezTargetCompany(targetCompany);
+        final Set<String> catalogBarcodeSet = catalogBarcodeMap.values
+            .map((b) => b.trim())
+            .where((b) => b.isNotEmpty)
+            .toSet();
 
         if (isMondelezTenant && result.extractedProducts.isNotEmpty) {
           const mondelezTokens = [
@@ -1851,7 +1999,8 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
             final isGenericMultipack = (nameLower.contains('مالتي باك') || nameLower.contains('مالتى باك')) &&
                 (nameLower.contains('شوكول') || nameLower.contains('شكول') || nameLower.contains('choc'));
 
-            if (isGenericMultipack && p.isTargetCompany) {
+            if (isGenericMultipack && p.isTargetCompany &&
+                !catalogBarcodeSet.contains(p.barcode.trim())) {
               final hasExplicitBrand = mondelezTokens.any((token) => nameLower.contains(token));
               if (!hasExplicitBrand) {
                 return p.copyWith(isTargetCompany: false);
@@ -1998,6 +2147,7 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                   result: result,
                   promotionalRules: promotionalRules,
                   allowCampaignMultipliers: allowMultipleChances,
+                  maxUnitsPerReceipt: maxChancesPerReceipt,
                 )
               : <MatchedPromotionalRuleResult>[];
 
@@ -2008,14 +2158,14 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
             // Spend-rule quantity isolation (AIR-83): When a rule is spend-based
             // (e.g. 150 EGP with Halawa prerequisite), chances MUST strictly depend on spend.
             // Piece counts (quantity) in the basket must NEVER inflate chances!
-            final ruleTotalChances = dartMatchedRules.fold<int>(0, (sum, r) => sum + r.multiplier);
+            final ruleTotalChances = dartMatchedRules.fold<int>(0, (sum, r) => sum + PromotionalRuleMatcher.matchedRuleUnits(r));
             calculatedChances = ruleTotalChances > 0 ? ruleTotalChances : 1;
             if (maxChancesPerReceipt > 0 && calculatedChances > maxChancesPerReceipt) {
               calculatedChances = maxChancesPerReceipt;
             }
           } else if (hasAnyRuleMatch) {
             // Pure quantity-based rules (e.g. buy 2 get 1)
-            final ruleTotalChances = dartMatchedRules.fold<int>(0, (sum, r) => sum + r.multiplier);
+            final ruleTotalChances = dartMatchedRules.fold<int>(0, (sum, r) => sum + PromotionalRuleMatcher.matchedRuleUnits(r));
             calculatedChances = ruleTotalChances > 0 ? ruleTotalChances : 1;
             if (maxChancesPerReceipt > 0 && calculatedChances > maxChancesPerReceipt) {
               calculatedChances = maxChancesPerReceipt;
@@ -2077,6 +2227,13 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         } else {
           calculatedChances = 0;
         }
+        // Campaign-level Smart Multipliers switch is the single source of
+        // truth: OFF => at most 1 chance; ON => capped by maxChancesPerReceipt.
+        calculatedChances = clampCampaignChances(
+          calculatedChances,
+          allowMultipleChances: allowMultipleChances,
+          maxChancesPerReceipt: maxChancesPerReceipt,
+        );
         result = result.copyWith(chancesEarned: calculatedChances);
 
         // Enrich extractedProducts with matched barcodes and canonical names from catalog bidirectionally
@@ -2118,6 +2275,35 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
             return item;
           }).toList();
           result = result.copyWith(extractedProducts: enrichedProducts);
+          // Catalog enrichment can flag registered-barcode lines as company
+          // products after the AIR-58 auto-heal ran; raise the total again so
+          // those lines count (only raises).
+          final double enrichedTargetSum = result.extractedProducts
+              .where((p) => p.isTargetCompany)
+              .fold<double>(0.0, (sum, p) => sum + (p.price * p.quantity));
+          if (enrichedTargetSum > result.targetCompanyTotal) {
+            result = result.copyWith(targetCompanyTotal: enrichedTargetSum);
+          }
+        }
+
+        // 2.0.153: branch from the store code printed in the receipt number.
+        // Overrides the AI branch (e.g. footer ads "تم افتتاح فرع ..."); no
+        // match keeps the AI's branch.
+        BranchModel? storeCodeBranch;
+        if (registeredBranches.isNotEmpty) {
+          final byCode = storeCodeBranch = StoreCodeBranchResolver.resolve(
+            result.receiptNumber,
+            registeredBranches,
+          );
+          if (byCode != null && byCode.branchName.trim().isNotEmpty) {
+            final prev = result.branchDetected;
+            result = result.copyWith(
+              branchDetected: byCode.branchName,
+              message: prev.trim().isNotEmpty && prev != byCode.branchName
+                  ? result.message.replaceAll(prev, byCode.branchName)
+                  : result.message,
+            );
+          }
         }
 
         // Deterministic POS & Store Code Reconciler in Dart
@@ -2126,9 +2312,10 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
               '${result.receiptNumber} ${result.branchDetected} ${result.message} ${result.storeChainDetected}'
                   .toEnglishDigits();
 
-          BranchModel? matchedBranchByCode;
+          BranchModel? matchedBranchByCode = storeCodeBranch;
 
           for (final branch in registeredBranches) {
+            if (matchedBranchByCode != null) break;
             final storeId = (branch.receiptSignature?.storeId ?? '')
                 .trim()
                 .toEnglishDigits();
@@ -2178,21 +2365,13 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           }
 
           if (matchedBranchByCode != null) {
-            String? matchedCanonicalAllowedBranch;
-            final cleanBName = CompanyGiftsService.normalizeBranchToken(
+            // Exact or longest campaign name. A shorter sibling that merely
+            // shares a token (طنطا inside طنطا اوت ليت) is not a match.
+            final String? matchedCanonicalAllowedBranch =
+                CanonicalBranchResolver.pickCampaignName(
               matchedBranchByCode.branchName,
+              allowedBranches,
             );
-            for (final ab in allowedBranches) {
-              final cleanAb = CompanyGiftsService.normalizeBranchToken(ab);
-              if (cleanAb.isNotEmpty &&
-                  cleanBName.isNotEmpty &&
-                  (cleanAb == cleanBName ||
-                      cleanAb.contains(cleanBName) ||
-                      cleanBName.contains(cleanAb))) {
-                matchedCanonicalAllowedBranch = ab;
-                break;
-              }
-            }
 
             final isAllowed =
                 isAllBranches ||
@@ -2232,10 +2411,11 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                           : result.message),
               );
             } else {
-              // Strictly reject if the POS Store Code belongs to a branch outside the campaign's allowedBranches!
+              // The branch doc is not one of this campaign's names. The receipt
+              // number is checked next and rejects only when that is not a
+              // unique campaign branch either.
               result = result.copyWith(
                 isBranchMatched: false,
-                isValid: false,
                 branchDetected: fixedBranchName,
                 storeChainDetected:
                     matchedBranchByCode.retailChainName.isNotEmpty
@@ -2246,58 +2426,33 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           }
         }
 
-        // Auto-reconcile detected branch against allowedBranches in Dart using canonical resolution
+        // A unique store code wins over the detected name. Name picking is
+        // exact, then one longest contained name, never the first short sibling.
         if (allowedBranches.isNotEmpty) {
           final detectedRaw = result.branchDetected.trim();
           final detectedClean = CompanyGiftsService.normalizeBranchToken(detectedRaw);
-          bool matchedAnyAllowed = false;
-
-          for (final ab in allowedBranches) {
-            final abClean = CompanyGiftsService.normalizeBranchToken(ab);
-
-            if (detectedClean.isNotEmpty && abClean.isNotEmpty) {
-              if (detectedClean == abClean ||
-                  detectedClean.contains(abClean) ||
-                  abClean.contains(detectedClean) ||
-                  (detectedClean.contains('عبور') &&
-                      abClean.contains('عبور')) ||
-                  (detectedClean.contains('رحاب') &&
-                      abClean.contains('رحاب')) ||
-                  (detectedClean.contains('سموحه') &&
-                      abClean.contains('سموحه')) ||
-                  (detectedClean.contains('ستانلي') &&
-                      abClean.contains('ستانلي')) ||
-                  (detectedClean.contains('جاردينيا') &&
-                      abClean.contains('جاردينيا')) ||
-                  (detectedClean.contains('عجمي') &&
-                      abClean.contains('عجمي')) ||
-                  (detectedClean.contains('محله') &&
-                      abClean.contains('محله')) ||
-                  (detectedClean.contains('تجمع') &&
-                      abClean.contains('تجمع')) ||
-                  (detectedClean.contains('اكتوبر') &&
-                      abClean.contains('اكتوبر')) ||
-                  (detectedClean.contains('منصوره') &&
-                      abClean.contains('منصوره')) ||
-                  (detectedClean.contains('شبين') &&
-                      abClean.contains('شبين')) ||
-                  (detectedClean.contains('منتزه') &&
-                      abClean.contains('منتزه')) ||
-                  (detectedClean.contains('ميامي') &&
-                      abClean.contains('ميامي')) ||
-                  (detectedClean.contains('جناكليس') &&
-                      abClean.contains('جناكليس'))) {
-                result = result.copyWith(
-                  isBranchMatched: true,
-                  branchDetected: ab,
-                );
-                matchedAnyAllowed = true;
-                break;
-              }
-            }
-          }
-
-          if (!isAllBranches && !matchedAnyAllowed && detectedClean.isNotEmpty) {
+          final picked = CanonicalBranchResolver.pickCampaignName(detectedRaw, allowedBranches);
+          final codeName = campaignBranchIds.isNotEmpty
+              ? StoreCodeBranchResolver.campaignBranchName(
+                  result.receiptNumber,
+                  campaignBranchIds,
+                  campaignBranchNames,
+                )
+              : null;
+          if (codeName != null) {
+            result = result.copyWith(
+              isBranchMatched: true,
+              branchDetected: codeName,
+              unfulfilledConditions: result.unfulfilledConditions
+                  .where((c) => !c.contains('فرع') && !c.contains('الفروع'))
+                  .toList(),
+            );
+          } else if (picked != null) {
+            result = result.copyWith(
+              isBranchMatched: true,
+              branchDetected: picked,
+            );
+          } else if (!isAllBranches && detectedClean.isNotEmpty) {
             result = result.copyWith(
               isBranchMatched: false,
               isValid: false,
@@ -2318,6 +2473,24 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
             bNorm = bNorm.substring(0, bNorm.length - 1).trim();
           }
           result = result.copyWith(branchDetected: bNorm);
+        }
+
+        // Store code again after parenthesis cleanup, still ahead of any name.
+        if (campaignBranchIds.isNotEmpty) {
+          final codeName = StoreCodeBranchResolver.campaignBranchName(
+            result.receiptNumber,
+            campaignBranchIds,
+            campaignBranchNames,
+          );
+          if (codeName != null && result.branchDetected != codeName) {
+            result = result.copyWith(
+              isBranchMatched: true,
+              branchDetected: codeName,
+              unfulfilledConditions: result.unfulfilledConditions
+                  .where((c) => !c.contains('فرع') && !c.contains('الفروع'))
+                  .toList(),
+            );
+          }
         }
 
         // Multi-chain matching reconciliation
@@ -2365,12 +2538,24 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
 
         // Promotional rules deterministic reconciliation in Dart
         if (promotionalRules.isNotEmpty && result.extractedProducts.isNotEmpty) {
+          // Spend comes from the item totals, not capped by the AI's own
+          // targetCompanyTotal (AIR-37 cap), so an AI under-count can't hide a
+          // qualifying tier. The total below is only ever raised.
           final dartMatches = PromotionalRuleMatcher.matchAllWithMultipliers(
             result: result,
             promotionalRules: promotionalRules,
             allowCampaignMultipliers: allowMultipleChances,
+            capSpendToAiTotal: false,
           );
           if (dartMatches.isNotEmpty) {
+            // Trust the deterministic matcher over the AI's own total: when a
+            // spend rule matched, its qualifying pool spend (barcode/scope
+            // filtered, after discounts) is the company total. Only raises it;
+            // scope, competitor filtering and exclusive tiers are unchanged.
+            final matcherSpend = qualifyingSpendFromMatches(dartMatches);
+            if (matcherSpend > result.targetCompanyTotal) {
+              result = result.copyWith(targetCompanyTotal: matcherSpend);
+            }
             final double promoMinSpendThreshold = promotionalRules
                 .where((r) => r.isSpendBased)
                 .map((r) => r.effectiveMinSpend)
@@ -2413,51 +2598,10 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         dartStopwatch.stop();
         int dartDurationMs = dartStopwatch.elapsedMilliseconds;
 
-        // 🛑 Conditional Escalation to Deep Reasoning Tier (AIR-72)
-        if (!forceDeepAudit &&
-            (result.isTampered ||
-                (result.fraudRiskScore >= 40 &&
-                    result.isThermalPosReceipt &&
-                    !result.isHandwritten &&
-                    !result.isScreenCapture))) {
-          try {
-            final deepAiStopwatch = Stopwatch()..start();
-            final deepPrompt = TextPart(
-              '⚠️ تنبيه تدقيق جنائي عميق واستدلال متقدم (Deep Forensic Audit - AIR-72):\n'
-              'هذه الفاتورة تحتوي على اشتباه تلاعب في الأرقام أو درجة خطورة تزوير مرتفعة.\n'
-              'يرجى إجراء فحص مجهري فائق الدقة لحواف الأرقام المطبوعة، وتطابق كود الفرع، وصحة البنود، واستخراج القرار النهائي الصارم.\n\n'
-              '$finalPromptText',
-            );
-            final deepResponse = await _deepAuditModel
-                .generateContent([
-                  Content.multi([deepPrompt, ...allImageParts]),
-                ])
-                .timeout(const Duration(seconds: 30));
-            deepAiStopwatch.stop();
-            aiDurationMs += deepAiStopwatch.elapsedMilliseconds;
-            pipelineTier = 'deep_reasoning_tier';
-
-            if (deepResponse.text != null && deepResponse.text!.trim().isNotEmpty) {
-              final deepJson = _cleanAndParseJson(deepResponse.text!);
-              final deepResult = AiReceiptAnalysisResult.fromJson(
-                deepJson,
-                durationMs: stopwatch.elapsedMilliseconds,
-                targetCompany: targetCompany,
-                targetBrands: resolvedRequiredProducts,
-              );
-              result = result.copyWith(
-                isTampered: deepResult.isTampered,
-                fraudRiskScore: deepResult.fraudRiskScore,
-                fraudReasons: deepResult.fraudReasons.isNotEmpty
-                    ? deepResult.fraudReasons
-                    : result.fraudReasons,
-                isValid: !deepResult.isTampered && result.isValid,
-              );
-            }
-          } catch (deepErr) {
-            debugPrint('Deep Reasoning Audit Fallback gracefully ignored: $deepErr');
-          }
-        }
+        // 2.0.150+211: the automatic second forensic check (AIR-72, risk >= 40
+        // / isTampered -> deep model) was removed on Mohamed's request; the
+        // first check's result is final. Admin forced deep re-scan
+        // (forceDeepAudit) is unchanged.
 
         stopwatch.stop();
         final int finalDurationMs = stopwatch.elapsedMilliseconds;
@@ -2495,9 +2639,8 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
               endDate: endDate,
             );
             if (parsedDate != null) {
-              if (startDate != null && parsedDate.isBefore(startDate)) {
-                final startStr =
-                    "${startDate.day}/${startDate.month}/${startDate.year}";
+              if (receiptDayBeforeStart(parsedDate, startDate)) {
+                final startStr = campaignFirstDayLabel(startDate);
                 return result.copyWith(
                   isValid: false,
                   durationMs: finalDurationMs,
@@ -2509,10 +2652,9 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                       'تاريخ الشراء بالفاتورة ($rawDateStr) أقدم من تاريخ بداية الحملة ($startStr). الشراء غير مشمول بالعرض.',
                 );
               }
-              if (endDate != null &&
-                  parsedDate.isAfter(endDate.add(const Duration(days: 1)))) {
-                final endStr =
-                    "${endDate.day}/${endDate.month}/${endDate.year}";
+              // 2.0.162: the end day is the last inclusive day (Cairo).
+              if (receiptDayAfterEnd(parsedDate, endDate)) {
+                final endStr = campaignLastDayLabel(endDate);
                 return result.copyWith(
                   isValid: false,
                   durationMs: finalDurationMs,
@@ -2747,8 +2889,24 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
     DateTime? startDate,
     DateTime? endDate,
   }) {
+    // 2.0.162: compare against Cairo calendar days, end day inclusive.
+    final DateTime? sDay = campaignFirstDay(startDate);
+    final DateTime? eDay = campaignLastDay(endDate);
     try {
-      final clean = dateStr.replaceAll(RegExp(r'[^\d/\-]'), '');
+      // 2.0.155: take only the first date token (ignores a trailing time such
+      // as "17:37") and accept '/', '-' or '.' separators. Year-first dates
+      // (yyyy/mm/dd) are matched before dd/mm/yy.
+      final ymd = RegExp(r'(\d{4})\s*[/\-.]\s*(\d{1,2})\s*[/\-.]\s*(\d{1,2})(?!\d)')
+          .firstMatch(dateStr);
+      final dmy = ymd == null
+          ? RegExp(r'(?<!\d)(\d{1,2})\s*[/\-.]\s*(\d{1,2})\s*[/\-.]\s*(\d{2,4})(?!\d)')
+              .firstMatch(dateStr)
+          : null;
+      final clean = ymd != null
+          ? '${ymd.group(1)}/${ymd.group(2)}/${ymd.group(3)}'
+          : dmy != null
+              ? '${dmy.group(1)}/${dmy.group(2)}/${dmy.group(3)}'
+              : dateStr.replaceAll(RegExp(r'[^\d/\-]'), '');
       if (clean.contains('/')) {
         final parts = clean.split('/');
         if (parts.length >= 3) {
@@ -2759,13 +2917,13 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
 
           DateTime resolveHealedDate(int y, int m, int d) {
             final direct = DateTime(y, m, d);
-            if (startDate != null && direct.isBefore(startDate)) {
-              final healedYear = startDate.year;
+            if (sDay != null && direct.isBefore(sDay)) {
+              final healedYear = sDay.year;
               if (y != healedYear) {
                 final healedDate = DateTime(healedYear, m, d);
-                final startBound = DateTime(startDate.year, startDate.month, startDate.day);
-                final endBound = endDate != null
-                    ? DateTime(endDate.year, endDate.month, endDate.day).add(const Duration(days: 1))
+                final startBound = DateTime(sDay.year, sDay.month, sDay.day);
+                final endBound = eDay != null
+                    ? DateTime(eDay.year, eDay.month, eDay.day)
                     : DateTime(2100);
                 final tomorrow = DateTime.now().add(const Duration(days: 1));
                 if (!healedDate.isBefore(startBound) &&
@@ -2779,9 +2937,11 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
             return direct;
           }
 
-          // Case 1: YYYY/MM/DD format
+          // Case 1: YYYY/MM/DD format.
+          // 2.0.155: the third part is the day here; it was read as a 2-digit
+          // year (+2000), so 2026/10/30 became day 2030 -> 2032-04-21.
           if (a > 1000) {
-            return resolveHealedDate(a, b, year);
+            return resolveHealedDate(a, b, int.parse(parts[2]));
           }
 
           // Case 2: Unambiguous day/month
@@ -2814,14 +2974,13 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
             return candidateDDMM;
           }
 
-          // Check against campaign window [startDate, endDate]
-          if (startDate != null || endDate != null) {
-            final startBound = startDate != null
-                ? DateTime(startDate.year, startDate.month, startDate.day)
+          // Check against campaign window [sDay, eDay]
+          if (sDay != null || eDay != null) {
+            final startBound = sDay != null
+                ? DateTime(sDay.year, sDay.month, sDay.day)
                 : DateTime(2000);
-            final endBound = endDate != null
-                ? DateTime(endDate.year, endDate.month, endDate.day)
-                    .add(const Duration(days: 1))
+            final endBound = eDay != null
+                ? DateTime(eDay.year, eDay.month, eDay.day)
                 : DateTime(2100);
 
             final bool ddmmInWindow = !candidateDDMM.isBefore(startBound) &&
@@ -2855,13 +3014,13 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
 
           DateTime resolveHealedDate(int y, int m, int d) {
             final direct = DateTime(y, m, d);
-            if (startDate != null && direct.isBefore(startDate)) {
-              final healedYear = startDate.year;
+            if (sDay != null && direct.isBefore(sDay)) {
+              final healedYear = sDay.year;
               if (y != healedYear) {
                 final healedDate = DateTime(healedYear, m, d);
-                final startBound = DateTime(startDate.year, startDate.month, startDate.day);
-                final endBound = endDate != null
-                    ? DateTime(endDate.year, endDate.month, endDate.day).add(const Duration(days: 1))
+                final startBound = DateTime(sDay.year, sDay.month, sDay.day);
+                final endBound = eDay != null
+                    ? DateTime(eDay.year, eDay.month, eDay.day)
                     : DateTime(2100);
                 final tomorrow = DateTime.now().add(const Duration(days: 1));
                 if (!healedDate.isBefore(startBound) &&
@@ -2893,13 +3052,12 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
               return candidateDDMM;
             }
 
-            if (startDate != null || endDate != null) {
-              final startBound = startDate != null
-                  ? DateTime(startDate.year, startDate.month, startDate.day)
+            if (sDay != null || eDay != null) {
+              final startBound = sDay != null
+                  ? DateTime(sDay.year, sDay.month, sDay.day)
                   : DateTime(2000);
-              final endBound = endDate != null
-                  ? DateTime(endDate.year, endDate.month, endDate.day)
-                      .add(const Duration(days: 1))
+              final endBound = eDay != null
+                  ? DateTime(eDay.year, eDay.month, eDay.day)
                   : DateTime(2100);
 
               final bool ddmmInWindow = !candidateDDMM.isBefore(startBound) &&
@@ -3036,7 +3194,7 @@ class PromotionalRuleMatcher {
           double totalSpend = 0.0;
           int matchedItemCount = 0;
           for (final p in effectiveProducts) {
-            if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands)) {
+            if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands, promotionalRules)) {
               totalSpend += p.actualLineSpend;
               matchedItemCount++;
             }
@@ -3054,7 +3212,7 @@ class PromotionalRuleMatcher {
           int matchedItemCount = 0;
 
           for (final p in effectiveProducts) {
-            if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands)) {
+            if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands, promotionalRules)) {
               totalMatchedQty += getEffectiveProductQuantity(p);
               matchedItemCount++;
             }
@@ -3127,6 +3285,7 @@ class PromotionalRuleMatcher {
           matchedRule.triggerProduct,
           matchedRule,
           campaignBrands,
+          promotionalRules,
         )) {
           final qty = getEffectiveProductQuantity(p);
           totalTriggerQty += qty;
@@ -3144,7 +3303,7 @@ class PromotionalRuleMatcher {
           ? matchedRule.effectiveMinSpend
           : matchedRule.minSpend;
       if (effectiveMin > 0 && totalTriggerSpend >= effectiveMin) {
-        if (matchedRule.allowMultipliers || allowCampaignMultipliers) {
+        if (allowCampaignMultipliers) {
           final divisor = matchedRule.minSpend > 0 ? matchedRule.minSpend : effectiveMin;
           multiplier = divisor > 0 ? (totalTriggerSpend ~/ divisor) : 1;
           if (multiplier < 1) multiplier = 1;
@@ -3155,7 +3314,7 @@ class PromotionalRuleMatcher {
     } else {
       if (matchedRule.minQuantity > 0 &&
           totalTriggerQty >= matchedRule.minQuantity) {
-        if (matchedRule.allowMultipliers || allowCampaignMultipliers) {
+        if (allowCampaignMultipliers) {
           multiplier = totalTriggerQty ~/ matchedRule.minQuantity;
           if (multiplier < 1) multiplier = 1;
         } else {
@@ -3205,11 +3364,118 @@ class PromotionalRuleMatcher {
   /// Evaluates ALL promotional rules against the receipt products,
   /// grouping by unique trigger product family so higher tiers beat lower tiers,
   /// and different products purchased together in the same receipt ALL produce rewards!
+  ///
+  /// [maxUnitsPerReceipt]: when non-null the campaign's per-receipt unit cap
+  /// is enforced on the result (see [capMatchedRuleUnits]): ON => at most
+  /// [maxUnitsPerReceipt] gift units (0 = no cap), OFF => exactly 1 unit.
   static List<MatchedPromotionalRuleResult> matchAllWithMultipliers({
     AiReceiptAnalysisResult? result,
     List<ExtractedProductItem> extractedProducts = const [],
     required List<PromotionalRuleItem> promotionalRules,
     bool allowCampaignMultipliers = true,
+    bool capSpendToAiTotal = true,
+    int? maxUnitsPerReceipt,
+  }) {
+    final raw = _matchAllUncapped(
+      result: result,
+      extractedProducts: extractedProducts,
+      promotionalRules: promotionalRules,
+      allowCampaignMultipliers: allowCampaignMultipliers,
+      capSpendToAiTotal: capSpendToAiTotal,
+    );
+    if (maxUnitsPerReceipt == null) return raw;
+    return capMatchedRuleUnits(
+      raw,
+      allowMultipleChances: allowCampaignMultipliers,
+      maxChancesPerReceipt: maxUnitsPerReceipt,
+    );
+  }
+
+  /// Number of gift units a matched rule hands over.
+  /// Award units of one matched rule = its offer count (multiplier). A rule
+  /// whose single offer hands over several pieces (e.g. 6 bags) still counts
+  /// as ONE unit, so the cap never splits an offer.
+  static int matchedRuleUnits(MatchedPromotionalRuleResult r) {
+    return r.multiplier > 0 ? r.multiplier : 1;
+  }
+
+  static double _ruleUnitValue(MatchedPromotionalRuleResult r) {
+    double best = 0;
+    for (final g in r.rule.linkedGifts) {
+      if (g.unitValue > best) best = g.unitValue;
+    }
+    if (best > 0) return best;
+    if (r.rule.rewardAmount > 0) return r.rule.rewardAmount;
+    return r.rule.totalVoucherValue > 0 ? r.rule.totalVoucherValue : 0.0;
+  }
+
+  static String _prizeSummary(PromotionalRuleItem rule, int count, double baseAmount) {
+    if (count <= 1) return rule.rewardValue;
+    if (rule.rewardType == 'voucher' || baseAmount > 0) {
+      final totalAmount = baseAmount * count;
+      final totalInt = totalAmount == totalAmount.roundToDouble() ? totalAmount.toInt() : totalAmount;
+      return '$count × ${rule.rewardValue} (إجمالي $totalInt جنيه)';
+    }
+    return '$count × ${rule.rewardValue}';
+  }
+
+  /// Caps the total gift UNITS handed over for one receipt.
+  /// Smart Multipliers ON => at most [maxChancesPerReceipt] units (0 = no cap);
+  /// OFF => 1 unit. Highest-value gifts are kept first; lower-value rules are
+  /// reduced or dropped. Order of the returned list follows unit value (desc).
+  static List<MatchedPromotionalRuleResult> capMatchedRuleUnits(
+    List<MatchedPromotionalRuleResult> matches, {
+    required bool allowMultipleChances,
+    int maxChancesPerReceipt = 0,
+  }) {
+    if (matches.isEmpty) return matches;
+    // Switch OFF keeps the existing behaviour (each rule already limited to
+    // one offer); the cross-rule cap applies only when multiple chances are ON.
+    final int cap = allowMultipleChances && maxChancesPerReceipt > 0 ? maxChancesPerReceipt : 0;
+    if (cap <= 0) return matches;
+    final total = matches.fold<int>(0, (s, r) => s + matchedRuleUnits(r));
+    if (total <= cap) return matches;
+
+    final sorted = List<MatchedPromotionalRuleResult>.from(matches)
+      ..sort((a, b) => _ruleUnitValue(b).compareTo(_ruleUnitValue(a)));
+    final out = <MatchedPromotionalRuleResult>[];
+    int remaining = cap;
+    for (final r in sorted) {
+      if (remaining <= 0) break;
+      final units = matchedRuleUnits(r);
+      if (units <= remaining) {
+        out.add(r);
+        remaining -= units;
+        continue;
+      }
+      final rule = r.rule;
+      final double baseAmount = rule.totalVoucherValue > 0
+          ? rule.totalVoucherValue
+          : (rule.rewardAmount > 0 ? rule.rewardAmount : 0.0);
+      final int newCount = remaining;
+      final List<LinkedGiftAllocation> gifts =
+          rule.linkedGifts.map((g) => g.copyWith(quantity: g.quantity * newCount)).toList();
+      out.add(MatchedPromotionalRuleResult(
+        rule: rule,
+        multiplier: newCount,
+        totalTriggerQuantity: r.totalTriggerQuantity,
+        totalRewardAmount: baseAmount * newCount,
+        formattedPrizeSummary: _prizeSummary(rule, newCount, baseAmount),
+        multipliedLinkedGifts: gifts,
+        qualifyingProductNames: r.qualifyingProductNames,
+        qualifyingSpend: r.qualifyingSpend,
+      ));
+      remaining -= newCount;
+    }
+    return out;
+  }
+
+  static List<MatchedPromotionalRuleResult> _matchAllUncapped({
+    AiReceiptAnalysisResult? result,
+    List<ExtractedProductItem> extractedProducts = const [],
+    required List<PromotionalRuleItem> promotionalRules,
+    bool allowCampaignMultipliers = true,
+    bool capSpendToAiTotal = true,
   }) {
     if (promotionalRules.isEmpty) return [];
 
@@ -3240,8 +3506,26 @@ class PromotionalRuleMatcher {
 
     // 1. Group rules by canonical product family tokens (to resolve and bundle tiers of the same product family)
     final Map<String, List<PromotionalRuleItem>> rulesByProductGroup = {};
+    // Spend rules that share the exact same barcode set compete for the same
+    // money, whatever their wording or detected brand family, so they must
+    // always share one pool (highest-value gift first, remainder to lower).
+    final Map<String, int> spendPoolCounts = {};
     for (final rule in promotionalRules) {
-      final key = _getProductGroupKey(rule);
+      final pk = _spendPoolKey(rule);
+      if (pk != null) spendPoolCounts[pk] = (spendPoolCounts[pk] ?? 0) + 1;
+    }
+    for (final rule in promotionalRules) {
+      final familyKey = _getProductGroupKey(rule);
+      final poolKey = _spendPoolKey(rule);
+      final bool sharedPool =
+          poolKey != null && (spendPoolCounts[poolKey] ?? 0) > 1;
+      // Known product families keep their grouping unless the rule shares an
+      // identical barcode pool with other spend rules.
+      final key = sharedPool
+          ? poolKey
+          : familyKey.contains('_family')
+              ? familyKey
+              : (poolKey ?? familyKey);
       rulesByProductGroup.putIfAbsent(key, () => []).add(rule);
     }
 
@@ -3261,9 +3545,30 @@ class PromotionalRuleMatcher {
       final isSpendGroup = group.any((r) => r.isSpendBased);
 
       if (isSpendGroup) {
-        // Sort descending by effectiveMinSpend (highest spend tier first: e.g. 200 EGP before 150 EGP before 100 EGP)
-        final sortedGroup = List<PromotionalRuleItem>.from(group)
+        // Highest-value gift wins: rules on the same products are ranked by
+        // gift value (known values first), then by spend tier. The spend is
+        // handed out greedily: the best rule takes its share and only the
+        // remainder can qualify lower tiers (never stacked on the same spend).
+        final spendTierOrder = List<PromotionalRuleItem>.from(group)
           ..sort((a, b) => b.effectiveMinSpend.compareTo(a.effectiveMinSpend));
+        // Exclusive spend tiers (general, all campaigns): when 2+ spend rules
+        // share one pool they form a ladder. The receipt gets ONLY the highest
+        // tier it reaches; a tier without maxSpend is implicitly capped by the
+        // next tier's minSpend. Multipliers apply to the top tier only
+        // (e.g. 900 on a 450 top tier = 2x top gift); lower tiers are single
+        // brackets and never receive the remainder of a higher tier's spend.
+        final bool isSpendLadder =
+            group.where((r) => r.isSpendBased).length > 1;
+        final sortedGroup = isSpendLadder
+            ? (List<PromotionalRuleItem>.from(group)
+              ..sort((a, b) {
+                final c = b.effectiveMinSpend.compareTo(a.effectiveMinSpend);
+                return c != 0 ? c : compareRulesByGiftValue(a, b);
+              }))
+            : (List<PromotionalRuleItem>.from(group)
+              ..sort(compareRulesByGiftValue));
+        double? remainingPoolSpend;
+        final Set<int> poolConsumedIndices = {};
 
         for (final rule in sortedGroup) {
           // Check combo brand requirement (e.g. Signal AND Closeup together)
@@ -3322,7 +3627,7 @@ class PromotionalRuleMatcher {
             final p = effectiveProducts[i];
             final remaining = remainingItemQuantities[i] ?? 0;
             if (remaining > 0 &&
-                _matchesProduct(p, rule.triggerProduct, rule, campaignBrands)) {
+                _matchesProduct(p, rule.triggerProduct, rule, campaignBrands, promotionalRules)) {
               final totalEffectiveQty = getEffectiveProductQuantity(p);
               final double actualFullItemSpend = p.actualLineSpend;
               final double itemSpend = totalEffectiveQty > 0
@@ -3337,16 +3642,23 @@ class PromotionalRuleMatcher {
 
           // Strict financial guard: total eligible spend on trigger products can never exceed
           // target company total spend on the receipt (AIR-37).
-          if (result != null &&
+          if (capSpendToAiTotal &&
+              result != null &&
               result.targetCompanyTotal > 0 &&
               totalEligibleSpend > result.targetCompanyTotal) {
             totalEligibleSpend = result.targetCompanyTotal;
           }
 
-          final isTopTierInGroup = sortedGroup.first.id == rule.id;
+          // Spend already used by a higher-value rule of this pool is not available again.
+          if (remainingPoolSpend != null && totalEligibleSpend > remainingPoolSpend) {
+            totalEligibleSpend = remainingPoolSpend;
+          }
+
+          final isTopTierInGroup = spendTierOrder.first.id == rule.id;
           final bool isBoundedBracket = !isTopTierInGroup &&
-              rule.hasSpendRange &&
-              (rule.maxSpend != null && rule.maxSpend! > rule.minSpend);
+              (isSpendLadder ||
+                  (rule.hasSpendRange &&
+                      (rule.maxSpend != null && rule.maxSpend! > rule.minSpend)));
           final effectiveMin = rule.effectiveMinSpend;
           final bool qualifiesMin =
               effectiveMin > 0 && totalEligibleSpend >= effectiveMin;
@@ -3361,7 +3673,7 @@ class PromotionalRuleMatcher {
             if (isBoundedBracket) {
               // Bounded middle bracket range (e.g. 95 to 139 EGP) qualifies as 1 bracket match
               count = 1;
-            } else if (rule.allowMultipliers || allowCampaignMultipliers) {
+            } else if (allowCampaignMultipliers) {
               final divisor = rule.minSpend > 0 ? rule.minSpend : effectiveMin;
               final effectiveSpendForMultiplier = totalEligibleSpend +
                   (rule.discountTolerance > 0 ? rule.discountTolerance : 0.0);
@@ -3369,10 +3681,12 @@ class PromotionalRuleMatcher {
               if (count < 1) count = 1;
             }
 
-            // Consume products for this spend tier
-            for (final idx in matchingProductIndices) {
-              remainingItemQuantities[idx] = 0;
-            }
+            // Spend used by this rule; the remainder stays available to lower tiers.
+            final double usedSpend = isBoundedBracket
+                ? totalEligibleSpend
+                : (rule.minSpend > 0 ? rule.minSpend : effectiveMin) * count;
+            remainingPoolSpend = (totalEligibleSpend - usedSpend).clamp(0.0, double.infinity);
+            poolConsumedIndices.addAll(matchingProductIndices);
 
             final double baseAmount = rule.totalVoucherValue > 0
                 ? rule.totalVoucherValue
@@ -3416,9 +3730,13 @@ class PromotionalRuleMatcher {
               ),
             );
 
-            // Winner tier resolved for this spend group
-            break;
+            if (isSpendLadder) break; // exclusive: only the highest reached tier
+            if (remainingPoolSpend <= 0) break;
           }
+        }
+        // Consume the pool's products once its rules are resolved (no reuse by other groups)
+        for (final idx in poolConsumedIndices) {
+          remainingItemQuantities[idx] = 0;
         }
       } else {
         // Quantity-based rules within the family (highest tier first: e.g. 2 pcs before 1 pc)
@@ -3433,7 +3751,7 @@ class PromotionalRuleMatcher {
             final p = effectiveProducts[i];
             final remaining = remainingItemQuantities[i] ?? 0;
             if (remaining > 0 &&
-                _matchesProduct(p, rule.triggerProduct, rule, campaignBrands)) {
+                _matchesProduct(p, rule.triggerProduct, rule, campaignBrands, promotionalRules)) {
               availableQtyForRule += remaining;
               matchingProductIndices.add(i);
             }
@@ -3441,7 +3759,7 @@ class PromotionalRuleMatcher {
 
           if (rule.minQuantity > 0 && availableQtyForRule >= rule.minQuantity) {
             int count = 1;
-            if (rule.allowMultipliers || allowCampaignMultipliers) {
+            if (allowCampaignMultipliers) {
               count = availableQtyForRule ~/ rule.minQuantity;
               if (count < 1) count = 1;
             }
@@ -3562,7 +3880,7 @@ class PromotionalRuleMatcher {
                 foundBrands.add(rb);
               }
             }
-            if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands)) {
+            if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands, promotionalRules)) {
               currentSpend += p.actualLineSpend;
             }
           }
@@ -3586,7 +3904,7 @@ class PromotionalRuleMatcher {
         } else {
           double currentSpend = 0.0;
           for (final p in products) {
-            if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands)) {
+            if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands, promotionalRules)) {
               currentSpend += p.actualLineSpend;
             }
           }
@@ -3606,7 +3924,7 @@ class PromotionalRuleMatcher {
         // Quantity-based rule check
         int count = 0;
         for (final p in products) {
-          if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands)) {
+          if (_matchesProduct(p, rule.triggerProduct, rule, campaignBrands, promotionalRules)) {
             count += getEffectiveProductQuantity(p);
           }
         }
@@ -3991,14 +4309,46 @@ class PromotionalRuleMatcher {
     return brands;
   }
 
+  static bool _ruleHasItemScope(PromotionalRuleItem? rule) =>
+      rule != null &&
+      (rule.selectedBarcodes.any((b) => b.trim().isNotEmpty) ||
+          rule.selectedProductNames.any((n) => n.trim().isNotEmpty) ||
+          rule.requiredBrands.any((b) => b.trim().isNotEmpty));
+
   static bool _matchesProduct(
     ExtractedProductItem product,
     String triggerProduct, [
     PromotionalRuleItem? rule,
     Iterable<String>? dynamicBrands,
+    List<PromotionalRuleItem>? siblingRules,
+    bool allowCompanySpendBypass = true,
   ]) {
-    final bool isCompanySpendRule =
-        (rule != null && (rule.isSpendBased || rule.conditionType == 'by_spend') && product.isTargetCompany);
+    // Company spend bypass: a target-company product counts toward a spend rule
+    // even when its (often OCR-misspelled) name doesn't match the rule's brands.
+    // Exception: if the rule has its own item scope (barcodes / names / brands)
+    // and the product strictly belongs to ANOTHER scoped spend rule of the same
+    // campaign, it must not leak into this rule (e.g. Dairy Milk products being
+    // counted on the Oreo rules). Strict = matched without the bypass.
+    bool isCompanySpendRule = allowCompanySpendBypass &&
+        rule != null &&
+        (rule.isSpendBased || rule.conditionType == 'by_spend') &&
+        product.isTargetCompany;
+    if (isCompanySpendRule &&
+        _ruleHasItemScope(rule) &&
+        siblingRules != null &&
+        siblingRules.length > 1) {
+      final belongsToOtherScopedRule = siblingRules.any((other) =>
+          other.id != rule.id &&
+          (other.isSpendBased || other.conditionType == 'by_spend') &&
+          _ruleHasItemScope(other) &&
+          _matchesProduct(product, other.triggerProduct, other, dynamicBrands,
+              null, false));
+      if (belongsToOtherScopedRule &&
+          !_matchesProduct(
+              product, triggerProduct, rule, dynamicBrands, null, false)) {
+        isCompanySpendRule = false;
+      }
+    }
 
     if (!isCompanySpendRule &&
         triggerProduct.trim().isEmpty &&
@@ -4038,6 +4388,16 @@ class PromotionalRuleMatcher {
       ...?dynamicBrands,
       if (rule != null) ...rule.requiredBrands,
     };
+
+    // 0. Exact catalog-name match: a product whose name equals one of the
+    // rule's selected product names belongs to the rule's item scope.
+    if (rule != null && rule.selectedProductNames.isNotEmpty) {
+      final nameNorm = _normalize(product.name);
+      if (nameNorm.isNotEmpty &&
+          rule.selectedProductNames.any((sel) => _normalize(sel) == nameNorm)) {
+        return true;
+      }
+    }
 
     // 0. Golden Barcode Priority Match:
     // If the rule has selected barcodes from catalog, or trigger contains barcode, match immediately!
@@ -4105,8 +4465,8 @@ class PromotionalRuleMatcher {
         (tb) => productBrands.contains(tb) || pNorm.contains(tb),
       );
       // In spend rules for a company, if AI confirmed product belongs to target company, do not reject solely on brand name root
-      final bool isCompanySpendAnchor = (rule?.conditionType == 'by_spend') &&
-          product.isTargetCompany;
+      final bool isCompanySpendAnchor =
+          isCompanySpendRule && rule?.conditionType == 'by_spend';
       if (!hasMatchingBrand && !isCompanySpendAnchor) {
         return false;
       }
@@ -4398,7 +4758,7 @@ class PromotionalRuleMatcher {
     final effectiveRuleBrands = _isolateSubBrands(rawEffectiveRuleBrands);
 
     final bool isCompanyProductSpendRule =
-        (rule?.conditionType == 'by_spend') && product.isTargetCompany;
+        isCompanySpendRule && rule?.conditionType == 'by_spend';
 
     if (effectiveRuleBrands.isNotEmpty || isCompanyProductSpendRule) {
       final Set<String> productBrands =
@@ -4779,6 +5139,32 @@ class PromotionalRuleMatcher {
     return tokens.toSet().toList();
   }
 
+  /// Gift value used to rank rules on the same products: voucher value, else
+  /// catalog unitValue x quantity of linked gifts. 0 means unknown.
+  static double ruleGiftValue(PromotionalRuleItem rule) {
+    if (rule.totalVoucherValue > 0) return rule.totalVoucherValue;
+    if (rule.rewardAmount > 0) return rule.rewardAmount;
+    return rule.linkedGifts.fold<double>(0.0, (acc, g) => acc + g.unitValue * g.quantity);
+  }
+
+  /// Known gift value first (high to low); gifts without a value come after,
+  /// ranked by spend tier (high to low).
+  static int compareRulesByGiftValue(PromotionalRuleItem a, PromotionalRuleItem b) {
+    final va = ruleGiftValue(a);
+    final vb = ruleGiftValue(b);
+    if ((va > 0) != (vb > 0)) return va > 0 ? -1 : 1;
+    if (va != vb) return vb.compareTo(va);
+    return b.effectiveMinSpend.compareTo(a.effectiveMinSpend);
+  }
+
+  /// Spend rules on the same product set share one pool, whatever their wording.
+  static String? _spendPoolKey(PromotionalRuleItem rule) {
+    if (!rule.isSpendBased || rule.isCombo || rule.selectedBarcodes.isEmpty) return null;
+    final codes = rule.selectedBarcodes.map((b) => b.trim()).where((b) => b.isNotEmpty).toSet().toList()..sort();
+    if (codes.isEmpty) return null;
+    return 'spend_pool_${codes.join(',')}';
+  }
+
   static String _getProductGroupKey(PromotionalRuleItem rule) {
     final titleNorm = _normalize(rule.ruleTitle);
     final triggerNorm = _normalize(rule.triggerProduct);
@@ -4930,10 +5316,96 @@ class MatchedPromotionalRuleResult {
   }
 }
 
+/// A matched rule whose reward the customer must pick from several options.
+class RewardChoiceGroup {
+  final String ruleId;
+  final String ruleTitle;
+  final int multiplier;
+  final List<RewardOption> options;
+
+  const RewardChoiceGroup({
+    required this.ruleId,
+    required this.ruleTitle,
+    this.multiplier = 1,
+    required this.options,
+  });
+
+  static RewardChoiceGroup? fromRule(PromotionalRuleItem rule, {int multiplier = 1}) {
+    if (!rule.hasRewardChoice) return null;
+    return RewardChoiceGroup(
+      ruleId: rule.id,
+      ruleTitle: rule.ruleTitle,
+      multiplier: multiplier < 1 ? 1 : multiplier,
+      options: rule.rewardOptions,
+    );
+  }
+}
+
+/// Merges allocations that refer to the same gift (by id, or by name when no id).
+/// Highest qualifying spend among matched spend-based rules (0 if none).
+/// Matched spend rules already passed their own min-spend (with tolerance).
+/// True for Cadbury / Mondelez campaigns (AIR-71 generic multipack rule scope).
+bool isMondelezTargetCompany(String targetCompany) {
+  final t = targetCompany.toLowerCase();
+  return t.contains('كادبري') || t.contains('كدبري') || t.contains('كادبوري') ||
+      t.contains('cadbury') || t.contains('مونديليز') || t.contains('mondelez');
+}
+
+double qualifyingSpendFromMatches(List<MatchedPromotionalRuleResult> matches) {
+  double best = 0.0;
+  for (final m in matches) {
+    if (m.rule.isSpendBased && m.qualifyingSpend > best) best = m.qualifyingSpend;
+  }
+  return best;
+}
+
+/// Receipt fields describing what the customer actually received after picking
+/// a reward option. Voucher value counts only voucher gifts, so choosing a
+/// product option (e.g. 2x chocolate) reports 0 voucher value, not the rule's
+/// default voucher amount.
+Map<String, dynamic> chosenRewardReceiptFields(List<LinkedGiftAllocation> chosenGifts) {
+  final voucherTotal = chosenGifts.fold<double>(0.0, (a, g) => a + g.totalMonetaryValue);
+  return {
+    'linked_gifts': chosenGifts.map((g) => g.toMap()).toList(),
+    'unit_value': voucherTotal,
+    'is_voucher': chosenGifts.any((g) => g.isVoucher),
+  };
+}
+
+List<LinkedGiftAllocation> consolidateLinkedGifts(Iterable<LinkedGiftAllocation> gifts) {
+  final Map<String, LinkedGiftAllocation> out = {};
+  for (final g in gifts) {
+    final key = g.giftId.isNotEmpty ? g.giftId : 'name:${g.giftName}';
+    final existing = out[key];
+    out[key] = existing == null ? g : existing.copyWith(quantity: existing.quantity + g.quantity);
+  }
+  return out.values.toList();
+}
+
 /// Represents a composite multi-offer prize bundle synthesized from all matched rules in a single receipt
+/// Applies the campaign-level Smart Multipliers switch to a chance count.
+/// OFF => at most 1; ON => capped by [maxChancesPerReceipt] when > 0.
+/// Values <= 0 are returned unchanged (0 means "no chance / rejected").
+int clampCampaignChances(
+  int chances, {
+  required bool allowMultipleChances,
+  int maxChancesPerReceipt = 0,
+}) {
+  if (chances <= 0) return chances;
+  if (!allowMultipleChances) return 1;
+  if (maxChancesPerReceipt > 0 && chances > maxChancesPerReceipt) {
+    return maxChancesPerReceipt;
+  }
+  return chances;
+}
+
 class CompositePromotionalBundle {
   final List<MatchedPromotionalRuleResult> matchedRules;
   final List<LinkedGiftAllocation> combinedLinkedGifts;
+  /// Gifts from rules WITHOUT a reward choice (always handed over).
+  final List<LinkedGiftAllocation> baseLinkedGifts;
+  /// Rules where the customer must choose one reward option.
+  final List<RewardChoiceGroup> rewardChoiceGroups;
   final String compositePrizeTitle;
   final double totalVoucherValue;
   final int totalChances;
@@ -4946,7 +5418,23 @@ class CompositePromotionalBundle {
     this.totalVoucherValue = 0.0,
     this.totalChances = 1,
     this.resolvedGameType,
+    this.baseLinkedGifts = const [],
+    this.rewardChoiceGroups = const [],
   });
+
+  bool get requiresRewardChoice => rewardChoiceGroups.isNotEmpty;
+
+  /// Gift names for "choose your gift" games: base gifts plus every reward option.
+  List<String> get candidateGiftNames {
+    if (!requiresRewardChoice) {
+      return combinedLinkedGifts.map((g) => g.giftName.trim()).where((n) => n.isNotEmpty).toSet().toList();
+    }
+    return <String>{
+      ...baseLinkedGifts.map((g) => g.giftName.trim()),
+      for (final grp in rewardChoiceGroups)
+        for (final o in grp.options) o.toAllocation().giftName.trim(),
+    }.where((n) => n.isNotEmpty).toList();
+  }
 
   static CompositePromotionalBundle fromMatchedRules(
     List<MatchedPromotionalRuleResult> rules, {
@@ -4964,15 +5452,34 @@ class CompositePromotionalBundle {
     }
 
     final Map<String, LinkedGiftAllocation> consolidatedGifts = {};
+    final List<RewardChoiceGroup> choiceGroups = [];
+    final List<LinkedGiftAllocation> defaultChoiceGifts = [];
+    final List<LinkedGiftAllocation> baseGifts = [];
     double totalVoucher = 0.0;
     int chances = 0;
     String? ruleLevelGameType;
 
     for (final r in rules) {
-      totalVoucher += r.totalRewardAmount;
-      chances += r.multiplier;
+      final ruleChoice = RewardChoiceGroup.fromRule(r.rule, multiplier: r.multiplier);
+      // Choice rules: value comes from the (default) option, not the rule's own reward amount.
+      totalVoucher += ruleChoice != null
+          ? ruleChoice.options.first.toAllocation(multiplier: ruleChoice.multiplier).totalMonetaryValue
+          : r.totalRewardAmount;
+      // Chances == gift units handed over (cap is enforced on units).
+      chances += PromotionalRuleMatcher.matchedRuleUnits(r);
       if (r.rule.gameType != null && r.rule.gameType!.trim().isNotEmpty) {
         ruleLevelGameType = r.rule.gameType!.trim();
+      }
+      final choice = RewardChoiceGroup.fromRule(r.rule, multiplier: r.multiplier);
+      if (choice != null) {
+        choiceGroups.add(choice);
+        // Default (first) option keeps legacy consumers working until the customer picks.
+        final def = choice.options.first.toAllocation(multiplier: choice.multiplier);
+        final key = def.giftId.isNotEmpty ? def.giftId : 'name:${def.giftName}';
+        defaultChoiceGifts.add(def);
+        final existing = consolidatedGifts[key];
+        consolidatedGifts[key] = existing == null ? def : existing.copyWith(quantity: existing.quantity + def.quantity);
+        continue;
       }
       final ruleGifts = r.multipliedLinkedGifts.isNotEmpty
           ? r.multipliedLinkedGifts
@@ -4993,6 +5500,7 @@ class CompositePromotionalBundle {
               ),
             ];
 
+      baseGifts.addAll(ruleGifts);
       for (final g in ruleGifts) {
         if (consolidatedGifts.containsKey(g.giftId)) {
           final existing = consolidatedGifts[g.giftId]!;
@@ -5014,6 +5522,8 @@ class CompositePromotionalBundle {
       totalVoucherValue: totalVoucher,
       totalChances: chances > 0 ? chances : 1,
       resolvedGameType: ruleLevelGameType,
+      baseLinkedGifts: consolidateLinkedGifts(baseGifts),
+      rewardChoiceGroups: choiceGroups,
     );
   }
 }

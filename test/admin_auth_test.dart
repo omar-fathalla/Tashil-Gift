@@ -48,7 +48,15 @@ void main() {
       expect(prefs.getString('active_admin_session'), isNull);
     });
 
-    test('isAuthorizedAdminEmail only accepts the two admin accounts trusted by firestore.rules', () {
+    test('Staff access is granted only by the ID token role claim', () {
+      expect(isStaffRole('super_admin'), isTrue);
+      expect(isStaffRole('admin'), isTrue);
+      expect(isStaffRole('partner'), isFalse);
+      expect(isStaffRole(null), isFalse);
+      expect(isStaffRole(''), isFalse);
+    });
+
+    test('Historical admin inboxes are recognized but are not an authorization allow-list', () {
       expect(isAuthorizedAdminEmail('support@switchpoint.com'), isTrue);
       expect(isAuthorizedAdminEmail('support@sw-point.com'), isTrue);
       expect(isAuthorizedAdminEmail(' Support@SwitchPoint.com '), isTrue);

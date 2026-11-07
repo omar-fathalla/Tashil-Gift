@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/constants/ai_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -88,9 +89,9 @@ class _AiBrainRulesScreenState extends ConsumerState<AiBrainRulesScreen>
         allDirectives.where((d) => d.isGloballyActive).length;
     final canPop = Navigator.of(context).canPop();
 
-    final modelConfig = ref.watch(aiModelConfigStreamProvider).value;
+    final modelConfig = ref.watch(aiModelConfigStreamProvider).valueOrNull;
     final activeModelName =
-        modelConfig?.effectivePrimaryModel ?? 'gemini-3.7-flash';
+        modelConfig?.effectivePrimaryModel ?? AiModels.defaultPrimary;
     final activeAgentMode = modelConfig?.mode ?? AiAgentMode.standardVision;
 
     return M3ResponsiveBuilder(

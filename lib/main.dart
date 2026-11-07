@@ -1,18 +1,25 @@
-import 'dart:async';
+import 'package:al_mraay/core/services/rep_device_id.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'core/services/anonymous_session_policy.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
+import 'core/services/app_check_bootstrap.dart';
+import 'core/services/emulator_auth_persistence.dart'
+    if (dart.library.html) 'core/services/emulator_auth_persistence_web.dart';
+import 'core/services/firebase_emulator_config.dart';
+import 'core/services/firebase_scope.dart';
 import 'core/theme/app_theme.dart';
+import 'core/update/app_update_checker.dart';
 import 'core/localization/locale_provider.dart';
 import 'core/services/firebase_service.dart';
 import 'core/utils/app_url_strategy.dart';
 import 'core/widgets/campaign_suspended_screen.dart';
 import 'features/auth/presentation/auth_screen.dart';
+import 'features/games/presentation/emulator_fixture_gift_claim_screen.dart';
 import 'features/admin/presentation/admin_dashboard_screen.dart';
 import 'features/client_portal/presentation/client_receipt_upload_screen.dart';
 import 'features/company_portal/presentation/company_manager_portal_screen.dart';
@@ -37,43 +44,87 @@ void main() async {
     }
   };
 
-  // Initialize Firebase and restore local admin session in parallel for fastest possible boot
-  String? initialAdminSession;
-  await Future.wait([
-    Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    ),
-    () async {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final rememberMe = prefs.getBool('remember_admin_me') ?? true;
-        final activeSession = prefs.getString('active_admin_session');
-        if (rememberMe &&
-            activeSession != null &&
-            isAuthorizedAdminEmail(activeSession)) {
-          initialAdminSession = activeSession.toLowerCase();
-        }
-      } catch (_) {}
-    }(),
-  ]);
+  // 2.0.172: never hang the splash. Firebase init gets a timeout + one retry,
+  // App Check activation and the device id are bounded (they are optional).
+  // FIREBASE_EMULATOR uses a demo- project and localhost ports only.
+  final FirebaseOptions firebaseOptions = kFirebaseEmulator
+      ? kFirebaseEmulatorOptions
+      : DefaultFirebaseOptions.currentPlatform;
+  if (kFirebaseEmulator) {
+    await clearEmulatorAuthPersistence();
+  }
+  for (var attempt = 0; attempt < 2; attempt++) {
+    try {
+      await Firebase.initializeApp(
+        options: firebaseOptions,
+      ).timeout(const Duration(seconds: 12));
+      break;
+    } catch (e) {
+      debugPrint('Firebase init attempt ${attempt + 1} failed: $e');
+      if (Firebase.apps.isNotEmpty) break;
+    }
+  }
+  if (kFirebaseEmulator) {
+    await attachFirebaseEmulators();
+  } else {
+    try {
+      await activateFirebaseAppCheck().timeout(const Duration(seconds: 8));
+    } catch (_) {}
+  }
 
-  // Fire anonymous auth session in the background without blocking initial UI frame render
+  // Field reps never see a login form. Anonymous Auth is their only session,
+  // so it is created only on public link routes, not on admin visits (M4).
   try {
-    if (FirebaseAuth.instance.currentUser == null) {
-      FirebaseAuth.instance.signInAnonymously().ignore();
+    if (routeNeedsAnonymousSession(Uri.base)) {
+      // On web the persisted session is restored asynchronously; wait for it so
+      // a returning rep keeps the same anonymous uid (and their receipts).
+      await FirebaseAuth.instance
+          .authStateChanges()
+          .first
+          .timeout(const Duration(seconds: 5));
     }
   } catch (_) {}
-  
+  // 2.0.148+204: portal routes run on an isolated named Firebase app so
+  // partner sign-in/out never touches the rep's anonymous session.
+  try {
+    await FirebaseScope.init(
+      entryUri: Uri.base,
+      options: firebaseOptions,
+    );
+    if (FirebaseScope.isPartnerPortal) {
+      try {
+        await activateFirebaseAppCheck(app: FirebaseScope.app)
+            .timeout(const Duration(seconds: 8));
+      } catch (_) {}
+      await scopedAuth()
+          .authStateChanges()
+          .first
+          .timeout(const Duration(seconds: 5));
+    }
+  } catch (_) {}
+  try {
+    if (scopedAuth().currentUser == null &&
+        routeNeedsAnonymousSession(Uri.base)) {
+      await scopedAuth()
+          .signInAnonymously()
+          .timeout(const Duration(seconds: 8));
+    }
+  } catch (_) {}
+
+  try {
+    await RepDeviceId.init().timeout(const Duration(seconds: 4));
+  } catch (_) {}
   runApp(
-    ProviderScope(
-      overrides: [
-        if (initialAdminSession != null)
-          adminSessionEmailProvider.overrideWith((ref) => initialAdminSession),
-      ],
-      child: const MyApp(),
+    const ProviderScope(
+      child: MyApp(),
     ),
   );
 }
+
+final GlobalKey<ScaffoldMessengerState> _updateMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
+final AppUpdateChecker _updateChecker =
+    AppUpdateChecker(messengerKey: _updateMessengerKey);
 
 class MyApp extends ConsumerWidget {
   const MyApp({super.key});
@@ -343,6 +394,11 @@ class MyApp extends ConsumerWidget {
           ),
           settings: effectiveSettings,
         );
+      case EmulatorFixtureGiftClaimScreen.route:
+        return MaterialPageRoute(
+          builder: (context) => const EmulatorFixtureGiftClaimScreen(),
+          settings: effectiveSettings,
+        );
       case '/login':
       case '/auth':
         return MaterialPageRoute(
@@ -365,8 +421,10 @@ class MyApp extends ConsumerWidget {
     final currentLocale = ref.watch(localeProvider);
     final isAr = currentLocale.languageCode == 'ar';
 
+    _updateChecker.start();
     return MaterialApp(
       title: 'Tashil Gift',
+      scaffoldMessengerKey: _updateMessengerKey,
       theme: AppTheme.getLightTheme(),
       darkTheme: AppTheme.getDarkTheme(),
       themeMode: themeMode,
@@ -415,8 +473,17 @@ class AdminAuthGuard extends ConsumerWidget {
       final authState = ref.watch(authStateStreamProvider);
       return authState.when(
         data: (user) {
-          if (user != null && !user.isAnonymous && isAuthorizedAdminEmail(user.email)) {
-            return const AdminDashboardScreen();
+          if (user != null && !user.isAnonymous) {
+            final claims = ref.watch(authClaimsProvider);
+            if (claims.isLoading) {
+              final colorScheme = Theme.of(context).colorScheme;
+              return Scaffold(
+                backgroundColor: colorScheme.surface,
+                body: Center(
+                  child: CircularProgressIndicator(color: colorScheme.primary),
+                ),
+              );
+            }
           }
           return const AuthScreen();
         },

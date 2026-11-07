@@ -44,8 +44,11 @@ void main() {
       );
 
       expect(find.text(SwitchPointInfo.platformName), findsOneWidget);
-      expect(find.text('عربي'), findsOneWidget); // Active language selector badge
-      expect(find.byIcon(Icons.dark_mode_rounded), findsOneWidget); // Theme toggle icon
+      expect(find.byIcon(Icons.settings_outlined), findsOneWidget); // Settings menu
+      await tester.tap(find.byIcon(Icons.settings_outlined));
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.dark_mode_outlined), findsOneWidget); // Theme toggle item
+      expect(find.text('اللغة'), findsOneWidget); // Language section
     });
 
     testWidgets('SwitchPointFooter renders desktop layout with full pills on large screen', (WidgetTester tester) async {

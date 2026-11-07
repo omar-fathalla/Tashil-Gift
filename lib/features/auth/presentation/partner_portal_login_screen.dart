@@ -42,6 +42,7 @@ class _PortalAuthGuardState extends ConsumerState<PortalAuthGuard> {
   PartnerPortalSession? _activeSession;
   String _resolvedCompanySlug = '';
   String _resolvedCompanyName = '';
+  String _resolvedCompanyLogoUrl = '';
   String? _resolvedEventName;
   int _lastCheckedEpoch = -1;
 
@@ -82,6 +83,7 @@ class _PortalAuthGuardState extends ConsumerState<PortalAuthGuard> {
       setState(() {
         _resolvedCompanySlug = resolved.companySlug;
         _resolvedCompanyName = resolved.companyName;
+        _resolvedCompanyLogoUrl = resolved.companyLogoUrl;
         _resolvedEventName = resolved.eventName;
         _activeSession = session;
         _isCheckingSession = false;
@@ -162,6 +164,7 @@ class _PortalAuthGuardState extends ConsumerState<PortalAuthGuard> {
     return PartnerPortalLoginScreen(
       companySlug: _resolvedCompanySlug.isNotEmpty ? _resolvedCompanySlug : (widget.companySlug ?? ''),
       companyName: _resolvedCompanyName,
+      companyLogoUrl: _resolvedCompanyLogoUrl,
       eventId: widget.eventId,
       eventName: _resolvedEventName,
       requiredRole: widget.requiredRole,
@@ -175,6 +178,7 @@ class _PortalAuthGuardState extends ConsumerState<PortalAuthGuard> {
 class PartnerPortalLoginScreen extends ConsumerStatefulWidget {
   final String companySlug;
   final String companyName;
+  final String companyLogoUrl;
   final String? eventId;
   final String? eventName;
   final PartnerPortalRole requiredRole;
@@ -184,6 +188,7 @@ class PartnerPortalLoginScreen extends ConsumerStatefulWidget {
     super.key,
     required this.companySlug,
     this.companyName = '',
+    this.companyLogoUrl = '',
     this.eventId,
     this.eventName,
     required this.requiredRole,
@@ -321,7 +326,19 @@ class _PartnerPortalLoginScreenState extends ConsumerState<PartnerPortalLoginScr
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const TashilGiftLogo(size: 36),
+                          widget.companyLogoUrl.startsWith('https://')
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Image.network(
+                                    widget.companyLogoUrl,
+                                    width: 44,
+                                    height: 44,
+                                    fit: BoxFit.contain,
+                                    semanticLabel: widget.companyName,
+                                    errorBuilder: (_, _, _) => const TashilGiftLogo(size: 36),
+                                  ),
+                                )
+                              : const TashilGiftLogo(size: 36),
                           OutlinedButton.icon(
                             onPressed: () {
                               ref.read(localeProvider.notifier).state =

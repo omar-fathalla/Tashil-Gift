@@ -26,11 +26,14 @@ import 'widgets/customer_import_dialog.dart';
 import 'widgets/whatsapp_campaign_dispatcher_dialog.dart';
 import 'widgets/whatsapp_gateway_settings_dialog.dart';
 import 'widgets/whatsapp_live_outbox_view.dart';
+import 'widgets/whatsapp_webhook_inbox_view.dart';
+import '../domain/whatsapp_webhook_admin_models.dart';
 import 'widgets/whatsapp_screenshot_dialog.dart';
 
 enum MarketingMainTab {
   audience,
   liveOutbox,
+  webhookInbox,
 }
 
 enum MarketingMessageMode {
@@ -138,7 +141,10 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
   Stream<QuerySnapshot> _getEventsStream(FirebaseFirestore firestore) {
     if (_lastFirestore != firestore || _eventsStream == null) {
       _lastFirestore = firestore;
-      _eventsStream = firestore.collection('events').snapshots();
+      final scopedSlug = (widget.lockedCompanySlug ?? '').trim().toLowerCase();
+      _eventsStream = scopedSlug.isNotEmpty
+          ? firestore.collection('events').where('companySlug', isEqualTo: scopedSlug).snapshots()
+          : firestore.collection('events').snapshots();
       _lastScopedSlug = null;
     }
     return _eventsStream!;
@@ -1875,6 +1881,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
   Widget build(BuildContext context) {
     final strings = AppStrings.of(ref);
     final isAr = ref.watch(localeProvider).languageCode == 'ar';
+    final canManageWebhook = ref.watch(isAdminProvider);
     final cs = Theme.of(context).colorScheme;
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 768;
@@ -2114,6 +2121,12 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                       label: isAr ? 'سجل الإرسال والتسليم' : 'Outbox & Delivery',
                                       icon: Icons.outbox_rounded,
                                     ),
+                                    if (canManageWebhook)
+                                      M3ButtonSegment<MarketingMainTab>(
+                                        value: MarketingMainTab.webhookInbox,
+                                        label: strings.webhookInboxTab,
+                                        icon: Icons.webhook_rounded,
+                                      ),
                                   ],
                                 ),
                               ),
@@ -2177,7 +2190,20 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                     ),
 
                     // Content View: Either Live Outbox Log OR Customer Data Table
-                    if (_activeMainTab == MarketingMainTab.liveOutbox)
+                    if (_activeMainTab == MarketingMainTab.webhookInbox)
+                      SliverToBoxAdapter(
+                        child: RepaintBoundary(
+                          child: WhatsAppWebhookInboxView(
+                            gatewayConfig: _gatewayConfig,
+                            companySlug: effectiveSlug,
+                            campaigns: [
+                              for (final event in companyEvents)
+                                WhatsappCampaignOption(id: event.id, name: event.eventName),
+                            ],
+                          ),
+                        ),
+                      )
+                    else if (_activeMainTab == MarketingMainTab.liveOutbox)
                       SliverToBoxAdapter(
                         child: RepaintBoundary(
                           child: WhatsAppLiveOutboxView(

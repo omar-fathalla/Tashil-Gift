@@ -1,9 +1,10 @@
+import 'package:al_mraay/core/constants/ai_models.dart';
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:al_mraay/features/admin/domain/event_model.dart';
 import 'package:al_mraay/features/admin/domain/company_gift_model.dart';
-import '../config/ai_config.dart';
+import 'gemini_cloud_model.dart';
 
 final campaignAiAssistantServiceProvider = Provider<CampaignAiAssistantService>((ref) {
   return CampaignAiAssistantService();
@@ -48,18 +49,17 @@ class CampaignAiAnalysisResult {
 }
 
 class CampaignAiAssistantService {
-  late final GenerativeModel _model;
-  late final GenerativeModel _fallbackModel;
+  late final CloudGenerativeModel _model;
+  late final CloudGenerativeModel _fallbackModel;
 
   CampaignAiAssistantService() {
-    _model = _createModel('gemini-3.7-flash');
-    _fallbackModel = _createModel('gemini-3.6-flash');
+    _model = _createModel(AiModels.helperServices);
+    _fallbackModel = _createModel(AiModels.helperServicesFallback);
   }
 
-  static GenerativeModel _createModel(String modelName) {
-    return GenerativeModel(
+  static CloudGenerativeModel _createModel(String modelName) {
+    return CloudGenerativeModel(
       model: modelName,
-      apiKey: AiConfig.geminiApiKey,
       systemInstruction: Content.system(
         'أنت كبير مستشاري التسويق وتدقيق العروض الترويجية لسلاسل السوبرماركت والتجزئة (FMCG Trade Marketing & Audit Specialist). '
         'مهمتك قراءة الأفكار والشروط الترويجية التي يكتبها مسؤول الحملة باللغة العربية (سواء كانت فصحى أو عامية أو شروط شراء محددة Buy X Get Y)، '
@@ -118,9 +118,6 @@ class CampaignAiAssistantService {
                   'rewardAmount': Schema.number(
                     description: 'Numeric monetary amount if reward is voucher (e.g. 50.0), or 0 otherwise.',
                   ),
-                  'allowMultipliers': Schema.boolean(
-                    description: 'True if purchasing multiples of the required quantity/spend grants multiple rewards.',
-                  ),
                   'linkedGiftId': Schema.string(
                     description: 'The exact ID of the matched gift from the company master inventory list, or empty string if not matched.',
                   ),
@@ -136,7 +133,6 @@ class CampaignAiAssistantService {
                   'rewardType',
                   'rewardValue',
                   'rewardAmount',
-                  'allowMultipliers',
                 ],
               ),
             ),
@@ -553,7 +549,15 @@ $rawIdeaText
     buffer.writeln('3. أصناف وكميات منتجات "$targetCompany" بدقة.');
     buffer.writeln();
 
+    // Sub-brands come from the company dictionary, required products, and the
+    // brands/products declared on the promotional rules (works for any company).
     final resolvedSubBrands = resolveCompanySubBrands(targetCompany, productNames: requiredProducts);
+    for (final r in promotionalRules) {
+      for (final b in r.requiredBrands) {
+        final t = b.trim();
+        if (t.isNotEmpty && !resolvedSubBrands.contains(t)) resolvedSubBrands.add(t);
+      }
+    }
     if (resolvedSubBrands.isNotEmpty) {
       buffer.writeln('🏷️ العلامات والأسماء التجارية المعتمدة للشركة بالفاتورة (Sub-Brands Taxonomy - AIR-59):');
       buffer.writeln('- نظراً لأن أنظمة الكاشير (POS) في السوبرماركت تطبع أسماء الماركات والعلامات الفرعية فقط ولا تطبع اسم الشركة القابضة، فإن منتجات وعلامات شركة "$targetCompany" في هذا العرض تشمل صراحةً العلامات التجارية والماركات الآتية:');
@@ -611,7 +615,6 @@ $rawIdeaText
       for (int i = 0; i < promotionalRules.length; i++) {
         final r = promotionalRules[i];
         final id = r.id.isNotEmpty ? r.id : 'rule_${i + 1}';
-        final multText = r.allowMultipliers ? ' (تتضاعف الجوائز بمضاعفة الاستهلاك/الإنفاق)' : '';
         final voucherVal = r.totalVoucherValue > 0
             ? ' [قيمة نقدية: ${r.totalVoucherValue.toInt()} ج.م]'
             : (r.rewardAmount > 0 ? ' [قيمة نقدية: ${r.rewardAmount.toInt()} ج.م]' : '');
@@ -628,18 +631,54 @@ $rawIdeaText
         final gameDelivery = (r.gameType != null && r.gameType!.isNotEmpty)
             ? ' (طريقة التسليم: ${r.gameType == 'directGift' ? 'هدية فورية مباشرة' : (r.gameType == 'scratch' ? 'خربش واكسب' : (r.gameType == 'wheel' ? 'عجلة الحظ' : 'اختر هديتك'))})'
             : '';
-        buffer.writeln('   - المكافأة المستحقة: [${r.rewardValue}$voucherVal] (نوع: ${r.rewardType})$giftBinding$gameDelivery$multText');
+        buffer.writeln('   - المكافأة المستحقة: [${r.rewardValue}$voucherVal] (نوع: ${r.rewardType})$giftBinding$gameDelivery');
       }
       buffer.writeln();
       buffer.writeln('⚠️ تعليمات هامة للذكاء الاصطناعي أثناء التدقيق ومطابقة القواعد (Mandatory Invariants):');
-      buffer.writeln('- [حارس العزل الصارم للشكل الفيزيائي للعبوة]:');
-      buffer.writeln('  * أصناف الرول أون (Roll-on بحجم 50 مل) تطابق حصراً قواعد الرول أون، وتطابق كافة اختصاراتها في بونات الكاشير (رول أون، رول، روول، ستيك، roll on) دون اشتراط كلمة "أون"، ويُحظر تماماً مطابقتها مع قواعد الاسبراي (مثل عرض الـ 125 ج.م).');
-      buffer.writeln('  * أصناف الاسبراي (Aerosol Spray بحجم 150 مل) تطابق حصراً قواعد الاسبراي، ويُحظر مطابقتها مع قواعد الرول أون.');
-      buffer.writeln('  * عبوات تريزيمي 400 مل تطابق حصراً قاعدة تريزيمي، وعبوات كلير 360 مل تطابق حصراً قاعدة كلير.');
-      buffer.writeln('  * أصناف العناية بالفم (معجون أسنان سيجنال أو كلوس اب) تطابق حصراً قواعد حزم العناية بالفم (Oral Care Bundles).');
-      buffer.writeln('- [قاعدة الحزم المدمجة Combo Bundles]:');
-      buffer.writeln('  * إذا اشترطت الحزمة وجود علامتين معاً (مثل Signal و Closeup معاً)، يجب التأكد من وجود صنف واحد على الأقل من كل علامة، وبلوغ إجمالي مشترياتهما معاً الحد الأدنى للإنفاق (مثال: 100 ج.م أو 150 ج.م).');
-      buffer.writeln('  * في حال وجود مستويات متعددة من الإنفاق أو الكميات، امنح العميل القاعدة ذات المستوى الأعلى المحقق من نفس الفئة (مثل: 200 ج.م تفوز بقاعدة الـ 75 ج.م وليس 25 ج.م).');
+      // Item-specific guards are only emitted when the campaign actually
+      // references those items (avoids leaking one company's rules into others).
+      final itemCorpus = <String>[
+        ...requiredProducts,
+        for (final r in promotionalRules) ...[
+          r.ruleTitle,
+          r.triggerProduct,
+          ...r.requiredBrands,
+          ...r.selectedProductNames,
+        ],
+      ].join(' ').toLowerCase();
+      bool mentions(List<String> keys) => keys.any((k) => itemCorpus.contains(k.toLowerCase()));
+      final hasRollOn = mentions(['رول', 'روول', 'roll on', 'roll-on', 'rollon']);
+      final hasSpray = mentions(['اسبراي', 'سبراي', 'بخاخ', 'spray', 'aerosol']);
+      final hasTresemme = mentions(['تريزيمي', 'tresemme', 'tresemmé']);
+      final hasClear = mentions(['كلير', 'clear']);
+      final hasOralCare = mentions(['سيجنال', 'كلوس اب', 'كلوزاب', 'signal', 'closeup', 'close up']);
+      final hasCombo = promotionalRules.any((r) => r.isCombo);
+      final hasTiers = promotionalRules.length > 1;
+
+      final guardLines = <String>[];
+      if (hasRollOn && hasSpray) {
+        guardLines.add('  * أصناف الرول أون (Roll-on بحجم 50 مل) تطابق حصراً قواعد الرول أون، وتطابق كافة اختصاراتها في بونات الكاشير (رول أون، رول، روول، ستيك، roll on) دون اشتراط كلمة "أون"، ويُحظر تماماً مطابقتها مع قواعد الاسبراي.');
+        guardLines.add('  * أصناف الاسبراي (Aerosol Spray بحجم 150 مل) تطابق حصراً قواعد الاسبراي، ويُحظر مطابقتها مع قواعد الرول أون.');
+      }
+      if (hasTresemme && hasClear) {
+        guardLines.add('  * عبوات تريزيمي 400 مل تطابق حصراً قاعدة تريزيمي، وعبوات كلير 360 مل تطابق حصراً قاعدة كلير.');
+      }
+      if (hasOralCare) {
+        guardLines.add('  * أصناف العناية بالفم (معجون أسنان سيجنال أو كلوس اب) تطابق حصراً قواعد حزم العناية بالفم (Oral Care Bundles).');
+      }
+      if (guardLines.isNotEmpty) {
+        buffer.writeln('- [حارس العزل الصارم للشكل الفيزيائي للعبوة]:');
+        guardLines.forEach(buffer.writeln);
+      }
+      if (hasCombo || hasTiers) {
+        buffer.writeln('- [قاعدة الحزم والمستويات]:');
+        if (hasCombo) {
+          buffer.writeln('  * إذا اشترطت القاعدة وجود أكثر من علامة معاً، يجب التأكد من وجود صنف واحد على الأقل من كل علامة، وبلوغ إجمالي مشترياتها معاً الحد الأدنى للإنفاق المحدد في القاعدة.');
+        }
+        if (hasTiers) {
+          buffer.writeln('  * في حال وجود مستويات متعددة من الإنفاق أو الكميات لنفس الفئة، ابدأ بالقاعدة ذات الهدية الأعلى قيمة، ثم امنح المستويات الأقل من المبلغ المتبقي فقط، ولا تجمع هدية أقل على نفس المبلغ.');
+        }
+      }
       buffer.writeln('- ضع في حقل (matchedRuleId) معرف القاعدة الفائزة بدقة (مثل "rule_1" أو "rule_3").');
       buffer.writeln('- ضع في حقل (matchedRewardValue) اسم الجائزة المستحقة بدقة.');
       buffer.writeln('- إذا لم تتحقق أي قاعدة خاصة، اترك (matchedRuleId) فارغاً.');
@@ -867,7 +906,6 @@ $rawIdeaText
         rewardType: firstGift?.isVoucher == true ? 'voucher' : 'free_product',
         rewardValue: firstGift != null ? firstGift.giftName : 'هدية فورية من العرض',
         rewardAmount: firstGift?.unitValue ?? 0.0,
-        allowMultipliers: true,
         linkedGiftId: firstGift?.id,
         linkedGiftName: firstGift?.giftName,
       ),
