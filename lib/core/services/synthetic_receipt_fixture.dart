@@ -11,17 +11,39 @@ const bool kSyntheticReceiptFixture = bool.fromEnvironment(
   'SYNTHETIC_RECEIPT_FIXTURE',
 );
 
+/// Closed unless every constraint is true. An uninitialized Firebase app is
+/// not treated as a demo project.
+bool syntheticReceiptMayServe({
+  required bool emulatorBuild,
+  required bool fixtureRequested,
+  required bool firebaseReady,
+  required String projectId,
+  required String emulatorHost,
+}) {
+  if (!emulatorBuild || !fixtureRequested || !firebaseReady) return false;
+  if (!projectId.startsWith('demo-')) return false;
+  return emulatorHost == '127.0.0.1' ||
+      emulatorHost == 'localhost' ||
+      emulatorHost == '::1';
+}
+
 /// Local OCR stand-in for one synthetic image.
 ///
-/// Both [kFirebaseEmulator] and [kSyntheticReceiptFixture] must be compiled in,
-/// and the signed-in Firebase app, when there is one, must be a `demo-` project.
-/// The image bytes are the only input that selects the fixture. Any other image
-/// still follows the normal model call.
+/// Served only when this build was compiled for the emulator, the fixture
+/// define is on, Firebase is already initialized, the project id starts with
+/// `demo-`, and the emulator host is loopback. Any other image still goes to
+/// the model.
 class SyntheticReceiptFixture {
   static bool get enabled {
     if (!kFirebaseEmulator || !kSyntheticReceiptFixture) return false;
-    if (Firebase.apps.isEmpty) return true;
-    return Firebase.app().options.projectId.startsWith('demo-');
+    if (Firebase.apps.isEmpty) return false;
+    return syntheticReceiptMayServe(
+      emulatorBuild: true,
+      fixtureRequested: true,
+      firebaseReady: true,
+      projectId: Firebase.app().options.projectId,
+      emulatorHost: kFirebaseEmulatorHost,
+    );
   }
 
   static final Uint8List imageBytes = Uint8List.fromList(
