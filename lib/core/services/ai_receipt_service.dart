@@ -16,6 +16,7 @@ import '../utils/store_code_branch_resolver.dart';
 import 'campaign_ai_assistant_service.dart';
 import 'company_gifts_service.dart';
 import 'ai_model_config_service.dart';
+import 'synthetic_receipt_fixture.dart';
 
 final aiReceiptServiceProvider = Provider<AiReceiptService>((ref) {
   final config = ref.watch(aiModelConfigStreamProvider).valueOrNull;
@@ -717,14 +718,23 @@ class AiReceiptService {
   static const String branchSourceRule =
       '- مصدر الفرع (branchDetected): خذ الفرع من كود المتجر المطبوع (ضمن رقم الفاتورة أو Store/POS) أو من رأس الفاتورة فقط، ولا تأخذه أبداً من الإعلانات أو السطور الدعائية في تذييل الفاتورة (مثل "تم افتتاح فرع ...").';
 
-  late final CloudGenerativeModel _model;
-  late final CloudGenerativeModel _fastModel;
-  late final CloudGenerativeModel _deepAuditModel;
-  late final CloudGenerativeModel _fallbackModel1;
-  late final CloudGenerativeModel _fallbackModel2;
+  CloudGenerativeModel? _modelCache;
+  CloudGenerativeModel? _fastModelCache;
+  CloudGenerativeModel? _deepAuditModelCache;
+  CloudGenerativeModel? _fallbackModel1Cache;
+  CloudGenerativeModel? _fallbackModel2Cache;
   final String modelName;
   final String fastTierModelName;
   final String deepAuditModelName;
+
+  CloudGenerativeModel get _model => _modelCache ??= _createModel(modelName);
+  CloudGenerativeModel get _fastModel => _fastModelCache ??= _createFastTierModel(fastTierModelName);
+  CloudGenerativeModel get _deepAuditModel =>
+      _deepAuditModelCache ??= _createDeepAuditModel(deepAuditModelName);
+  CloudGenerativeModel get _fallbackModel1 =>
+      _fallbackModel1Cache ??= _createFastTierModel(AiConfig.fallbackModel);
+  CloudGenerativeModel get _fallbackModel2 =>
+      _fallbackModel2Cache ??= _createFastTierModel(AiModels.defaultFallback);
 
   AiReceiptService({
     String? modelName,
@@ -732,13 +742,7 @@ class AiReceiptService {
     String? deepAuditModelName,
   })  : modelName = (modelName != null && modelName.isNotEmpty) ? modelName : AiConfig.primaryModel,
         fastTierModelName = (fastTierModelName != null && fastTierModelName.isNotEmpty) ? fastTierModelName : AiConfig.fastTierModel,
-        deepAuditModelName = (deepAuditModelName != null && deepAuditModelName.isNotEmpty) ? deepAuditModelName : AiConfig.deepAuditModel {
-    _model = _createModel(this.modelName);
-    _fastModel = _createFastTierModel(this.fastTierModelName);
-    _deepAuditModel = _createDeepAuditModel(this.deepAuditModelName);
-    _fallbackModel1 = _createFastTierModel(AiConfig.fallbackModel);
-    _fallbackModel2 = _createFastTierModel(AiModels.defaultFallback);
-  }
+        deepAuditModelName = (deepAuditModelName != null && deepAuditModelName.isNotEmpty) ? deepAuditModelName : AiConfig.deepAuditModel;
 
   static CloudGenerativeModel _createModel(String name) {
     return CloudGenerativeModel(
@@ -1434,6 +1438,12 @@ class AiReceiptService {
       }
       final resolvedRequiredProducts = effectiveRequiredProducts.toList();
 
+      // Emulator fixture only. Production builds take the model path below.
+      final syntheticModelText = SyntheticReceiptFixture.modelTextFor(imageBytes);
+      CloudGenerateContentResponse? remoteResponse;
+      var aiDurationMs = 0;
+      var pipelineTier = 'synthetic_fixture';
+      if (syntheticModelText == null) {
       final List<Part> allImageParts = [
         DataPart(mimeType, imageBytes),
       ];
@@ -1844,7 +1854,6 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
       final prompt = TextPart(finalPromptText);
 
       final aiStopwatch = Stopwatch()..start();
-      CloudGenerateContentResponse response;
       final targetModel = forceDeepAudit ? _deepAuditModel : _fastModel;
       final primaryFallback = forceDeepAudit ? _model : _fallbackModel1;
       final contentParts = [
@@ -1859,7 +1868,7 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           ? null
           : _scanCacheKey(targetModel.model, finalPromptText, allImageParts);
       final firstDeadline = DateTime.now().add(firstCheckBudget);
-      response = await _dedupedGenerate(scanKey, () async {
+      remoteResponse = await _dedupedGenerate(scanKey, () async {
         CloudGenerateContentResponse r;
         try {
           r = await _executeWithExponentialBackoff(targetModel, contentParts,
@@ -1882,12 +1891,14 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         return r;
       });
       aiStopwatch.stop();
-      int aiDurationMs = aiStopwatch.elapsedMilliseconds;
-      String pipelineTier = forceDeepAudit ? 'deep_reasoning_tier' : 'fast_tier';
+      aiDurationMs = aiStopwatch.elapsedMilliseconds;
+      pipelineTier = forceDeepAudit ? 'deep_reasoning_tier' : 'fast_tier';
+      }
 
-      if (response.text != null && response.text!.trim().isNotEmpty) {
+      final String? modelText = syntheticModelText ?? remoteResponse?.text;
+      if (modelText != null && modelText.trim().isNotEmpty) {
         final dartStopwatch = Stopwatch()..start();
-        final Map<String, dynamic> jsonMap = _cleanAndParseJson(response.text!);
+        final Map<String, dynamic> jsonMap = _cleanAndParseJson(modelText);
         var result = AiReceiptAnalysisResult.fromJson(
           jsonMap,
           durationMs: stopwatch.elapsedMilliseconds,

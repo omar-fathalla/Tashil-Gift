@@ -15,6 +15,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/services/firebase_service.dart';
+import '../../../core/services/accepted_receipt_core.dart';
 import '../../../core/services/ai_receipt_service.dart';
 import '../../../core/update/app_update_checker.dart';
 import '../../../core/services/receipt_save_failure.dart';
@@ -1862,56 +1863,32 @@ class _ClientReceiptUploadScreenState
       final Map<String, dynamic> transactionData = {
         'app_version': AppVersionConfig.appVersion,
         if (RepDeviceId.value.isNotEmpty) 'rep_device_id': RepDeviceId.value,
-        'receipt_number': receiptNumber,
-        'is_valid': true,
-        'status': 'accepted',
-        'rejection_reason': null,
-        'unfulfilled_conditions': const [],
-        'total_value': totalValue,
-        'target_company_total': totalValue,
-        'receipt_date': result.receiptDate,
-        'extracted_products': result.extractedProducts
-            .map((p) => p.toJson())
-            .toList(),
-        'store_chain_detected': result.storeChainDetected,
-        ...ReceiptBranchResolver.firestoreFields(
-          _activeEvent ?? widget.event,
-          detectedName: result.branchDetected,
-          receiptNumber: result.receiptNumber,
+        ...acceptedReceiptCore(
+          result: result,
+          campaignId: _activeEvent!.id,
+          companySlug: _activeEvent!.companySlug,
+          targetCompany: _activeEvent!.targetCompany,
+          retailChainName: _activeEvent!.retailChainName,
+          chancesEarned: calculatedChances,
+          allowMultipleChances: _activeEvent!.allowMultipleChances,
+          submittedByUid: ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
+          branchFields: ReceiptBranchResolver.firestoreFields(
+            _activeEvent ?? widget.event,
+            detectedName: result.branchDetected,
+            receiptNumber: result.receiptNumber,
+          ),
         ),
-        'is_branch_matched': result.isBranchMatched,
         if (_lastBranchLoad.isNotEmpty) 'branch_load': _lastBranchLoad,
         if (_lastPriceCheck.isNotEmpty) 'price_check': _lastPriceCheck,
         if (_lastNearMiss.isNotEmpty) 'near_miss': _lastNearMiss,
-        'is_handwritten': result.isHandwritten,
-        'is_thermal_pos_receipt': result.isThermalPosReceipt,
-        'is_tampered': result.isTampered,
-        'is_screen_capture': result.isScreenCapture,
-        'fraud_risk_score': result.fraudRiskScore,
-        'fraud_reasons': result.fraudReasons,
-        'retail_chain_name': _activeEvent!.retailChainName,
         if (primaryImageUrl.isNotEmpty) 'image_url': primaryImageUrl,
         if (primaryStoragePath.isNotEmpty) 'storage_path': primaryStoragePath,
         if (uploadedImageUrls.length > 1) 'image_urls': uploadedImageUrls,
         if (uploadedStoragePaths.length > 1)
           'storage_paths': uploadedStoragePaths,
         'parts_count': allBytesList.length,
-        'campaignId': _activeEvent!.id,
-        'submittedByUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
-        'companySlug': _activeEvent!.companySlug,
-        'targetCompany': _activeEvent!.targetCompany,
         'customerPhone': _customerPhoneController.text.toEnglishDigits().trim(),
         'customerName': _customerNameController.text.trim(),
-        'aiMessage': result.message,
-        'analysis_duration_seconds': result.durationSeconds,
-        'analysis_duration_ms': result.durationMs,
-        'ai_kpi_rating': result.kpiRating,
-        'chances_earned': calculatedChances,
-        if (result.matchedRuleId.isNotEmpty)
-          'matched_rule_id': result.matchedRuleId,
-        if (result.matchedRewardValue.isNotEmpty)
-          'matched_reward_value': result.matchedRewardValue,
-        'allow_multiple_chances': _activeEvent!.allowMultipleChances,
       };
 
       transactionData['timestamp'] = FieldValue.serverTimestamp();

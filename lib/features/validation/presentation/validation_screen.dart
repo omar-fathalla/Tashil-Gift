@@ -12,6 +12,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../../../core/services/firebase_service.dart';
+import '../../../core/services/accepted_receipt_core.dart';
 import '../../../core/services/ai_receipt_service.dart';
 import '../../../core/services/ai_product_discovery_service.dart';
 import '../../../core/services/company_products_service.dart';
@@ -746,44 +747,27 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       final Map<String, dynamic> transactionData = {
         'app_version': AppVersionConfig.appVersion,
         if (RepDeviceId.value.isNotEmpty) 'rep_device_id': RepDeviceId.value,
-        'receipt_number': receiptNumber,
-        'is_valid': true,
-        'status': 'accepted',
-        'rejection_reason': null,
-        'unfulfilled_conditions': const [],
-        'total_value': totalValue,
-        'target_company_total': totalValue,
-        'receipt_date': result.receiptDate,
-        'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
-        'store_chain_detected': result.storeChainDetected,
-        ...ReceiptBranchResolver.firestoreFields(
-          activeEvent,
-          detectedName: result.branchDetected,
-          receiptNumber: result.receiptNumber,
+        ...acceptedReceiptCore(
+          result: result,
+          campaignId: activeEvent.id,
+          companySlug: activeEvent.companySlug,
+          targetCompany: activeEvent.targetCompany,
+          retailChainName: activeEvent.retailChainName,
+          chancesEarned: totalChances,
+          allowMultipleChances: activeEvent.allowMultipleChances,
+          submittedByUid: ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
+          branchFields: ReceiptBranchResolver.firestoreFields(
+            activeEvent,
+            detectedName: result.branchDetected,
+            receiptNumber: result.receiptNumber,
+          ),
         ),
-        'is_branch_matched': result.isBranchMatched,
-        'is_handwritten': result.isHandwritten,
-        'is_thermal_pos_receipt': result.isThermalPosReceipt,
-        'is_tampered': result.isTampered,
-        'is_screen_capture': result.isScreenCapture,
-        'fraud_risk_score': result.fraudRiskScore,
-        'fraud_reasons': result.fraudReasons,
-        'retail_chain_name': activeEvent.retailChainName,
+        'promoter_id': ref.read(firebaseAuthProvider).currentUser?.uid,
         if (primaryImageUrl.isNotEmpty) 'image_url': primaryImageUrl,
         if (primaryStoragePath.isNotEmpty) 'storage_path': primaryStoragePath,
         if (uploadedImageUrls.length > 1) 'image_urls': uploadedImageUrls,
         if (uploadedStoragePaths.length > 1) 'storage_paths': uploadedStoragePaths,
         'parts_count': allBytesList.length,
-        'promoter_id': ref.read(firebaseAuthProvider).currentUser?.uid,
-        'submittedByUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
-        'campaignId': activeEvent.id,
-        'companySlug': activeEvent.companySlug,
-        'targetCompany': activeEvent.targetCompany,
-        'analysis_duration_seconds': result.durationSeconds,
-        'analysis_duration_ms': result.durationMs,
-        'ai_kpi_rating': result.kpiRating,
-        'chances_earned': totalChances,
-        'allow_multiple_chances': activeEvent.allowMultipleChances,
       };
 
       if (isExistingRecord) {
