@@ -7,6 +7,7 @@
  * cannot write stock counters directly.
  */
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { planConsumingClaim } = require("./consuming_spend_ladder");
 const admin = require("./admin_sdk");
 
 const callableOptions = {
@@ -282,6 +283,13 @@ function sanitizePatch(patch) {
   return out;
 }
 
+function sanitizeClaimSlot(item) {
+  if (!item || item.claimSlot == null || item.claimSlot === "") return null;
+  const slot = Number(item.claimSlot);
+  if (!Number.isInteger(slot) || slot < 0 || slot > 100) return null;
+  return slot;
+}
+
 function sanitizeDecrements(raw) {
   if (!Array.isArray(raw)) return [];
   return raw.slice(0, 20).map((item) => {
@@ -290,6 +298,7 @@ function sanitizeDecrements(raw) {
       prizeIdentifier: String((item && item.prizeIdentifier) || "").trim().slice(0, 200),
       branchId: String((item && item.branchId) || "").trim().slice(0, 160),
       count: Number.isFinite(count) ? Math.floor(count) : 0,
+      claimSlot: sanitizeClaimSlot(item),
       unitValue: item && typeof item.unitValue === "number" ? item.unitValue : null,
       isVoucher: item ? item.isVoucher === true : false,
       gameType: String((item && item.gameType) || "claim").slice(0, 40),
@@ -418,13 +427,27 @@ exports.setUserRole = onCall(callableOptions, async (request) => {
  * receipts_transactions, then sharded counters. `actor.allowCreateReceipt`
  * lets the WhatsApp webhook insert the receipt inside that transaction.
  */
-/** Sum of quantities in a claimed_gifts array. */
+/**
+ * Units already stored, for the exclusive receipt cap.
+ * A missing quantity still counts as one. A positive quantity keeps its
+ * numeric value, including a fraction, so this cap does not become looser.
+ * Blank, zero, negative, and non-numeric quantities used to add nothing and
+ * could slip past the cap; those now count as one. The consuming ledger uses
+ * claimedEntryUnits instead and floors positive values.
+ */
 function claimedUnits(gifts) {
   if (!Array.isArray(gifts)) return 0;
-  return gifts.reduce((s, g) => {
-    const q = Number(g && g.quantity != null ? g.quantity : 1);
-    return s + (Number.isFinite(q) && q > 0 ? q : 0);
-  }, 0);
+  return gifts.reduce((sum, gift) => sum + exclusiveCapUnits(gift), 0);
+}
+
+function exclusiveCapUnits(gift) {
+  if (!gift || typeof gift !== "object") return 1;
+  const raw = gift.quantity;
+  if (raw == null) return 1;
+  if (typeof raw === "string" && raw.trim() === "") return 1;
+  const count = Number(raw);
+  if (Number.isFinite(count) && count > 0) return count;
+  return 1;
 }
 
 /**
@@ -614,10 +637,53 @@ async function applyCampaignPrizeClaim(db, input) {
       }
     }
 
+    let consumingLedger = false;
+    if (receipt && decrements.length > 0 && event.spendLadderMode === "consuming") {
+      const plan = planConsumingClaim(event, receipt, decrements);
+      const reason = plan && plan.reason;
+      if (reason === "already_claimed") {
+        throw new HttpsError("failed-precondition", "This receipt was already claimed.", { reason });
+      }
+      if (reason === "missing_lines") {
+        throw new HttpsError("failed-precondition", "لا يمكن إعادة حساب شرائح الإنفاق من هذه الفاتورة.", { reason });
+      }
+      if (reason === "tier_mismatch") {
+        throw new HttpsError("failed-precondition", "الهدية لا تطابق شريحة هذه الجولة.", { reason });
+      }
+      if (reason === "extra_quantity") {
+        throw new HttpsError("failed-precondition", "الكمية أكبر من الجولات المستحقة.", { reason });
+      }
+      if (reason === "missing_spend_rules") {
+        throw new HttpsError("failed-precondition", "حملة شرائح الإنفاق لا تحتوي على قاعدة إنفاق، لذلك لا تُصرف هدية.", { reason });
+      }
+      if (reason === "round_unbound") {
+        throw new HttpsError("failed-precondition", "تعذر تحديد الجولة المطلوبة، ولم يُصرف مخزون إضافي.", { reason });
+      }
+      if (reason === "round_conflict" || reason === "stale_round" || reason === "round_gap") {
+        throw new HttpsError("failed-precondition", "هذه الجولة لم تَعُد مطابقة للسجل المحفوظ، ولم يُصرف مخزون إضافي.", { reason });
+      }
+      if (reason) {
+        throw new HttpsError("failed-precondition", "تعذر اعتماد هذه الجولة.", { reason });
+      }
+      if (plan && !plan.skip && !reason) {
+        // The stored ledger is the previous transaction snapshot plus this
+        // round's canonical gift. The client array is discarded, and the
+        // generic trimmer must not rebuild that array from the request.
+        consumingLedger = true;
+        decrements = plan.decrements;
+        patch.claimed_gifts = plan.claimed_gifts;
+        patch.prizes_won = plan.prizes_won;
+        patch.prize_won = plan.prizes_won.join(" + ");
+        patch.remaining_chances = plan.remaining_chances;
+      }
+    }
+
     // 2.0.163: max gift UNITS per receipt = min(campaign cap, receipt chances).
     // 2.0.164: over-limit requests are trimmed, highest value first, no error.
+    // A consuming ladder already accepted an exact round list, so this trim
+    // does not run for it and cannot replace claimed_gifts.
     let trim = null;
-    if (receipt && decrements.length > 0) {
+    if (receipt && decrements.length > 0 && !consumingLedger) {
       const limit = receiptUnitLimit(event, receipt, patch);
       const already = createdReceipt ? 0 : claimedUnits(receipt.claimed_gifts);
       const requested = decrements.reduce((s, d) => s + Number(d.count || 0), 0);
@@ -823,6 +889,6 @@ async function decrementCampaignPrizeImpl(request) {
 // Non-enumerable so index.js Object.assign does not expose it as a function group.
 Object.defineProperty(exports, "_testing", {
   value: { NO_BRANCH_STOCK_MESSAGE, findBestPrizeMatchIndex, resolvePrizeIndexForDecrement, storeCodeFromReceiptNumber, branchIdFromStoreCode, findSharedPoolRow, sharedPoolEnabled, applyCampaignPrizeClaim, receiptUnitLimit,
-    piecesPerOffer, claimedUnits, recordClaimFailure, trimDecrementsToLimit, trimPatchToDecrements },
+    piecesPerOffer, claimedUnits, recordClaimFailure, trimDecrementsToLimit, trimPatchToDecrements, planConsumingClaim },
   enumerable: false,
 });

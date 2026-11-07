@@ -540,7 +540,10 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
           final pBarcode = pMap['barcode'] ?? 'N/A';
           final pQty = pMap['quantity'] ?? 1;
           final pPrice = pMap['price'] ?? 0;
-          final pTotal = pMap['totalPrice'] ?? ((pPrice is num ? pPrice : 0) * (pQty is num ? pQty : 1));
+          final lineLabel = ExtractedProductItem.lineTotalLabel(pMap, arabic: strings.isAr);
+          final pTotal = lineLabel.grossNote == null
+              ? lineLabel.primary
+              : '${lineLabel.primary} (${lineLabel.grossNote})';
           final isPromo = pMap['isTargetCompany'] == true;
 
           rows.add([
@@ -1549,14 +1552,22 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
       }
 
       final canonical = winningEval.resolvedBranchName ?? _normalizeBranchName(rawBranch, winningCampaign.branchNames, isAr);
-      final double promoSpend = winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : targetTotal;
+      final spend = PromotionalRuleMatcher.spendTotals(
+        products: products,
+        rules: winningCampaign.promotionalRules,
+        spendLadderMode: winningCampaign.spendLadderMode,
+      );
+      final double promoSpend = winningCampaign.spendLadderMode == 'consuming'
+          ? spend.eligibleNet
+          : (winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : targetTotal);
+      final double invoiceSpend = winningCampaign.spendLadderMode == 'consuming' ? spend.invoiceNet : promoSpend;
 
       inv['is_valid'] = true;
       inv['status'] = 'accepted';
       inv['unfulfilled_conditions'] = <String>[];
       inv['rejection_reason'] = null;
       inv['target_company_total'] = promoSpend;
-      inv['total_value'] = promoSpend;
+      inv['total_value'] = invoiceSpend;
       inv['campaignId'] = winningCampaign.id;
       inv['campaign_name'] = winningCampaign.eventName;
       inv['eventName'] = winningCampaign.eventName;
@@ -1578,6 +1589,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
         'rechecked_by': currentUser?.email ?? 'admin',
         'recheck_type': winningCampaign.id == activeEvent.id ? 'quick_rule_match' : 'quick_multi_campaign_match',
         'target_company_total': promoSpend,
+        'total_value': invoiceSpend,
         'chances_earned': chances,
         'canonical_branch': canonical,
         'branch_detected': canonical,
@@ -1606,6 +1618,9 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
           resolvedBranchId: winningEval.resolvedBranchId,
           resolvedBranchName: canonical,
           resolvedLinkedGifts: winningEval.resolvedLinkedGifts,
+          awardRounds: winningCampaign.spendLadderMode == 'consuming'
+              ? SpendAwardRound.expand(winningEval.matchedRules)
+              : const [],
           resolvedUnitValue: winningEval.resolvedUnitValue,
           resolvedIsVoucher: winningEval.resolvedIsVoucher,
           onViewAccepted: () {
@@ -1818,6 +1833,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
       multiplierBasis: activeEvent.multiplierBasis,
       maxChancesPerReceipt: activeEvent.maxChancesPerReceipt,
       promotionalRules: combinedPromotionalRules,
+      spendLadderMode: activeEvent.spendLadderMode,
       allowComplementaryReceipts: activeEvent.allowComplementaryReceipts,
     );
 
@@ -1859,15 +1875,25 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
         }
       }
 
+      final fullTotals = PromotionalRuleMatcher.spendTotals(
+        products: result.extractedProducts,
+        rules: winningCampaign.promotionalRules,
+        spendLadderMode: winningCampaign.spendLadderMode,
+      );
       final double computedTotal = result.extractedProducts.fold<double>(0.0, (acc, p) => acc + p.actualLineSpend);
-      final double totalSpend = computedTotal > 0 ? computedTotal : result.targetCompanyTotal;
+      final double totalSpend = winningCampaign.spendLadderMode == 'consuming'
+          ? fullTotals.invoiceNet
+          : (computedTotal > 0 ? computedTotal : result.targetCompanyTotal);
+      final double eligibleSpend = winningCampaign.spendLadderMode == 'consuming'
+          ? fullTotals.eligibleNet
+          : (winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : result.targetCompanyTotal);
       final canonical = winningEval.resolvedBranchName ?? _normalizeBranchName(result.branchDetected, winningCampaign.branchNames, isAr);
 
       inv['is_valid'] = true;
       inv['status'] = 'accepted';
       inv['unfulfilled_conditions'] = <String>[];
       inv['rejection_reason'] = null;
-      inv['target_company_total'] = winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : result.targetCompanyTotal;
+      inv['target_company_total'] = eligibleSpend;
       inv['total_value'] = totalSpend;
       inv['campaignId'] = winningCampaign.id;
       inv['campaign_name'] = winningCampaign.eventName;
@@ -1893,7 +1919,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
         'rechecked_by': currentUser?.email ?? 'admin',
         'recheck_type': winningCampaign.id == activeEvent.id ? 'full_ai_scan' : 'full_ai_multi_campaign_match',
         'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
-        'target_company_total': winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : result.targetCompanyTotal,
+        'target_company_total': eligibleSpend,
         'total_value': totalSpend,
         if (result.receiptNumber.isNotEmpty) 'receipt_number': result.receiptNumber,
         if (result.storeChainDetected.isNotEmpty) 'store_chain_detected': result.storeChainDetected,
@@ -1927,6 +1953,9 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
           resolvedBranchId: winningEval.resolvedBranchId,
           resolvedBranchName: canonical,
           resolvedLinkedGifts: winningEval.resolvedLinkedGifts,
+          awardRounds: winningCampaign.spendLadderMode == 'consuming'
+              ? SpendAwardRound.expand(winningEval.matchedRules)
+              : const [],
           resolvedUnitValue: winningEval.resolvedUnitValue,
           resolvedIsVoucher: winningEval.resolvedIsVoucher,
           onViewAccepted: () {
@@ -1947,8 +1976,18 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
               ? summary.unfulfilledCampaigns.expand((u) => u.unfulfilledConditions).toList()
               : [result.message.trim().isNotEmpty ? result.message.trim() : (isAr ? 'الفاتورة غير مطابقة لشروط عروض الشركة' : 'Receipt does not qualify for company offers')]);
 
+      final rejectedTotals = PromotionalRuleMatcher.spendTotals(
+        products: result.extractedProducts,
+        rules: activeEvent.promotionalRules,
+        spendLadderMode: activeEvent.spendLadderMode,
+      );
       final double computedTotal = result.extractedProducts.fold<double>(0.0, (acc, p) => acc + p.actualLineSpend);
-      final double totalSpend = computedTotal > 0 ? computedTotal : result.targetCompanyTotal;
+      final double totalSpend = activeEvent.spendLadderMode == 'consuming'
+          ? rejectedTotals.invoiceNet
+          : (computedTotal > 0 ? computedTotal : result.targetCompanyTotal);
+      final double eligibleSpend = activeEvent.spendLadderMode == 'consuming'
+          ? rejectedTotals.eligibleNet
+          : result.targetCompanyTotal;
 
       await firestore.collection('receipts_transactions').doc(docId).update({
         'is_valid': false,
@@ -1956,7 +1995,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
         'unfulfilled_conditions': unfulfilledList,
         'rejection_reason': unfulfilledList.join(' • '),
         'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
-        'target_company_total': result.targetCompanyTotal,
+        'target_company_total': eligibleSpend,
         'total_value': totalSpend,
         'rechecked_at': FieldValue.serverTimestamp(),
         'rechecked_by': currentUser?.email ?? 'admin',
@@ -2020,6 +2059,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
     String? resolvedBranchId,
     String? resolvedBranchName,
     List<LinkedGiftAllocation> resolvedLinkedGifts = const [],
+    List<SpendAwardRound> awardRounds = const [],
     double? resolvedUnitValue,
     bool resolvedIsVoucher = false,
     VoidCallback? onViewAccepted,
@@ -2033,13 +2073,21 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
     final branchIdOrName = (resolvedBranchName != null && resolvedBranchName.trim().isNotEmpty)
         ? resolvedBranchName.trim()
         : resolvedBranchId;
+    final bool consumingLadder = winningCampaign?.spendLadderMode == 'consuming';
+    final effectiveRounds = consumingLadder ? awardRounds : const <SpendAwardRound>[];
 
-    // Extract available candidate prizes
+    // Extract available candidate prizes. A consuming ladder never falls back
+    // to every gift in the branch.
     List<String> candidatePrizes = [];
-    if (resolvedLinkedGifts.isNotEmpty) {
+    if (consumingLadder) {
+      candidatePrizes = [
+        for (final round in effectiveRounds)
+          for (final name in round.prizeNames) name,
+      ];
+    } else if (resolvedLinkedGifts.isNotEmpty) {
       candidatePrizes = resolvedLinkedGifts.map((g) => g.giftName.trim()).where((n) => n.isNotEmpty).toSet().toList();
     }
-    if (winningCampaign != null) {
+    if (winningCampaign != null && !consumingLadder) {
       if (candidatePrizes.isNotEmpty) {
         final filtered = winningCampaign.filterGiftsByBranchStock(candidateGifts: candidatePrizes, branch: branchIdOrName);
         if (filtered.isNotEmpty) {
@@ -2052,7 +2100,11 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
 
     // Clean display title for choice campaigns
     String effectiveTitle = prizeTitle ?? '';
-    if (isChooseGift) {
+    if (isChooseGift && consumingLadder && effectiveRounds.isNotEmpty) {
+      effectiveTitle = isAr
+          ? 'سلم الإنفاق: ${effectiveRounds.length} جولات، وكل جولة تعرض هدايا شريحتها فقط'
+          : 'Spend ladder: ${effectiveRounds.length} rounds, each with its own gifts';
+    } else if (isChooseGift) {
       effectiveTitle = isAr
           ? 'عرض ترويجي بنظام اختيار الهدية (${candidatePrizes.length} خيارات متاحة)'
           : 'Promotional Choice Reward (${candidatePrizes.length} Options)';
@@ -2132,7 +2184,16 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                           ),
                         ],
                       ),
-                      if (candidatePrizes.isNotEmpty) ...[
+                      if (consumingLadder && effectiveRounds.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        ...effectiveRounds.asMap().entries.map((entry) => Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Text(
+                            entry.value.roundLine(entry.key, effectiveRounds.length, arabic: isAr),
+                            style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.onSecondaryContainer),
+                          ),
+                        )),
+                      ] else if (candidatePrizes.isNotEmpty) ...[
                         const SizedBox(height: 10),
                         Wrap(
                           spacing: 6,
@@ -2251,7 +2312,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
         actions: [
           // Primary Action Button (Game / Choice / Direct Claim)
           if (docId != null && docId.isNotEmpty && winningCampaign != null) ...[
-            if (isChooseGift)
+            if ((consumingLadder && effectiveRounds.isNotEmpty) || (isChooseGift && !consumingLadder))
               FilledButton.icon(
                 onPressed: () {
                   Navigator.pop(ctx);
@@ -2261,8 +2322,15 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                         transactionId: docId,
                         eventId: winningCampaign.id,
                         companySlug: winningCampaign.companySlug,
-                        prizes: candidatePrizes,
-                        totalChances: totalChances > 0 ? totalChances : 1,
+                        prizes: effectiveRounds.isNotEmpty ? effectiveRounds.first.prizeNames : candidatePrizes,
+                        roundPrizeNames: [for (final round in effectiveRounds) round.prizeNames],
+                        roundGiftIds: [for (final round in effectiveRounds) round.giftIds],
+                        roundUnitValues: [for (final round in effectiveRounds) round.unitValues],
+                        roundRuleIds: [for (final round in effectiveRounds) round.ruleId],
+                        roundTierMinSpends: [for (final round in effectiveRounds) round.tierMinSpend],
+                        totalChances: effectiveRounds.isNotEmpty
+                            ? effectiveRounds.length
+                            : (totalChances > 0 ? totalChances : 1),
                         branchId: resolvedBranchId,
                       ),
                     ),
@@ -2279,7 +2347,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                 ),
               )
-            else if (isWheel)
+            else if (!consumingLadder && isWheel)
               FilledButton.icon(
                 onPressed: () {
                   Navigator.pop(ctx);
@@ -2307,7 +2375,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                 ),
               )
-            else if (isScratch)
+            else if (!consumingLadder && isScratch)
               FilledButton.icon(
                 onPressed: () {
                   Navigator.pop(ctx);
@@ -2333,7 +2401,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                 ),
               )
-            else if (isDirect)
+            else if (!consumingLadder && isDirect)
               FilledButton.icon(
                 onPressed: () {
                   Navigator.pop(ctx);
@@ -5182,9 +5250,21 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                                                     overflow: TextOverflow.ellipsis,
                                                   ),
                                                 ),
-                                                Text(
-                                                  '$totalValue ج.م',
-                                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.primary),
+                                                Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                                  children: [
+                                                    Text(
+                                                      '$totalValue ج.م',
+                                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.primary),
+                                                    ),
+                                                    if (inv['total_value'] is num &&
+                                                        inv['target_company_total'] is num &&
+                                                        ((inv['total_value'] as num) - (inv['target_company_total'] as num)).abs() > 0.49)
+                                                      Text(
+                                                        isAr ? 'صافي الفاتورة ${inv['total_value']}' : 'Invoice net ${inv['total_value']}',
+                                                        style: TextStyle(fontSize: 9, color: colorScheme.outline),
+                                                      ),
+                                                  ],
                                                 ),
                                               ],
                                             ),
@@ -6526,6 +6606,13 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
             color: isSelected ? colorScheme.primary : colorScheme.onSurface,
           ),
         ),
+        if (inv['total_value'] is num &&
+            inv['target_company_total'] is num &&
+            ((inv['total_value'] as num) - (inv['target_company_total'] as num)).abs() > 0.49)
+          Text(
+            isAr ? 'صافي الفاتورة ${inv['total_value']}' : 'Invoice net ${inv['total_value']}',
+            style: TextStyle(fontSize: 9, color: colorScheme.outline),
+          ),
         const SizedBox(height: 3),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -7750,6 +7837,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
               activeCountry: activeCountry,
               strings: strings,
               targetCompany: targetCompany,
+              isAr: isAr,
             ),
           ],
         ],
@@ -8142,6 +8230,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
     required CountryCurrency activeCountry,
     required AppStrings strings,
     required String targetCompany,
+    required bool isAr,
   }) {
     if (products.isEmpty) {
       return Padding(
@@ -8194,7 +8283,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                   horizontalMargin: 12,
                   headingRowHeight: 38,
                   dataRowMinHeight: 40,
-                  dataRowMaxHeight: 46,
+                  dataRowMaxHeight: 64,
                   columns: [
                     DataColumn(label: Text('#', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                     DataColumn(label: Text(strings.productNameCol, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
@@ -8211,7 +8300,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                     final barcode = itemMap['barcode']?.toString().trim() ?? '';
                     final qty = itemMap['quantity'] is num ? (itemMap['quantity'] as num).toInt() : 1;
                     final price = itemMap['price'] is num ? (itemMap['price'] as num).toDouble() : 0.0;
-                    final total = itemMap['totalPrice'] is num ? (itemMap['totalPrice'] as num).toDouble() : (price * qty);
+                    final lineLabel = ExtractedProductItem.lineTotalLabel(itemMap, arabic: isAr);
                     final isPromo = itemMap['isTargetCompany'] == true;
 
                     return DataRow(
@@ -8268,7 +8357,16 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                         ),
                         DataCell(Text('$qty', style: const TextStyle(fontSize: 12))),
                         DataCell(Text(price.toStringAsFixed(2), style: const TextStyle(fontSize: 12))),
-                        DataCell(Text(total.toStringAsFixed(2), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                        DataCell(Column(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(lineLabel.primary, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            if (lineLabel.grossNote != null)
+                              Text(lineLabel.grossNote!, style: TextStyle(fontSize: 9, color: colorScheme.outline)),
+                          ],
+                        )),
                         DataCell(
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),

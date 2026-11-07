@@ -1800,6 +1800,8 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
   }) {
     final receiptNumber = (data['receipt_number'] ?? 'INV-N/A').toString().trim();
     final totalVal = (data['target_company_total'] ?? data['total_value'] as num?)?.toDouble() ?? 0.0;
+    final invoiceVal = data['total_value'] is num ? (data['total_value'] as num).toDouble() : totalVal;
+    final showInvoiceNet = data['target_company_total'] is num && (invoiceVal - totalVal).abs() > 0.49;
     final storeChain = (data['store_chain_detected'] ?? data['retail_chain_name'] ?? '').toString().trim();
     final branch = (data['canonical_branch'] ?? data['branch_detected'] ?? data['branch_name'] ?? '').toString().trim();
     final customerPhone = (data['customerPhone'] ?? data['customer_phone'] ?? '').toString().trim();
@@ -1948,13 +1950,23 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: isValid ? colorScheme.tertiaryFixedDim : colorScheme.errorContainer),
                     ),
-                    child: Text(
-                      '${totalVal.toStringAsFixed(totalVal == totalVal.roundToDouble() ? 0 : 2)} $currencySymbol',
-                      style: GoogleFonts.cairo(
-                        fontWeight: FontWeight.bold,
-                        fontSize: isMobile ? 12.5 : 14,
-                        color: isValid ? colorScheme.onTertiaryContainer : colorScheme.onErrorContainer,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '${totalVal.toStringAsFixed(totalVal == totalVal.roundToDouble() ? 0 : 2)} $currencySymbol',
+                          style: GoogleFonts.cairo(
+                            fontWeight: FontWeight.bold,
+                            fontSize: isMobile ? 12.5 : 14,
+                            color: isValid ? colorScheme.onTertiaryContainer : colorScheme.onErrorContainer,
+                          ),
+                        ),
+                        if (showInvoiceNet)
+                          Text(
+                            isAr ? 'صافي الفاتورة $invoiceVal' : 'Invoice net $invoiceVal',
+                            style: GoogleFonts.cairo(fontSize: 9, color: colorScheme.onSurfaceVariant),
+                          ),
+                      ],
                     ),
                   ),
                 ],
@@ -2232,10 +2244,11 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   ),
                   const SizedBox(height: 6),
                   ...extractedProducts.map((p) {
-                    final pMap = p is Map ? Map<String, dynamic>.from(p) : {};
+                    final pMap = p is Map ? Map<String, dynamic>.from(p) : <String, dynamic>{};
                     final name = (pMap['name'] ?? pMap['product_name'] ?? 'منتج').toString();
                     final qty = (pMap['quantity'] as num?)?.toInt() ?? 1;
                     final price = (pMap['price'] as num?)?.toDouble() ?? 0.0;
+                    final lineLabel = ExtractedProductItem.lineTotalLabel(pMap, arabic: isAr);
                     final isTarget = pMap['is_target_company'] != false;
 
                     return Container(
@@ -2264,7 +2277,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                             ),
                           ),
                           Text(
-                            'الكمية: $qty | السعر: ${price.toStringAsFixed(price == price.roundToDouble() ? 0 : 2)} $currencySymbol',
+                            'الكمية: $qty | السعر: ${price.toStringAsFixed(price == price.roundToDouble() ? 0 : 2)} | السطر ${lineLabel.primary}${lineLabel.grossNote == null ? '' : ' (${lineLabel.grossNote})'} $currencySymbol',
                             style: GoogleFonts.cairo(
                               fontSize: 11.5,
                               color: colorScheme.onSurfaceVariant,
@@ -2862,7 +2875,15 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
       }
 
       final canonical = winningEval.resolvedBranchName ?? _normalizeBranchName(rawBranch, winningCampaign.branchNames, isAr);
-      final double promoSpend = winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : targetTotal;
+      final spend = PromotionalRuleMatcher.spendTotals(
+        products: products,
+        rules: winningCampaign.promotionalRules,
+        spendLadderMode: winningCampaign.spendLadderMode,
+      );
+      final double promoSpend = winningCampaign.spendLadderMode == 'consuming'
+          ? spend.eligibleNet
+          : (winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : targetTotal);
+      final double invoiceSpend = winningCampaign.spendLadderMode == 'consuming' ? spend.invoiceNet : promoSpend;
 
       await firestore.collection('receipts_transactions').doc(docId).update({
         'is_valid': true,
@@ -2877,6 +2898,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
         'rechecked_by': currentUser?.email ?? 'promoter',
         'recheck_type': winningCampaign.id == activeEvent.id ? 'quick_rule_match' : 'quick_multi_campaign_match',
         'target_company_total': promoSpend,
+        'total_value': invoiceSpend,
         'chances_earned': chances,
         'canonical_branch': canonical,
         'branch_detected': canonical,
@@ -2897,6 +2919,9 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
           resolvedBranchId: winningEval.resolvedBranchId,
           resolvedBranchName: canonical,
           resolvedLinkedGifts: winningEval.resolvedLinkedGifts,
+          awardRounds: winningCampaign.spendLadderMode == 'consuming'
+              ? SpendAwardRound.expand(winningEval.matchedRules)
+              : const [],
           resolvedUnitValue: winningEval.resolvedUnitValue,
           resolvedIsVoucher: winningEval.resolvedIsVoucher,
           onViewAccepted: () {
@@ -3101,6 +3126,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
       multiplierBasis: activeEvent.multiplierBasis,
       maxChancesPerReceipt: activeEvent.maxChancesPerReceipt,
       promotionalRules: combinedPromotionalRules,
+      spendLadderMode: activeEvent.spendLadderMode,
       allowComplementaryReceipts: activeEvent.allowComplementaryReceipts,
     );
 
@@ -3143,8 +3169,18 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
         }
       }
 
+      final fullTotals = PromotionalRuleMatcher.spendTotals(
+        products: result.extractedProducts,
+        rules: winningCampaign.promotionalRules,
+        spendLadderMode: winningCampaign.spendLadderMode,
+      );
       final double computedTotal = result.extractedProducts.fold<double>(0.0, (acc, p) => acc + p.actualLineSpend);
-      final double totalSpend = computedTotal > 0 ? computedTotal : result.targetCompanyTotal;
+      final double totalSpend = winningCampaign.spendLadderMode == 'consuming'
+          ? fullTotals.invoiceNet
+          : (computedTotal > 0 ? computedTotal : result.targetCompanyTotal);
+      final double eligibleSpend = winningCampaign.spendLadderMode == 'consuming'
+          ? fullTotals.eligibleNet
+          : (winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : result.targetCompanyTotal);
       final canonical = winningEval.resolvedBranchName ?? _normalizeBranchName(result.branchDetected, winningCampaign.branchNames, isAr);
 
       await firestore.collection('receipts_transactions').doc(docId).update({
@@ -3160,7 +3196,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
         'rechecked_by': currentUser?.email ?? 'promoter',
         'recheck_type': winningCampaign.id == activeEvent.id ? 'full_ai_scan' : 'full_ai_multi_campaign_match',
         'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
-        'target_company_total': winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : result.targetCompanyTotal,
+        'target_company_total': eligibleSpend,
         'total_value': totalSpend,
         if (result.receiptNumber.isNotEmpty) 'receipt_number': result.receiptNumber,
         if (result.storeChainDetected.isNotEmpty) 'store_chain_detected': result.storeChainDetected,
@@ -3186,6 +3222,9 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
           resolvedBranchId: winningEval.resolvedBranchId,
           resolvedBranchName: canonical,
           resolvedLinkedGifts: winningEval.resolvedLinkedGifts,
+          awardRounds: winningCampaign.spendLadderMode == 'consuming'
+              ? SpendAwardRound.expand(winningEval.matchedRules)
+              : const [],
           resolvedUnitValue: winningEval.resolvedUnitValue,
           resolvedIsVoucher: winningEval.resolvedIsVoucher,
           onViewAccepted: () {
@@ -3202,8 +3241,18 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
               ? summary.unfulfilledCampaigns.expand((u) => u.unfulfilledConditions).toList()
               : [result.message.trim().isNotEmpty ? result.message.trim() : (isAr ? 'الفاتورة غير مطابقة لشروط عروض الشركة' : 'Receipt does not qualify for company offers')]);
 
+      final rejectedTotals = PromotionalRuleMatcher.spendTotals(
+        products: result.extractedProducts,
+        rules: activeEvent.promotionalRules,
+        spendLadderMode: activeEvent.spendLadderMode,
+      );
       final double computedTotal = result.extractedProducts.fold<double>(0.0, (acc, p) => acc + p.actualLineSpend);
-      final double totalSpend = computedTotal > 0 ? computedTotal : result.targetCompanyTotal;
+      final double totalSpend = activeEvent.spendLadderMode == 'consuming'
+          ? rejectedTotals.invoiceNet
+          : (computedTotal > 0 ? computedTotal : result.targetCompanyTotal);
+      final double eligibleSpend = activeEvent.spendLadderMode == 'consuming'
+          ? rejectedTotals.eligibleNet
+          : result.targetCompanyTotal;
 
       await firestore.collection('receipts_transactions').doc(docId).update({
         'is_valid': false,
@@ -3211,7 +3260,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
         'unfulfilled_conditions': unfulfilledList,
         'rejection_reason': unfulfilledList.join(' • '),
         'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
-        'target_company_total': result.targetCompanyTotal,
+        'target_company_total': eligibleSpend,
         'total_value': totalSpend,
         'rechecked_at': FieldValue.serverTimestamp(),
         'rechecked_by': currentUser?.email ?? 'promoter',
@@ -3268,6 +3317,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     String? resolvedBranchId,
     String? resolvedBranchName,
     List<LinkedGiftAllocation> resolvedLinkedGifts = const [],
+    List<SpendAwardRound> awardRounds = const [],
     double? resolvedUnitValue,
     bool resolvedIsVoucher = false,
     VoidCallback? onViewAccepted,
@@ -3281,17 +3331,25 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     final branchIdOrName = (resolvedBranchName != null && resolvedBranchName.trim().isNotEmpty)
         ? resolvedBranchName.trim()
         : resolvedBranchId;
+    final bool consumingLadder = winningCampaign?.spendLadderMode == 'consuming';
+    final effectiveRounds = consumingLadder ? awardRounds : const <SpendAwardRound>[];
 
-    // Collect candidate prizes for choice or wheel
+    // Collect candidate prizes for choice or wheel. A consuming ladder never
+    // falls back to every gift in the branch.
     List<String> candidatePrizes = [];
-    if (resolvedLinkedGifts.isNotEmpty) {
+    if (consumingLadder) {
+      candidatePrizes = [
+        for (final round in effectiveRounds)
+          for (final name in round.prizeNames) name,
+      ];
+    } else if (resolvedLinkedGifts.isNotEmpty) {
       candidatePrizes = resolvedLinkedGifts
           .map((g) => g.giftName.trim())
           .where((n) => n.isNotEmpty)
           .toSet()
           .toList();
     }
-    if (winningCampaign != null) {
+    if (winningCampaign != null && !consumingLadder) {
       if (candidatePrizes.isNotEmpty) {
         final filtered = winningCampaign.filterGiftsByBranchStock(candidateGifts: candidatePrizes, branch: branchIdOrName);
         if (filtered.isNotEmpty) {
@@ -3304,7 +3362,11 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
 
     // Clean display title for choice campaigns
     String effectiveTitle = prizeTitle ?? '';
-    if (isChooseGift) {
+    if (isChooseGift && consumingLadder && effectiveRounds.isNotEmpty) {
+      effectiveTitle = isAr
+          ? 'سلم الإنفاق: ${effectiveRounds.length} جولات، وكل جولة تعرض هدايا شريحتها فقط'
+          : 'Spend ladder: ${effectiveRounds.length} rounds, each with its own gifts';
+    } else if (isChooseGift) {
       effectiveTitle = isAr
           ? 'عرض ترويجي بنظام اختيار الهدية (${candidatePrizes.length} خيارات متاحة)'
           : 'Promotional Choice Reward (${candidatePrizes.length} Options)';
@@ -3384,7 +3446,16 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                           ),
                         ],
                       ),
-                      if (candidatePrizes.isNotEmpty) ...[
+                      if (consumingLadder && effectiveRounds.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        ...effectiveRounds.asMap().entries.map((entry) => Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Text(
+                            entry.value.roundLine(entry.key, effectiveRounds.length, arabic: isAr),
+                            style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.onSecondaryContainer),
+                          ),
+                        )),
+                      ] else if (candidatePrizes.isNotEmpty) ...[
                         const SizedBox(height: 10),
                         Wrap(
                           spacing: 6,
@@ -3503,7 +3574,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
         actions: [
           // Primary Action Button (Game / Choice / Direct Claim)
           if (docId != null && docId.isNotEmpty && winningCampaign != null) ...[
-            if (isChooseGift)
+            if ((consumingLadder && effectiveRounds.isNotEmpty) || (isChooseGift && !consumingLadder))
               FilledButton.icon(
                 onPressed: () {
                   Navigator.pop(ctx);
@@ -3513,8 +3584,15 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                         transactionId: docId,
                         eventId: winningCampaign.id,
                         companySlug: winningCampaign.companySlug,
-                        prizes: candidatePrizes,
-                        totalChances: totalChances > 0 ? totalChances : 1,
+                        prizes: effectiveRounds.isNotEmpty ? effectiveRounds.first.prizeNames : candidatePrizes,
+                        roundPrizeNames: [for (final round in effectiveRounds) round.prizeNames],
+                        roundGiftIds: [for (final round in effectiveRounds) round.giftIds],
+                        roundUnitValues: [for (final round in effectiveRounds) round.unitValues],
+                        roundRuleIds: [for (final round in effectiveRounds) round.ruleId],
+                        roundTierMinSpends: [for (final round in effectiveRounds) round.tierMinSpend],
+                        totalChances: effectiveRounds.isNotEmpty
+                            ? effectiveRounds.length
+                            : (totalChances > 0 ? totalChances : 1),
                         branchId: resolvedBranchId,
                       ),
                     ),
@@ -3531,7 +3609,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                 ),
               )
-            else if (isWheel)
+            else if (!consumingLadder && isWheel)
               FilledButton.icon(
                 onPressed: () {
                   Navigator.pop(ctx);
@@ -3559,7 +3637,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                 ),
               )
-            else if (isScratch)
+            else if (!consumingLadder && isScratch)
               FilledButton.icon(
                 onPressed: () {
                   Navigator.pop(ctx);
@@ -3585,7 +3663,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                 ),
               )
-            else if (isDirect)
+            else if (!consumingLadder && isDirect)
               FilledButton.icon(
                 onPressed: () {
                   Navigator.pop(ctx);

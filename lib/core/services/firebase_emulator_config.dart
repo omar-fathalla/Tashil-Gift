@@ -29,8 +29,9 @@ const String kFirebaseEmulatorHost = String.fromEnvironment(
 /// Call immediately after [Firebase.initializeApp] and before any read.
 ///
 /// The functions emulator is not required to be running. The host is set so a
-/// claim never builds a `cloudfunctions.net` URL. A refused local call falls
-/// back to a Firestore write on port 8080 for a signed-in staff user.
+/// claim never builds a `cloudfunctions.net` URL. A refused connection may
+/// fall back to the Firestore emulator for a signed-in staff user. A callable
+/// that answers with App Check, permission, or a gift-rule rejection does not.
 Future<void> attachFirebaseEmulators() async {
   FirebaseFirestore.instance.useFirestoreEmulator(kFirebaseEmulatorHost, 8080);
   await FirebaseAuth.instance.useAuthEmulator(kFirebaseEmulatorHost, 9099);

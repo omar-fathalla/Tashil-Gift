@@ -12,6 +12,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../../../core/services/firebase_service.dart';
+import '../../../core/services/accepted_receipt_core.dart';
 import '../../../core/services/ai_receipt_service.dart';
 import '../../../core/services/ai_product_discovery_service.dart';
 import '../../../core/services/company_products_service.dart';
@@ -382,6 +383,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         multiplierBasis: activeEvent.multiplierBasis,
         maxChancesPerReceipt: activeEvent.maxChancesPerReceipt,
         promotionalRules: activeEvent.promotionalRules,
+        spendLadderMode: activeEvent.spendLadderMode,
       ).timeout(AiReceiptService.stage2Ceiling,
           onTimeout: () => throw TimeoutException(
               AiReceiptService.stage2TimeoutMessage,
@@ -655,6 +657,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         promotionalRules: activeEvent.promotionalRules,
         allowCampaignMultipliers: activeEvent.allowMultipleChances,
         maxUnitsPerReceipt: activeEvent.maxChancesPerReceipt,
+        spendLadderMode: activeEvent.spendLadderMode,
       );
 
       // Strict Zero-Fallback Rule: If campaign has promotional rules and none are met, reject receipt
@@ -744,44 +747,29 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       final Map<String, dynamic> transactionData = {
         'app_version': AppVersionConfig.appVersion,
         if (RepDeviceId.value.isNotEmpty) 'rep_device_id': RepDeviceId.value,
-        'receipt_number': receiptNumber,
-        'is_valid': true,
-        'status': 'accepted',
-        'rejection_reason': null,
-        'unfulfilled_conditions': const [],
-        'total_value': totalValue,
-        'target_company_total': totalValue,
-        'receipt_date': result.receiptDate,
-        'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
-        'store_chain_detected': result.storeChainDetected,
-        ...ReceiptBranchResolver.firestoreFields(
-          activeEvent,
-          detectedName: result.branchDetected,
-          receiptNumber: result.receiptNumber,
+        ...acceptedReceiptCore(
+          result: result,
+          campaignId: activeEvent.id,
+          companySlug: activeEvent.companySlug,
+          targetCompany: activeEvent.targetCompany,
+          retailChainName: activeEvent.retailChainName,
+          chancesEarned: totalChances,
+          allowMultipleChances: activeEvent.allowMultipleChances,
+          submittedByUid: ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
+          spendLadderMode: activeEvent.spendLadderMode,
+          promotionalRules: activeEvent.promotionalRules,
+          branchFields: ReceiptBranchResolver.firestoreFields(
+            activeEvent,
+            detectedName: result.branchDetected,
+            receiptNumber: result.receiptNumber,
+          ),
         ),
-        'is_branch_matched': result.isBranchMatched,
-        'is_handwritten': result.isHandwritten,
-        'is_thermal_pos_receipt': result.isThermalPosReceipt,
-        'is_tampered': result.isTampered,
-        'is_screen_capture': result.isScreenCapture,
-        'fraud_risk_score': result.fraudRiskScore,
-        'fraud_reasons': result.fraudReasons,
-        'retail_chain_name': activeEvent.retailChainName,
+        'promoter_id': ref.read(firebaseAuthProvider).currentUser?.uid,
         if (primaryImageUrl.isNotEmpty) 'image_url': primaryImageUrl,
         if (primaryStoragePath.isNotEmpty) 'storage_path': primaryStoragePath,
         if (uploadedImageUrls.length > 1) 'image_urls': uploadedImageUrls,
         if (uploadedStoragePaths.length > 1) 'storage_paths': uploadedStoragePaths,
         'parts_count': allBytesList.length,
-        'promoter_id': ref.read(firebaseAuthProvider).currentUser?.uid,
-        'submittedByUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
-        'campaignId': activeEvent.id,
-        'companySlug': activeEvent.companySlug,
-        'targetCompany': activeEvent.targetCompany,
-        'analysis_duration_seconds': result.durationSeconds,
-        'analysis_duration_ms': result.durationMs,
-        'ai_kpi_rating': result.kpiRating,
-        'chances_earned': totalChances,
-        'allow_multiple_chances': activeEvent.allowMultipleChances,
       };
 
       if (isExistingRecord) {
@@ -910,8 +898,10 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           ? compositeBundle.resolvedGameType!.trim()
           : null;
       final gameType = ruleLevelGame ?? activeEvent.gameType;
+      // Wheel, scratch, and direct gift do not name a consuming round.
+      final bool consumingLadder = activeEvent.spendLadderMode == 'consuming';
 
-      if (gameType == 'directGift' || gameType == 'direct_gift') {
+      if (!consumingLadder && (gameType == 'directGift' || gameType == 'direct_gift')) {
         final designatedPrizeObj = activeEvent.availablePrizes.isNotEmpty
             ? activeEvent.availablePrizes.first
             : (activeEvent.allocatedPrizes.isNotEmpty ? activeEvent.allocatedPrizes.first : null);
@@ -1008,18 +998,32 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
             _selectedPreviewIndex = 0;
           });
         }
-      } else if (gameType == 'chooseGift') {
+      } else if (consumingLadder || gameType == 'chooseGift') {
         final candidateGifts = compositeBundle.candidateGiftNames.isNotEmpty
             ? compositeBundle.candidateGiftNames
             : prizeNames;
-        await Navigator.of(context).push(
+        final awardRounds = compositeBundle.awardRounds;
+        if (consumingLadder && awardRounds.isEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(PromotionalRuleMatcher.missingSpendRulesMessage)),
+            );
+          }
+        } else await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => ChooseGiftScreen(
               transactionId: transactionRef.id,
               eventId: activeEvent.id,
               companySlug: activeEvent.companySlug,
-              prizes: candidateGifts.isNotEmpty ? candidateGifts : prizeNames,
-              totalChances: totalChances,
+              prizes: awardRounds.isNotEmpty
+                  ? awardRounds.first.prizeNames
+                  : (candidateGifts.isNotEmpty ? candidateGifts : prizeNames),
+              roundPrizeNames: [for (final round in awardRounds) round.prizeNames],
+              roundGiftIds: [for (final round in awardRounds) round.giftIds],
+              roundUnitValues: [for (final round in awardRounds) round.unitValues],
+              roundRuleIds: [for (final round in awardRounds) round.ruleId],
+              roundTierMinSpends: [for (final round in awardRounds) round.tierMinSpend],
+              totalChances: awardRounds.isNotEmpty ? awardRounds.length : totalChances,
               branchId: resolvedBranchId,
             ),
           ),
@@ -1030,7 +1034,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
             _selectedPreviewIndex = 0;
           });
         }
-      } else if (gameType == 'scratch') {
+      } else if (!consumingLadder && gameType == 'scratch') {
         final candidateGifts = compositeBundle.candidateGiftNames.isNotEmpty
             ? compositeBundle.candidateGiftNames
             : prizeNames;
@@ -1050,7 +1054,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
             _selectedPreviewIndex = 0;
           });
         }
-      } else {
+      } else if (!consumingLadder) {
         // Default: wheel (AIR-85: filter prizes strictly by detected branch stock)
         final candidateGifts = compositeBundle.candidateGiftNames.isNotEmpty
             ? compositeBundle.candidateGiftNames
@@ -2083,6 +2087,17 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
 
       final String primaryImageUrl = uploadedImageUrls.isNotEmpty ? uploadedImageUrls.first : '';
       final String primaryStoragePath = uploadedStoragePaths.isNotEmpty ? uploadedStoragePaths.first : '';
+      final rejectedSpend = PromotionalRuleMatcher.spendTotals(
+        products: result.extractedProducts,
+        rules: activeEvent.promotionalRules,
+        spendLadderMode: activeEvent.spendLadderMode,
+      );
+      final double eligibleSpend = activeEvent.spendLadderMode == 'consuming'
+          ? rejectedSpend.eligibleNet
+          : totalValue;
+      final double invoiceSpend = activeEvent.spendLadderMode == 'consuming'
+          ? rejectedSpend.invoiceNet
+          : totalValue;
 
       DocumentSnapshot<Map<String, dynamic>>? existingDoc;
       if (receiptNumber.isNotEmpty) {
@@ -2106,8 +2121,8 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         'status': 'rejected',
         'rejection_reason': rejectionReason,
         'unfulfilled_conditions': unfulfilledConditions,
-        'total_value': totalValue,
-        'target_company_total': totalValue,
+        'total_value': invoiceSpend,
+        'target_company_total': eligibleSpend,
         'receipt_date': result.receiptDate,
         'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
         'store_chain_detected': result.storeChainDetected,
