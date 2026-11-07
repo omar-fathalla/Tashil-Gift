@@ -11,6 +11,7 @@ import '../config/ai_config.dart';
 import 'gemini_cloud_model.dart';
 import '../utils/arabic_numbers_utils.dart';
 import '../utils/receipt_date_window.dart';
+import '../utils/canonical_branch_resolver.dart';
 import '../utils/store_code_branch_resolver.dart';
 import 'campaign_ai_assistant_service.dart';
 import 'company_gifts_service.dart';
@@ -2364,21 +2365,13 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           }
 
           if (matchedBranchByCode != null) {
-            String? matchedCanonicalAllowedBranch;
-            final cleanBName = CompanyGiftsService.normalizeBranchToken(
+            // Exact or longest campaign name. A shorter sibling that merely
+            // shares a token (طنطا inside طنطا اوت ليت) is not a match.
+            final String? matchedCanonicalAllowedBranch =
+                CanonicalBranchResolver.pickCampaignName(
               matchedBranchByCode.branchName,
+              allowedBranches,
             );
-            for (final ab in allowedBranches) {
-              final cleanAb = CompanyGiftsService.normalizeBranchToken(ab);
-              if (cleanAb.isNotEmpty &&
-                  cleanBName.isNotEmpty &&
-                  (cleanAb == cleanBName ||
-                      cleanAb.contains(cleanBName) ||
-                      cleanBName.contains(cleanAb))) {
-                matchedCanonicalAllowedBranch = ab;
-                break;
-              }
-            }
 
             final isAllowed =
                 isAllBranches ||
@@ -2418,10 +2411,11 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                           : result.message),
               );
             } else {
-              // Strictly reject if the POS Store Code belongs to a branch outside the campaign's allowedBranches!
+              // The branch doc is not one of this campaign's names. The receipt
+              // number is checked next and rejects only when that is not a
+              // unique campaign branch either.
               result = result.copyWith(
                 isBranchMatched: false,
-                isValid: false,
                 branchDetected: fixedBranchName,
                 storeChainDetected:
                     matchedBranchByCode.retailChainName.isNotEmpty
@@ -2432,58 +2426,33 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           }
         }
 
-        // Auto-reconcile detected branch against allowedBranches in Dart using canonical resolution
+        // A unique store code wins over the detected name. Name picking is
+        // exact, then one longest contained name, never the first short sibling.
         if (allowedBranches.isNotEmpty) {
           final detectedRaw = result.branchDetected.trim();
           final detectedClean = CompanyGiftsService.normalizeBranchToken(detectedRaw);
-          bool matchedAnyAllowed = false;
-
-          for (final ab in allowedBranches) {
-            final abClean = CompanyGiftsService.normalizeBranchToken(ab);
-
-            if (detectedClean.isNotEmpty && abClean.isNotEmpty) {
-              if (detectedClean == abClean ||
-                  detectedClean.contains(abClean) ||
-                  abClean.contains(detectedClean) ||
-                  (detectedClean.contains('عبور') &&
-                      abClean.contains('عبور')) ||
-                  (detectedClean.contains('رحاب') &&
-                      abClean.contains('رحاب')) ||
-                  (detectedClean.contains('سموحه') &&
-                      abClean.contains('سموحه')) ||
-                  (detectedClean.contains('ستانلي') &&
-                      abClean.contains('ستانلي')) ||
-                  (detectedClean.contains('جاردينيا') &&
-                      abClean.contains('جاردينيا')) ||
-                  (detectedClean.contains('عجمي') &&
-                      abClean.contains('عجمي')) ||
-                  (detectedClean.contains('محله') &&
-                      abClean.contains('محله')) ||
-                  (detectedClean.contains('تجمع') &&
-                      abClean.contains('تجمع')) ||
-                  (detectedClean.contains('اكتوبر') &&
-                      abClean.contains('اكتوبر')) ||
-                  (detectedClean.contains('منصوره') &&
-                      abClean.contains('منصوره')) ||
-                  (detectedClean.contains('شبين') &&
-                      abClean.contains('شبين')) ||
-                  (detectedClean.contains('منتزه') &&
-                      abClean.contains('منتزه')) ||
-                  (detectedClean.contains('ميامي') &&
-                      abClean.contains('ميامي')) ||
-                  (detectedClean.contains('جناكليس') &&
-                      abClean.contains('جناكليس'))) {
-                result = result.copyWith(
-                  isBranchMatched: true,
-                  branchDetected: ab,
-                );
-                matchedAnyAllowed = true;
-                break;
-              }
-            }
-          }
-
-          if (!isAllBranches && !matchedAnyAllowed && detectedClean.isNotEmpty) {
+          final picked = CanonicalBranchResolver.pickCampaignName(detectedRaw, allowedBranches);
+          final codeName = campaignBranchIds.isNotEmpty
+              ? StoreCodeBranchResolver.campaignBranchName(
+                  result.receiptNumber,
+                  campaignBranchIds,
+                  campaignBranchNames,
+                )
+              : null;
+          if (codeName != null) {
+            result = result.copyWith(
+              isBranchMatched: true,
+              branchDetected: codeName,
+              unfulfilledConditions: result.unfulfilledConditions
+                  .where((c) => !c.contains('فرع') && !c.contains('الفروع'))
+                  .toList(),
+            );
+          } else if (picked != null) {
+            result = result.copyWith(
+              isBranchMatched: true,
+              branchDetected: picked,
+            );
+          } else if (!isAllBranches && detectedClean.isNotEmpty) {
             result = result.copyWith(
               isBranchMatched: false,
               isValid: false,
@@ -2506,16 +2475,14 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           result = result.copyWith(branchDetected: bNorm);
         }
 
-        // 2.0.170: the store code in the receipt number belongs to one of the
-        // campaign's own branch ids (e.g. 418 -> gomla-market_gml-418). This
-        // needs no branch docs, so it still works if loading them failed.
-        if (!result.isBranchMatched && campaignBranchIds.isNotEmpty) {
+        // Store code again after parenthesis cleanup, still ahead of any name.
+        if (campaignBranchIds.isNotEmpty) {
           final codeName = StoreCodeBranchResolver.campaignBranchName(
             result.receiptNumber,
             campaignBranchIds,
             campaignBranchNames,
           );
-          if (codeName != null) {
+          if (codeName != null && result.branchDetected != codeName) {
             result = result.copyWith(
               isBranchMatched: true,
               branchDetected: codeName,

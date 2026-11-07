@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'firebase_emulator_config.dart';
 import 'firebase_service.dart';
 import 'distributed_counter_service.dart';
 import '../../features/admin/domain/company_gift_model.dart';
@@ -1387,6 +1388,75 @@ class CompanyGiftsService {
     return match != null ? double.tryParse(match.group(1)!) ?? 0.0 : 0.0;
   }
 
+  /// A branch key matches one prize row by id or by the full branch name.
+  /// A shorter sibling token, a partial name, an unknown code, or a foreign
+  /// id does not match a different row.
+  static bool _prizeBranchAccepted(
+    Map<String, dynamic> prize,
+    String branchId,
+    String? pickedBranchName,
+  ) {
+    if (branchId.isEmpty) return true;
+    final id = (prize['branchId'] ?? '').toString().trim();
+    final name = (prize['branchName'] ?? '').toString().trim();
+    if (id.isEmpty && name.isEmpty) return true;
+    if (id == branchId || name == branchId) return true;
+    if (pickedBranchName != null && name == pickedBranchName) return true;
+    if (name.isNotEmpty &&
+        _normalizePrizeText(name) == _normalizePrizeText(branchId)) {
+      return true;
+    }
+    return false;
+  }
+
+  static bool _prizeIdentityMatches(
+    Map<String, dynamic> prize,
+    String prizeIdentifier,
+  ) {
+    final id = prizeIdentifier.trim();
+    if (id.isEmpty) return true;
+    final pGiftId = (prize['giftId'] ?? '').toString().trim();
+    final pName = (prize['name'] ?? '').toString().trim();
+    final cleanTarget = _normalizePrizeText(id);
+    final cleanName = _normalizePrizeText(pName);
+    if (pGiftId.isNotEmpty && (pGiftId == id || pGiftId == cleanTarget)) {
+      return true;
+    }
+    if (pName == id) return true;
+    if (cleanName.isNotEmpty && cleanName == cleanTarget) return true;
+    if (cleanTarget.isNotEmpty &&
+        (cleanName.contains(cleanTarget) || cleanTarget.contains(cleanName))) {
+      return true;
+    }
+    final targetVal = _extractNumericValue(id);
+    final pUnit = (prize['unitValue'] as num?)?.toDouble() ?? 0.0;
+    if (targetVal > 0 && pUnit > 0 && (targetVal - pUnit).abs() < 0.01) {
+      return true;
+    }
+    return false;
+  }
+
+  static String? _pickedPrizeBranchName(
+    List<Map<String, dynamic>> prizes,
+    String branchId,
+  ) {
+    if (branchId.isEmpty) return null;
+    final names = <String>[];
+    for (final prize in prizes) {
+      final name = (prize['branchName'] ?? '').toString().trim();
+      if (name.isNotEmpty) names.add(name);
+    }
+    if (names.isEmpty) return null;
+    final exact = names.where((name) => name == branchId).toList();
+    if (exact.length == 1) return exact.first;
+    final normalized = _normalizePrizeText(branchId);
+    if (normalized.isEmpty) return null;
+    final normalizedHits =
+        names.where((name) => _normalizePrizeText(name) == normalized).toList();
+    if (normalizedHits.length == 1) return normalizedHits.first;
+    return null;
+  }
+
   static int findBestPrizeMatchIndex(
     List<Map<String, dynamic>> prizes,
     String prizeIdentifier, {
@@ -1396,6 +1466,8 @@ class CompanyGiftsService {
     bool preferWithRemaining = true,
   }) {
     if (prizes.isEmpty || prizeIdentifier.trim().isEmpty) return -1;
+    final queriedBranch = (branchId ?? '').trim();
+    final pickedBranchName = _pickedPrizeBranchName(prizes, queriedBranch);
 
     final cleanTarget = _normalizePrizeText(prizeIdentifier);
     final targetVal = unitValue ?? _extractNumericValue(prizeIdentifier);
@@ -1427,22 +1499,18 @@ class CompanyGiftsService {
 
       int score = 0;
 
-      // 1. Branch match weighting (support branchId, branchName, and normalized branch name)
+      // 1. Branch match weighting. Exact id or the full branch name only.
+      // A token inside a longer sibling ("طنطا" inside "طنطا اوت ليت") is not a match.
       final pBranchName = (p['branchName'] ?? '').toString().trim();
-      final isExactBranch = branchId != null &&
-          branchId.isNotEmpty &&
-          (pBranchId == branchId ||
-              pBranchName == branchId ||
-              matchesBranchName(pBranchName, branchId) ||
-              matchesBranchName(pBranchId, branchId) ||
-              _normalizePrizeText(pBranchName) == _normalizePrizeText(branchId) ||
-              (_normalizePrizeText(branchId).isNotEmpty && _normalizePrizeText(pBranchName).contains(_normalizePrizeText(branchId))));
+      final isExactBranch = _prizeBranchAccepted(p, queriedBranch, pickedBranchName) &&
+          queriedBranch.isNotEmpty &&
+          !(pBranchId.isEmpty && pBranchName.isEmpty);
       final isGeneralBranch = pBranchId.isEmpty && pBranchName.isEmpty;
       if (isExactBranch) {
         score += 120;
       } else if (isGeneralBranch) {
         score += 60;
-      } else if (branchId != null && branchId.isNotEmpty && (pBranchId.isNotEmpty || pBranchName.isNotEmpty) && !isExactBranch) {
+      } else if (queriedBranch.isNotEmpty && (pBranchId.isNotEmpty || pBranchName.isNotEmpty) && !isExactBranch) {
         // Different specific branch penalty
         score -= 80;
       }
@@ -1486,6 +1554,12 @@ class CompanyGiftsService {
       }
     }
 
+    if (bestIndex == -1) return -1;
+    final winner = prizes[bestIndex];
+    if (!_prizeBranchAccepted(winner, queriedBranch, pickedBranchName)) {
+      return -1;
+    }
+    if (!_prizeIdentityMatches(winner, prizeIdentifier)) return -1;
     return bestIndex;
   }
 
@@ -1518,7 +1592,11 @@ class CompanyGiftsService {
       return true;
     } on FirebaseFunctionsException catch (e) {
       final missing = e.code == 'not-found' || e.code == 'unavailable' || e.code == 'unimplemented';
-      if (missing && !_isAnonymousCaller()) return false;
+      // A demo build pins Functions to 127.0.0.1:5001. Connection refused
+      // arrives as `internal` and must stay on the Firestore emulator.
+      // A production internal error is not a missing function.
+      final localRefusal = kFirebaseEmulator && !_isAnonymousCaller();
+      if ((missing || localRefusal) && !_isAnonymousCaller()) return false;
       rethrow;
     } catch (e) {
       if (_isAnonymousCaller()) rethrow;
