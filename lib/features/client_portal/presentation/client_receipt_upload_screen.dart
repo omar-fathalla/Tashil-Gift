@@ -1157,6 +1157,7 @@ class _ClientReceiptUploadScreenState
                 ? 0
                 : _activeEvent!.maxChancesPerReceipt,
             promotionalRules: combinedPromotionalRules,
+            spendLadderMode: isMultiScan ? 'exclusive' : _activeEvent!.spendLadderMode,
             allowComplementaryReceipts:
                 _activeEvent?.allowComplementaryReceipts ?? false,
           )
@@ -1647,6 +1648,7 @@ class _ClientReceiptUploadScreenState
         promotionalRules: _activeEvent!.promotionalRules,
         allowCampaignMultipliers: _activeEvent!.allowMultipleChances,
         maxUnitsPerReceipt: _activeEvent!.maxChancesPerReceipt,
+        spendLadderMode: _activeEvent!.spendLadderMode,
       );
 
       if (_activeEvent!.promotionalRules.isNotEmpty &&
@@ -2187,6 +2189,7 @@ class _ClientReceiptUploadScreenState
         final candidateGifts = compositeBundle.candidateGiftNames.isNotEmpty
             ? compositeBundle.candidateGiftNames
             : prizeNames;
+        final awardRounds = compositeBundle.awardRounds;
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => ChooseGiftScreen(
@@ -2194,7 +2197,11 @@ class _ClientReceiptUploadScreenState
               eventId: currentEventId,
               companySlug: currentEvent?.companySlug ?? '',
               prizes: candidateGifts.isNotEmpty ? candidateGifts : prizeNames,
-              totalChances: totalChances,
+              roundPrizeNames: [for (final round in awardRounds) round.prizeNames],
+              roundGiftIds: [for (final round in awardRounds) round.giftIds],
+              roundUnitValues: [for (final round in awardRounds) round.unitValues],
+              roundRuleIds: [for (final round in awardRounds) round.ruleId],
+              totalChances: awardRounds.isNotEmpty ? awardRounds.length : totalChances,
               branchId: resolvedBranchId,
               customerPhone: enteredPhone,
               customerName: enteredName,

@@ -7,6 +7,7 @@
  * cannot write stock counters directly.
  */
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { verifyConsumingDecrements } = require("./consuming_spend_ladder");
 const admin = require("./admin_sdk");
 
 const callableOptions = {
@@ -614,6 +615,22 @@ async function applyCampaignPrizeClaim(db, input) {
       }
     }
 
+    if (receipt && decrements.length > 0 && event.spendLadderMode === "consuming") {
+      const reason = verifyConsumingDecrements(event, receipt, decrements);
+      if (reason === "already_claimed") {
+        throw new HttpsError("failed-precondition", "This receipt was already claimed.", { reason });
+      }
+      if (reason === "missing_lines") {
+        throw new HttpsError("failed-precondition", "لا يمكن إعادة حساب شرائح الإنفاق من هذه الفاتورة.", { reason });
+      }
+      if (reason === "tier_mismatch") {
+        throw new HttpsError("failed-precondition", "الهدية لا تطابق شريحة هذه الجولة.", { reason });
+      }
+      if (reason === "extra_quantity") {
+        throw new HttpsError("failed-precondition", "الكمية أكبر من الجولات المستحقة.", { reason });
+      }
+    }
+
     // 2.0.163: max gift UNITS per receipt = min(campaign cap, receipt chances).
     // 2.0.164: over-limit requests are trimmed, highest value first, no error.
     let trim = null;
@@ -823,6 +840,6 @@ async function decrementCampaignPrizeImpl(request) {
 // Non-enumerable so index.js Object.assign does not expose it as a function group.
 Object.defineProperty(exports, "_testing", {
   value: { NO_BRANCH_STOCK_MESSAGE, findBestPrizeMatchIndex, resolvePrizeIndexForDecrement, storeCodeFromReceiptNumber, branchIdFromStoreCode, findSharedPoolRow, sharedPoolEnabled, applyCampaignPrizeClaim, receiptUnitLimit,
-    piecesPerOffer, claimedUnits, recordClaimFailure, trimDecrementsToLimit, trimPatchToDecrements },
+    piecesPerOffer, claimedUnits, recordClaimFailure, trimDecrementsToLimit, trimPatchToDecrements, verifyConsumingDecrements },
   enumerable: false,
 });

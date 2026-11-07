@@ -25,6 +25,11 @@ class ChooseGiftScreen extends ConsumerStatefulWidget {
   final String eventId;
   final String? companySlug;
   final List<String> prizes;
+  /// One gift list per round. Empty keeps the shared [prizes] list.
+  final List<List<String>> roundPrizeNames;
+  final List<List<String>> roundGiftIds;
+  final List<List<double>> roundUnitValues;
+  final List<String> roundRuleIds;
   final int totalChances;
   final bool isDemo;
   final String? branchId;
@@ -39,6 +44,10 @@ class ChooseGiftScreen extends ConsumerStatefulWidget {
     this.eventId = '',
     this.companySlug,
     this.prizes = const [],
+    this.roundPrizeNames = const [],
+    this.roundGiftIds = const [],
+    this.roundUnitValues = const [],
+    this.roundRuleIds = const [],
     this.totalChances = 1,
     this.isDemo = false,
     this.branchId,
@@ -56,7 +65,19 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
     with TickerProviderStateMixin {
   ColorScheme get colorScheme => Theme.of(context).colorScheme;
 
-  late final List<String> _items;
+  late final List<String> _flatItems;
+
+  List<String> get _items {
+    if (widget.roundPrizeNames.isNotEmpty) {
+      final index = (_currentRound - 1).clamp(0, widget.roundPrizeNames.length - 1);
+      final round = widget.roundPrizeNames[index]
+          .map((name) => name.trim())
+          .where((name) => name.isNotEmpty)
+          .toList();
+      if (round.isNotEmpty) return round;
+    }
+    return _flatItems;
+  }
   int? _selectedGiftIndex;
   bool _isConfirming = false;
   late int _remainingChances;
@@ -95,7 +116,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
             'طقم أواني فاخر 🍳',
           ];
     final seen = <String>{};
-    _items = rawPrizes.where((p) => p.trim().isNotEmpty && seen.add(p.trim())).toList();
+    _flatItems = rawPrizes.where((p) => p.trim().isNotEmpty && seen.add(p.trim())).toList();
 
     _pulseController = AnimationController(
       vsync: this,
@@ -238,7 +259,21 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
   Future<void> _handleConfirmSelection() async {
     if (_selectedGiftIndex == null || _isConfirming) return;
 
-    final selectedPrize = _items[_selectedGiftIndex!];
+    final selectedPrize = _items[_selectedGiftIndex!.clamp(0, _items.length - 1)];
+    final roundIndex = _currentRound - 1;
+    final roundGiftId = roundIndex >= 0 &&
+            roundIndex < widget.roundGiftIds.length &&
+            _selectedGiftIndex! < widget.roundGiftIds[roundIndex].length
+        ? widget.roundGiftIds[roundIndex][_selectedGiftIndex!]
+        : '';
+    final roundUnit = roundIndex >= 0 &&
+            roundIndex < widget.roundUnitValues.length &&
+            _selectedGiftIndex! < widget.roundUnitValues[roundIndex].length
+        ? widget.roundUnitValues[roundIndex][_selectedGiftIndex!]
+        : 0.0;
+    final roundRuleId = roundIndex >= 0 && roundIndex < widget.roundRuleIds.length
+        ? widget.roundRuleIds[roundIndex]
+        : '';
     final audioService = ref.read(gameAudioServiceProvider);
 
     setState(() {
@@ -260,8 +295,12 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
         await runGameClaim(
           () => giftsService.decrementCampaignPrize(
           widget.eventId,
-          selectedPrize,
+          roundGiftId.isNotEmpty ? roundGiftId : selectedPrize,
           branchId: widget.branchId,
+          unitValue: roundUnit > 0 ? roundUnit : null,
+          isVoucher: selectedPrize.contains('فواتشر') ||
+              selectedPrize.contains('قسيمة') ||
+              selectedPrize.toLowerCase().contains('voucher'),
           gameType: 'chooseGift',
           receiptId: widget.transactionId,
           receiptPatch: {
@@ -271,12 +310,19 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
             'prizes_won': _wonPrizes,
             'remaining_chances': _remainingChances,
             'event_id': widget.eventId,
-            'claimed_gifts': _wonPrizes.map((p) => {
-              'giftId': '',
-              'giftName': p,
-              'quantity': 1,
-              'unitValue': 0.0,
-              'isVoucher': p.contains('فواتشر') || p.contains('قسيمة') || p.toLowerCase().contains('voucher'),
+            'claimed_gifts': _wonPrizes.asMap().entries.map((entry) {
+              final index = entry.key;
+              final name = entry.value;
+              final giftId = index == roundIndex ? roundGiftId : '';
+              final unit = index == roundIndex ? roundUnit : 0.0;
+              return {
+                'giftId': giftId,
+                'giftName': name,
+                'quantity': 1,
+                'unitValue': unit,
+                if (roundRuleId.isNotEmpty && index == roundIndex) 'ruleId': roundRuleId,
+                'isVoucher': name.contains('فواتشر') || name.contains('قسيمة') || name.toLowerCase().contains('voucher'),
+              };
             }).toList(),
           },
         ),

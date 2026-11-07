@@ -382,6 +382,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         multiplierBasis: activeEvent.multiplierBasis,
         maxChancesPerReceipt: activeEvent.maxChancesPerReceipt,
         promotionalRules: activeEvent.promotionalRules,
+        spendLadderMode: activeEvent.spendLadderMode,
       ).timeout(AiReceiptService.stage2Ceiling,
           onTimeout: () => throw TimeoutException(
               AiReceiptService.stage2TimeoutMessage,
@@ -655,6 +656,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         promotionalRules: activeEvent.promotionalRules,
         allowCampaignMultipliers: activeEvent.allowMultipleChances,
         maxUnitsPerReceipt: activeEvent.maxChancesPerReceipt,
+        spendLadderMode: activeEvent.spendLadderMode,
       );
 
       // Strict Zero-Fallback Rule: If campaign has promotional rules and none are met, reject receipt
@@ -1012,6 +1014,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         final candidateGifts = compositeBundle.candidateGiftNames.isNotEmpty
             ? compositeBundle.candidateGiftNames
             : prizeNames;
+        final awardRounds = compositeBundle.awardRounds;
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => ChooseGiftScreen(
@@ -1019,7 +1022,11 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
               eventId: activeEvent.id,
               companySlug: activeEvent.companySlug,
               prizes: candidateGifts.isNotEmpty ? candidateGifts : prizeNames,
-              totalChances: totalChances,
+              roundPrizeNames: [for (final round in awardRounds) round.prizeNames],
+              roundGiftIds: [for (final round in awardRounds) round.giftIds],
+              roundUnitValues: [for (final round in awardRounds) round.unitValues],
+              roundRuleIds: [for (final round in awardRounds) round.ruleId],
+              totalChances: awardRounds.isNotEmpty ? awardRounds.length : totalChances,
               branchId: resolvedBranchId,
             ),
           ),

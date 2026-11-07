@@ -2897,6 +2897,9 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
           resolvedBranchId: winningEval.resolvedBranchId,
           resolvedBranchName: canonical,
           resolvedLinkedGifts: winningEval.resolvedLinkedGifts,
+          awardRounds: winningCampaign.spendLadderMode == 'consuming'
+              ? SpendAwardRound.expand(winningEval.matchedRules)
+              : const [],
           resolvedUnitValue: winningEval.resolvedUnitValue,
           resolvedIsVoucher: winningEval.resolvedIsVoucher,
           onViewAccepted: () {
@@ -3101,6 +3104,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
       multiplierBasis: activeEvent.multiplierBasis,
       maxChancesPerReceipt: activeEvent.maxChancesPerReceipt,
       promotionalRules: combinedPromotionalRules,
+      spendLadderMode: activeEvent.spendLadderMode,
       allowComplementaryReceipts: activeEvent.allowComplementaryReceipts,
     );
 
@@ -3186,6 +3190,9 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
           resolvedBranchId: winningEval.resolvedBranchId,
           resolvedBranchName: canonical,
           resolvedLinkedGifts: winningEval.resolvedLinkedGifts,
+          awardRounds: winningCampaign.spendLadderMode == 'consuming'
+              ? SpendAwardRound.expand(winningEval.matchedRules)
+              : const [],
           resolvedUnitValue: winningEval.resolvedUnitValue,
           resolvedIsVoucher: winningEval.resolvedIsVoucher,
           onViewAccepted: () {
@@ -3268,6 +3275,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     String? resolvedBranchId,
     String? resolvedBranchName,
     List<LinkedGiftAllocation> resolvedLinkedGifts = const [],
+    List<SpendAwardRound> awardRounds = const [],
     double? resolvedUnitValue,
     bool resolvedIsVoucher = false,
     VoidCallback? onViewAccepted,
@@ -3281,17 +3289,25 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     final branchIdOrName = (resolvedBranchName != null && resolvedBranchName.trim().isNotEmpty)
         ? resolvedBranchName.trim()
         : resolvedBranchId;
+    final bool consumingLadder = winningCampaign?.spendLadderMode == 'consuming';
+    final effectiveRounds = consumingLadder ? awardRounds : const <SpendAwardRound>[];
 
-    // Collect candidate prizes for choice or wheel
+    // Collect candidate prizes for choice or wheel. A consuming ladder never
+    // falls back to every gift in the branch.
     List<String> candidatePrizes = [];
-    if (resolvedLinkedGifts.isNotEmpty) {
+    if (consumingLadder) {
+      candidatePrizes = [
+        for (final round in effectiveRounds)
+          for (final name in round.prizeNames) name,
+      ];
+    } else if (resolvedLinkedGifts.isNotEmpty) {
       candidatePrizes = resolvedLinkedGifts
           .map((g) => g.giftName.trim())
           .where((n) => n.isNotEmpty)
           .toSet()
           .toList();
     }
-    if (winningCampaign != null) {
+    if (winningCampaign != null && !consumingLadder) {
       if (candidatePrizes.isNotEmpty) {
         final filtered = winningCampaign.filterGiftsByBranchStock(candidateGifts: candidatePrizes, branch: branchIdOrName);
         if (filtered.isNotEmpty) {
@@ -3503,7 +3519,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
         actions: [
           // Primary Action Button (Game / Choice / Direct Claim)
           if (docId != null && docId.isNotEmpty && winningCampaign != null) ...[
-            if (isChooseGift)
+            if (isChooseGift && (!consumingLadder || effectiveRounds.isNotEmpty))
               FilledButton.icon(
                 onPressed: () {
                   Navigator.pop(ctx);
@@ -3513,8 +3529,14 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                         transactionId: docId,
                         eventId: winningCampaign.id,
                         companySlug: winningCampaign.companySlug,
-                        prizes: candidatePrizes,
-                        totalChances: totalChances > 0 ? totalChances : 1,
+                        prizes: effectiveRounds.isNotEmpty ? effectiveRounds.first.prizeNames : candidatePrizes,
+                        roundPrizeNames: [for (final round in effectiveRounds) round.prizeNames],
+                        roundGiftIds: [for (final round in effectiveRounds) round.giftIds],
+                        roundUnitValues: [for (final round in effectiveRounds) round.unitValues],
+                        roundRuleIds: [for (final round in effectiveRounds) round.ruleId],
+                        totalChances: effectiveRounds.isNotEmpty
+                            ? effectiveRounds.length
+                            : (totalChances > 0 ? totalChances : 1),
                         branchId: resolvedBranchId,
                       ),
                     ),

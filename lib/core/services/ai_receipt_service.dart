@@ -58,6 +58,27 @@ class ExtractedProductItem {
     return p * q;
   }
 
+  /// Net line for a consuming ladder. A price that already equals
+  /// original minus discount is left alone so a net unit is not reduced twice.
+  double get netEligibleLineSpend {
+    final qty = quantity > 0 ? quantity : 1;
+    final line = actualLineSpend;
+    if (discountAmount <= 0) return line;
+    final original = originalPrice;
+    if (original != null &&
+        original > price &&
+        (price + discountAmount - original).abs() < 1.5) {
+      return line;
+    }
+    if (discountAmount >= price && discountAmount < line) {
+      return (line - discountAmount).clamp(0.0, double.infinity);
+    }
+    if (discountAmount < price) {
+      return ((price - discountAmount) * qty).clamp(0.0, double.infinity);
+    }
+    return line;
+  }
+
   bool get hasDiscount =>
       discountAmount > 0 ||
       discountPercent > 0 ||
@@ -1375,6 +1396,7 @@ class AiReceiptService {
     String multiplierBasis = 'both',
     int maxChancesPerReceipt = 0,
     List<PromotionalRuleItem> promotionalRules = const [],
+    String spendLadderMode = 'exclusive',
     bool allowComplementaryReceipts = false,
     bool forceDeepAudit = false,
     bool forceRefresh = false,
@@ -2148,6 +2170,7 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                   promotionalRules: promotionalRules,
                   allowCampaignMultipliers: allowMultipleChances,
                   maxUnitsPerReceipt: maxChancesPerReceipt,
+                  spendLadderMode: spendLadderMode,
                 )
               : <MatchedPromotionalRuleResult>[];
 
@@ -2546,6 +2569,7 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
             promotionalRules: promotionalRules,
             allowCampaignMultipliers: allowMultipleChances,
             capSpendToAiTotal: false,
+            spendLadderMode: spendLadderMode,
           );
           if (dartMatches.isNotEmpty) {
             // Trust the deterministic matcher over the AI's own total: when a
@@ -3365,6 +3389,106 @@ class PromotionalRuleMatcher {
   /// grouping by unique trigger product family so higher tiers beat lower tiers,
   /// and different products purchased together in the same receipt ALL produce rewards!
   ///
+  static ({List<MatchedPromotionalRuleResult> results, Set<int> indices})
+      _matchConsumingSpendGroup({
+    required List<PromotionalRuleItem> group,
+    required List<ExtractedProductItem> products,
+    required Map<int, int> remainingItemQuantities,
+    required Set<String> campaignBrands,
+    required List<PromotionalRuleItem> promotionalRules,
+    required bool allowCampaignMultipliers,
+  }) {
+    final tiers = group.where((rule) => rule.isSpendBased).toList()
+      ..sort((a, b) => b.effectiveMinSpend.compareTo(a.effectiveMinSpend));
+    final indices = <int>{};
+    final names = <String>[];
+    final remainingSpendByIndex = <int, double>{};
+    for (var i = 0; i < products.length; i++) {
+      final remaining = remainingItemQuantities[i] ?? 0;
+      if (remaining <= 0) continue;
+      final product = products[i];
+      final included = tiers.any((rule) =>
+          hasExplicitSpendMembership(product, rule) &&
+          _matchesProduct(
+            product,
+            rule.triggerProduct,
+            rule,
+            campaignBrands,
+            promotionalRules,
+            false,
+          ));
+      if (!included) continue;
+      final totalQty = getEffectiveProductQuantity(product);
+      final full = product.netEligibleLineSpend;
+      remainingSpendByIndex[i] = totalQty > 0 ? full * (remaining / totalQty) : full;
+      indices.add(i);
+      names.add(product.name);
+    }
+
+    final results = <MatchedPromotionalRuleResult>[];
+    final pool = remainingSpendByIndex.values.fold<double>(0, (sum, value) => sum + value);
+    for (final rule in tiers) {
+      final minimum = rule.minSpend > 0 ? rule.minSpend : rule.effectiveMinSpend;
+      if (minimum <= 0) continue;
+      final eligibleIndexes = <int>[];
+      var eligible = 0.0;
+      for (final entry in remainingSpendByIndex.entries) {
+        if (entry.value <= 0) continue;
+        final product = products[entry.key];
+        final matchesTier = hasExplicitSpendMembership(product, rule) &&
+            _matchesProduct(
+              product,
+              rule.triggerProduct,
+              rule,
+              campaignBrands,
+              promotionalRules,
+              false,
+            );
+        if (!matchesTier) continue;
+        eligible += entry.value;
+        eligibleIndexes.add(entry.key);
+      }
+      var count = allowCampaignMultipliers ? eligible ~/ minimum : 0;
+      if (!allowCampaignMultipliers &&
+          eligible + rule.discountTolerance >= minimum) {
+        count = 1;
+      } else if (allowCampaignMultipliers &&
+          count < 1 &&
+          rule.discountTolerance > 0 &&
+          eligible + rule.discountTolerance >= minimum) {
+        count = 1;
+      }
+      if (count < 1) continue;
+      var toConsume = minimum * count;
+      for (final index in eligibleIndexes) {
+        if (toConsume <= 0) break;
+        final left = remainingSpendByIndex[index] ?? 0;
+        if (left <= 0) continue;
+        final take = math.min(left, toConsume);
+        remainingSpendByIndex[index] = left - take;
+        toConsume -= take;
+      }
+      final baseAmount = rule.totalVoucherValue > 0
+          ? rule.totalVoucherValue
+          : (rule.rewardAmount > 0 ? rule.rewardAmount : 0.0);
+      final gifts = rule.linkedGifts
+          .map((gift) => gift.copyWith(quantity: gift.quantity * count))
+          .toList();
+      results.add(MatchedPromotionalRuleResult(
+        rule: rule,
+        multiplier: count,
+        totalTriggerQuantity: count,
+        totalRewardAmount: baseAmount * count,
+        formattedPrizeSummary: _prizeSummary(rule, count, baseAmount),
+        multipliedLinkedGifts: gifts,
+        qualifyingProductNames: names,
+        qualifyingSpend: pool,
+      ));
+      if (!allowCampaignMultipliers) break;
+    }
+    return (results: results, indices: indices);
+  }
+
   /// [maxUnitsPerReceipt]: when non-null the campaign's per-receipt unit cap
   /// is enforced on the result (see [capMatchedRuleUnits]): ON => at most
   /// [maxUnitsPerReceipt] gift units (0 = no cap), OFF => exactly 1 unit.
@@ -3375,6 +3499,7 @@ class PromotionalRuleMatcher {
     bool allowCampaignMultipliers = true,
     bool capSpendToAiTotal = true,
     int? maxUnitsPerReceipt,
+    String spendLadderMode = 'exclusive',
   }) {
     final raw = _matchAllUncapped(
       result: result,
@@ -3382,6 +3507,7 @@ class PromotionalRuleMatcher {
       promotionalRules: promotionalRules,
       allowCampaignMultipliers: allowCampaignMultipliers,
       capSpendToAiTotal: capSpendToAiTotal,
+      spendLadderMode: spendLadderMode,
     );
     if (maxUnitsPerReceipt == null) return raw;
     return capMatchedRuleUnits(
@@ -3404,9 +3530,49 @@ class PromotionalRuleMatcher {
     for (final g in r.rule.linkedGifts) {
       if (g.unitValue > best) best = g.unitValue;
     }
+    for (final option in r.rule.rewardOptions) {
+      if (option.monetaryValue > best) best = option.monetaryValue;
+    }
     if (best > 0) return best;
     if (r.rule.rewardAmount > 0) return r.rule.rewardAmount;
     return r.rule.totalVoucherValue > 0 ? r.rule.totalVoucherValue : 0.0;
+  }
+
+  /// Barcode, catalog name, or an explicit brand token. A company flag alone
+  /// is not membership, so an ambiguous OCR line cannot enter a consuming ladder.
+  static bool hasExplicitSpendMembership(
+    ExtractedProductItem product,
+    PromotionalRuleItem rule,
+  ) {
+    final barcode = product.barcode.trim();
+    if (barcode.isNotEmpty && rule.selectedBarcodes.isNotEmpty) {
+      if (rule.selectedBarcodes.any((b) => b.trim() == barcode)) return true;
+      if (barcode.length >= 10 &&
+          rule.selectedBarcodes.any(
+            (b) => b.startsWith(barcode) || barcode.startsWith(b.trim()),
+          )) {
+        return true;
+      }
+    }
+    final name = _normalize(product.name);
+    if (name.isEmpty) return false;
+    if (rule.selectedProductNames.any((sel) {
+      final normalized = _normalize(sel);
+      return normalized.isNotEmpty && normalized == name;
+    })) {
+      return true;
+    }
+    final brands = <String>[
+      ...rule.requiredBrands,
+      if (rule.triggerProduct.trim().isNotEmpty &&
+          rule.triggerProduct.trim().split(RegExp(r'\s+')).length <= 3)
+        rule.triggerProduct.trim(),
+    ];
+    for (final brand in brands) {
+      final normalized = _normalize(brand);
+      if (normalized.length >= 3 && name.contains(normalized)) return true;
+    }
+    return false;
   }
 
   static String _prizeSummary(PromotionalRuleItem rule, int count, double baseAmount) {
@@ -3476,6 +3642,7 @@ class PromotionalRuleMatcher {
     required List<PromotionalRuleItem> promotionalRules,
     bool allowCampaignMultipliers = true,
     bool capSpendToAiTotal = true,
+    String spendLadderMode = 'exclusive',
   }) {
     if (promotionalRules.isEmpty) return [];
 
@@ -3543,6 +3710,22 @@ class PromotionalRuleMatcher {
 
     for (final group in rulesByProductGroup.values) {
       final isSpendGroup = group.any((r) => r.isSpendBased);
+
+      if (isSpendGroup && EventModel.normalizeSpendLadderMode(spendLadderMode) == 'consuming') {
+        final consumed = _matchConsumingSpendGroup(
+          group: group,
+          products: effectiveProducts,
+          remainingItemQuantities: remainingItemQuantities,
+          campaignBrands: campaignBrands,
+          promotionalRules: promotionalRules,
+          allowCampaignMultipliers: allowCampaignMultipliers,
+        );
+        allMatchedResults.addAll(consumed.results);
+        for (final idx in consumed.indices) {
+          remainingItemQuantities[idx] = 0;
+        }
+        continue;
+      }
 
       if (isSpendGroup) {
         // Highest-value gift wins: rules on the same products are ranked by
@@ -3830,6 +4013,7 @@ class PromotionalRuleMatcher {
     AiReceiptAnalysisResult? result,
     List<ExtractedProductItem>? extractedProducts,
     required List<PromotionalRuleItem> promotionalRules,
+    String spendLadderMode = 'exclusive',
   }) {
     if (promotionalRules.isEmpty) return [];
 
@@ -3842,6 +4026,7 @@ class PromotionalRuleMatcher {
     final matches = matchAllWithMultipliers(
       result: result,
       extractedProducts: products,
+      spendLadderMode: spendLadderMode,
       promotionalRules: promotionalRules,
     );
     if (matches.isNotEmpty) return const [];
@@ -5383,6 +5568,68 @@ List<LinkedGiftAllocation> consolidateLinkedGifts(Iterable<LinkedGiftAllocation>
 }
 
 /// Represents a composite multi-offer prize bundle synthesized from all matched rules in a single receipt
+/// One gift round after a consuming or exclusive ladder. The gifts belong to
+/// this tier only, so a later round cannot offer the previous tier's voucher.
+class SpendAwardRound {
+  final String ruleId;
+  final String ruleTitle;
+  final double tierMinSpend;
+  final List<String> prizeNames;
+  final List<String> giftIds;
+  final List<double> unitValues;
+
+  const SpendAwardRound({
+    required this.ruleId,
+    required this.ruleTitle,
+    required this.tierMinSpend,
+    required this.prizeNames,
+    required this.giftIds,
+    required this.unitValues,
+  });
+
+  static List<SpendAwardRound> expand(List<MatchedPromotionalRuleResult> rules) {
+    final ordered = List<MatchedPromotionalRuleResult>.from(rules)
+      ..sort((a, b) => b.rule.effectiveMinSpend.compareTo(a.rule.effectiveMinSpend));
+    final rounds = <SpendAwardRound>[];
+    for (final match in ordered) {
+      final names = <String>[];
+      final ids = <String>[];
+      final values = <double>[];
+      if (match.rule.rewardOptions.isNotEmpty) {
+        for (final option in match.rule.rewardOptions) {
+          final name = option.displayLabel.trim();
+          if (name.isEmpty) continue;
+          names.add(name);
+          ids.add(option.giftId);
+          values.add(option.monetaryValue);
+        }
+      } else if (match.rule.linkedGifts.isNotEmpty) {
+        for (final gift in match.rule.linkedGifts) {
+          names.add(gift.giftName);
+          ids.add(gift.giftId);
+          values.add(gift.unitValue);
+        }
+      } else if (match.rule.rewardValue.trim().isNotEmpty) {
+        names.add(match.rule.rewardValue.trim());
+        ids.add(match.rule.linkedGiftId ?? '');
+        values.add(match.rule.rewardAmount);
+      }
+      final copies = match.multiplier > 0 ? match.multiplier : 1;
+      for (var i = 0; i < copies; i++) {
+        rounds.add(SpendAwardRound(
+          ruleId: match.rule.id,
+          ruleTitle: match.rule.ruleTitle,
+          tierMinSpend: match.rule.minSpend,
+          prizeNames: names,
+          giftIds: ids,
+          unitValues: values,
+        ));
+      }
+    }
+    return rounds;
+  }
+}
+
 /// Applies the campaign-level Smart Multipliers switch to a chance count.
 /// OFF => at most 1; ON => capped by [maxChancesPerReceipt] when > 0.
 /// Values <= 0 are returned unchanged (0 means "no chance / rejected").
@@ -5423,6 +5670,8 @@ class CompositePromotionalBundle {
   });
 
   bool get requiresRewardChoice => rewardChoiceGroups.isNotEmpty;
+
+  List<SpendAwardRound> get awardRounds => SpendAwardRound.expand(matchedRules);
 
   /// Gift names for "choose your gift" games: base gifts plus every reward option.
   List<String> get candidateGiftNames {
