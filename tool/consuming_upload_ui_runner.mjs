@@ -29,12 +29,15 @@
 //   text "قسيمة شراء 150 جنيه"
 //   button "تأكيد الهدية"
 //
-// FAULT is local only. It never writes claimed gifts or stock.
-//   ledger-read     abort the receipt document GET when the gift screen opens
-//   ledger-missing  answer that GET with 404 and leave the saved receipt in place
-//   offline         abort 127.0.0.1:5001 only while confirming
-//   missing-rules   seed the local campaign with no spend rules, then expect
-//                   the config rejection instead of a gift screen
+// FAULT is local only. It never writes claimed gifts or stock, and it does
+// not delete the fixture receipt.
+//   ledger-read            abort the server receipt GET when the gift screen opens
+//   ledger-missing-fresh   a new browser context and a receipt id that Firestore
+//                          REST already returns as 404. A Listen/channel 404 is
+//                          not this check: a cached document 200 can still be shown.
+//   offline                abort 127.0.0.1:5001 only while confirming
+//   missing-rules          seed the local campaign with no spend rules, then expect
+//                          the config rejection instead of a gift screen
 // Wheel, scratch, direct gift, and the demo mystery box do not send a
 // consuming slot. A consuming campaign is routed to the round gift screen.
 
@@ -229,7 +232,8 @@ async function fillFlutterField(page, ariaLabel, value, { tabInto = false } = {}
   }
 }
 
-const faults = new Set(['', 'ledger-read', 'ledger-missing', 'offline', 'missing-rules']);
+const faults = new Set(['', 'ledger-read', 'ledger-missing-fresh', 'offline', 'missing-rules']);
+const missingProbeId = 'rcpt_demo_missing_ledger_probe';
 
 async function openExactInvoiceMenu(page, number) {
   const maxSteps = 8;
@@ -296,7 +300,7 @@ async function openExactInvoiceMenu(page, number) {
 async function main() {
   const fault = process.env.FAULT || '';
   if (!faults.has(fault)) {
-    throw new Error(`Unknown FAULT "${fault}". Use ledger-read, ledger-missing, offline, or missing-rules.`);
+    throw new Error(`Unknown FAULT "${fault}". Use ledger-read, ledger-missing-fresh, offline, or missing-rules.`);
   }
   if (fault === 'missing-rules' && process.env.SKIP_UPLOAD === '1') {
     throw new Error('missing-rules uses the upload screen. Do not set SKIP_UPLOAD.');
@@ -304,7 +308,7 @@ async function main() {
   assertLocal(appUrl);
   mkdirSync(shots, { recursive: true });
   writeFileSync(fixturePath, 'tashil-synthetic-receipt-v1:1402-ambiguous');
-  await seedCampaign();
+  if (fault !== 'ledger-missing-fresh') await seedCampaign();
   const browser = await chromium.launch({
     headless: true,
     executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome',
@@ -312,17 +316,13 @@ async function main() {
   });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   let armLedgerFault = false;
-  if (fault === 'ledger-read' || fault === 'ledger-missing') {
+  if (fault === 'ledger-read') {
     await page.route('**/documents/receipts_transactions/**', async (route) => {
       if (!armLedgerFault || route.request().method() !== 'GET') {
         await route.continue();
         return;
       }
-      if (fault === 'ledger-missing') {
-        await route.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
-      } else {
-        await route.abort('failed');
-      }
+      await route.abort('failed');
     });
   }
   let armOffline = false;
@@ -338,6 +338,31 @@ async function main() {
   page.on('console', (msg) => log.push(`${msg.type()}: ${msg.text()}`));
   page.on('pageerror', (err) => log.push(`pageerror: ${err.message}`));
   try {
+    if (fault === 'ledger-missing-fresh') {
+      const probeUrl = `http://${host}:8080/v1/projects/${projectId}/databases/(default)/documents/receipts_transactions/${missingProbeId}`;
+      const probe = await fetch(probeUrl);
+      if (probe.status === 200) {
+        throw new Error(
+          `${missingProbeId} is present (HTTP 200). This mode does not delete it. A Listen 404 is not proof that the document is missing.`,
+        );
+      }
+      if (probe.status !== 404) {
+        throw new Error(`Expected Firestore REST 404 for ${missingProbeId}, got ${probe.status}.`);
+      }
+      const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+      const fresh = await context.newPage();
+      await fresh.goto(`${appUrl}/login`, { waitUntil: 'domcontentloaded' });
+      await enableSemantics(fresh);
+      await fillFlutterField(fresh, 'البريد الإلكتروني', adminEmail);
+      await fillFlutterField(fresh, 'كلمة المرور', adminPassword, { tabInto: true });
+      await fresh.getByRole('button', { name: 'دخول الحساب' }).click();
+      await fresh.goto(`${appUrl}/demo-ledger-missing`, { waitUntil: 'domcontentloaded' });
+      await enableSemantics(fresh);
+      await fresh.getByText('غير موجود على الخادم', { exact: false }).waitFor({ timeout: 20000 });
+      await shot(fresh, '07-ledger-missing-fresh');
+      console.log('ledger-missing-fresh saw a server miss in a cache-free session');
+      return;
+    }
     if (process.env.SKIP_UPLOAD !== '1') {
       await page.goto(`${appUrl}/event/${eventId}`, { waitUntil: 'domcontentloaded', timeout: 120000 });
       await enableSemantics(page);
@@ -381,7 +406,7 @@ async function main() {
     await page.getByText('فحص سريع للقواعد الحالية').click();
     await page.getByText('شريحة 350').waitFor({ timeout: 30000 });
     await shot(page, '06-recheck-rounds');
-    armLedgerFault = fault === 'ledger-read' || fault === 'ledger-missing';
+    armLedgerFault = fault === 'ledger-read';
     await page.getByText('اختيار وتسليم الهدية للعميل الآن').click();
     if (armLedgerFault) {
       await page.getByText('إعادة قراءة السجل', { exact: false }).waitFor({ timeout: 20000 });
@@ -393,7 +418,7 @@ async function main() {
     armOffline = fault === 'offline';
     await page.getByText('تأكيد الهدية', { exact: false }).click();
     if (armOffline) {
-      await page.getByText('لم يُكتب سجل الهدايا', { exact: false }).waitFor({ timeout: 20000 });
+      await page.getByText('لم يُحفظ صرف هذه الجولة', { exact: false }).waitFor({ timeout: 30000 });
       await shot(page, '07-offline-fault');
       console.log('offline fault refused the local stock write');
       return;

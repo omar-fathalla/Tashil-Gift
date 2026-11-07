@@ -1,10 +1,13 @@
 import 'package:al_mraay/core/utils/claim_retry.dart';
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../../core/services/claim_callable_fallback.dart';
 import '../../../core/services/claim_ledger_resume.dart';
 import '../../../core/services/firebase_service.dart';
 import '../../../core/services/company_gifts_service.dart';
@@ -89,7 +92,11 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
   int _claimedUnits = 0;
   bool _ledgerReady = true;
   bool _ledgerFailed = false;
+  bool _ledgerMissing = false;
+  bool _ledgerUncertain = false;
   int _ledgerRequest = 0;
+  int _claimAttempt = 0;
+  static const Duration _authoritativeReadBound = Duration(seconds: 8);
   Map<String, String> _prizeImages = {};
   bool _whatsappSent = false;
   bool? _enableWhatsAppWinnerNotification;
@@ -158,14 +165,18 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
       ..addAll(resume.wonNames);
     _ledgerReady = true;
     _ledgerFailed = false;
+    _ledgerMissing = false;
+    _ledgerUncertain = false;
   }
 
+  /// Server read only. A cached copy is not the authoritative ledger.
   Future<GiftResume> _readAuthoritativeResume() async {
     final snap = await ref
         .read(firestoreProvider)
         .collection('receipts_transactions')
         .doc(widget.transactionId)
-        .get();
+        .get(const GetOptions(source: Source.server))
+        .timeout(_authoritativeReadBound);
     if (!snap.exists) {
       throw StateError('receipt-ledger-missing');
     }
@@ -175,17 +186,26 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
     );
   }
 
+  void _markLedgerUnread({required bool missing, required bool uncertain}) {
+    _ledgerReady = false;
+    _ledgerFailed = true;
+    _ledgerMissing = missing;
+    _ledgerUncertain = uncertain;
+  }
+
   Future<void> _resumeFromAuthoritativeLedger() async {
     final request = ++_ledgerRequest;
     try {
       final resume = await _readAuthoritativeResume();
       if (!mounted || request != _ledgerRequest) return;
       setState(() => _applyResume(resume));
-    } catch (_) {
+    } catch (error) {
       if (!mounted || request != _ledgerRequest) return;
       setState(() {
-        _ledgerReady = false;
-        _ledgerFailed = true;
+        _markLedgerUnread(
+          missing: error is StateError && error.message == 'receipt-ledger-missing',
+          uncertain: false,
+        );
       });
     }
   }
@@ -194,8 +214,30 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
     setState(() {
       _ledgerReady = false;
       _ledgerFailed = false;
+      _ledgerMissing = false;
+      _ledgerUncertain = false;
+      _isConfirming = false;
     });
     _resumeFromAuthoritativeLedger();
+  }
+
+  bool _claimMayHaveCommitted(Object error) {
+    if (error is FirebaseFunctionsException) {
+      const uncertain = {
+        'deadline-exceeded',
+        'unavailable',
+        'aborted',
+        'cancelled',
+        'unknown',
+        'internal',
+      };
+      return uncertain.contains(error.code);
+    }
+    final text = error.toString().toLowerCase();
+    return text.contains('timeout') ||
+        text.contains('socket') ||
+        text.contains('xmlhttprequest') ||
+        text.contains('failed host');
   }
 
   Future<void> _preloadMetadataForWhatsApp() async {
@@ -388,9 +430,10 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
     });
 
     if (!widget.isDemo && widget.transactionId.trim().isNotEmpty) {
+      final request = ++_ledgerRequest;
       try {
         final fresh = await _readAuthoritativeResume();
-        if (!mounted) return;
+        if (!mounted || request != _ledgerRequest) return;
         final stale = fresh.claimedUnits != _claimedUnits ||
             fresh.currentRound != _currentRound ||
             fresh.remaining != _remainingChances;
@@ -412,11 +455,13 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
           );
           return;
         }
-      } catch (_) {
-        if (!mounted) return;
+      } catch (error) {
+        if (!mounted || request != _ledgerRequest) return;
         setState(() {
-          _ledgerReady = false;
-          _ledgerFailed = true;
+          _markLedgerUnread(
+            missing: error is StateError && error.message == 'receipt-ledger-missing',
+            uncertain: false,
+          );
           _isConfirming = false;
         });
         return;
@@ -425,6 +470,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
 
     bool claimApplied = false;
     bool claimSaved = false;
+    var resumedCommit = false;
     final int? claimSlot = widget.roundPrizeNames.isNotEmpty ? _claimedUnits : null;
     try {
       audioService.playWinFanfare();
@@ -473,8 +519,37 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
           },
         );
         }
+        final attempt = ++_claimAttempt;
         if (claimSlot != null) {
-          await runClaimWithSingleRetry(sendClaim);
+          try {
+            await sendClaim();
+          } catch (error) {
+            if (!mounted || attempt != _claimAttempt) return;
+            if (!_claimMayHaveCommitted(error)) rethrow;
+            final request = ++_ledgerRequest;
+            try {
+              final resume = await _readAuthoritativeResume();
+              if (!mounted || attempt != _claimAttempt || request != _ledgerRequest) return;
+              if (resume.claimedUnits > claimSlot) {
+                resumedCommit = true;
+                setState(() => _applyResume(resume));
+              } else {
+                throw ClaimCallableException(
+                  code: 'failed-precondition',
+                  message: 'لم يُحفظ صرف هذه الجولة على السجل. يمكنك تأكيد الهدية نفسها مرة أخرى.',
+                );
+              }
+            } catch (readError) {
+              if (readError is ClaimCallableException) rethrow;
+              if (!mounted || attempt != _claimAttempt || request != _ledgerRequest) return;
+              setState(() {
+                _markLedgerUnread(missing: false, uncertain: true);
+                _isConfirming = false;
+              });
+              return;
+            }
+          }
+          if (!mounted || attempt != _claimAttempt) return;
         } else {
           await runGameClaim(
             sendClaim,
@@ -512,7 +587,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
           setState(() {
             _selectedGiftIndex = null;
             _isConfirming = false;
-            _currentRound++;
+            if (!resumedCommit) _currentRound++;
           });
         },
         onNextCustomer: () {
@@ -851,8 +926,16 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                             const SizedBox(height: 12),
                             Text(
                               isAr
-                                  ? 'تعذر قراءة سجل الهدايا المحفوظ. لن يبدأ الاختيار ولن يُسمح بالصرف قبل نجاح القراءة.'
-                                  : 'The saved gift ledger could not be read. Selection stays closed until a fresh read succeeds.',
+                                  ? (_ledgerMissing
+                                      ? 'سجل هذه الفاتورة غير موجود على الخادم. لن يبدأ الاختيار قبل ظهوره.'
+                                      : _ledgerUncertain
+                                          ? 'لم يصل رد الخادم. قد تكون الهدية سُجّلت. لن يُرسل طلب جديد قبل إعادة قراءة السجل.'
+                                          : 'تعذر قراءة سجل الهدايا المحفوظ. لن يبدأ الاختيار ولن يُسمح بالصرف قبل نجاح القراءة.')
+                                  : (_ledgerMissing
+                                      ? 'This receipt ledger is not on the server. Selection stays closed until it is.'
+                                      : _ledgerUncertain
+                                          ? 'The server did not answer. The gift may already be saved. No new claim is sent until the ledger is read again.'
+                                          : 'The saved gift ledger could not be read. Selection stays closed until a fresh read succeeds.'),
                               textAlign: TextAlign.center,
                               style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
                             ),

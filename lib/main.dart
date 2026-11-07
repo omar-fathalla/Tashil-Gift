@@ -20,6 +20,7 @@ import 'core/utils/app_url_strategy.dart';
 import 'core/widgets/campaign_suspended_screen.dart';
 import 'features/auth/presentation/auth_screen.dart';
 import 'features/games/presentation/emulator_fixture_gift_claim_screen.dart';
+import 'features/games/presentation/emulator_missing_ledger_probe_screen.dart';
 import 'features/admin/presentation/admin_dashboard_screen.dart';
 import 'features/client_portal/presentation/client_receipt_upload_screen.dart';
 import 'features/company_portal/presentation/company_manager_portal_screen.dart';
@@ -397,6 +398,11 @@ class MyApp extends ConsumerWidget {
       case EmulatorFixtureGiftClaimScreen.route:
         return MaterialPageRoute(
           builder: (context) => const EmulatorFixtureGiftClaimScreen(),
+          settings: effectiveSettings,
+        );
+      case EmulatorMissingLedgerProbeScreen.route:
+        return MaterialPageRoute(
+          builder: (context) => const EmulatorMissingLedgerProbeScreen(),
           settings: effectiveSettings,
         );
       case '/login':

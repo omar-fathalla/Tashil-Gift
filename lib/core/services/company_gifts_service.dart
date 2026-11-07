@@ -1804,7 +1804,7 @@ class CompanyGiftsService {
       if (await _localStockWouldBypassConsumingLedger(eventId)) {
         throw ClaimCallableException(
           code: 'unavailable',
-          message: 'تعذر اعتماد الجولة لأن الخادم غير متاح. لم يُكتب سجل الهدايا ولم يُخصم الرصيد.',
+          message: 'لم يصل رد الخادم. لم يُخصم رصيد من هذا الجهاز.',
         );
       }
     }
