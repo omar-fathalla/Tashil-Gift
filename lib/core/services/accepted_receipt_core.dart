@@ -1,3 +1,4 @@
+import '../../features/admin/domain/event_model.dart';
 import 'ai_receipt_service.dart';
 
 /// Fields both the customer upload and the validation desk write after analysis.
@@ -13,10 +14,11 @@ Map<String, dynamic> acceptedReceiptCore({
   required String submittedByUid,
   required Map<String, dynamic> branchFields,
   String spendLadderMode = 'exclusive',
+  List<PromotionalRuleItem> promotionalRules = const [],
 }) {
   final totals = PromotionalRuleMatcher.spendTotals(
     products: result.extractedProducts,
-    rules: const [],
+    rules: promotionalRules,
     spendLadderMode: spendLadderMode,
   );
   // target_company_total is the brand-eligible net. total_value on a consuming

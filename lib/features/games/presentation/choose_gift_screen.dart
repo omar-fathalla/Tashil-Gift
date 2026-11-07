@@ -757,7 +757,9 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                 ),
               )
             : null,
-        body: SafeArea(
+        body: !_ledgerReady
+            ? const Center(child: CircularProgressIndicator())
+            : SafeArea(
           child: Column(
             children: [
               if (widget.isDemo)
@@ -1004,7 +1006,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                     children: List.generate(totalChances, (i) {
                                       final roundNum = i + 1;
                                       final isCompleted = _remainingChances == 0 || roundNum < _currentRound;
-                                      final isCurrent = roundNum == _currentRound;
+                                      final isCurrent = _remainingChances > 0 && roundNum == _currentRound;
                                       final wonGift = isCompleted && i < _wonPrizes.length ? _wonPrizes[i] : null;
 
                                       return Container(

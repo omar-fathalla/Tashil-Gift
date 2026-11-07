@@ -1800,6 +1800,8 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
   }) {
     final receiptNumber = (data['receipt_number'] ?? 'INV-N/A').toString().trim();
     final totalVal = (data['target_company_total'] ?? data['total_value'] as num?)?.toDouble() ?? 0.0;
+    final invoiceVal = data['total_value'] is num ? (data['total_value'] as num).toDouble() : totalVal;
+    final showInvoiceNet = data['target_company_total'] is num && (invoiceVal - totalVal).abs() > 0.49;
     final storeChain = (data['store_chain_detected'] ?? data['retail_chain_name'] ?? '').toString().trim();
     final branch = (data['canonical_branch'] ?? data['branch_detected'] ?? data['branch_name'] ?? '').toString().trim();
     final customerPhone = (data['customerPhone'] ?? data['customer_phone'] ?? '').toString().trim();
@@ -1948,13 +1950,23 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: isValid ? colorScheme.tertiaryFixedDim : colorScheme.errorContainer),
                     ),
-                    child: Text(
-                      '${totalVal.toStringAsFixed(totalVal == totalVal.roundToDouble() ? 0 : 2)} $currencySymbol',
-                      style: GoogleFonts.cairo(
-                        fontWeight: FontWeight.bold,
-                        fontSize: isMobile ? 12.5 : 14,
-                        color: isValid ? colorScheme.onTertiaryContainer : colorScheme.onErrorContainer,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '${totalVal.toStringAsFixed(totalVal == totalVal.roundToDouble() ? 0 : 2)} $currencySymbol',
+                          style: GoogleFonts.cairo(
+                            fontWeight: FontWeight.bold,
+                            fontSize: isMobile ? 12.5 : 14,
+                            color: isValid ? colorScheme.onTertiaryContainer : colorScheme.onErrorContainer,
+                          ),
+                        ),
+                        if (showInvoiceNet)
+                          Text(
+                            isAr ? 'صافي الفاتورة $invoiceVal' : 'Invoice net $invoiceVal',
+                            style: GoogleFonts.cairo(fontSize: 9, color: colorScheme.onSurfaceVariant),
+                          ),
+                      ],
                     ),
                   ),
                 ],
@@ -3156,8 +3168,18 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
         }
       }
 
+      final fullTotals = PromotionalRuleMatcher.spendTotals(
+        products: result.extractedProducts,
+        rules: winningCampaign.promotionalRules,
+        spendLadderMode: winningCampaign.spendLadderMode,
+      );
       final double computedTotal = result.extractedProducts.fold<double>(0.0, (acc, p) => acc + p.actualLineSpend);
-      final double totalSpend = computedTotal > 0 ? computedTotal : result.targetCompanyTotal;
+      final double totalSpend = winningCampaign.spendLadderMode == 'consuming'
+          ? fullTotals.invoiceNet
+          : (computedTotal > 0 ? computedTotal : result.targetCompanyTotal);
+      final double eligibleSpend = winningCampaign.spendLadderMode == 'consuming'
+          ? fullTotals.eligibleNet
+          : (winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : result.targetCompanyTotal);
       final canonical = winningEval.resolvedBranchName ?? _normalizeBranchName(result.branchDetected, winningCampaign.branchNames, isAr);
 
       await firestore.collection('receipts_transactions').doc(docId).update({
@@ -3173,7 +3195,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
         'rechecked_by': currentUser?.email ?? 'promoter',
         'recheck_type': winningCampaign.id == activeEvent.id ? 'full_ai_scan' : 'full_ai_multi_campaign_match',
         'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
-        'target_company_total': winningEval.qualifyingSpend > 0 ? winningEval.qualifyingSpend : result.targetCompanyTotal,
+        'target_company_total': eligibleSpend,
         'total_value': totalSpend,
         if (result.receiptNumber.isNotEmpty) 'receipt_number': result.receiptNumber,
         if (result.storeChainDetected.isNotEmpty) 'store_chain_detected': result.storeChainDetected,
@@ -3218,8 +3240,18 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
               ? summary.unfulfilledCampaigns.expand((u) => u.unfulfilledConditions).toList()
               : [result.message.trim().isNotEmpty ? result.message.trim() : (isAr ? 'الفاتورة غير مطابقة لشروط عروض الشركة' : 'Receipt does not qualify for company offers')]);
 
+      final rejectedTotals = PromotionalRuleMatcher.spendTotals(
+        products: result.extractedProducts,
+        rules: activeEvent.promotionalRules,
+        spendLadderMode: activeEvent.spendLadderMode,
+      );
       final double computedTotal = result.extractedProducts.fold<double>(0.0, (acc, p) => acc + p.actualLineSpend);
-      final double totalSpend = computedTotal > 0 ? computedTotal : result.targetCompanyTotal;
+      final double totalSpend = activeEvent.spendLadderMode == 'consuming'
+          ? rejectedTotals.invoiceNet
+          : (computedTotal > 0 ? computedTotal : result.targetCompanyTotal);
+      final double eligibleSpend = activeEvent.spendLadderMode == 'consuming'
+          ? rejectedTotals.eligibleNet
+          : result.targetCompanyTotal;
 
       await firestore.collection('receipts_transactions').doc(docId).update({
         'is_valid': false,
@@ -3227,7 +3259,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
         'unfulfilled_conditions': unfulfilledList,
         'rejection_reason': unfulfilledList.join(' • '),
         'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
-        'target_company_total': result.targetCompanyTotal,
+        'target_company_total': eligibleSpend,
         'total_value': totalSpend,
         'rechecked_at': FieldValue.serverTimestamp(),
         'rechecked_by': currentUser?.email ?? 'promoter',

@@ -1973,8 +1973,18 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
               ? summary.unfulfilledCampaigns.expand((u) => u.unfulfilledConditions).toList()
               : [result.message.trim().isNotEmpty ? result.message.trim() : (isAr ? 'الفاتورة غير مطابقة لشروط عروض الشركة' : 'Receipt does not qualify for company offers')]);
 
+      final rejectedTotals = PromotionalRuleMatcher.spendTotals(
+        products: result.extractedProducts,
+        rules: activeEvent.promotionalRules,
+        spendLadderMode: activeEvent.spendLadderMode,
+      );
       final double computedTotal = result.extractedProducts.fold<double>(0.0, (acc, p) => acc + p.actualLineSpend);
-      final double totalSpend = computedTotal > 0 ? computedTotal : result.targetCompanyTotal;
+      final double totalSpend = activeEvent.spendLadderMode == 'consuming'
+          ? rejectedTotals.invoiceNet
+          : (computedTotal > 0 ? computedTotal : result.targetCompanyTotal);
+      final double eligibleSpend = activeEvent.spendLadderMode == 'consuming'
+          ? rejectedTotals.eligibleNet
+          : result.targetCompanyTotal;
 
       await firestore.collection('receipts_transactions').doc(docId).update({
         'is_valid': false,
@@ -1982,7 +1992,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
         'unfulfilled_conditions': unfulfilledList,
         'rejection_reason': unfulfilledList.join(' • '),
         'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
-        'target_company_total': result.targetCompanyTotal,
+        'target_company_total': eligibleSpend,
         'total_value': totalSpend,
         'rechecked_at': FieldValue.serverTimestamp(),
         'rechecked_by': currentUser?.email ?? 'admin',

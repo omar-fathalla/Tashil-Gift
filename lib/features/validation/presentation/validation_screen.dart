@@ -757,6 +757,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           allowMultipleChances: activeEvent.allowMultipleChances,
           submittedByUid: ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
           spendLadderMode: activeEvent.spendLadderMode,
+          promotionalRules: activeEvent.promotionalRules,
           branchFields: ReceiptBranchResolver.firestoreFields(
             activeEvent,
             detectedName: result.branchDetected,

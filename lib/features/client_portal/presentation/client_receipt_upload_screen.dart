@@ -1873,6 +1873,7 @@ class _ClientReceiptUploadScreenState
           allowMultipleChances: _activeEvent!.allowMultipleChances,
           submittedByUid: ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
           spendLadderMode: _activeEvent!.spendLadderMode,
+          promotionalRules: _activeEvent!.promotionalRules,
           branchFields: ReceiptBranchResolver.firestoreFields(
             _activeEvent ?? widget.event,
             detectedName: result.branchDetected,
@@ -4140,6 +4141,17 @@ class _ClientReceiptUploadScreenState
       final String primaryStoragePath = uploadedStoragePaths.isNotEmpty
           ? uploadedStoragePaths.first
           : '';
+      final rejectedSpend = PromotionalRuleMatcher.spendTotals(
+        products: result.extractedProducts,
+        rules: activeEvent.promotionalRules,
+        spendLadderMode: activeEvent.spendLadderMode,
+      );
+      final double eligibleSpend = activeEvent.spendLadderMode == 'consuming'
+          ? rejectedSpend.eligibleNet
+          : totalValue;
+      final double invoiceSpend = activeEvent.spendLadderMode == 'consuming'
+          ? rejectedSpend.invoiceNet
+          : totalValue;
 
       // Rejected receipts are logged as new docs; anonymous reps cannot query
       // existing receipts (firestore.rules), so there is no client-side lookup.
@@ -4154,8 +4166,8 @@ class _ClientReceiptUploadScreenState
         'status': 'rejected',
         'rejection_reason': rejectionReason,
         'unfulfilled_conditions': unfulfilledConditions,
-        'total_value': totalValue,
-        'target_company_total': totalValue,
+        'total_value': invoiceSpend,
+        'target_company_total': eligibleSpend,
         'receipt_date': result.receiptDate,
         'extracted_products': result.extractedProducts
             .map((p) => p.toJson())
